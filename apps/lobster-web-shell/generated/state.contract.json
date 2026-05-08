@@ -1,0 +1,222 @@
+{
+  "conversation_shell": {
+    "active_conversation_id": "room:world:lobby",
+    "action_templates": [
+      {
+        "action": "委托",
+        "draft_template": "合同委托：\n- 合同需求：\n- 合同截止：\n- 合同交付：",
+        "send_label": "合同发单",
+        "state_templates": [
+          {
+            "state": "已回执",
+            "draft_template": "合同委托回执：\n- 合同回执：\n- 合同待确认：\n- 合同下一步："
+          },
+          {
+            "state": "已完成",
+            "draft_template": "合同委托完成：\n- 合同复盘：\n- 合同新需求：\n- 合同下一轮："
+          }
+        ]
+      }
+    ],
+    "conversations": [
+      {
+        "conversation_id": "room:world:lobby",
+        "title": "合同入口广场",
+        "subtitle": "合同态跨城回廊",
+        "meta": "合同态壳层",
+      "kind_hint": "合同世界广场",
+      "participant_label": "跨城共响回廊",
+      "route_label": "跨城共响线",
+      "list_summary": "合同列表摘要 · 3 人 · 2 条消息",
+      "status_line": "合同状态行 · 回廊直连",
+      "thread_headline": "合同线程标题 · 广场群聊",
+      "chat_status_summary": "合同聊天状态 · 广场当前安静",
+      "queue_summary": "合同队列摘要 · 1 条巡视提醒待处理",
+      "preview_text": "合同预览摘要 · 回廊的最新广播",
+      "last_activity_label": "合同巡视犬 · 刚刚",
+      "activity_time_label": "刚刚",
+      "overview_summary": "合同重点摘要 · 回廊总览",
+      "context_summary": "合同上下文摘要 · 直接来自 conversation_shell 合同",
+      "member_count": 3,
+        "caretaker": {
+          "name": "合同巡视犬",
+          "role_label": "频道巡视",
+          "persona": "只在需要时出面，把公共频道的留言和提醒收成可执行摘要。",
+          "status": "在线巡视",
+          "memory": "刚整理完 2 条跨城广播和 1 条回廊提醒。",
+          "auto_reply": "公共问题先收口成待办，再决定是否继续下沉到房间。",
+          "pending_visitors": 1,
+          "notifications": [
+            "合同态提醒：回廊入口说明还没有补齐。"
+          ],
+          "messages": [
+            {
+              "visitor": "北岸测试员",
+              "note": "请把回廊入口和房间切换说明补成一张用户卡。",
+              "urgency": "高"
+            }
+          ],
+          "patrol": {
+            "mode": "公共巡逻",
+            "last_check": "刚刚",
+            "outcome": "当前没有异常消息，已把入口文案缺口列成提醒。"
+          }
+        },
+        "detail_card": {
+          "summary_title": "合同广场 / 当前状态",
+          "summary_copy": "合同字段已经可以直接驱动频道状态、角色卡和快捷动作。",
+          "kicker": "公共频道 / 合同卡",
+          "title": "合同巡视犬 / 频道状态",
+          "monogram": "合",
+          "meta": [
+            {
+              "label": "角色",
+              "value": "频道巡视"
+            },
+            {
+              "label": "称号",
+              "value": "合同巡视犬"
+            },
+            {
+              "label": "当前",
+              "value": "合同态跨城回廊"
+            },
+            {
+              "label": "状态",
+              "value": "在线巡视"
+            }
+          ],
+          "actions": ["私聊", "委托", "交易"]
+        },
+        "workflow": {
+          "action": "委托",
+          "state": "待回执",
+          "title": "委托阶段",
+          "summary": "合同态委托正在等待第一轮回执。",
+          "steps": [
+            {
+              "label": "待回执",
+              "copy": "先确认需求是否被接住。"
+            },
+            {
+              "label": "已回执",
+              "copy": "已经收到第一轮回执，继续补材料。"
+            },
+            {
+              "label": "已完成",
+              "copy": "这一轮委托已经收口。"
+            }
+          ]
+        },
+        "inline_actions": [
+          {
+            "role": "primary",
+            "label": "合同跟进委托",
+            "action": "委托"
+          },
+          {
+            "role": "secondary",
+            "label": "合同标记已回执",
+            "action": "委托",
+            "next_state": "已回执"
+          }
+        ],
+        "messages": [
+          {
+            "sender": "系统",
+            "timestamp_ms": 1713240000000,
+            "timestamp_label": "更早",
+            "text": "欢迎来到凛冬城 · 世界广场，这里是跨城公共频道。"
+          },
+          {
+            "sender": "builder",
+            "timestamp_ms": 1713247200000,
+            "timestamp_label": "2 小时前",
+            "text": "广场的布局已经调好了，大家可以试着发消息看看效果。"
+          },
+          {
+            "sender": "访客",
+            "timestamp_ms": 1713250000000,
+            "timestamp_label": "1 小时前",
+            "text": "本地航路已连上，回声可以先顺着流转。"
+          },
+          {
+            "sender": "builder",
+            "timestamp_ms": 1713250000000,
+            "timestamp_label": "1 小时前",
+            "text": "收到，移动端壳层也跑通了，H5 可以直接聊。"
+          },
+          {
+            "sender": "rsaga",
+            "timestamp_ms": 1713251800000,
+            "timestamp_label": "30 分钟前",
+            "text": "城邦大厅的传送阵也布置好了，随时可以切换房间。"
+          }
+        ]
+      },
+      {
+        "conversation_id": "dm:builder:rsaga",
+        "title": "居所 · builder",
+        "subtitle": "你与 builder",
+        "meta": "居所直达",
+      "kind_hint": "居所",
+      "participant_label": "你与 builder",
+      "route_label": "居所直达",
+      "list_summary": "合同私聊摘要 · 2 人 · 0 条消息",
+      "status_line": "合同状态行 · 居所直达",
+      "thread_headline": "合同线程标题 · 居所直聊",
+      "chat_status_summary": "合同聊天状态 · 可直接继续回复",
+      "queue_summary": "合同队列摘要 · 暂无排队事项",
+      "preview_text": "合同预览摘要 · 适合直接继续一对一沟通",
+      "last_activity_label": "合同居所 · 暂无消息",
+      "activity_time_label": "暂无消息",
+      "context_summary": "合同上下文摘要 · 适合直接继续一对一沟通",
+      "member_count": 2,
+      "messages": []
+      }
+    ]
+  },
+  "scene_render": {
+    "active_conversation_id": "room:world:lobby",
+    "scenes": [
+      {
+        "conversation_id": "room:world:lobby",
+        "scene_banner": "合同广场",
+        "scene_summary": "这份场景来自 conversation_shell / scene_render 合同，不依赖旧 rooms 数组。",
+        "room_variant": "city",
+        "room_motif": "watchtower",
+        "stage": {
+          "title": "合同回廊主舞台",
+          "summary": "这张舞台卡直接来自 scene_render 合同，不再靠页面本地猜标题和摘要。",
+          "badge": "合同舞台"
+        },
+        "portrait": {
+          "title": "合同巡视犬",
+          "summary": "合同态人物卡已经直接给出角色、人设、记忆和自动回复摘要。",
+          "badge": "合同角色卡",
+          "status": "在线巡视 · 回廊值守",
+          "monogram": "合"
+        }
+      },
+      {
+        "conversation_id": "dm:builder:rsaga",
+        "scene_banner": "夜航居所",
+        "scene_summary": "适合贴耳对句、补一笔居所回声。",
+        "room_variant": "home",
+        "room_motif": "courtyard",
+        "stage": {
+          "title": "夜航居所",
+          "summary": "住宅舞台直接来自合同态场景投影。",
+          "badge": "居所舞台"
+        },
+        "portrait": {
+          "title": "夜航同伴",
+          "summary": "一对一居所的人物资料和提示也已经进了正式合同。",
+          "badge": "居所角色卡",
+          "status": "在线值守",
+          "monogram": "夜"
+        }
+      }
+    ]
+  }
+}

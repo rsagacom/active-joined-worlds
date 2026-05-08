@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>龙虾聊天 · 世界广场</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.world-square.css?v=20260507-bg-png256-v1" />
+  </head>
+  <body data-shell-page="world-square" data-shell-variant="world-square-readonly" data-sfc-theme="city">
+    <div class="world-square-shell">
+      <header class="world-square-hud">
+        <div class="world-square-title-stack">
+          <p class="world-square-kicker">WORLD SQUARE</p>
+          <h1>世界广场</h1>
+          <p class="world-square-hud-note">公共广场入口，后续接入公告与跨城发现。</p>
+        </div>
+        <nav class="world-square-actions" aria-label="世界广场导航">
+          <a href="./unified.html">返回世界入口</a>
+          <a href="./index.html">回主城群聊</a>
+        </nav>
+      </header>
+
+      <aside class="world-square-rail" data-shell-column="rooms" aria-label="站点导航">
+        <div class="world-square-rail-title">导航</div>
+        <div class="rail-actions">
+          <a href="./creative.html" class="rail-item">
+            <span class="rail-item-label">住宅</span>
+          </a>
+          <a href="./index.html" class="rail-item">
+            <span class="rail-item-label">主城</span>
+          </a>
+          <a href="./unified.html" class="rail-item">
+            <span class="rail-item-label">世界入口</span>
+          </a>
+          <a href="./world-square.html" class="rail-item is-active" aria-current="page">
+            <span class="rail-item-label">世界广场</span>
+          </a>
+        </div>
+      </aside>
+
+      <section class="world-square-stage" aria-label="世界广场概念图">
+        <div class="world-square-scene" role="img" aria-label="世界广场完整概念图"></div>
+        <details class="world-square-card world-square-card--compact" aria-label="世界广场说明">
+          <summary class="world-square-card-toggle">广场信息</summary>
+          <div class="world-square-card-panel">
+            <p>世界广场</p>
+            <h2>只读公共入口</h2>
+            <span>当前先展示公告、公共讨论和跨城发现摘要；后续再接真实世界广场数据。</span>
+            <div class="world-square-readonly-grid" aria-label="世界广场只读功能">
+              <article class="world-square-readonly-item" data-readonly-kind="notice" aria-disabled="true">
+                <strong>公告</strong>
+                <span>城邦联调、维护窗口与公共说明集中显示。</span>
+                <em>只读预览</em>
+              </article>
+              <article class="world-square-readonly-item" data-readonly-kind="discussion" aria-disabled="true">
+                <strong>公共讨论</strong>
+                <span>跨城公开议题先做摘要，不加入实时聊天框。</span>
+                <em>只读预览</em>
+              </article>
+              <article class="world-square-readonly-item" data-readonly-kind="discovery" aria-disabled="true">
+                <strong>跨城发现</strong>
+                <span>展示可访问主城与公共入口，真实线路由 gateway 提供。</span>
+                <em>只读预览</em>
+              </article>
+            </div>
+          </div>
+        </details>
+      </section>
+    </div>
+    <script>
+      (function() {
+        const hour = new Date().getHours();
+        const isDay = hour >= 6 && hour < 18;
+        document.body.dataset.timeOfDay = isDay ? "day" : "night";
+        const infoCard = document.querySelector(".world-square-card");
+
+        document.addEventListener("click", (event) => {
+          if (!infoCard?.open) return;
+          if (infoCard.contains(event.target)) return;
+          infoCard.open = false;
+        });
+
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape" && infoCard?.open) {
+            infoCard.open = false;
+          }
+        });
+
+        const preloadAsset = isDay
+          ? "./assets/pixel/concepts/world-square-concept-20260428-day-draft-256.png"
+          : "./assets/pixel/concepts/world-square-concept-20260427-256.png";
+
+        const link = document.createElement("link");
+        link.rel = "preload";
+        link.as = "image";
+        link.href = preloadAsset;
+        document.head.appendChild(link);
+
+        const gateway = new URLSearchParams(window.location.search).get("gateway");
+        if (!gateway) return;
+
+        const endpoint = new URL("/v1/world-square", gateway);
+        const cards = {
+          notice: document.querySelector('[data-readonly-kind="notice"]'),
+          discussion: document.querySelector('[data-readonly-kind="discussion"]'),
+          discovery: document.querySelector('[data-readonly-kind="discovery"]'),
+        };
+
+        const classifyNotice = (notice) => {
+          const tags = Array.isArray(notice.tags) ? notice.tags.join(" ").toLowerCase() : "";
+          const text = `${notice.title || ""} ${notice.body || ""} ${tags}`.toLowerCase();
+          if (/discover|route|city|mirror|migration|跨城|路线|主城|发现/.test(text)) return "discovery";
+          if (/discussion|forum|public|thread|议题|讨论|公开/.test(text)) return "discussion";
+          return "notice";
+        };
+
+        const applyNotice = (kind, notice) => {
+          const card = cards[kind];
+          if (!card || !notice) return;
+          const title = card.querySelector("strong");
+          const body = card.querySelector("span");
+          const meta = card.querySelector("em");
+          if (title) title.textContent = notice.title || title.textContent;
+          if (body) body.textContent = notice.body || body.textContent;
+          if (meta) meta.textContent = "来自网关";
+          card.dataset.source = "gateway";
+        };
+
+        fetch(endpoint)
+          .then((response) => (response.ok ? response.json() : []))
+          .then((notices) => {
+            if (!Array.isArray(notices)) return;
+            const picked = {};
+            for (const notice of notices) {
+              const kind = classifyNotice(notice);
+              if (!picked[kind]) picked[kind] = notice;
+            }
+            applyNotice("notice", picked.notice || notices[0]);
+            applyNotice("discussion", picked.discussion);
+            applyNotice("discovery", picked.discovery);
+          })
+          .catch(() => {
+            document.body.dataset.worldSquareSource = "fallback";
+          });
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>龙虾聊天 · 主城群聊</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css?v=20260430-polish-v1" />
+    <link rel="stylesheet" href="./styles.pixel-map.css?v=20260507-bg-png256-v1" />
+  </head>
+  <body
+    data-shell-page="hub"
+    data-shell-variant="public-square"
+    data-default-shell-mode="hub"
+    data-default-room-id="room:world:lobby"
+    data-workspace="chat"
+    data-sfc-theme="city"
+  >
+    <div class="app app-hub-shell sfc-shell sfc-city-shell city-hub-shell">
+      <header class="sfc-hud public-square-hud">
+        <div class="hud-left">
+          <button class="hud-rail-toggle" id="hud-rail-toggle" aria-label="切换会话">≡</button>
+          <div class="hub-hud-copy">
+            <span class="hub-hud-kicker">Main City</span>
+            <span class="hud-title">主城</span>
+          </div>
+        </div>
+        <div class="hud-right">
+          <span class="hub-hud-chip">群聊</span>
+          <span id="hud-status" class="hud-pill">连线中</span>
+        </div>
+      </header>
+
+      <main class="sfc-layout sfc-city-layout public-square-layout" aria-label="城邦公共聊天">
+        <aside class="sfc-rail sfc-city-rail public-square-rail" data-shell-column="rooms">
+          <div class="rail-title">导航</div>
+          <div class="rail-actions">
+            <a href="./creative.html" class="rail-item">
+              <span class="rail-item-label">住宅</span>
+            </a>
+            <a href="./index.html" class="rail-item is-active" aria-current="page">
+              <span class="rail-item-label">主城</span>
+            </a>
+            <a href="./unified.html" class="rail-item">
+              <span class="rail-item-label">世界入口</span>
+            </a>
+          </div>
+          <div class="rail-section">
+            <div class="rail-section-title">频道</div>
+            <ul id="room-list" class="rail-list public-square-list"></ul>
+          </div>
+        </aside>
+
+        <section class="sfc-stage sfc-city-stage public-square-stage">
+          <canvas
+            id="room-stage-canvas"
+            class="stage-canvas public-square-stage-canvas"
+            aria-label="主城场景画布"
+          ></canvas>
+          <div class="scene-hotspots public-square-hotspots" aria-label="主城热点">
+            <a
+              href="./unified.html"
+              class="scene-hotspot scene-hotspot--metro"
+              data-hotspot-title="地铁口"
+              data-hotspot-copy="通过地铁站进入世界入口。"
+            >
+              <span>地铁口</span>
+            </a>
+            <button
+              type="button"
+              class="scene-hotspot scene-hotspot--plaza"
+              data-hotspot-title="广场"
+              data-hotspot-copy="查看当前群聊焦点和公共事件。"
+            >
+              <span>广场</span>
+            </button>
+            <button
+              type="button"
+              class="scene-hotspot scene-hotspot--board"
+              data-hotspot-title="公告栏"
+              data-hotspot-copy="打开公告、任务、相册墙和城邦提示。"
+            >
+              <span>公告栏</span>
+            </button>
+            <button
+              type="button"
+              class="scene-hotspot scene-hotspot--shop"
+              data-hotspot-title="商铺"
+              data-hotspot-copy="进入轻闲聊天、补给和附近居民动态。"
+            >
+              <span>商铺</span>
+            </button>
+          </div>
+
+          <div class="sfc-chat-bar sfc-city-chat public-square-chat">
+            <div id="timeline" class="chat-log public-square-log"></div>
+          </div>
+
+          <form id="composer" class="sfc-composer sfc-city-composer public-square-composer">
+            <label class="public-square-field" for="composer-input">
+              <button type="button" class="public-square-field-label public-square-mention-chip" data-mention-trigger>@用户名</button>
+              <button
+                type="button"
+                class="composer-symbol-trigger"
+                data-symbol-trigger
+                aria-haspopup="menu"
+                aria-expanded="false"
+                aria-controls="composer-symbol-menu"
+              >
+                颜
+              </button>
+              <textarea
+                id="composer-input"
+                placeholder="在主城里说点什么…"
+                rows="1"
+              ></textarea>
+            </label>
+            <div id="composer-symbol-menu" class="composer-symbol-menu" data-symbol-menu role="menu" hidden>
+              <section class="composer-symbol-category" aria-label="常用颜文字">
+                <h3 class="composer-symbol-heading">常用</h3>
+                <div class="composer-symbol-grid">
+                  <button type="button" data-symbol-insert="(๑•̀ㅂ•́) ✧" role="menuitem">(๑•̀ㅂ•́) ✧</button>
+                  <button type="button" data-symbol-insert="(*^▽^*)" role="menuitem">(*^▽^*)</button>
+                  <button type="button" data-symbol-insert="(｡･∀･)ﾉﾞ" role="menuitem">(｡･∀･)ﾉﾞ</button>
+                  <button type="button" data-symbol-insert="♪(^∇^*)" role="menuitem">♪(^∇^*)</button>
+                  <button type="button" data-symbol-insert="o(￣▽￣)d" role="menuitem">o(￣▽￣)d</button>
+                  <button type="button" data-symbol-insert="╮(╯▽╰)╭" role="menuitem">╮(╯▽╰)╭</button>
+                  <button type="button" data-symbol-insert="(づ￣3￣)づ╭❤～" role="menuitem">(づ￣3￣)づ╭❤～</button>
+                  <button type="button" data-symbol-insert="○|￣|_" role="menuitem">○|￣|_</button>
+                </div>
+              </section>
+              <section class="composer-symbol-category" aria-label="高兴颜文字">
+                <h3 class="composer-symbol-heading">高兴</h3>
+                <div class="composer-symbol-grid">
+                  <button type="button" data-symbol-insert="ヾ(≧▽≦*)o" role="menuitem">ヾ(≧▽≦*)o</button>
+                  <button type="button" data-symbol-insert="(o゜▽゜)o☆" role="menuitem">(o゜▽゜)o☆</button>
+                  <button type="button" data-symbol-insert="&lt;(￣︶￣)&gt;" role="menuitem">&lt;(￣︶￣)&gt;</button>
+                  <button type="button" data-symbol-insert="o(*￣▽￣*)o" role="menuitem">o(*￣▽￣*)o</button>
+                  <button type="button" data-symbol-insert="(p≧w≦q)" role="menuitem">(p≧w≦q)</button>
+                  <button type="button" data-symbol-insert="ヽ(✿ﾟ▽ﾟ)ノ" role="menuitem">ヽ(✿ﾟ▽ﾟ)ノ</button>
+                  <button type="button" data-symbol-insert="(((o(*ﾟ▽ﾟ*)o)))" role="menuitem">(((o(*ﾟ▽ﾟ*)o)))</button>
+                  <button type="button" data-symbol-insert="(☆▽☆)" role="menuitem">(☆▽☆)</button>
+                  <button type="button" data-symbol-insert="φ(≧ω≦*)♪" role="menuitem">φ(≧ω≦*)♪</button>
+                  <button type="button" data-symbol-insert="︿(￣︶￣)︿" role="menuitem">︿(￣︶￣)︿</button>
+                  <button type="button" data-symbol-insert="(′▽`ʃ♡ƪ)" role="menuitem">(′▽`ʃ♡ƪ)</button>
+                  <button type="button" data-symbol-insert="~(～￣▽￣)～" role="menuitem">~(～￣▽￣)～</button>
+                </div>
+              </section>
+              <section class="composer-symbol-category" aria-label="卖萌颜文字">
+                <h3 class="composer-symbol-heading">卖萌</h3>
+                <div class="composer-symbol-grid">
+                  <button type="button" data-symbol-insert="=￣ω￣=" role="menuitem">=￣ω￣=</button>
+                  <button type="button" data-symbol-insert="(*^-^*)" role="menuitem">(*^-^*)</button>
+                  <button type="button" data-symbol-insert="n(*≧▽≦*)n" role="menuitem">n(*≧▽≦*)n</button>
+                  <button type="button" data-symbol-insert="o(〃'▽'〃)o" role="menuitem">o(〃'▽'〃)o</button>
+                  <button type="button" data-symbol-insert="(ฅ´ω`ฅ)" role="menuitem">(ฅ´ω`ฅ)</button>
+                  <button type="button" data-symbol-insert="( =•ω•= )m" role="menuitem">( =•ω•= )m</button>
+                  <button type="button" data-symbol-insert="ฅ’ω’ฅ" role="menuitem">ฅ’ω’ฅ</button>
+                  <button type="button" data-symbol-insert="(｡￫‿￩｡)" role="menuitem">(｡￫‿￩｡)</button>
+                  <button type="button" data-symbol-insert="(//▽//)" role="menuitem">(//▽//)</button>
+                  <button type="button" data-symbol-insert="(๑´0`๑)" role="menuitem">(๑´0`๑)</button>
+                </div>
+              </section>
+              <section class="composer-symbol-category" aria-label="生气颜文字">
+                <h3 class="composer-symbol-heading">生气</h3>
+                <div class="composer-symbol-grid">
+                  <button type="button" data-symbol-insert="￣へ￣" role="menuitem">￣へ￣</button>
+                  <button type="button" data-symbol-insert="(*￣︿￣)" role="menuitem">(*￣︿￣)</button>
+                  <button type="button" data-symbol-insert="(#￣～￣#)" role="menuitem">(#￣～￣#)</button>
+                  <button type="button" data-symbol-insert="o(￣ヘ￣o#)" role="menuitem">o(￣ヘ￣o#)</button>
+                  <button type="button" data-symbol-insert="凸(艹皿艹 )" role="menuitem">凸(艹皿艹 )</button>
+                  <button type="button" data-symbol-insert="(ー`′ー)" role="menuitem">(ー`′ー)</button>
+                  <button type="button" data-symbol-insert="(╯°Д°)╯︵ ┻━┻" role="menuitem">(╯°Д°)╯︵ ┻━┻</button>
+                  <button type="button" data-symbol-insert="(ノ=Д=)ノ┻━┻" role="menuitem">(ノ=Д=)ノ┻━┻</button>
+                  <button type="button" data-symbol-insert="(`д′)" role="menuitem">(`д′)</button>
+                  <button type="button" data-symbol-insert="&lt;(`^′)&gt;" role="menuitem">&lt;(`^′)&gt;</button>
+                </div>
+              </section>
+              <section class="composer-symbol-category" aria-label="震惊尴尬颜文字">
+                <h3 class="composer-symbol-heading">震惊 / 尴尬</h3>
+                <div class="composer-symbol-grid">
+                  <button type="button" data-symbol-insert="(⊙ˍ⊙)" role="menuitem">(⊙ˍ⊙)</button>
+                  <button type="button" data-symbol-insert="Σ(っ °Д °;)っ" role="menuitem">Σ(っ °Д °;)っ</button>
+                  <button type="button" data-symbol-insert="O(≧口≦)O" role="menuitem">O(≧口≦)O</button>
+                  <button type="button" data-symbol-insert="(￣△￣;)" role="menuitem">(￣△￣;)</button>
+                  <button type="button" data-symbol-insert="(°ー°〃)" role="menuitem">(°ー°〃)</button>
+                  <button type="button" data-symbol-insert="&gt;_&lt;|||" role="menuitem">&gt;_&lt;|||</button>
+                  <button type="button" data-symbol-insert="^_^;" role="menuitem">^_^;</button>
+                  <button type="button" data-symbol-insert="→_→" role="menuitem">→_→</button>
+                  <button type="button" data-symbol-insert="@_@" role="menuitem">@_@</button>
+                  <button type="button" data-symbol-insert="o_O???" role="menuitem">o_O???</button>
+                </div>
+              </section>
+              <section class="composer-symbol-category" aria-label="无奈伤心颜文字">
+                <h3 class="composer-symbol-heading">无奈 / 伤心</h3>
+                <div class="composer-symbol-grid">
+                  <button type="button" data-symbol-insert="╮(╯_╰)╭" role="menuitem">╮(╯_╰)╭</button>
+                  <button type="button" data-symbol-insert=".....((/- -)/" role="menuitem">.....((/- -)/</button>
+                  <button type="button" data-symbol-insert="(⊙﹏⊙)" role="menuitem">(⊙﹏⊙)</button>
+                  <button type="button" data-symbol-insert="(ノへ￣、)" role="menuitem">(ノへ￣、)</button>
+                  <button type="button" data-symbol-insert="┭┮﹏┭┮" role="menuitem">┭┮﹏┭┮</button>
+                  <button type="button" data-symbol-insert="(;′⌒`)" role="menuitem">(;′⌒`)</button>
+                  <button type="button" data-symbol-insert="X﹏X" role="menuitem">X﹏X</button>
+                  <button type="button" data-symbol-insert="(。﹏。*)" role="menuitem">(。﹏。*)</button>
+                  <button type="button" data-symbol-insert="╥﹏╥" role="menuitem">╥﹏╥</button>
+                  <button type="button" data-symbol-insert="_(:з」∠)_" role="menuitem">_(:з」∠)_</button>
+                </div>
+              </section>
+              <section class="composer-symbol-category" aria-label="亲亲动物颜文字">
+                <h3 class="composer-symbol-heading">亲亲 / 动物 / Orz</h3>
+                <div class="composer-symbol-grid">
+                  <button type="button" data-symbol-insert="(* ￣3)(ε￣ *)" role="menuitem">(* ￣3)(ε￣ *)</button>
+                  <button type="button" data-symbol-insert="(*￣3￣)╭" role="menuitem">(*￣3￣)╭</button>
+                  <button type="button" data-symbol-insert="o(*￣3￣)o" role="menuitem">o(*￣3￣)o</button>
+                  <button type="button" data-symbol-insert="( ˘ ³˘)♥" role="menuitem">( ˘ ³˘)♥</button>
+                  <button type="button" data-symbol-insert="( ¯(∞)¯ )" role="menuitem">( ¯(∞)¯ )</button>
+                  <button type="button" data-symbol-insert="(:◎)≡" role="menuitem">(:◎)≡</button>
+                  <button type="button" data-symbol-insert="≡ω≡" role="menuitem">≡ω≡</button>
+                  <button type="button" data-symbol-insert="ʕ•̀ω•́ʔ✧" role="menuitem">ʕ•̀ω•́ʔ✧</button>
+                  <button type="button" data-symbol-insert="ORZ" role="menuitem">ORZ</button>
+                  <button type="button" data-symbol-insert="OTL" role="menuitem">OTL</button>
+                </div>
+              </section>
+              <section class="composer-symbol-category" aria-label="轻萌颜文字">
+                <h3 class="composer-symbol-heading">轻萌</h3>
+                <div class="composer-symbol-grid">
+                  <button type="button" data-symbol-insert="(✧∇✧)" role="menuitem">(✧∇✧)</button>
+                  <button type="button" data-symbol-insert=">ㅂ<" role="menuitem">&gt;ㅂ&lt;</button>
+                  <button type="button" data-symbol-insert="^O^" role="menuitem">^O^</button>
+                  <button type="button" data-symbol-insert="(//▽//)" role="menuitem">(//▽//)</button>
+                  <button type="button" data-symbol-insert="(๑´0`๑)" role="menuitem">(๑´0`๑)</button>
+                  <button type="button" data-symbol-insert="(ฅ´ω`ฅ)" role="menuitem">(ฅ´ω`ฅ)</button>
+                  <button type="button" data-symbol-insert="(｡￫‿￩｡)" role="menuitem">(｡￫‿￩｡)</button>
+                  <button type="button" data-symbol-insert="o(〃'▽'〃)o" role="menuitem">o(〃'▽'〃)o</button>
+                </div>
+              </section>
+            </div>
+            <button id="composer-send" type="submit">发送</button>
+          </form>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js?v=20260501-contract-v1"></script>
+  </body>
+</html>

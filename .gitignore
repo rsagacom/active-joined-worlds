@@ -1,0 +1,25 @@
+# Build outputs
+/target/
+/dist/
+/output/
+/test-results/
+
+# Dependencies
+/node_modules/
+**/node_modules/
+
+# Local runtime state and test leftovers
+/.lobster-chat-dev/
+/.playwright-cli/
+/backups/
+*.log
+
+# Local OS/editor noise
+.DS_Store
+*.swp
+*.swo
+__pycache__/
+*.pyc
+
+# Local screenshots and generated debug artifacts
+apps/lobster-web-shell/screenshots/

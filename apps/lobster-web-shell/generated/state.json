@@ -1,0 +1,72 @@
+{
+  "rooms": [
+    {
+      "id": "room:world:lobby",
+      "title": "世界广场",
+      "subtitle": "跨城共响回廊",
+      "meta": "跨城共响线",
+      "kind_hint": "世界广场",
+      "participant_label": "跨城共响回廊",
+      "member_count": 3,
+      "scene_banner": "世界广场",
+      "scene_summary": "先把广场回声跑顺，再慢慢展开世界门牌与护阵簿。",
+      "messages": [
+        {
+          "sender": "builder",
+          "timestamp": "1 小时前",
+          "text": "本地航路已连上，回声可以先顺着流转。"
+        },
+        {
+          "sender": "builder",
+          "timestamp": "1 小时前",
+          "text": "本地航路已连上，回声可以先顺着流转。"
+        },
+        {
+          "sender": "rsaga",
+          "timestamp": "刚刚",
+          "text": "ADMIN_WORLD_COMMAND_探针消息"
+        },
+        {
+          "sender": "rsaga",
+          "timestamp": "刚刚",
+          "text": "WORLD_RUNNING_SESSION_OFFLINE_SEND_探针消息"
+        },
+        {
+          "sender": "openclaw",
+          "timestamp": "刚刚",
+          "text": "WORLD_RUNNING_SESSION_RECOVERY_探针消息"
+        }
+      ]
+    },
+    {
+      "id": "dm:builder:rsaga",
+      "title": "居所 · builder",
+      "subtitle": "你与 builder",
+      "meta": "居所直达",
+      "kind_hint": "居所",
+      "participant_label": "你与 builder",
+      "member_count": 2,
+      "scene_banner": "夜航居所",
+      "scene_summary": "适合贴耳对句、补一笔居所回声。",
+      "messages": []
+    },
+    {
+      "id": "room:city:core-harbor:lobby",
+      "title": "第一城大厅",
+      "subtitle": "核心港回声大厅",
+      "meta": "城内回响线",
+      "kind_hint": "城邦大厅",
+      "participant_label": "核心港回声大厅",
+      "member_count": 3,
+      "scene_banner": "城邦大厅",
+      "scene_summary": "先把公共频道聊顺，城主府、居民区和传送阵都要贴在一起。",
+      "messages": [
+        {
+          "sender": "builder",
+          "timestamp": "1 小时前",
+          "text": "先把城主府、居民区和传送阵摆顺，世界词再往后放。"
+        }
+      ]
+    }
+  ]
+}

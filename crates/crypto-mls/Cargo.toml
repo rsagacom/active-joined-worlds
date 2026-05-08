@@ -1,0 +1,11 @@
+[package]
+name = "crypto-mls"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+authors.workspace = true
+
+[dependencies]
+chat-core.workspace = true
+postcard = { version = "1", features = ["alloc"] }
+serde = { version = "1", features = ["derive"] }

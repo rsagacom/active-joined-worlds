@@ -1,0 +1,1086 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>龙虾聊天 · 管理后台</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.css?v=20260507-admin-v14" />
+  </head>
+  <body
+    data-shell-page="admin"
+    data-default-shell-mode="admin"
+    data-workspace="chat"
+  >
+    <div class="app">
+      <header class="topbar">
+        <div class="topbar-main">
+          <div class="masthead">
+            <div id="masthead-eyebrow" class="eyebrow">龙虾聊天 · 管理后台</div>
+            <h1 id="masthead-title">管理后台</h1>
+            <p id="hero-note" class="hero-note">
+              当前模块：<strong id="admin-current-module">会话处理</strong>。左侧选分类，中间看会话，右侧用工具。
+            </p>
+          </div>
+        </div>
+        <div class="status-cluster">
+          <span id="shell-mode-badge" class="badge">入口：管理后台</span>
+          <span id="transport-state" class="badge">连接：探测中</span>
+          <span id="storage-state" class="badge">历史：准备中</span>
+          <span id="gateway-state" class="badge">消息源：待定</span>
+          <span id="provider-state" class="badge">身份：待定</span>
+          <span id="world-state" class="badge">城邦：治理中</span>
+        </div>
+      </header>
+
+      <main class="layout layout-admin-shell">
+        <aside class="sidebar-stack sidebar-stack-admin admin-nav-shell" data-admin-nav="expanded">
+          <section class="panel admin-nav-panel" aria-label="后台功能目录">
+            <div class="admin-nav-head">
+              <div class="admin-nav-head-title">
+                <div class="panel-kicker">后台目录</div>
+                <div class="panel-shell-title">管理工具</div>
+              </div>
+              <button
+                id="admin-nav-toggle"
+                class="admin-nav-toggle"
+                type="button"
+                aria-label="收起后台功能目录"
+                aria-pressed="false"
+              >
+                <span class="admin-nav-toggle-icon">&#9664;</span>
+                <span class="admin-nav-toggle-label">收起</span>
+              </button>
+            </div>
+            <nav class="admin-nav-list" aria-label="管理后台分类">
+              <a class="admin-nav-item is-active" href="#admin-session-workspace" data-admin-category="session" data-admin-tool-status="可用" aria-label="会话处理：全部、未读、待处理、归档">
+                <span class="admin-nav-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                </span>
+                <span class="admin-nav-copy">
+                  <strong>会话</strong>
+                  <small>全部、未读、待处理、归档</small>
+                </span>
+              </a>
+              <a class="admin-nav-item" href="#admin-resident-tools" data-admin-category="resident" data-admin-tool-status="可用" aria-label="居民管理：资料、身份状态、备注">
+                <span class="admin-nav-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                </span>
+                <span class="admin-nav-copy">
+                  <strong>居民</strong>
+                  <small>资料、身份状态、备注</small>
+                </span>
+              </a>
+              <a class="admin-nav-item" href="#admin-room-tools" data-admin-category="room" data-admin-tool-status="待接入" aria-label="房间管理：成员、公告、冻结状态（待接入）">
+                <span class="admin-nav-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                </span>
+                <span class="admin-nav-copy">
+                  <strong>房间</strong>
+                  <small>成员、公告、冻结状态</small>
+                </span>
+              </a>
+              <a class="admin-nav-item" href="#admin-safety-tools" data-admin-category="safety" data-admin-tool-status="需网关" aria-label="安全管理：举报队列、审核、安全通告（需网关）">
+                <span class="admin-nav-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                </span>
+                <span class="admin-nav-copy">
+                  <strong>安全</strong>
+                  <small>举报队列、审核、安全通告</small>
+                </span>
+              </a>
+              <a class="admin-nav-item" href="#admin-notice-tools" data-admin-category="notice" data-admin-tool-status="需网关" aria-label="公告发布：世界、城市、房间公告（需网关）">
+                <span class="admin-nav-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                </span>
+                <span class="admin-nav-copy">
+                  <strong>公告</strong>
+                  <small>世界、城市、房间公告</small>
+                </span>
+              </a>
+              <a class="admin-nav-item" href="#admin-world-tools" data-admin-category="world" data-admin-tool-status="高级" aria-label="世界互联：目录、广场、镜像、Provider（高级）">
+                <span class="admin-nav-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                </span>
+                <span class="admin-nav-copy">
+                  <strong>世界</strong>
+                  <small>目录、广场、镜像、Provider</small>
+                </span>
+              </a>
+              <a class="admin-nav-item" href="#admin-system-tools" data-admin-category="system" data-admin-tool-status="可用" aria-label="系统管理：网关状态、导出、审计">
+                <span class="admin-nav-icon" aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                </span>
+                <span class="admin-nav-copy">
+                  <strong>系统</strong>
+                  <small>网关状态、导出、审计</small>
+                </span>
+              </a>
+            </nav>
+          </section>
+
+          <section class="panel rooms admin-session-queue">
+            <div class="panel-shell-header">
+              <div>
+                <div class="panel-kicker">会话队列</div>
+                <div class="panel-shell-title">待处理会话</div>
+              </div>
+              <p class="panel-shell-note">
+                按 IM 后台方式排队：未读、待处理、当前跟进优先。
+              </p>
+            </div>
+            <div class="panel-title">会话列表</div>
+            <ul id="room-list" class="room-list"></ul>
+          </section>
+        </aside>
+
+        <section id="admin-session-workspace" class="panel conversation conversation-shell-admin">
+          <div id="admin-workspace-session">
+            <div class="conversation-stage">
+            <div class="conversation-stage-copy">
+              <div class="panel-kicker">会话工作区</div>
+              <div id="room-stage-title" class="conversation-stage-title">当前会话</div>
+              <p class="conversation-stage-note">先选择左侧会话，查看消息后在此处理。</p>
+            </div>
+            <div class="conversation-stage-side">
+              <span class="stage-chip">消息</span>
+              <span class="stage-chip">状态</span>
+              <span class="stage-chip">工具</span>
+            </div>
+          </div>
+          <div class="panel-title">当前会话</div>
+          <div id="conversation-meta" class="meta"></div>
+          <div id="timeline" class="timeline"></div>
+          <form id="composer" class="composer">
+            <div class="identity-row">
+              <label for="identity-input">当前身份</label>
+              <input
+                id="identity-input"
+                type="text"
+                placeholder="输入已分配的居民账号"
+                autocomplete="off"
+              />
+            </div>
+            <div class="composer-row">
+              <textarea
+                id="composer-input"
+                placeholder="先选会话，再写跟进或公告"
+                rows="1"
+                autofocus
+              ></textarea>
+              <button id="composer-send" type="submit">发送</button>
+            </div>
+            <div class="composer-hints composer-hints-admin">
+              <span>Enter 发送</span>
+              <span>Shift+Enter 换行</span>
+              <span>处理</span>
+              <span>刷新</span>
+            </div>
+          </form>
+          </div>
+
+          <!-- 分类视图（默认隐藏，点击左侧分类时切换） -->
+          <div id="admin-workspace-category" hidden>
+            <!-- 会话分类 -->
+            <div class="admin-category-panel" data-admin-category="session" hidden>
+              <div class="admin-category-head">
+                <div class="panel-kicker">会话处理</div>
+                <h2 class="admin-category-title">当前会话</h2>
+                <p class="admin-category-desc">查看消息、发送跟进、导出历史记录。</p>
+              </div>
+              <div class="admin-category-status">
+                <span class="action-status action-status-available">可用</span>
+                <span class="admin-category-status-copy">会话队列实时同步中</span>
+              </div>
+              <div class="admin-category-actions">
+                <button type="button" class="action-btn" id="category-session-export" data-admin-action="export-current" data-action-status="available">导出当前会话</button>
+                <button type="button" class="action-btn secondary" id="category-session-all" data-admin-action="export-all" data-action-status="available">导出全部历史</button>
+              </div>
+            </div>
+
+            <!-- 居民分类 -->
+            <div class="admin-category-panel" data-admin-category="resident" hidden>
+              <div class="admin-category-head">
+                <div class="panel-kicker">居民管理</div>
+                <h2 class="admin-category-title">居民与身份</h2>
+                <p class="admin-category-desc">查看居民资料、管理身份状态、验证码登录。</p>
+              </div>
+              <div class="admin-category-status">
+                <span class="action-status action-status-gateway">需网关</span>
+                <span class="admin-category-status-copy">需要已验证的城主或管理员身份</span>
+              </div>
+              <div class="admin-category-actions">
+                <button type="button" class="action-btn" id="category-resident-login" data-admin-action="resident-login" data-action-status="gateway" disabled aria-disabled="true" title="需要已连接的网关与已验证的管理员身份">居民登录</button>
+                <button type="button" class="action-btn secondary" id="category-resident-identity" data-admin-action="view-identity" data-action-status="gateway" disabled aria-disabled="true" title="需要已连接的网关与已验证的管理员身份">查看身份</button>
+              </div>
+            </div>
+
+            <!-- 房间分类 -->
+            <div class="admin-category-panel" data-admin-category="room" hidden>
+              <div class="admin-category-head">
+                <div class="panel-kicker">房间管理</div>
+                <h2 class="admin-category-title">房间与成员</h2>
+                <p class="admin-category-desc">查看房间状态、公告与冻结状态。首版只读展示。</p>
+              </div>
+              <div class="admin-category-status">
+                <span class="action-status action-status-pending">待接入</span>
+                <span class="admin-category-status-copy">成员管理与冻结功能尚未接入</span>
+              </div>
+              <div class="admin-category-actions">
+                <button type="button" class="action-btn" data-admin-action="room-list" data-action-status="pending" disabled aria-disabled="true" title="房间管理功能尚未接入后端 API">房间列表</button>
+              </div>
+            </div>
+
+            <!-- 安全分类 -->
+            <div class="admin-category-panel" data-admin-category="safety" hidden>
+              <div class="admin-category-head">
+                <div class="panel-kicker">安全管理</div>
+                <h2 class="admin-category-title">安全与举报</h2>
+                <p class="admin-category-desc">处理举报队列、发布安全通告、审查违规内容。</p>
+              </div>
+              <div class="admin-category-status">
+                <span class="action-status action-status-gateway">需网关</span>
+                <span class="admin-category-status-copy">安全通告可发布，举报列表待接入</span>
+              </div>
+              <div class="admin-category-actions">
+                <button type="button" class="action-btn" id="category-safety-advisory" data-admin-action="publish-advisory" data-action-status="gateway" disabled aria-disabled="true" title="需要已连接的网关与发布权限">发布安全通告</button>
+                <button type="button" class="action-btn secondary" data-admin-action="view-reports" data-action-status="pending" disabled aria-disabled="true" title="举报列表功能尚未接入">查看举报</button>
+              </div>
+            </div>
+
+            <!-- 公告分类 -->
+            <div class="admin-category-panel" data-admin-category="notice" hidden>
+              <div class="admin-category-head">
+                <div class="panel-kicker">公告发布</div>
+                <h2 class="admin-category-title">公告与通知</h2>
+                <p class="admin-category-desc">发布世界公告、城市公告、房间公告。</p>
+              </div>
+              <div class="admin-category-status">
+                <span class="action-status action-status-gateway">需网关</span>
+                <span class="admin-category-status-copy">需要已连接的网关与发布权限</span>
+              </div>
+              <div class="admin-category-actions">
+                <button type="button" class="action-btn" id="category-notice-publish" data-admin-action="publish-notice" data-action-status="gateway" disabled aria-disabled="true" title="需要已连接的网关与发布权限">发布公告</button>
+                <button type="button" class="action-btn secondary" data-admin-action="history-notice" data-action-status="pending" disabled aria-disabled="true" title="历史公告功能尚未接入">历史公告</button>
+              </div>
+            </div>
+
+            <!-- 世界分类 -->
+            <div class="admin-category-panel" data-admin-category="world" hidden>
+              <div class="admin-category-head">
+                <div class="panel-kicker">世界互联</div>
+                <h2 class="admin-category-title">世界与Provider</h2>
+                <p class="admin-category-desc">管理城市目录、镜像源、Provider 连接与信任状态。</p>
+              </div>
+              <div class="admin-category-status">
+                <span class="action-status action-status-pending">待接入</span>
+                <span class="admin-category-status-copy">Provider 连接与城市创建尚未接入</span>
+              </div>
+              <div class="admin-category-actions">
+                <button type="button" class="action-btn" data-admin-action="connect-provider" data-action-status="pending" disabled aria-disabled="true" title="Provider 连接功能尚未接入">接入消息来源</button>
+              </div>
+              <details class="tool-group tool-group--advanced">
+                <summary class="tool-group-title">高级 / 互联实验</summary>
+                <div class="tool-group-body">
+                  <div class="action-row">
+                    <span class="action-desc">Provider 互联、城市与房间创建、镜像注册、信任状态深改。</span>
+                    <span class="action-status action-status-pending">待接入</span>
+                  </div>
+                  <div class="action-row">
+                    <button type="button" class="action-btn" disabled aria-disabled="true" title="Provider 连接功能尚未接入">接入消息来源</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button type="button" class="action-btn secondary" disabled aria-disabled="true" title="断开连接功能尚未接入">断开连接</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button type="button" class="action-btn" disabled aria-disabled="true" title="镜像源功能尚未接入">添加镜像源</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button type="button" class="action-btn" disabled aria-disabled="true" title="城市创建功能尚未接入">新建城市</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button type="button" class="action-btn" disabled aria-disabled="true" title="加入城市功能尚未接入">加入城市</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button type="button" class="action-btn" disabled aria-disabled="true" title="房间创建功能尚未接入">新建房间</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button type="button" class="action-btn" disabled aria-disabled="true" title="私聊功能尚未接入">打开私聊</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button type="button" class="action-btn" disabled aria-disabled="true" title="城市状态更新功能尚未接入">更新城市状态</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div id="mode-guide" class="guide-list compact-guide-list">正在准备中文指引…</div>
+                </div>
+              </details>
+            </div>
+
+            <!-- 系统分类 -->
+            <div class="admin-category-panel" data-admin-category="system" hidden>
+              <div class="admin-category-head">
+                <div class="panel-kicker">系统管理</div>
+                <h2 class="admin-category-title">系统与导出</h2>
+                <p class="admin-category-desc">网关状态、同步状态、会话导出与审计日志。</p>
+              </div>
+              <div class="admin-category-status">
+                <span class="action-status action-status-available">可用</span>
+                <span class="admin-category-status-copy">导出功能可用，审计日志待接入</span>
+              </div>
+              <div class="admin-category-actions">
+                <button type="button" class="action-btn" id="category-system-export" data-admin-action="export-all" data-action-status="available">导出全部历史</button>
+                <button type="button" class="action-btn secondary" data-admin-action="gateway-diag" data-action-status="pending" disabled aria-disabled="true" title="网关诊断功能尚未接入">网关诊断</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="panel chat-detail admin-context-panel">
+          <div class="panel-shell-header panel-shell-header-detail">
+            <div>
+              <div class="panel-kicker">上下文</div>
+              <div class="panel-shell-title">当前对象与工具</div>
+            </div>
+            <p class="panel-shell-note">
+              只显示与当前会话有关的动作；默认折叠高级治理。
+            </p>
+          </div>
+          <div class="panel-title">当前对象与工具</div>
+
+          <!-- 极简工具摘要（JS 动态填充当前分类） -->
+          <div id="admin-tools-summary" class="admin-tools-summary"></div>
+
+          <!-- 分类工具表单（默认隐藏，按分类分组；点击打开工具后展开为抽屉） -->
+          <div id="admin-tool-forms" hidden>
+            <div class="admin-tool-drawer-head">
+              <button
+                type="button"
+                id="admin-tool-drawer-close"
+                class="admin-tool-drawer-close action-btn secondary"
+                aria-label="关闭工具抽屉"
+              >
+                关闭工具
+              </button>
+            </div>
+            <div data-admin-tool-category="session">
+              <div class="tool-group tool-group--primary">
+                <div class="tool-group-title tool-group-title--static">会话处理</div>
+                <div class="tool-group-body">
+                  <div class="action-row">
+                    <span class="action-desc">导出当前会话或全部历史记录。</span>
+                    <span class="action-status action-status-available">可用</span>
+                  </div>
+                  <div class="action-row">
+                    <span class="action-desc">数据来源：本地会话状态 / GET /v1/shell/state</span>
+                  </div>
+                  <div class="conversation-tools admin-conversation-tools">
+                    <select id="export-format-select" aria-label="导出格式">
+                      <option value="markdown">标记文稿</option>
+                      <option value="txt">纯文本</option>
+                      <option value="jsonl">结构化记录</option>
+                    </select>
+                    <button id="export-current-button" type="button" class="secondary">
+                      导出当前会话
+                    </button>
+                    <button id="export-all-button" type="button" class="secondary">
+                      导出全部历史
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div data-admin-tool-category="resident">
+              <div class="tool-group">
+                <div class="tool-group-title tool-group-title--static">登录与身份</div>
+                <div class="tool-group-body">
+                  <div class="action-row">
+                    <span class="action-desc">城主/居民身份查看与验证码登录。</span>
+                    <span class="action-status action-status-gateway">需网关</span>
+                  </div>
+                  <div class="action-row">
+                    <span class="action-desc">API：POST /v1/auth/email-otp/request · POST /v1/auth/email-otp/verify</span>
+                  </div>
+                  <form id="auth-request-form" class="inline-form compact-form">
+                    <div class="section-label">申请验证码</div>
+                    <input id="auth-email-input" type="email" placeholder="邮箱地址" autocomplete="email" />
+                    <input id="auth-mobile-input" type="text" placeholder="手机号（反滥用句柄）" autocomplete="tel" />
+                    <input id="auth-device-input" type="text" placeholder="设备物理地址（可选）" autocomplete="off" />
+                    <div class="action-row">
+                      <button id="auth-request-button" type="submit" class="action-btn">申请验证码</button>
+                    </div>
+                  </form>
+                  <form id="auth-verify-form" class="inline-form compact-form">
+                    <div class="section-label">验证验证码</div>
+                    <input id="auth-challenge-input" type="text" placeholder="挑战编号" autocomplete="off" />
+                    <input id="auth-code-input" type="text" placeholder="6 位验证码" inputmode="numeric" autocomplete="one-time-code" />
+                    <div class="action-row">
+                      <button id="auth-verify-button" type="submit" class="action-btn">完成登录</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+
+            <div data-admin-tool-category="notice">
+              <div class="tool-group">
+                <div class="tool-group-title tool-group-title--static">公告发布</div>
+                <div class="tool-group-body">
+                  <div class="action-row">
+                    <span class="action-desc">发布世界公告或城邦公告。</span>
+                    <span class="action-status action-status-gateway">需网关</span>
+                  </div>
+                  <div class="action-row">
+                    <span class="action-desc">API：POST /v1/world-square/notices</span>
+                  </div>
+                  <form id="world-notice-form" class="inline-form compact-form" data-shell-role="admin">
+                    <div class="section-label">发布世界公告</div>
+                    <input id="world-notice-title-input" type="text" placeholder="公告标题" autocomplete="off" />
+                    <select id="world-notice-severity-select" aria-label="公告级别">
+                      <option value="info">普通说明</option>
+                      <option value="warning">维护提醒</option>
+                      <option value="critical">紧急通告</option>
+                    </select>
+                    <input id="world-notice-tags-input" type="text" placeholder="标签，用逗号分隔（可选）" autocomplete="off" />
+                    <textarea id="world-notice-body-input" rows="3" placeholder="公告正文"></textarea>
+                    <div class="action-row">
+                      <button type="submit" class="action-btn">发布公告</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+
+            <div data-admin-tool-category="safety">
+              <div class="tool-group">
+                <div class="tool-group-title tool-group-title--static">安全通告</div>
+                <div class="tool-group-body">
+                  <div class="action-row">
+                    <span class="action-desc">发布安全提示、处理安全状态。</span>
+                    <span class="action-status action-status-gateway">需网关</span>
+                  </div>
+                  <div class="action-row">
+                    <span class="action-desc">API：POST /v1/world-safety/advisories</span>
+                  </div>
+                  <form id="world-advisory-form" class="inline-form compact-form" data-shell-role="admin">
+                    <div class="section-label">发布安全通告</div>
+                    <select id="world-advisory-subject-kind-select" aria-label="通告对象类型">
+                      <option value="City">城市</option>
+                      <option value="Resident">居民</option>
+                      <option value="Room">房间</option>
+                    </select>
+                    <input id="world-advisory-subject-input" type="text" placeholder="对象标识" autocomplete="off" />
+                    <input id="world-advisory-action-input" type="text" placeholder="处置动作" autocomplete="off" />
+                    <textarea id="world-advisory-reason-input" rows="3" placeholder="原因与说明"></textarea>
+                    <div class="action-row">
+                      <button type="submit" class="action-btn">发布安全通告</button>
+                    </div>
+                  </form>
+                  <form id="world-report-review-form" class="inline-form compact-form" data-shell-role="admin">
+                    <div class="section-label">审查举报</div>
+                    <input id="world-report-review-id-input" type="text" placeholder="举报 ID" autocomplete="off" />
+                    <select id="world-report-review-status-select" aria-label="审查状态">
+                      <option value="Resolved">已处理</option>
+                      <option value="Dismissed">驳回</option>
+                      <option value="Open">继续观察</option>
+                    </select>
+                    <select id="world-report-review-city-state-select" aria-label="城市信任变更">
+                      <option value="">不变更城市状态</option>
+                      <option value="UnderReview">审查中</option>
+                      <option value="Quarantined">隔离观察</option>
+                      <option value="Isolated">孤城断联</option>
+                    </select>
+                    <textarea id="world-report-review-resolution-input" rows="3" placeholder="处理结论"></textarea>
+                    <div class="action-row">
+                      <button type="submit" class="action-btn">审查举报</button>
+                    </div>
+                  </form>
+                  <form id="world-report-form" class="inline-form compact-form">
+                    <div class="section-label">提交公共空间举报</div>
+                    <input id="world-report-city-input" type="text" placeholder="城市标识（可选）" autocomplete="off" />
+                    <select id="world-report-target-kind-select" aria-label="举报对象类型">
+                      <option value="City">城市</option>
+                      <option value="Resident">居民</option>
+                      <option value="Room">房间</option>
+                      <option value="Message">消息</option>
+                    </select>
+                    <input id="world-report-target-input" type="text" placeholder="对象标识" autocomplete="off" />
+                    <textarea id="world-report-summary-input" rows="3" placeholder="违规摘要"></textarea>
+                    <textarea id="world-report-evidence-input" rows="2" placeholder="证据链接，每行一个（可选）"></textarea>
+                    <div class="action-row">
+                      <button type="submit" class="action-btn">提交举报</button>
+                    </div>
+                  </form>
+                  <div class="action-row">
+                    <span class="action-desc">冻结、限制或恢复居民权限；高风险动作。</span>
+                    <span class="action-status action-status-pending">待接入</span>
+                  </div>
+                  <div class="action-row">
+                    <span class="action-desc">API：POST /v1/world-safety/residents/sanction</span>
+                  </div>
+                  <div class="action-row">
+                    <button id="world-resident-sanction-button" type="submit" class="action-btn" disabled aria-disabled="true" title="居民制裁功能尚未接入">执行制裁</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div data-admin-tool-category="room">
+              <div class="tool-group">
+                <div class="tool-group-title tool-group-title--static">房间管理</div>
+                <div class="tool-group-body">
+                  <div class="action-row">
+                    <span class="action-desc">首版只读展示房间状态；新建、冻结和成员调整先放高级操作。</span>
+                    <span class="action-status action-status-pending">待接入</span>
+                  </div>
+                  <div class="action-row">
+                    <span class="action-desc">API：POST /v1/cities/rooms/freeze · POST /v1/cities/stewards</span>
+                  </div>
+                  <div class="action-row">
+                    <button type="button" class="action-btn" disabled aria-disabled="true" title="成员管理功能尚未接入">成员管理</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button type="button" class="action-btn" disabled aria-disabled="true" title="房间冻结功能尚未接入">冻结房间</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div data-admin-tool-category="world">
+              <div class="tool-group tool-group--advanced">
+                <div class="tool-group-title tool-group-title--static">高级 / 互联实验</div>
+                <div class="tool-group-body">
+                  <div class="action-row">
+                    <span class="action-desc">Provider 互联、城市与房间创建、镜像注册、信任状态深改。</span>
+                    <span class="action-status action-status-pending">待接入</span>
+                  </div>
+                  <div class="action-row">
+                    <span class="action-desc">API：POST /v1/provider/connect · POST /v1/cities · POST /v1/cities/rooms · POST /v1/world-mirror-sources · POST /v1/cities/federation-policy</span>
+                  </div>
+                  <div class="action-row">
+                    <button id="provider-connect-button" type="submit" class="action-btn" disabled aria-disabled="true" title="Provider 连接功能尚未接入">接入消息来源</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button id="provider-disconnect-button" type="button" class="action-btn secondary" disabled aria-disabled="true" title="断开连接功能尚未接入">断开连接</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button id="world-mirror-button" type="submit" class="action-btn" disabled aria-disabled="true" title="镜像源功能尚未接入">添加镜像源</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button id="city-create-button" type="submit" class="action-btn" disabled aria-disabled="true" title="城市创建功能尚未接入">新建城市</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button id="city-join-button" type="submit" class="action-btn" disabled aria-disabled="true" title="加入城市功能尚未接入">加入城市</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button id="room-create-button" type="submit" class="action-btn" disabled aria-disabled="true" title="房间创建功能尚未接入">新建房间</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button id="direct-open-button" type="submit" class="action-btn" disabled aria-disabled="true" title="私聊功能尚未接入">打开私聊</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button id="world-trust-button" type="submit" class="action-btn" disabled aria-disabled="true" title="城市状态更新功能尚未接入">更新城市状态</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+
+                  <div id="mode-guide" class="guide-list compact-guide-list">正在准备中文指引…</div>
+
+                  <form id="provider-connect-form" class="inline-form compact-form" data-shell-role="admin">
+                    <div class="section-label">A. 接入消息来源</div>
+                    <input id="provider-url-input" type="url" placeholder="输入传输源地址，例如 http://127.0.0.1:8788" autocomplete="off" />
+                    <div class="provider-actions">
+                      <button type="submit" disabled aria-disabled="true" title="Provider 连接功能尚未接入">连接消息来源</button>
+                      <button type="button" class="secondary" disabled aria-disabled="true" title="断开连接功能尚未接入">断开连接</button>
+                    </div>
+                  </form>
+
+                  <form id="city-create-form" class="inline-form compact-form" data-shell-role="admin">
+                    <div class="section-label">B. 新建城市</div>
+                    <input id="city-title-input" type="text" placeholder="城市名称" autocomplete="off" />
+                    <input id="city-slug-input" type="text" placeholder="城市标识（可选）" autocomplete="off" />
+                    <textarea id="city-description-input" rows="2" placeholder="城市简介"></textarea>
+                    <button type="submit" disabled aria-disabled="true" title="城市创建功能尚未接入">创建城市</button>
+                  </form>
+
+                  <form id="city-join-form" class="inline-form compact-form">
+                    <div class="section-label">C. 加入城市</div>
+                    <input id="city-join-input" type="text" placeholder="城市标识或城市 ID" autocomplete="off" />
+                    <button type="submit" disabled aria-disabled="true" title="加入城市功能尚未接入">加入城市</button>
+                  </form>
+
+                  <form id="room-create-form" class="inline-form compact-form" data-shell-role="admin">
+                    <div class="section-label">D. 新建房间</div>
+                    <input id="room-city-input" type="text" placeholder="城市标识或城市 ID" autocomplete="off" />
+                    <input id="room-title-input" type="text" placeholder="房间名称" autocomplete="off" />
+                    <input id="room-slug-input" type="text" placeholder="房间标识（可选）" autocomplete="off" />
+                    <textarea id="room-description-input" rows="2" placeholder="房间简介"></textarea>
+                    <button type="submit" disabled aria-disabled="true" title="房间创建功能尚未接入">创建房间</button>
+                  </form>
+
+                  <form id="direct-open-form" class="inline-form compact-form">
+                    <div class="section-label">E. 打开私聊</div>
+                    <input id="direct-peer-input" type="text" placeholder="居民 ID" autocomplete="off" />
+                    <button type="submit" disabled aria-disabled="true" title="私聊功能尚未接入">打开私聊</button>
+                  </form>
+
+                  <form id="world-mirror-form" class="inline-form compact-form" data-shell-role="admin">
+                    <div class="section-label">F. 添加镜像源</div>
+                    <input id="world-mirror-url-input" type="url" placeholder="https://seed-city.example.com" autocomplete="off" />
+                    <button type="submit" disabled aria-disabled="true" title="镜像源功能尚未接入">添加镜像</button>
+                  </form>
+
+                  <form id="world-trust-form" class="inline-form compact-form" data-shell-role="admin">
+                    <div class="section-label">H. 更新城市状态</div>
+                    <input id="world-trust-city-input" type="text" placeholder="城市标识或城市 ID" autocomplete="off" />
+                    <select id="world-trust-state-select" aria-label="世界城市信任状态">
+                      <option value="Healthy">健康</option>
+                      <option value="UnderReview">审查中</option>
+                      <option value="Quarantined">隔离观察</option>
+                      <option value="Isolated">孤城断联</option>
+                    </select>
+                    <textarea id="world-trust-reason-input" rows="2" placeholder="变更原因"></textarea>
+                    <button type="submit" disabled aria-disabled="true" title="城市状态更新功能尚未接入">更新状态</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+
+            <div data-admin-tool-category="system">
+              <div class="tool-group">
+                <div class="tool-group-title tool-group-title--static">系统与导出</div>
+                <div class="tool-group-body">
+                  <div class="action-row">
+                    <span class="action-desc">网关状态、同步状态与会话导出；审计日志后续接入。</span>
+                    <span class="action-status action-status-available">可用</span>
+                  </div>
+                  <div class="action-row">
+                    <span class="action-desc">API：GET /v1/shell/state · GET /v1/shell/events · GET /v1/provider</span>
+                  </div>
+                  <div class="action-row">
+                    <button type="button" class="action-btn secondary" disabled aria-disabled="true" title="审计日志功能尚未接入">查看审计日志</button>
+                    <span class="action-status action-status-pending">待接 API</span>
+                  </div>
+                  <div class="action-row">
+                    <button type="button" class="action-btn secondary" disabled aria-disabled="true" title="网关诊断功能尚未接入">网关诊断</button>
+                    <span class="action-status action-status-readonly">只读预览</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="chat-detail-content" class="chat-detail-content"></div>
+        </aside>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js?v=20260501-contract-v1"></script>
+    <script>
+      (() => {
+        // ---------- 导航折叠 ----------
+        const shell = document.querySelector(".admin-nav-shell");
+        const toggle = document.querySelector("#admin-nav-toggle");
+        if (shell && toggle) {
+          const setCollapsed = (collapsed) => {
+            shell.dataset.adminNav = collapsed ? "collapsed" : "expanded";
+            document.body.dataset.adminNav = shell.dataset.adminNav;
+            toggle.querySelector(".admin-nav-toggle-label").textContent = collapsed ? "展开" : "收起";
+            toggle.querySelector(".admin-nav-toggle-icon").style.transform = collapsed ? "rotate(180deg)" : "rotate(0deg)";
+            toggle.setAttribute("aria-pressed", String(collapsed));
+            toggle.setAttribute("aria-label", collapsed ? "展开后台功能目录" : "收起后台功能目录");
+          };
+          setCollapsed(window.localStorage?.getItem("lobster-admin-nav") === "collapsed");
+          toggle.addEventListener("click", () => {
+            const collapsed = shell.dataset.adminNav !== "collapsed";
+            setCollapsed(collapsed);
+            window.localStorage?.setItem("lobster-admin-nav", collapsed ? "collapsed" : "expanded");
+          });
+        }
+
+        // ---------- 分类切换 ----------
+        const workspaceSession = document.getElementById("admin-workspace-session");
+        const workspaceCategory = document.getElementById("admin-workspace-category");
+        const toolsSummary = document.getElementById("admin-tools-summary");
+        const toolForms = document.getElementById("admin-tool-forms");
+        const moduleTitle = document.getElementById("admin-current-module");
+        const navItems = document.querySelectorAll(".admin-nav-item");
+
+        const CATEGORY_LABELS = {
+          session: "会话",
+          resident: "居民",
+          room: "房间",
+          safety: "安全",
+          notice: "公告",
+          world: "世界",
+          system: "系统",
+        };
+
+        function clearChildren(el) {
+          while (el.firstChild) el.removeChild(el.firstChild);
+        }
+
+        function createElement(tag, attrs = {}, text = "") {
+          const el = document.createElement(tag);
+          for (const [k, v] of Object.entries(attrs)) {
+            if (k === "className") el.className = v;
+            else if (k === "dataset") Object.assign(el.dataset, v);
+            else el.setAttribute(k, v);
+          }
+          if (text) el.textContent = text;
+          return el;
+        }
+
+        const ACTION_CATALOG = {
+          session: {
+            desc: "导出当前会话或全部历史记录。",
+            status: "available",
+            statusLabel: "可用",
+            api: "GET /v1/shell/state",
+            available: [
+              { action: "export-current", label: "导出当前会话", reason: "", desc: "将当前会话导出为 Markdown、纯文本或 JSONL。", api: "GET /v1/shell/state" },
+              { action: "export-all", label: "导出全部历史", reason: "", desc: "导出所有历史会话记录。", api: "GET /v1/shell/state" },
+            ],
+            pending: [],
+          },
+          resident: {
+            desc: "城主/居民身份查看与验证码登录。",
+            status: "gateway",
+            statusLabel: "需网关",
+            api: "POST /v1/auth/email-otp/*",
+            available: [],
+            pending: [
+              { action: "resident-login", label: "居民登录", reason: "需要已连接的网关与已验证的管理员身份", desc: "通过邮箱验证码验证居民身份。", api: "POST /v1/auth/email-otp/request · POST /v1/auth/email-otp/verify" },
+              { action: "view-identity", label: "查看身份", reason: "需要已连接的网关与已验证的管理员身份", desc: "查看当前登录居民的身份资料。", api: "GET /v1/shell/identity" },
+            ],
+          },
+          room: {
+            desc: "首版只读展示房间状态。",
+            status: "pending",
+            statusLabel: "待接入",
+            api: "POST /v1/cities/rooms/*",
+            available: [],
+            pending: [
+              { action: "room-list", label: "房间列表", reason: "房间管理功能尚未接入后端 API", desc: "查看所有房间列表与基本信息。", api: "GET /v1/cities/rooms" },
+            ],
+          },
+          safety: {
+            desc: "处理举报队列、发布安全通告。",
+            status: "gateway",
+            statusLabel: "需网关",
+            api: "POST /v1/world-safety/*",
+            available: [],
+            pending: [
+              { action: "publish-advisory", label: "发布安全通告", reason: "需要已连接的网关与发布权限", desc: "向指定对象发布安全提示或处置通告。", api: "POST /v1/world-safety/advisories" },
+              { action: "view-reports", label: "查看举报", reason: "举报列表功能尚未接入", desc: "查看和处理用户举报队列。", api: "GET /v1/world-safety/reports" },
+            ],
+          },
+          notice: {
+            desc: "发布世界公告或城邦公告。",
+            status: "gateway",
+            statusLabel: "需网关",
+            api: "POST /v1/world-square/notices",
+            available: [],
+            pending: [
+              { action: "publish-notice", label: "发布公告", reason: "需要已连接的网关与发布权限", desc: "发布世界公告或城市级通知。", api: "POST /v1/world-square/notices" },
+              { action: "history-notice", label: "历史公告", reason: "历史公告功能尚未接入", desc: "查看历史发布公告。", api: "GET /v1/world-square/notices" },
+            ],
+          },
+          world: {
+            desc: "Provider 互联、城市与房间创建。",
+            status: "pending",
+            statusLabel: "待接入",
+            api: "POST /v1/provider/connect",
+            available: [],
+            pending: [
+              { action: "connect-provider", label: "接入消息来源", reason: "Provider 连接功能尚未接入", desc: "连接外部消息来源 Provider。", api: "POST /v1/provider/connect" },
+            ],
+          },
+          system: {
+            desc: "网关状态、同步状态与会话导出。",
+            status: "available",
+            statusLabel: "可用",
+            api: "GET /v1/shell/state · GET /v1/provider",
+            available: [
+              { action: "export-all", label: "导出全部历史", reason: "", desc: "导出所有历史会话记录。", api: "GET /v1/shell/state" },
+            ],
+            pending: [
+              { action: "gateway-diag", label: "网关诊断", reason: "网关诊断功能尚未接入", desc: "检查网关连接与同步状态。", api: "GET /v1/provider" },
+            ],
+          },
+        };
+
+        function renderSummary(category) {
+          if (!toolsSummary) return;
+          clearChildren(toolsSummary);
+
+          const catalog = ACTION_CATALOG[category];
+          if (!catalog) return;
+
+          const panel = createElement("div", { className: "admin-summary-panel", dataset: { summaryCategory: category } });
+
+          // 标题
+          const head = createElement("div", { className: "admin-summary-head" });
+          const title = createElement("div", { className: "tool-group-title tool-group-title--static" });
+          title.textContent = CATEGORY_LABELS[category] + "工具";
+          head.appendChild(title);
+
+          // 描述 + 状态
+          const descRow = createElement("div", { className: "action-row" });
+          const desc = createElement("span", { className: "action-desc" });
+          desc.textContent = catalog.desc;
+          const status = createElement("span", { className: "action-status action-status-" + catalog.status });
+          status.textContent = catalog.statusLabel;
+          descRow.appendChild(desc);
+          descRow.appendChild(status);
+          head.appendChild(descRow);
+
+          // API
+          if (catalog.api) {
+            const apiRow = createElement("div", { className: "action-row" });
+            const api = createElement("span", { className: "action-desc" });
+            api.textContent = "API：" + catalog.api;
+            apiRow.appendChild(api);
+            head.appendChild(apiRow);
+          }
+
+          panel.appendChild(head);
+
+          // 可用工具：最多 1 主 + 1 次按钮
+          if (catalog.available.length > 0) {
+            const availSection = createElement("div", { className: "admin-summary-section" });
+            const availLabel = createElement("div", { className: "admin-summary-section-label" });
+            availLabel.textContent = "可用";
+            availSection.appendChild(availLabel);
+
+            catalog.available.forEach((item, idx) => {
+              const card = createElement("div", { className: "admin-summary-tool-card" });
+
+              const nameRow = createElement("div", { className: "action-row" });
+              const name = createElement("span", { className: "admin-summary-tool-name" });
+              name.textContent = item.label;
+              const itemStatus = createElement("span", { className: "action-status action-status-available" });
+              itemStatus.textContent = "可用";
+              nameRow.appendChild(name);
+              nameRow.appendChild(itemStatus);
+              card.appendChild(nameRow);
+
+              if (item.desc) {
+                const itemDesc = createElement("div", { className: "admin-summary-item-desc" });
+                itemDesc.textContent = item.desc;
+                card.appendChild(itemDesc);
+              }
+
+              if (item.api) {
+                const itemApi = createElement("div", { className: "admin-summary-item-desc" });
+                itemApi.textContent = "API：" + item.api;
+                card.appendChild(itemApi);
+              }
+
+              const btnClass = idx === 0 ? "action-btn" : "action-btn secondary";
+              const btn = createElement("button", {
+                type: "button",
+                className: btnClass,
+                dataset: { adminAction: item.action, actionStatus: "available" },
+              }, item.label);
+              card.appendChild(btn);
+              availSection.appendChild(card);
+            });
+            panel.appendChild(availSection);
+          }
+
+          // 待接入 / 需网关工具：产品目录式列出，带原因
+          if (catalog.pending.length > 0) {
+            const pendingSection = createElement("div", { className: "admin-summary-section" });
+            const pendingLabel = createElement("div", { className: "admin-summary-section-label" });
+            pendingLabel.textContent = catalog.status === "gateway" ? "需网关" : "待接入";
+            pendingSection.appendChild(pendingLabel);
+
+            catalog.pending.forEach((item) => {
+              const card = createElement("div", { className: "admin-summary-tool-card" });
+
+              const nameRow = createElement("div", { className: "action-row" });
+              const name = createElement("span", { className: "admin-summary-tool-name" });
+              name.textContent = item.label;
+              const itemStatus = createElement("span", { className: "action-status action-status-" + catalog.status });
+              itemStatus.textContent = catalog.status === "gateway" ? "需网关" : "待接入";
+              nameRow.appendChild(name);
+              nameRow.appendChild(itemStatus);
+              card.appendChild(nameRow);
+
+              if (item.desc) {
+                const itemDesc = createElement("div", { className: "admin-summary-item-desc" });
+                itemDesc.textContent = item.desc;
+                card.appendChild(itemDesc);
+              }
+
+              if (item.reason) {
+                const itemReason = createElement("div", { className: "admin-summary-item-desc" });
+                itemReason.textContent = "原因：" + item.reason;
+                card.appendChild(itemReason);
+              }
+
+              if (item.api) {
+                const itemApi = createElement("div", { className: "admin-summary-item-desc" });
+                itemApi.textContent = "API：" + item.api;
+                card.appendChild(itemApi);
+              }
+
+              const btn = createElement("button", {
+                type: "button",
+                className: "action-btn secondary",
+                dataset: { adminAction: item.action, actionStatus: catalog.status },
+                disabled: "true",
+                ariaDisabled: "true",
+                title: item.reason || (catalog.status === "gateway" ? "需要网关连接" : "功能尚未接入"),
+              }, item.label);
+              card.appendChild(btn);
+              pendingSection.appendChild(card);
+            });
+            panel.appendChild(pendingSection);
+          }
+
+          // 打开工具按钮（展开该分类的表单抽屉）
+          const hasForms = toolForms?.querySelector(`[data-admin-tool-category="${category}"]`);
+          if (hasForms) {
+            const drawerSection = createElement("div", { className: "admin-summary-section" });
+            const openBtn = createElement("button", {
+              type: "button",
+              className: "action-btn",
+              dataset: { adminOpenDrawer: "true" },
+            }, "打开工具");
+            openBtn.addEventListener("click", () => openToolDrawer(category));
+            drawerSection.appendChild(openBtn);
+            panel.appendChild(drawerSection);
+          }
+
+          toolsSummary.appendChild(panel);
+
+          // 绑定可用按钮的真实处理逻辑
+          bindAdminActions(panel);
+        }
+
+        function openToolDrawer(category) {
+          if (!toolForms || !toolsSummary) return;
+
+          // 关闭当前可能打开的抽屉
+          closeToolDrawer();
+
+          // 只显示对应分类的内容
+          toolForms.querySelectorAll("[data-admin-tool-category]").forEach((el) => {
+            el.hidden = el.dataset.adminToolCategory !== category;
+          });
+
+          // 显示表单容器，隐藏摘要
+          toolForms.hidden = false;
+          toolsSummary.hidden = true;
+
+          // 更新 body 标记，方便 CSS 控制
+          document.body.dataset.adminDrawer = category;
+        }
+
+        function closeToolDrawer() {
+          if (!toolForms || !toolsSummary) return;
+          toolForms.hidden = true;
+          toolsSummary.hidden = false;
+          delete document.body.dataset.adminDrawer;
+        }
+
+        function bindAdminActions(container) {
+          if (!container) return;
+          container.querySelectorAll("[data-admin-action]").forEach((btn) => {
+            const action = btn.dataset.adminAction;
+            if (btn.disabled) return;
+            // 移除旧监听器（简单方案：clone 替换）
+            const clone = btn.cloneNode(true);
+            btn.parentNode.replaceChild(clone, btn);
+            clone.addEventListener("click", () => {
+              if (action === "export-current") {
+                document.querySelector("#export-current-button")?.click();
+              } else if (action === "export-all") {
+                document.querySelector("#export-all-button")?.click();
+              }
+            });
+          });
+        }
+
+        // 同时绑定中心区域分类面板中的可用按钮
+        function bindCategoryPanelActions() {
+          workspaceCategory?.querySelectorAll("[data-admin-action]").forEach((btn) => {
+            const action = btn.dataset.adminAction;
+            if (btn.disabled) return;
+            btn.addEventListener("click", () => {
+              if (action === "export-current") {
+                document.querySelector("#export-current-button")?.click();
+              } else if (action === "export-all") {
+                document.querySelector("#export-all-button")?.click();
+              }
+            });
+          });
+        }
+
+        function switchCategory(category) {
+          // 关闭当前工具抽屉
+          closeToolDrawer();
+
+          // 更新 nav 激活态
+          navItems.forEach((item) => {
+            item.classList.toggle("is-active", item.dataset.adminCategory === category);
+          });
+
+          // 更新模块标题
+          if (moduleTitle) {
+            moduleTitle.textContent = (CATEGORY_LABELS[category] || "") + "处理";
+          }
+
+          // 中间区域永远显示会话，分类面板保持隐藏
+          if (workspaceSession && workspaceCategory) {
+            workspaceSession.hidden = false;
+            workspaceCategory.hidden = true;
+          }
+
+          // 渲染右侧摘要
+          renderSummary(category);
+        }
+
+        // 绑定 nav 点击
+        navItems.forEach((item) => {
+          const category = item.dataset.adminCategory;
+          if (!category) return;
+          item.addEventListener("click", (e) => {
+            e.preventDefault();
+            switchCategory(category);
+          });
+        });
+
+        // 绑定工具抽屉关闭按钮
+        document.getElementById("admin-tool-drawer-close")?.addEventListener("click", closeToolDrawer);
+
+        // 同时绑定中心区域分类面板的可用按钮（只绑一次）
+        bindCategoryPanelActions();
+
+        // 默认选中会话
+        switchCategory("session");
+      })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "lobster-web-shell",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Static web shell plus OSS-backed pixel scene prototype for lobster-chat.",
+  "license": "MIT",
+  "dependencies": {
+    "@chenglou/pretext": "0.0.6",
+    "phaser": "^3.90.0",
+    "rpgui": "^1.0.3"
+  }
+}

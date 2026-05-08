@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>龙虾聊天 · 世界入口</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.world-entry.css?v=20260507-bg-png256-v1" />
+  </head>
+  <body
+    data-shell-page="world-entry"
+    data-shell-variant="metro-station"
+    data-default-shell-mode="unified"
+    data-workspace="chat"
+    data-sfc-theme="city"
+  >
+    <div class="app app-hub-shell sfc-shell sfc-city-shell world-entry-shell">
+      <header class="sfc-hud world-entry-hud">
+        <div class="hud-left">
+          <div class="world-entry-hud-copy">
+            <span class="hud-kicker">World Gate</span>
+            <span class="hud-title">世界入口</span>
+          </div>
+        </div>
+        <div class="hud-right">
+          <span class="world-entry-hud-chip">地铁候车站</span>
+          <span id="hud-status" class="hud-pill">待机</span>
+        </div>
+      </header>
+
+      <main class="sfc-layout world-entry-layout" aria-label="世界入口">
+        <aside class="sfc-rail world-entry-rail" data-shell-column="rooms">
+          <div class="rail-actions">
+            <a href="./creative.html" class="rail-item">
+              <span class="rail-item-label">住宅</span>
+            </a>
+            <a href="./index.html" class="rail-item">
+              <span class="rail-item-label">主城</span>
+            </a>
+            <a href="./unified.html" class="rail-item is-active" aria-current="page">
+              <span class="rail-item-label">世界入口</span>
+            </a>
+          </div>
+        </aside>
+
+        <section class="sfc-stage world-entry-stage" aria-label="世界入口地铁候车站">
+          <div class="world-entry-scene" aria-hidden="true"></div>
+
+          <div class="scene-hotspots world-entry-hotspots" aria-label="世界入口热点">
+            <a href="./index.html" class="scene-hotspot world-entry-hotspot--city" data-hotspot-title="返回主城" data-hotspot-copy="回到主城广场。">
+              <span>返回主城</span>
+            </a>
+            <button type="button" class="scene-hotspot world-entry-hotspot--platform" data-hotspot-title="候车站台" data-hotspot-copy="这里是世界线路的等待区，后续承载外部城邦状态。">
+              <span>候车站台</span>
+            </button>
+            <button type="button" class="scene-hotspot world-entry-hotspot--train" data-hotspot-title="列车通道" data-hotspot-copy="列车与隧道会连接到外部世界和互联城邦。">
+              <span>列车通道</span>
+            </button>
+            <a href="#world-routes" class="scene-hotspot world-entry-hotspot--map" data-hotspot-title="世界线路图" data-hotspot-copy="选择要前往的其他主城。">
+              <span>世界线路图</span>
+            </a>
+          </div>
+
+          <div id="world-routes" class="world-route-panel" aria-label="世界线路选择">
+            <div class="world-route-card">
+              <a class="world-route-close" href="./unified.html" aria-label="关闭世界线路选择">关闭</a>
+              <p class="world-route-kicker">世界线路图</p>
+              <h2>选择前往的主城</h2>
+              <div class="world-route-list">
+                <a href="./world-square.html" class="world-route-option world-route-option-square">
+                  <strong>世界广场</strong>
+                  <span>打开之前绘制的世界广场完整素材，作为公共广场入口。</span>
+                  <span class="world-route-status">概念图 · 公共广场</span>
+                </a>
+                <a href="./index.html" class="world-route-option">
+                  <strong>凛冬城主城</strong>
+                  <span>当前主城广场，群聊与公告入口。</span>
+                </a>
+                <a href="./index.html?city=harbor" class="world-route-option">
+                  <strong>海港主城</strong>
+                  <span>后续外城入口，暂接入同一主城壳。</span>
+                </a>
+                <a href="./index.html?city=mountain" class="world-route-option">
+                  <strong>山城主城</strong>
+                  <span>预留线路，用于后续多城邦扩展。</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js?v=20260501-contract-v1"></script>
+  </body>
+</html>

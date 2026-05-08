@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lobster-chat visual layer reference prototype</title>
+    <link
+      rel="stylesheet"
+      href="../../apps/lobster-web-shell/node_modules/rpgui/rpgui.css"
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #130f12;
+        --panel: #171218;
+        --panel-2: #1f1820;
+        --line: #705c47;
+        --text: #f5e6c8;
+        --muted: #cdb482;
+        --accent: #f1c55f;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          radial-gradient(circle at top, rgba(87, 59, 46, 0.18), transparent 40%),
+          var(--bg);
+      }
+
+      body {
+        font-family: "Press Start 2P", monospace;
+        color: var(--text);
+      }
+
+      .rpgui-content {
+        padding: 20px 22px 48px;
+      }
+
+      .masthead {
+        display: grid;
+        gap: 8px;
+        margin-bottom: 18px;
+      }
+
+      .eyebrow {
+        font-size: 10px;
+        color: var(--muted);
+      }
+
+      .title {
+        font-size: 24px;
+        color: var(--accent);
+      }
+
+      .subtitle {
+        font-size: 11px;
+        color: #d8c9aa;
+        line-height: 1.65;
+        max-width: 1100px;
+      }
+
+      .top-strip {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+      }
+
+      .chip {
+        padding: 9px 12px;
+        border: 2px solid var(--line);
+        background: #241c21;
+        color: #dbc99f;
+        font-size: 10px;
+      }
+
+      .scene-tabs {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 18px;
+      }
+
+      .scene-tabs .rpgui-button {
+        min-width: 148px;
+      }
+
+      .prototype-stack {
+        display: grid;
+        gap: 22px;
+      }
+
+      .shell-card .rpgui-container {
+        background: rgba(12, 9, 13, 0.92);
+        padding: 16px;
+      }
+
+      .shell-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+
+      .shell-title {
+        font-size: 14px;
+        color: var(--accent);
+      }
+
+      .shell-state {
+        font-size: 10px;
+        color: var(--muted);
+      }
+
+      .city-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 280px;
+        gap: 14px;
+      }
+
+      .city-main {
+        display: grid;
+        grid-template-rows: 430px 178px 88px;
+        gap: 14px;
+      }
+
+      .scene-frame .rpgui-container,
+      .log-frame .rpgui-container,
+      .input-frame .rpgui-container,
+      .side-frame .rpgui-container,
+      .home-rail .rpgui-container,
+      .home-scene .rpgui-container,
+      .home-log .rpgui-container,
+      .home-input .rpgui-container,
+      .home-status .rpgui-container {
+        background: var(--panel);
+      }
+
+      .scene-frame .rpgui-container,
+      .home-scene .rpgui-container {
+        padding: 12px;
+      }
+
+      .frame-title {
+        font-size: 12px;
+        color: var(--accent);
+        margin-bottom: 10px;
+      }
+
+      .scene-image-wrap {
+        position: relative;
+        width: 100%;
+        height: calc(100% - 22px);
+        overflow: hidden;
+        background: #09070c;
+      }
+
+      .scene-image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+
+      .city-scene-image {
+        object-position: 20% center;
+      }
+
+      .scene-note {
+        position: absolute;
+        left: 14px;
+        bottom: 14px;
+        padding: 8px 10px;
+        border: 2px solid rgba(112, 92, 71, 0.9);
+        background: rgba(12, 9, 13, 0.88);
+        color: #f3ddb0;
+        font-size: 10px;
+        line-height: 1.45;
+      }
+
+      .side-frame .rpgui-container {
+        min-height: 724px;
+        padding: 12px;
+      }
+
+      .portrait-card {
+        width: 100%;
+        height: 236px;
+        margin-bottom: 14px;
+        border: 2px solid rgba(112, 92, 71, 0.82);
+        background-color: #09070c;
+        background-image: url("./");
+        background-repeat: no-repeat;
+        background-size: cover;
+        background-position: center;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+
+      .meta-block {
+        display: grid;
+        gap: 12px;
+      }
+
+      .meta-line {
+        font-size: 11px;
+        line-height: 1.45;
+        color: #ecd9ad;
+      }
+
+      .meta-line strong {
+        color: var(--accent);
+      }
+
+      .action-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+      }
+
+      .action-row .rpgui-button {
+        min-width: 96px;
+      }
+
+      .log-frame .rpgui-container,
+      .home-log .rpgui-container {
+        padding: 12px 14px;
+      }
+
+      .log {
+        display: grid;
+        gap: 9px;
+        font-size: 11px;
+        line-height: 1.55;
+      }
+
+      .sys {
+        color: #f5dfb0;
+      }
+
+      .npc {
+        color: #90d0f3;
+      }
+
+      .lord {
+        color: #a9d28c;
+      }
+
+      .user {
+        color: #f4e7cf;
+      }
+
+      .input-frame .rpgui-container,
+      .home-input .rpgui-container {
+        padding: 12px 14px;
+      }
+
+      .composer {
+        display: grid;
+        grid-template-columns: 1fr 144px;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .composer textarea {
+        width: 100%;
+        min-height: 54px;
+        resize: none;
+      }
+
+      .home-shell {
+        display: grid;
+        grid-template-columns: 180px minmax(0, 1fr) 220px;
+        gap: 14px;
+      }
+
+      .home-rail .rpgui-container {
+        min-height: 724px;
+        padding: 18px 14px;
+        background: #6e5b48;
+      }
+
+      .menu {
+        display: grid;
+        gap: 10px;
+      }
+
+      .menu-item {
+        padding: 13px 12px;
+        border: 2px solid rgba(112, 92, 71, 0.92);
+        background: rgba(255, 247, 217, 0.18);
+        color: #1a130f;
+        font-size: 12px;
+      }
+
+      .menu-item.active {
+        background: rgba(255, 236, 178, 0.94);
+        font-weight: 700;
+      }
+
+      .home-main {
+        display: grid;
+        grid-template-rows: 430px 178px 88px;
+        gap: 14px;
+      }
+
+      .home-scene-image {
+        object-position: center top;
+      }
+
+      .home-status .rpgui-container {
+        min-height: 724px;
+        padding: 12px;
+      }
+
+      .status-shot {
+        width: 100%;
+        height: 170px;
+        margin-bottom: 14px;
+        border: 2px solid rgba(112, 92, 71, 0.82);
+        background-color: #09070c;
+        background-image: url("./");
+        background-repeat: no-repeat;
+        background-size: cover;
+        background-position: center;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+
+      .footer-note {
+        margin-top: 16px;
+        font-size: 10px;
+        color: #b79f76;
+        line-height: 1.6;
+      }
+
+      @media (max-width: 1240px) {
+        .city-shell,
+        .home-shell {
+          grid-template-columns: 1fr;
+        }
+
+        .city-main,
+        .home-main {
+          grid-template-rows: 360px 178px 88px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="rpgui-content">
+      <div class="masthead">
+        <div class="eyebrow">visual layer reference mockup</div>
+        <div class="title">lobster-chat</div>
+        <div class="subtitle">
+          这张稿只验证两件事：一，TUI 退回到消息与输入壳；二，像素视觉层迁到 H5，
+          用 RPGUI 承接 chrome 和控件，用真正的像素场景与立绘承接“城市公共页 / 住宅私聊页”。
+        </div>
+      </div>
+
+      <div class="top-strip">
+        <div class="chip">TUI 只留会话 / 时间线 / 输入</div>
+        <div class="chip">视觉层迁出：scene / portrait / cover</div>
+        <div class="chip">当前稿用参考像素图锁视觉分工</div>
+      </div>
+
+      <div class="scene-tabs">
+        <button class="rpgui-button golden" type="button" data-scene-tab="city"><p>城市公共页</p></button>
+        <button class="rpgui-button" type="button" data-scene-tab="home"><p>住宅私聊页</p></button>
+        <button class="rpgui-button" type="button" data-scene-tab="compare"><p>双页对照</p></button>
+      </div>
+
+      <div class="prototype-stack">
+        <section class="shell-card" id="citySection" data-scene-card="city">
+          <div class="rpgui-container framed-golden">
+            <div class="shell-head">
+              <div class="shell-title">城市公共页 / 第一城大厅</div>
+              <div class="shell-state">状态：在线 4 人 · 频道：公共 · 视觉层：城市外景 + 人物立绘</div>
+            </div>
+
+            <div class="city-shell">
+              <div class="city-main">
+                <div class="scene-frame">
+                  <div class="rpgui-container framed-golden">
+                    <div class="frame-title">第一城 / 公共频道</div>
+                    <div class="scene-image-wrap">
+                      <img
+                        class="scene-image city-scene-image"
+                        src="./"
+                        alt="城市公共页像素场景"
+                      />
+                      <div class="scene-note">主景负责世界感和房间定位，不再让 TUI 字符伪装成像素画面。</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="log-frame">
+                  <div class="rpgui-container framed">
+                    <div class="frame-title">第一城 - 公共频道</div>
+                    <div class="log">
+                      <div class="sys">&lt;系统&gt; 欢迎来到第一城。</div>
+                      <div class="npc">&lt;居民_阿尔法&gt; 今天市场那边很热闹。</div>
+                      <div class="lord">&lt;城主_奥瑞利安&gt; 傍晚前会有商队进城。</div>
+                      <div class="user">&lt;玩家_tiyan&gt; 收到，我先去钟塔那边看看。</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="input-frame">
+                  <div class="rpgui-container framed-grey">
+                    <div class="composer">
+                      <textarea>可以继续发消息，也可以输入 /dm guide 切进住宅私聊。</textarea>
+                      <button class="rpgui-button golden" type="button"><p>发送</p></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <aside class="side-frame">
+                <div class="rpgui-container framed-golden">
+                  <div class="frame-title">角色资料 / 状态</div>
+                  <div class="portrait-card" aria-label="城市向导像素立绘"></div>
+                  <div class="meta-block">
+                    <div class="meta-line"><strong>角色</strong>：城市向导</div>
+                    <div class="meta-line"><strong>称号</strong>：公共频道引路</div>
+                    <div class="meta-line"><strong>当前</strong>：第一城大厅</div>
+                    <div class="meta-line"><strong>状态</strong>：正常</div>
+                  </div>
+                  <div class="action-row">
+                    <button class="rpgui-button golden" type="button"><p>私聊</p></button>
+                    <button class="rpgui-button" type="button"><p>委托</p></button>
+                    <button class="rpgui-button" type="button"><p>交易</p></button>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </section>
+
+        <section class="shell-card" id="homeSection" data-scene-card="home">
+          <div class="rpgui-container framed-golden-2">
+            <div class="shell-head">
+              <div class="shell-title">住宅私聊页 / 新手居所</div>
+              <div class="shell-state">状态：私聊连线 · 同住 AI：guide · 视觉层：住宅主景内含角色存在感</div>
+            </div>
+
+            <div class="home-shell">
+              <aside class="home-rail">
+                <div class="rpgui-container framed-grey">
+                  <div class="frame-title">居所侧栏</div>
+                  <div class="menu">
+                    <div class="menu-item">搜索</div>
+                    <div class="menu-item active">消息</div>
+                    <div class="menu-item">定时任务</div>
+                    <div class="menu-item">灵感广场</div>
+                  </div>
+                </div>
+              </aside>
+
+              <div class="home-main">
+                <div class="home-scene">
+                  <div class="rpgui-container framed-golden">
+                    <div class="frame-title">新手居所 / guide 私聊</div>
+                    <div class="scene-image-wrap">
+                      <img
+                        class="scene-image home-scene-image"
+                        src="./"
+                        alt="住宅私聊页像素场景"
+                      />
+                      <div class="scene-note">住宅页把角色和居住感放进主景本体，不再额外堆一张伪像素头像卡。</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="home-log">
+                  <div class="rpgui-container framed">
+                    <div class="frame-title">新手居所 - guide 私聊</div>
+                    <div class="log">
+                      <div class="sys">&lt;系统&gt; 住宅私聊已接通。</div>
+                      <div class="npc">&lt;guide&gt; 先把今天的想法说出来，我帮你整理。</div>
+                      <div class="user">&lt;tiyan&gt; 先记三件事：剧情、功能、部署。</div>
+                      <div class="npc">&lt;guide&gt; 好，我先给你拆成小任务。</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="home-input">
+                  <div class="rpgui-container framed-grey">
+                    <div class="composer">
+                      <textarea>继续聊、记任务、问问题，按 Enter 发送…</textarea>
+                      <button class="rpgui-button golden" type="button"><p>发送</p></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <aside class="home-status">
+                <div class="rpgui-container framed">
+                  <div class="frame-title">房内状态</div>
+                  <div class="status-shot" aria-label="住宅角色局部像素截图"></div>
+                  <div class="meta-block">
+                    <div class="meta-line"><strong>住户</strong>：tiyan</div>
+                    <div class="meta-line"><strong>同住 AI</strong>：guide</div>
+                    <div class="meta-line"><strong>当前</strong>：新手居所</div>
+                    <div class="meta-line"><strong>模式</strong>：私聊整理中</div>
+                  </div>
+                  <div class="action-row">
+                    <button class="rpgui-button golden" type="button"><p>续聊</p></button>
+                    <button class="rpgui-button" type="button"><p>整理</p></button>
+                  </div>
+                  <div class="footer-note">
+                    住宅页保留房间感、角色感和陪伴感；真正的输入与记录仍然是稳定的聊天器组件。
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+    <script>
+      (function sceneSwitcher() {
+        const page = new URLSearchParams(window.location.search).get("page");
+        const city = document.getElementById("citySection");
+        const home = document.getElementById("homeSection");
+        const tabs = Array.from(document.querySelectorAll("[data-scene-tab]"));
+        let current = page === "city" || page === "home" ? page : "compare";
+
+        function sync(mode) {
+          current = mode;
+          city.style.display = mode === "home" ? "none" : "";
+          home.style.display = mode === "city" ? "none" : "";
+          tabs.forEach((tab) => {
+            const on = tab.dataset.sceneTab === mode;
+            tab.classList.toggle("golden", on);
+          });
+          const next = new URLSearchParams(window.location.search);
+          if (mode === "compare") {
+            next.delete("page");
+          } else {
+            next.set("page", mode);
+          }
+          const qs = next.toString();
+          history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
+        }
+
+        tabs.forEach((tab) => {
+          tab.addEventListener("click", () => sync(tab.dataset.sceneTab));
+        });
+
+        sync(current);
+      })();
+    </script>
+  </body>
+</html>

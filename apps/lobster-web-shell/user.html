@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>龙虾聊天 · 住宅</title>
+    <link rel="icon" href="data:," />
+    <style>
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #0f0b0a;
+        color: rgba(246, 239, 220, 0.78);
+        font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .redirect-card {
+        max-width: 420px;
+        padding: 28px 32px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .redirect-card h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        color: #f1d59d;
+        letter-spacing: 0.04em;
+      }
+      .redirect-card p {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.6;
+        color: rgba(246, 239, 220, 0.62);
+      }
+      .redirect-card a {
+        display: inline-block;
+        margin-top: 6px;
+        padding: 10px 20px;
+        border-radius: 999px;
+        font-size: 13px;
+        font-weight: 600;
+        color: #2a1709;
+        background: linear-gradient(180deg, #f1d59d, #cb9758);
+        border: 2px solid #4a2b1a;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      .redirect-note {
+        font-size: 11px;
+        color: rgba(246, 239, 220, 0.4);
+        margin-top: 8px;
+      }
+    </style>
+    <script>
+      (function() {
+        var params = new URLSearchParams(window.location.search);
+        var target = new URL("./creative.html", window.location.href);
+        params.forEach(function(value, key) {
+          target.searchParams.set(key, value);
+        });
+        window.location.replace(target.href);
+      })();
+    </script>
+  </head>
+  <body>
+    <div class="redirect-card">
+      <h1>住宅入口已迁移</h1>
+      <p>user.html 不再作为独立住宅页面。<br>正在跳转到 creative.html …</p>
+      <a id="redirect-link" href="./creative.html">前往住宅</a>
+      <p class="redirect-note">如果未自动跳转，请点击上方按钮。</p>
+    </div>
+    <script>
+      (function() {
+        var params = new URLSearchParams(window.location.search);
+        var link = document.getElementById("redirect-link");
+        var target = new URL(link.href, window.location.href);
+        params.forEach(function(value, key) {
+          target.searchParams.set(key, value);
+        });
+        link.href = target.href;
+      })();
+    </script>
+  </body>
+</html>

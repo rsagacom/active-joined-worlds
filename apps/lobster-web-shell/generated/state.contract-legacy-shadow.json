@@ -1,0 +1,83 @@
+{
+  "rooms": [
+    {
+      "id": "room:world:lobby",
+      "title": "legacy 世界广场",
+      "subtitle": "legacy 回廊",
+      "meta": "legacy 壳层",
+      "messages": [
+        {
+          "sender": "builder",
+          "timestamp_ms": 1713250000000,
+          "timestamp_label": "1 小时前",
+          "text": "legacy room payload still exists."
+        }
+      ]
+    },
+    {
+      "id": "legacy:shadow",
+      "title": "旧影子会话",
+      "subtitle": "不应进入正式 UI",
+      "meta": "legacy only",
+      "messages": [
+        {
+          "sender": "system",
+          "timestamp_ms": 1713251000000,
+          "timestamp_label": "刚刚",
+          "text": "this room should disappear once contract is present"
+        }
+      ]
+    }
+  ],
+  "conversation_shell": {
+    "active_conversation_id": "room:world:lobby",
+    "conversations": [
+      {
+        "conversation_id": "room:world:lobby",
+        "title": "合同入口广场",
+        "subtitle": "合同态跨城回廊",
+        "meta": "合同态壳层",
+        "kind_hint": "合同世界广场",
+        "participant_label": "跨城共响回廊",
+        "route_label": "跨城共响线",
+        "list_summary": "合同列表摘要 · 3 人 · 1 条消息",
+        "status_line": "合同状态行 · 回廊直连",
+        "overview_summary": "合同重点摘要 · 回廊总览",
+        "context_summary": "合同上下文摘要 · 应该只显示合同会话",
+        "member_count": 3,
+        "messages": [
+          {
+            "sender": "builder",
+            "timestamp_ms": 1713250000000,
+            "timestamp_label": "1 小时前",
+            "text": "contract conversation should stay visible."
+          }
+        ]
+      }
+    ]
+  },
+  "scene_render": {
+    "active_conversation_id": "room:world:lobby",
+    "scenes": [
+      {
+        "conversation_id": "room:world:lobby",
+        "scene_banner": "合同广场",
+        "scene_summary": "正式合同已经给出唯一可见会话。",
+        "room_variant": "city",
+        "room_motif": "watchtower",
+        "stage": {
+          "title": "合同回廊主舞台",
+          "summary": "这里只该出现合同会话，不应夹带旧房间。",
+          "badge": "合同舞台"
+        },
+        "portrait": {
+          "title": "合同巡视犬",
+          "summary": "人物投影同样来自正式合同。",
+          "badge": "合同角色卡",
+          "status": "在线巡视",
+          "monogram": "合"
+        }
+      }
+    ]
+  }
+}

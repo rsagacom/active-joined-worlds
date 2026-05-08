@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 1536px;
+        height: 864px;
+        margin: 0;
+        overflow: hidden;
+        background: #0d0b09;
+      }
+
+      .scene {
+        position: relative;
+        width: 1536px;
+        height: 864px;
+        overflow: hidden;
+        image-rendering: pixelated;
+        background:
+          linear-gradient(180deg, rgba(5, 8, 13, 0.18), rgba(5, 8, 13, 0.1) 42%, rgba(7, 5, 4, 0.28)),
+          url("./hub-main-city-scene-v1.avif") center / cover no-repeat,
+          #15130f;
+      }
+
+      .scene::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at 68% 42%, rgba(77, 227, 255, 0.22), transparent 16%),
+          radial-gradient(circle at 72% 48%, rgba(255, 198, 95, 0.14), transparent 24%),
+          linear-gradient(90deg, rgba(7, 6, 5, 0.45), transparent 30%, transparent 70%, rgba(6, 5, 4, 0.35));
+        mix-blend-mode: screen;
+      }
+
+      .portal {
+        position: absolute;
+        left: 900px;
+        top: 142px;
+        width: 282px;
+        height: 430px;
+        border: 10px solid #2b1a0d;
+        border-bottom-width: 18px;
+        background:
+          linear-gradient(180deg, rgba(118, 236, 255, 0.24), rgba(35, 105, 149, 0.1)),
+          repeating-linear-gradient(90deg, rgba(145, 241, 255, 0.22) 0 8px, rgba(30, 71, 111, 0.12) 8px 16px),
+          #182134;
+        box-shadow:
+          0 0 0 6px #d39a45,
+          0 0 0 12px #3a2412,
+          0 0 32px 10px rgba(81, 220, 255, 0.42),
+          0 24px 0 rgba(0, 0, 0, 0.4);
+      }
+
+      .portal::before {
+        content: "";
+        position: absolute;
+        left: 34px;
+        top: 30px;
+        width: 194px;
+        height: 310px;
+        background:
+          radial-gradient(circle at 50% 46%, rgba(233, 255, 246, 0.9), rgba(106, 242, 255, 0.68) 18%, rgba(44, 119, 196, 0.26) 40%, rgba(15, 26, 58, 0.18) 58%, transparent 72%),
+          repeating-linear-gradient(0deg, rgba(246, 226, 147, 0.36) 0 5px, transparent 5px 14px);
+        border: 6px solid rgba(246, 216, 128, 0.86);
+        box-shadow:
+          inset 0 0 36px rgba(255, 250, 204, 0.72),
+          0 0 24px rgba(103, 232, 255, 0.75);
+      }
+
+      .portal::after {
+        content: "";
+        position: absolute;
+        left: -38px;
+        top: -72px;
+        width: 338px;
+        height: 54px;
+        background:
+          linear-gradient(90deg, #20140b, #4b2c13 18%, #d79c45 48%, #4b2c13 78%, #20140b),
+          #422613;
+        border: 6px solid #211308;
+        box-shadow:
+          0 0 0 4px #c78939,
+          0 12px 0 rgba(0, 0, 0, 0.32);
+      }
+
+      .pillar {
+        position: absolute;
+        top: 210px;
+        width: 42px;
+        height: 390px;
+        background:
+          repeating-linear-gradient(0deg, #2d1a0b 0 15px, #4b2a10 15px 31px),
+          #35200f;
+        border: 5px solid #d29a4a;
+        box-shadow: 0 8px 0 rgba(0, 0, 0, 0.38);
+      }
+
+      .pillar-left {
+        left: 842px;
+      }
+
+      .pillar-right {
+        left: 1199px;
+      }
+
+      .steps {
+        position: absolute;
+        left: 753px;
+        top: 582px;
+        width: 548px;
+        height: 208px;
+        transform: skewX(-15deg);
+      }
+
+      .step {
+        position: absolute;
+        left: calc(var(--i) * 18px);
+        top: calc(var(--i) * 18px);
+        width: calc(548px - var(--i) * 36px);
+        height: 28px;
+        background: linear-gradient(180deg, #c68b45, #74451f);
+        border: 4px solid #2a190b;
+        box-shadow: 0 5px 0 rgba(0, 0, 0, 0.26);
+      }
+
+      .way {
+        position: absolute;
+        left: 455px;
+        top: 688px;
+        width: 740px;
+        height: 176px;
+        background:
+          repeating-linear-gradient(90deg, rgba(248, 199, 87, 0.42) 0 14px, transparent 14px 34px),
+          linear-gradient(90deg, transparent, rgba(255, 211, 107, 0.5) 45%, rgba(108, 225, 255, 0.48) 60%, transparent);
+        clip-path: polygon(22% 100%, 82% 100%, 58% 0, 44% 0);
+        opacity: 0.82;
+      }
+
+      .lantern {
+        position: absolute;
+        width: 22px;
+        height: 38px;
+        background: #ffd36a;
+        border: 4px solid #2b1608;
+        box-shadow:
+          0 0 20px #ffd36a,
+          0 0 0 4px rgba(103, 232, 255, 0.16);
+      }
+
+      .lantern-a {
+        left: 802px;
+        top: 320px;
+      }
+
+      .lantern-b {
+        left: 1258px;
+        top: 326px;
+      }
+
+      .signal {
+        position: absolute;
+        left: 658px;
+        top: 218px;
+        width: 170px;
+        height: 90px;
+        background:
+          linear-gradient(180deg, rgba(15, 19, 25, 0.92), rgba(32, 23, 14, 0.92)),
+          #18130e;
+        border: 6px solid #d09a4c;
+        box-shadow: 0 0 0 4px #21150b, 0 12px 0 rgba(0, 0, 0, 0.32);
+      }
+
+      .signal::before,
+      .signal::after {
+        content: "";
+        position: absolute;
+        left: 22px;
+        right: 22px;
+        height: 10px;
+        background: #7be7ff;
+        box-shadow: 0 0 14px rgba(123, 231, 255, 0.78);
+      }
+
+      .signal::before {
+        top: 23px;
+      }
+
+      .signal::after {
+        top: 50px;
+        width: 82px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="scene">
+      <div class="way"></div>
+      <div class="pillar pillar-left"></div>
+      <div class="pillar pillar-right"></div>
+      <div class="portal"></div>
+      <div class="steps">
+        <div class="step" style="--i: 0"></div>
+        <div class="step" style="--i: 1"></div>
+        <div class="step" style="--i: 2"></div>
+        <div class="step" style="--i: 3"></div>
+        <div class="step" style="--i: 4"></div>
+      </div>
+      <div class="lantern lantern-a"></div>
+      <div class="lantern lantern-b"></div>
+      <div class="signal"></div>
+    </div>
+  </body>
+</html>

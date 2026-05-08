@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lobster-chat SFC Canvas Draft</title>
+    <style>
+      :root {
+        --bg: #141014;
+        --panel: #221920;
+        --panel-2: #2d222b;
+        --line: #e7d8b0;
+        --text: #f6efdc;
+        --muted: #b8a98b;
+        --gold: #f3c96c;
+        --green: #9ac47c;
+        --cyan: #87d0df;
+        --rose: #d96b83;
+        --wood-1: #8c5d33;
+        --wood-2: #5e3721;
+        --ink: #0d0b10;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at top, rgba(243, 201, 108, 0.12), transparent 35%),
+          linear-gradient(180deg, #100d12 0%, #151118 48%, #0e0c10 100%);
+        color: var(--text);
+        font-family: "SF Mono", "Menlo", "Monaco", monospace;
+      }
+
+      .page {
+        max-width: 1520px;
+        margin: 0 auto;
+        padding: 22px 22px 28px;
+      }
+
+      .masthead {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+
+      .title {
+        font-size: 24px;
+        line-height: 1.1;
+        color: var(--gold);
+        letter-spacing: 0.02em;
+      }
+
+      .subtitle {
+        margin-top: 6px;
+        max-width: 820px;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .tab {
+        appearance: none;
+        border: 1px solid rgba(231, 216, 176, 0.32);
+        background: rgba(45, 34, 43, 0.78);
+        color: var(--text);
+        padding: 10px 14px;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .tab[aria-pressed="true"] {
+        border-color: var(--gold);
+        background: rgba(243, 201, 108, 0.14);
+        color: var(--gold);
+      }
+
+      .top-strip {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+      }
+
+      .top-pill {
+        border: 1px solid rgba(231, 216, 176, 0.22);
+        background: rgba(34, 25, 32, 0.74);
+        color: var(--muted);
+        padding: 8px 12px;
+        font-size: 12px;
+      }
+
+      .top-pill strong {
+        color: var(--gold);
+      }
+
+      .app {
+        border: 2px solid rgba(231, 216, 176, 0.58);
+        background: rgba(15, 12, 17, 0.94);
+        box-shadow: 0 26px 70px rgba(0, 0, 0, 0.55);
+      }
+
+      .app-top {
+        display: grid;
+        grid-template-columns: 176px minmax(0, 1fr) 268px;
+        gap: 0;
+        min-height: 690px;
+      }
+
+      .left-rail {
+        border-right: 2px solid rgba(231, 216, 176, 0.34);
+        background:
+          linear-gradient(180deg, rgba(240, 222, 180, 0.08), transparent 16%),
+          linear-gradient(180deg, #84755f 0%, #6f5d48 100%);
+        padding: 18px 16px;
+      }
+
+      .app.scene-home .left-rail {
+        background:
+          linear-gradient(180deg, rgba(255, 224, 153, 0.06), transparent 14%),
+          linear-gradient(180deg, #5c4334 0%, #4c3528 100%);
+      }
+
+      .rail-title {
+        color: #1b1510;
+        font-size: 13px;
+        letter-spacing: 0.08em;
+        margin-bottom: 16px;
+      }
+
+      .rail-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .rail-item {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        color: #18120e;
+        padding: 10px 10px;
+        border: 1px solid rgba(24, 18, 14, 0.18);
+        background: rgba(255, 247, 224, 0.22);
+      }
+
+      .rail-item.active {
+        background: rgba(255, 239, 193, 0.9);
+        font-weight: 700;
+      }
+
+      .rail-badge {
+        width: 18px;
+        text-align: center;
+      }
+
+      .stage {
+        position: relative;
+        display: grid;
+        grid-template-rows: auto 1fr;
+        background: #0a0810;
+      }
+
+      .app.scene-home .stage {
+        background: #130d11;
+      }
+
+      .stage-title {
+        border-bottom: 2px solid rgba(231, 216, 176, 0.34);
+        padding: 12px 16px 10px;
+        color: var(--gold);
+        font-size: 16px;
+      }
+
+      .canvas-wrap {
+        position: relative;
+        padding: 14px;
+      }
+
+      .scene-canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+        background: #09070d;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+
+      .right-card {
+        border-left: 2px solid rgba(231, 216, 176, 0.34);
+        background:
+          linear-gradient(180deg, rgba(255, 238, 186, 0.06), transparent 18%),
+          linear-gradient(180deg, #161018 0%, #0e0b11 100%);
+        display: grid;
+        grid-template-rows: auto auto 1fr auto;
+        padding: 14px;
+        gap: 12px;
+      }
+
+      .app.scene-home .right-card {
+        background:
+          linear-gradient(180deg, rgba(255, 226, 176, 0.05), transparent 18%),
+          linear-gradient(180deg, #181016 0%, #100b11 100%);
+      }
+
+      .card-title {
+        color: var(--gold);
+        font-size: 16px;
+      }
+
+      .portrait-shell {
+        border: 2px solid rgba(231, 216, 176, 0.4);
+        background: rgba(255, 239, 208, 0.05);
+        padding: 10px;
+      }
+
+      .portrait-canvas {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        display: block;
+        background: #0c0910;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+
+      .meta {
+        display: grid;
+        gap: 8px;
+      }
+
+      .meta-line {
+        color: var(--text);
+        font-size: 14px;
+      }
+
+      .meta-line strong {
+        color: var(--gold);
+        font-weight: 600;
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .action {
+        padding: 8px 10px;
+        border: 1px solid rgba(231, 216, 176, 0.32);
+        background: rgba(45, 34, 43, 0.72);
+        color: var(--text);
+        font-size: 13px;
+      }
+
+      .app-bottom {
+        border-top: 2px solid rgba(231, 216, 176, 0.34);
+        display: grid;
+        grid-template-rows: 200px 78px;
+      }
+
+      .transcript {
+        padding: 14px 18px 10px;
+        background:
+          linear-gradient(180deg, rgba(255, 224, 131, 0.04), transparent 20%),
+          #0d0b10;
+        overflow: hidden;
+      }
+
+      .transcript-title {
+        color: var(--gold);
+        margin-bottom: 10px;
+        font-size: 16px;
+      }
+
+      .log {
+        display: grid;
+        gap: 7px;
+        font-size: 15px;
+      }
+
+      .log .sys {
+        color: #d8c79f;
+      }
+
+      .log .npc {
+        color: #87d0df;
+      }
+
+      .log .lord {
+        color: #9ac47c;
+      }
+
+      .log .user {
+        color: #f2dfbe;
+      }
+
+      .input-shell {
+        display: grid;
+        grid-template-columns: 1fr 120px;
+        gap: 10px;
+        padding: 14px 18px 18px;
+        background: #151019;
+        align-items: center;
+      }
+
+      .input-box {
+        border: 2px solid rgba(231, 216, 176, 0.46);
+        padding: 14px 16px;
+        color: #201912;
+        background: #fff3dc;
+        font-size: 18px;
+      }
+
+      .send {
+        border: 2px solid rgba(231, 216, 176, 0.48);
+        padding: 14px 16px;
+        background: linear-gradient(180deg, #f1d59d 0%, #cb9758 100%);
+        color: #25140b;
+        font-weight: 700;
+        text-align: center;
+      }
+
+      .footer-note {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      @media (max-width: 1160px) {
+        .app-top {
+          grid-template-columns: 1fr;
+        }
+
+        .left-rail,
+        .right-card {
+          border: 0;
+          border-top: 2px solid rgba(231, 216, 176, 0.22);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="masthead">
+        <div>
+          <div class="title">lobster-chat</div>
+          <div class="subtitle">
+            `TUI` 只保留会话、消息流和输入；主景和角色画面交给独立像素画布。下面这版直接按“城市公共页 / 住宅私聊页”来做页面原型，不再用字符画冒充视觉层。
+          </div>
+        </div>
+        <div class="tabs">
+          <button class="tab" type="button" data-scene="city" aria-pressed="true">城市公共页</button>
+          <button class="tab" type="button" data-scene="home" aria-pressed="false">住宅私聊页</button>
+        </div>
+      </div>
+
+      <div class="top-strip">
+        <div class="top-pill"><strong>TUI 壳</strong> 会话 / 消息 / 输入</div>
+        <div class="top-pill"><strong>Canvas</strong> 城市 / 住宅 / 角色</div>
+        <div class="top-pill"><strong>后续</strong> 共用同一份 scene model 投到 H5</div>
+      </div>
+
+      <div class="app scene-city" id="appShell">
+        <div class="app-top">
+          <aside class="left-rail">
+            <div class="rail-title" id="railTitle"></div>
+            <div class="rail-list" id="railList"></div>
+          </aside>
+
+          <section class="stage">
+            <div class="stage-title" id="stageTitle"></div>
+            <div class="canvas-wrap">
+              <canvas class="scene-canvas" id="sceneCanvas" width="320" height="180"></canvas>
+            </div>
+          </section>
+
+          <aside class="right-card">
+            <div class="card-title" id="cardTitle"></div>
+            <div class="portrait-shell">
+              <canvas class="portrait-canvas" id="portraitCanvas" width="96" height="96"></canvas>
+            </div>
+            <div class="meta" id="metaBox"></div>
+            <div class="actions" id="actions"></div>
+          </aside>
+        </div>
+
+        <div class="app-bottom">
+          <section class="transcript">
+            <div class="transcript-title" id="transcriptTitle"></div>
+            <div class="log" id="log"></div>
+          </section>
+          <section class="input-shell">
+            <div class="input-box" id="inputBox"></div>
+            <div class="send">发送</div>
+          </section>
+        </div>
+      </div>
+
+      <div class="footer-note">
+        下一步不再继续补字符主景，而是把 `scene / portrait` 抽成可渲染资产模型，再由本地 renderer 与 H5 共用。
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      const scenes = {
+        city: {
+          railTitle: "城内目录",
+          stageTitle: "第一城 / 公共频道",
+          cardTitle: "角色资料 / 状态",
+          transcriptTitle: "第一城 - 公共频道",
+          input: "可以描述任务或提出任何问题，按 Enter 发送…",
+          rail: [
+            ["⌕", "搜索"],
+            ["✉", "消息"],
+            ["⏰", "定时任务"],
+            ["✦", "灵感广场"],
+          ],
+          meta: [
+            ["角色", "城市向导"],
+            ["称号", "公共频道引路"],
+            ["当前", "第一城大厅"],
+            ["状态", "正常"],
+          ],
+          actions: ["私聊", "委托", "交易"],
+          log: [
+            ["sys", "<系统> 欢迎来到第一城。"],
+            ["npc", "<居民_阿尔法> 今天市场那边很热闹。"],
+            ["lord", "<城主_奥瑞利安> 傍晚前会有商队进城。"],
+            ["user", "<玩家_tiyan> 收到，我先去钟塔那边看看。"],
+          ],
+        },
+        home: {
+          railTitle: "居所侧栏",
+          stageTitle: "新手居所 / 私聊",
+          cardTitle: "房内状态",
+          transcriptTitle: "新手居所 - guide 私聊",
+          input: "继续聊、记任务、问问题，按 Enter 发送…",
+          rail: [
+            ["↺", "续聊"],
+            ["⚑", "整理"],
+            ["⌂", "住户档"],
+            ["☼", "灯火"],
+          ],
+          meta: [
+            ["住户", "tiyan"],
+            ["同住AI", "guide"],
+            ["当前", "新手居所"],
+            ["状态", "房内连线"],
+          ],
+          actions: ["续聊", "整理", "留条"],
+          log: [
+            ["sys", "<系统> 住宅私聊已接通。"],
+            ["npc", "<guide> 先把今天的想法说出来，我帮你整理。"],
+            ["user", "<tiyan> 先记三件事：剧情、功能、部署。"],
+            ["npc", "<guide> 好，我先给你拆成小任务。"],
+          ],
+        },
+      };
+
+      let current = "city";
+
+      function fillRect(ctx, x, y, w, h, color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, w, h);
+      }
+
+      function drawBorder(ctx, x, y, w, h, color) {
+        fillRect(ctx, x, y, w, 1, color);
+        fillRect(ctx, x, y + h - 1, w, 1, color);
+        fillRect(ctx, x, y, 1, h, color);
+        fillRect(ctx, x + w - 1, y, 1, h, color);
+      }
+
+      function drawCityScene(ctx) {
+        fillRect(ctx, 0, 0, 320, 180, "#08070d");
+        fillRect(ctx, 0, 136, 320, 44, "#111116");
+
+        for (let i = 0; i < 6; i++) {
+          fillRect(ctx, 12 + i * 14, 28 + (i % 2) * 12, 6, 16, "#3a8a45");
+          fillRect(ctx, 220 + i * 10, 24 + (i % 3) * 8, 6, 16, "#8a8b92");
+        }
+
+        for (let i = 0; i < 7; i++) {
+          fillRect(ctx, 6 + i * 6, 18 + i * 10, 4, 12, "#2a82df");
+          fillRect(ctx, 300 - i * 7, 20 + i * 13, 4, 12, "#2a82df");
+        }
+
+        fillRect(ctx, 72, 24, 166, 104, "#6e6f76");
+        drawBorder(ctx, 72, 24, 166, 104, "#e5dcc6");
+
+        fillRect(ctx, 120, 42, 70, 42, "#f6e4bc");
+        fillRect(ctx, 132, 34, 46, 16, "#b9444c");
+        fillRect(ctx, 142, 30, 26, 12, "#ce5d4d");
+        fillRect(ctx, 146, 58, 8, 26, "#6a4c2d");
+        fillRect(ctx, 156, 58, 8, 26, "#6a4c2d");
+
+        for (let i = 0; i < 3; i++) {
+          fillRect(ctx, 88 + i * 22, 54, 16, 18, "#7b5030");
+          fillRect(ctx, 88 + i * 22, 46, 16, 10, "#6b9dd7");
+        }
+
+        for (let i = 0; i < 5; i++) {
+          fillRect(ctx, 172 + i * 14, 90, 10, 14, "#8d6240");
+          fillRect(ctx, 172 + i * 14, 84, 10, 8, "#d5b190");
+        }
+
+        fillRect(ctx, 95, 112, 120, 10, "#d2bf92");
+        fillRect(ctx, 145, 112, 10, 44, "#d2bf92");
+        fillRect(ctx, 136, 148, 28, 18, "#d2bf92");
+        drawBorder(ctx, 136, 148, 28, 18, "#8a7a52");
+
+        fillRect(ctx, 240, 86, 18, 18, "#5c2478");
+        fillRect(ctx, 244, 90, 10, 10, "#c576ff");
+      }
+
+      function drawHomeScene(ctx) {
+        fillRect(ctx, 0, 0, 320, 180, "#1a1114");
+        fillRect(ctx, 0, 0, 320, 118, "#6c4a2f");
+        fillRect(ctx, 0, 118, 320, 62, "#4f3120");
+
+        fillRect(ctx, 18, 20, 84, 72, "#8c684a");
+        drawBorder(ctx, 18, 20, 84, 72, "#e0c692");
+        fillRect(ctx, 34, 34, 38, 24, "#efead5");
+        fillRect(ctx, 48, 94, 12, 18, "#1b1614");
+
+        fillRect(ctx, 126, 24, 66, 42, "#8f6848");
+        fillRect(ctx, 142, 36, 26, 16, "#e5cf97");
+        fillRect(ctx, 136, 82, 42, 20, "#cfa07a");
+
+        fillRect(ctx, 205, 76, 58, 28, "#d8be93");
+        fillRect(ctx, 212, 68, 44, 16, "#aa7a59");
+        fillRect(ctx, 272, 28, 38, 70, "#a78b6d");
+        fillRect(ctx, 276, 36, 30, 18, "#efe6d2");
+        fillRect(ctx, 276, 58, 30, 34, "#d5b17e");
+
+        fillRect(ctx, 182, 114, 90, 10, "#e8d5a2");
+        fillRect(ctx, 40, 114, 84, 10, "#e8d5a2");
+        fillRect(ctx, 40, 124, 10, 42, "#e8d5a2");
+        fillRect(ctx, 114, 124, 10, 42, "#e8d5a2");
+
+        fillRect(ctx, 165, 84, 16, 34, "#e9a152");
+        fillRect(ctx, 168, 76, 10, 10, "#ffe38b");
+      }
+
+      function drawGuidePortrait(ctx) {
+        fillRect(ctx, 0, 0, 96, 96, "#100c11");
+        fillRect(ctx, 26, 16, 42, 18, "#b65255");
+        fillRect(ctx, 34, 8, 26, 12, "#efcb74");
+        fillRect(ctx, 24, 26, 46, 46, "#f2d3a3");
+        fillRect(ctx, 26, 42, 12, 8, "#181319");
+        fillRect(ctx, 56, 42, 12, 8, "#181319");
+        fillRect(ctx, 32, 58, 28, 10, "#885231");
+        fillRect(ctx, 18, 68, 60, 18, "#7c2430");
+      }
+
+      function drawResidentPortrait(ctx) {
+        fillRect(ctx, 0, 0, 96, 96, "#100c11");
+        fillRect(ctx, 24, 18, 48, 18, "#5b8dcf");
+        fillRect(ctx, 26, 28, 44, 40, "#f2d1a2");
+        fillRect(ctx, 34, 42, 10, 8, "#181319");
+        fillRect(ctx, 54, 42, 10, 8, "#181319");
+        fillRect(ctx, 40, 58, 14, 8, "#8d5343");
+        fillRect(ctx, 18, 70, 60, 18, "#4d6578");
+      }
+
+      function renderScene(name) {
+        current = name;
+        const config = scenes[name];
+        $("appShell").className = `app scene-${name}`;
+        $("railTitle").textContent = config.railTitle;
+        $("stageTitle").textContent = config.stageTitle;
+        $("cardTitle").textContent = config.cardTitle;
+        $("transcriptTitle").textContent = config.transcriptTitle;
+        $("inputBox").textContent = config.input;
+
+        $("railList").innerHTML = config.rail
+          .map(
+            ([icon, label], index) => `
+              <div class="rail-item ${index === 1 ? "active" : ""}">
+                <span class="rail-badge">${icon}</span>
+                <span>${label}</span>
+              </div>
+            `
+          )
+          .join("");
+
+        $("metaBox").innerHTML = config.meta
+          .map(([k, v]) => `<div class="meta-line"><strong>${k}</strong>：${v}</div>`)
+          .join("");
+
+        $("actions").innerHTML = config.actions
+          .map((label) => `<div class="action">${label}</div>`)
+          .join("");
+
+        $("log").innerHTML = config.log
+          .map(([cls, text]) => `<div class="${cls}">${text}</div>`)
+          .join("");
+
+        const scene = $("sceneCanvas").getContext("2d");
+        scene.imageSmoothingEnabled = false;
+        if (name === "city") {
+          drawCityScene(scene);
+        } else {
+          drawHomeScene(scene);
+        }
+
+        const portrait = $("portraitCanvas").getContext("2d");
+        portrait.imageSmoothingEnabled = false;
+        if (name === "city") {
+          drawGuidePortrait(portrait);
+        } else {
+          drawResidentPortrait(portrait);
+        }
+
+        document.querySelectorAll(".tab").forEach((button) => {
+          button.setAttribute(
+            "aria-pressed",
+            button.dataset.scene === name ? "true" : "false"
+          );
+        });
+      }
+
+      document.querySelectorAll(".tab").forEach((button) => {
+        button.addEventListener("click", () => renderScene(button.dataset.scene));
+      });
+
+      renderScene(current);
+    </script>
+  </body>
+</html>
