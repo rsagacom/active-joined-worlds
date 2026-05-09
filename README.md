@@ -2,6 +2,8 @@
 
 An IM-first world communication base for real people. It uses a shared vocabulary of `世界 / 城邦 / 聚落 / 居民 / 城主 / 互联 / 共建`, with the gateway contract as the single source of truth, H5 as the current primary interaction entry, and TUI as a parallel mapped client. Different windows share the same world model, but they do not share the same rights.
 
+![Active Joined Worlds scene preview](docs/assets/readme-hero-4up.png)
+
 ## License
 
 lobster-chat is open source under the MIT License. You may use, copy, modify, merge, publish, distribute, sublicense, and sell copies of the software, subject to the license notice and warranty disclaimer.
