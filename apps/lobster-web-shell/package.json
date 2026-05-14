@@ -4,10 +4,18 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Static web shell plus OSS-backed pixel scene prototype for lobster-chat.",
-  "license": "MIT",
+  "license": "UNLICENSED",
+  "scripts": {
+    "test": "npm run test:unit && npm run test:layout",
+    "test:unit": "node --test test/*.test.mjs",
+    "test:layout": "node verify-scene-layout.mjs"
+  },
   "dependencies": {
-    "@chenglou/pretext": "0.0.6",
+    "@chenglou/pretext": "^0.0.7",
     "phaser": "^3.90.0",
     "rpgui": "^1.0.3"
+  },
+  "devDependencies": {
+    "playwright": "^1.59.1"
   }
 }

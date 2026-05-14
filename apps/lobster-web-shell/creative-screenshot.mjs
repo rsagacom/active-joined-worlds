@@ -37,7 +37,7 @@ await new Promise((r) => server.listen(PORT, r));
 console.log(`Server running on http://localhost:${PORT}`);
 
 const browser = await chromium.launch();
-const outputDir = "output/playwright/visual-qa-20260421-sfc-wechat/";
+const outputDir = "/Users/rsaga/Documents/Playground/lobster-chat/output/playwright/visual-qa-20260421-sfc-wechat/";
 
 async function screenshot(name, viewport) {
   const context = await browser.newContext(viewport ? { viewport } : {});

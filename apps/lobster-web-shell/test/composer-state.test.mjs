@@ -61,3 +61,19 @@ test("gateway resident mode requires a non-visitor identity before drafting", ()
   assert.equal(state.canSend, false);
   assert.equal(state.draftState, "login-required");
 });
+
+test("gateway offline state locks drafting and sending", () => {
+  const state = computeComposerAvailability({
+    hasActiveRoom: true,
+    hasDraftText: true,
+    isSendingMessage: false,
+    hasGateway: true,
+    hasIdentity: true,
+    gatewayUnavailable: true,
+  });
+
+  assert.equal(state.canDraft, false);
+  assert.equal(state.canLiveSend, false);
+  assert.equal(state.canSend, false);
+  assert.equal(state.draftState, "offline");
+});

@@ -37,7 +37,7 @@ const DEFAULT_BOOTSTRAP = {
 const SAMPLE_STATE = {
   rooms: [
     {
-      id: "dm:builder:rsaga",
+      id: "dm:rsaga:builder",
       title: "私信 · 内测同伴",
       subtitle: "一对一测试聊天",
       meta: "最近 24 小时活跃",
@@ -1162,6 +1162,7 @@ let authSession = {
   expiresAtMs: null,
   deliveryMode: null,
 };
+let sessionToken = null;
 let residentLoginDismissed = false;
 let provider = {
   mode: "unknown",
@@ -1169,6 +1170,7 @@ let provider = {
   connection_state: "Disconnected",
   reachable: false,
 };
+let providerLoaded = false;
 const CHAT_FOCUS_STORAGE_KEY = "lobster-chat-focus";
 let chatFocusPreference = false;
 let chatFocusMode = false;
@@ -1650,12 +1652,26 @@ function messageMatchesPendingEcho(message, pending) {
   );
 }
 
+function messageIsDeliveredCopyOfPending(message, pending) {
+  if (!message || !pending) return false;
+  return (
+    message.delivery_status === "delivered" &&
+    normalizedMessageText(message.sender) === normalizedMessageText(pending.sender) &&
+    normalizedMessageText(message.text) === normalizedMessageText(pending.text)
+  );
+}
+
 function visiblePendingEchoesForRoom(room) {
   if (!room?.id) return [];
   const committed = Array.isArray(room.messages) ? room.messages : [];
   return pendingEchoesForRoom(room.id).filter(
     (pending) =>
-      pending.failed || !committed.some((message) => messageMatchesPendingEcho(message, pending)),
+      pending.failed ||
+      !committed.some(
+        (message) =>
+          messageMatchesPendingEcho(message, pending) ||
+          messageIsDeliveredCopyOfPending(message, pending),
+      ),
   );
 }
 
@@ -1683,12 +1699,46 @@ function markPendingEchoFailed(roomId, echoId, failed) {
   );
 }
 
+function removePendingEcho(roomId, echoId) {
+  const remaining = pendingEchoesForRoom(roomId).filter((item) => item.id !== echoId);
+  if (remaining.length) {
+    pendingMessageEchoes[roomId] = remaining;
+  } else {
+    delete pendingMessageEchoes[roomId];
+  }
+}
+
 function clearPendingEchoes(roomId) {
   delete pendingMessageEchoes[roomId];
 }
 
 function clearAllPendingEchoes() {
   pendingMessageEchoes = {};
+}
+
+async function retryPendingEcho(roomId, echoId) {
+  if (isSendingMessage) return false;
+  const pending = pendingEchoesForRoom(roomId).find((item) => item.id === echoId);
+  if (!pending) return false;
+  activeRoomId = roomId;
+  removePendingEcho(roomId, echoId);
+  delete roomSendErrors[roomId];
+  renderRooms();
+  renderTimeline();
+  renderConversationOverview();
+  updateComposerState();
+  try {
+    await sendMessage(pending.text, { quickAction: pending.quick_action || "" });
+    return true;
+  } catch (error) {
+    roomSendErrors[roomId] = localizedRuntimeError(error, "消息发送失败");
+    refreshGatewayBadge();
+    renderRooms();
+    renderTimeline();
+    renderConversationOverview();
+    updateComposerState();
+    return false;
+  }
 }
 
 function latestRoomMessageLike(room) {
@@ -3602,6 +3652,40 @@ function createRoomPreviewNode(room) {
   return shell;
 }
 
+function renderTimelineSkeletonRows(count = 4) {
+  if (!timelineEl) return;
+  for (let index = 0; index < count; index += 1) {
+    const isSelf = index % 2 === 1;
+    const row = document.createElement("div");
+    row.className = `message-row timeline-skeleton-row${isSelf ? " self" : ""}`;
+    row.dataset.messageKind = "skeleton";
+    row.dataset.messageSide = isSelf ? "self" : "peer";
+
+    const avatar = document.createElement("div");
+    avatar.className = `message-avatar timeline-skeleton-avatar${isSelf ? " message-avatar-self" : ""}`;
+
+    const stack = document.createElement("div");
+    stack.className = "message-stack";
+
+    const bubble = document.createElement("div");
+    bubble.className = "timeline-skeleton-bubble";
+    bubble.setAttribute("aria-hidden", "true");
+    bubble.setAttribute("style", `--skeleton-width:${index === 0 ? 72 : index === 1 ? 54 : index === 2 ? 64 : 44}%`);
+
+    const linePrimary = document.createElement("span");
+    linePrimary.className = "timeline-skeleton-line timeline-skeleton-line-primary";
+    const lineSecondary = document.createElement("span");
+    lineSecondary.className = "timeline-skeleton-line timeline-skeleton-line-secondary";
+    bubble.appendChild(linePrimary);
+    bubble.appendChild(lineSecondary);
+
+    stack.appendChild(bubble);
+    row.appendChild(avatar);
+    row.appendChild(stack);
+    timelineEl.appendChild(row);
+  }
+}
+
 function roomOverviewSummary(room) {
   const action = latestRoomQuickAction(room);
   const actionSummary = quickActionOverviewSummary(action);
@@ -3667,10 +3751,12 @@ function autoSizeComposerInput() {
   const isMobile = window.innerWidth <= 720;
   const isCityHub = document.body.dataset.sfcTheme === "city";
   const isSceneComposer = !!composerInputEl.closest(".public-square-composer, .creative-composer");
-  const minH = isWechat ? (isMobile ? 40 : 36) : (isMobile ? 48 : (isCityHub ? 36 : 74));
-  const maxH = isWechat ? (isMobile ? 80 : 100) : (isSceneComposer ? (isMobile ? 120 : 160) : (isMobile ? 120 : (isCityHub ? 80 : 220)));
+  const isResidentShell = currentShellPage() === "user";
+  const minH = isWechat || isResidentShell ? (isMobile ? 40 : 36) : (isMobile ? 48 : (isCityHub ? 36 : 74));
+  const maxH = isWechat || isResidentShell || isSceneComposer ? 120 : (isMobile ? 120 : (isCityHub ? 80 : 220));
   const nextHeight = Math.min(Math.max(composerInputEl.scrollHeight, minH), maxH);
   composerInputEl.style.height = `${nextHeight}px`;
+  composerInputEl.style.overflowY = composerInputEl.scrollHeight > maxH ? "auto" : "hidden";
 }
 
 function unreadCount(room) {
@@ -4716,7 +4802,13 @@ function currentDesiredResidentId() {
 }
 
 function setGovernanceStatus(message, isError = false) {
-  if (!governanceStatusEl) return;
+  if (!governanceStatusEl) {
+    if (worldStateEl) {
+      worldStateEl.textContent = `${isError ? "提示异常" : "提示"}：${message}`;
+      worldStateEl.classList.toggle("notice-pending", isError);
+    }
+    return;
+  }
   governanceStatusEl.textContent = `${shellMode === "user" ? "边缘抽屉提示" : "侧栏提示"}：${message}`;
   governanceStatusEl.classList.toggle("notice-pending", isError);
 }
@@ -5624,15 +5716,44 @@ function translateProviderHealth(reachable) {
   return reachable ? "正常" : "降级";
 }
 
+function normalizeProviderConnectionState(state) {
+  const normalized = String(state || "").trim().toLowerCase();
+  if (normalized === "connected" || normalized === "online") return "Connected";
+  if (normalized === "disconnected" || normalized === "offline") return "Disconnected";
+  if (normalized === "connecting" || normalized === "syncing") return "Connecting";
+  return "Unknown";
+}
+
 function translateProviderConnectionState(state) {
-  switch (state) {
+  switch (normalizeProviderConnectionState(state)) {
     case "Connected":
       return "已连接";
     case "Disconnected":
       return "已断开";
+    case "Connecting":
+      return "连线中";
     default:
       return "状态未知";
   }
+}
+
+function gatewayConnectionStatus() {
+  if (!gatewayUrl) return "offline";
+  const explicitGatewayUrl = Boolean(queryGatewayUrl());
+  if (lastRefreshErrorMessage && (explicitGatewayUrl || providerLoaded)) return "offline";
+  const providerState = normalizeProviderConnectionState(provider.connection_state);
+  if (providerLoaded && (provider.reachable === false || providerState === "Disconnected")) return "offline";
+  if (providerState === "Connecting" || (refreshInProgress && !lastRefreshAtMs)) return "connecting";
+  if (providerState === "Connected" || lastRefreshAtMs) return "online";
+  return refreshInProgress ? "connecting" : "offline";
+}
+
+function gatewayUnavailableForComposer() {
+  if (!gatewayUrl) return false;
+  const explicitGatewayUrl = Boolean(queryGatewayUrl());
+  if (lastRefreshErrorMessage && (explicitGatewayUrl || providerLoaded)) return true;
+  const providerState = normalizeProviderConnectionState(provider.connection_state);
+  return Boolean(providerLoaded && (provider.reachable === false || providerState === "Disconnected"));
 }
 
 function translateResidentLabel(residentId) {
@@ -5655,6 +5776,10 @@ function localizedRuntimeError(error, fallbackMessage) {
   if (/^room .+ is frozen$/.test(message)) return "房间已冻结，暂不能发送";
   if (/^unknown public room:/.test(message)) return "房间不存在，无法发送";
   if (/^resident .+ is not active in city .+$/.test(message)) return "当前居民不在该城市，无法发送";
+  if (/^authorization bearer token required$/i.test(message)) return "登录已失效，请重新登录";
+  if (/^invalid or expired session$/i.test(message)) return "登录已失效，请重新登录";
+  if (/^sender .+ does not match authenticated session/.test(message)) return "登录身份不匹配，请重新登录";
+  if (/^Unauthorized$/i.test(message)) return "登录已失效，请重新登录";
   return /[A-Za-z]/.test(message) ? fallbackMessage : message;
 }
 
@@ -5865,6 +5990,12 @@ function roomSyncLabel() {
 
 function composerStatusState() {
   const shellPage = currentShellPage();
+  if (gatewayUnavailableForComposer()) {
+    return {
+      tone: "danger",
+      text: "连接离线，等待同步恢复后发送。",
+    };
+  }
   if (residentGatewayLoginRequired()) {
     return {
       tone: "warning",
@@ -6018,6 +6149,8 @@ function updateRoomToolbarState() {
 }
 
 function focusRoom(roomId) {
+  const shouldFollowExistingTimeline =
+    !timelineEl || timelineEl.scrollHeight - timelineEl.scrollTop - timelineEl.clientHeight < 80;
   if (activeRoomId && activeRoomId !== roomId && timelineEl) {
     timelineEl.setAttribute("data-switching", "true");
     requestAnimationFrame(() => {
@@ -6029,7 +6162,7 @@ function focusRoom(roomId) {
   activeRoomId = roomId;
   roomSearch = "";
   roomFilter = "all";
-  followTimelineToLatest = true;
+  followTimelineToLatest = shouldFollowExistingTimeline;
   syncComposerDraft({ force: true });
   syncChatPaneMode(window.matchMedia("(max-width: 960px)").matches ? "thread" : "split");
   markRoomRead(roomId);
@@ -6041,7 +6174,7 @@ function focusRoom(roomId) {
   focusComposerInput({ force: true });
   // Close mobile drawers after selecting a room
   railDrawerEl?.classList.remove("open");
-  sfcRailEl?.classList.remove("open");
+  setSfcRailOpen(false);
 }
 
 function formatDateTime(timestampMs) {
@@ -6391,6 +6524,7 @@ async function loadProviderState() {
     const payload = await response.json();
     if (payload?.mode) {
       provider = payload;
+      providerLoaded = true;
       return true;
     }
   } catch {
@@ -6599,6 +6733,8 @@ function loadAuthDraft() {
   const deliveryMode = safeLocalStorageGet("lobster-auth-delivery-mode");
   const expiresAtMsRaw = safeLocalStorageGet("lobster-auth-expires-at-ms");
   const expiresAtMs = expiresAtMsRaw ? Number(expiresAtMsRaw) : null;
+  const savedSessionToken = safeLocalStorageGet("lobster-session-token");
+  sessionToken = savedSessionToken || null;
   if (authEmailInputEl && email) authEmailInputEl.value = email;
   if (authMobileInputEl && mobile) authMobileInputEl.value = mobile;
   if (authResidentInputEl && resident) authResidentInputEl.value = resident;
@@ -6746,6 +6882,13 @@ function renderRooms() {
       );
       titleStack.appendChild(createLine("room-kicker", roomAudienceLabel(room)));
       top.appendChild(titleStack);
+      if (unread > 0 && room.id !== activeRoomId) {
+        const unreadBadge = document.createElement("span");
+        unreadBadge.className = "room-unread-badge";
+        unreadBadge.setAttribute("aria-label", `${unread} 条未读消息`);
+        unreadBadge.textContent = unread > 99 ? "99+" : String(unread);
+        top.appendChild(unreadBadge);
+      }
 
       const metaStack = document.createElement("div");
       metaStack.className = "room-top-meta";
@@ -7068,7 +7211,10 @@ function renderConversationOverview() {
   const exportButton = document.createElement("button");
   exportButton.type = "button";
   exportButton.textContent = shellPage === "admin" ? "导出会话" : "导出聊天";
-  exportButton.addEventListener("click", () => exportCurrentButtonEl?.click());
+  exportButton.disabled = !gatewayUrl || !activeRoomId;
+  exportButton.addEventListener("click", () => {
+    void exportCurrentConversation(shellPage === "admin" ? "导出会话失败" : "导出聊天失败");
+  });
   actions.appendChild(exportButton);
   appendRoomQuickActionOverviewButton(actions, room);
   appendRoomQuickStateAdvanceButton(actions, room);
@@ -7372,9 +7518,9 @@ function renderChatDetailPanel() {
   exportButton.type = "button";
   exportButton.className = "secondary";
   exportButton.textContent = "导出当前";
-  exportButton.disabled = !exportCurrentButtonEl;
+  exportButton.disabled = !gatewayUrl || !activeRoomId;
   exportButton.addEventListener("click", () => {
-    exportCurrentButtonEl?.click();
+    void exportCurrentConversation("导出当前会话失败");
   });
   actionRow.appendChild(exportButton);
 
@@ -7497,12 +7643,7 @@ function renderTimeline() {
   const localPreviewMessages = localPreviewMessagesForEmptyRoom(room);
 
   if (!room.messages?.length && !localPreviewMessages.length) {
-    const empty = document.createElement("div");
-    empty.className = "empty-note timeline-empty";
-    empty.textContent = gatewayUrl
-      ? "还没有消息，先发一句试试。"
-      : "还没有消息，先发一句试试。";
-    timelineEl.appendChild(empty);
+    renderTimelineSkeletonRows(4);
   }
 
   const messages = (room.messages?.length ? room.messages : localPreviewMessages).filter(
@@ -7675,6 +7816,21 @@ function renderTimeline() {
 
     article.appendChild(header);
     article.appendChild(body);
+    if (message.failed) {
+      const pendingActions = document.createElement("div");
+      pendingActions.className = "message-pending-actions";
+      const retryButton = document.createElement("button");
+      retryButton.type = "button";
+      retryButton.className = "message-pending-retry";
+      retryButton.dataset.pendingAction = "retry";
+      retryButton.textContent = "重发";
+      retryButton.addEventListener("click", () => {
+        retryButton.disabled = true;
+        void retryPendingEcho(room.id, message.id);
+      });
+      pendingActions.appendChild(retryButton);
+      article.appendChild(pendingActions);
+    }
     stack.appendChild(article);
     row.appendChild(avatar);
     row.appendChild(stack);
@@ -8473,6 +8629,14 @@ function updateChatPaneToggleLabel(el, mode) {
 }
 
 function refreshGatewayBadge() {
+  const gatewayStatus = gatewayConnectionStatus();
+  document.body.dataset.gatewayConnection = gatewayStatus;
+  const hudStatusEl = document.querySelector("#hud-status");
+  if (hudStatusEl) {
+    hudStatusEl.dataset.connection = gatewayStatus;
+    hudStatusEl.textContent =
+      gatewayStatus === "online" ? "在线" : gatewayStatus === "connecting" ? "连线中" : "离线";
+  }
   if (gatewayUrl) {
     try {
       setNodeText(gatewayStateEl, `连接入口：${new URL(gatewayUrl).host}`);
@@ -8537,6 +8701,7 @@ function updateComposerState() {
     hasGateway: Boolean(gatewayUrl),
     hasIdentity: userShellProjection() ? !isVisitorIdentity() : Boolean(currentIdentity()),
     requiresIdentity: userShellProjection(),
+    gatewayUnavailable: gatewayUnavailableForComposer(),
   });
   if (composerFormEl) {
     composerFormEl.dataset.shellMode = shellMode;
@@ -8553,6 +8718,8 @@ function updateComposerState() {
   let placeholder;
   if (isSendingMessage) {
     placeholder = "正在发送消息...";
+  } else if (gatewayUnavailableForComposer()) {
+    placeholder = "连接离线，等待同步恢复";
   } else if (residentGatewayLoginRequired()) {
     placeholder = "请先登录后发送";
   } else if (room) {
@@ -8575,7 +8742,7 @@ function updateComposerState() {
   if (!residentGatewayLoginRequired() && !isSendingMessage && room && !canLiveSend) {
     placeholder += gatewayUrl ? "（会先保存在本地，等待同步）" : "（会先进入本地时间线）";
   }
-  if (shellPage === "hub") {
+  if (shellPage === "hub" && !gatewayUnavailableForComposer() && !isSendingMessage) {
     placeholder = "说点什么…";
   }
   composerInputEl.placeholder = placeholder;
@@ -8618,6 +8785,7 @@ async function submitComposerMessage() {
     roomSendErrors[activeRoomId] = message;
     refreshGatewayBadge();
     renderRooms();
+    renderTimeline();
     renderConversationOverview();
     return false;
   } finally {
@@ -8724,21 +8892,32 @@ function updateGovernanceFormState() {
 
 function updateAuthFormState() {
   const enabled = Boolean(gatewayUrl);
+  const verifyStep = Boolean(authSession.challengeId);
   for (const element of [
     authDeliverySelectEl,
     authEmailInputEl,
     authMobileInputEl,
     authDeviceInputEl,
-    authChallengeInputEl,
-    authCodeInputEl,
   ]) {
     if (!element) continue;
-    element.disabled = !enabled;
+    element.disabled = !enabled || verifyStep;
+  }
+  for (const element of [authChallengeInputEl, authCodeInputEl]) {
+    if (!element) continue;
+    element.disabled = !enabled || !verifyStep;
   }
   const authRequestButton = authRequestFormEl?.querySelector("button");
-  if (authRequestButton) authRequestButton.disabled = !enabled;
+  if (authRequestButton) authRequestButton.disabled = !enabled || verifyStep;
   const authVerifyButton = authVerifyFormEl?.querySelector("button");
-  if (authVerifyButton) authVerifyButton.disabled = !enabled;
+  if (authVerifyButton) authVerifyButton.disabled = !enabled || !verifyStep;
+  authRequestFormEl?.classList.toggle("is-auth-verify-step", verifyStep);
+  authVerifyFormEl?.classList.toggle("shell-hidden", !verifyStep);
+  if (authRequestFormEl) {
+    authRequestFormEl.dataset.authStep = verifyStep ? "verify" : "request";
+  }
+  if (authVerifyFormEl) {
+    authVerifyFormEl.dataset.authStep = verifyStep ? "verify" : "request";
+  }
 }
 
 function resolveGatewayUrl() {
@@ -8766,12 +8945,28 @@ function resolveGatewayUrl() {
   return null;
 }
 
+function gatewayJsonHeaders() {
+  const headers = {
+    "Content-Type": "application/json",
+  };
+  if (sessionToken) {
+    headers["Authorization"] = `Bearer ${sessionToken}`;
+  }
+  return headers;
+}
+
+function handleGatewayAuthFailure(status) {
+  if (status !== 401 && status !== 403) return;
+  sessionToken = null;
+  safeLocalStorageSet("lobster-session-token", "");
+  setAuthStatus("登录已失效，请重新登录", true);
+}
+
 async function postGatewayJson(path, payload) {
+  const headers = gatewayJsonHeaders();
   const response = await fetch(`${gatewayUrl}${path}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify(payload),
   });
   const text = await response.text();
@@ -8783,6 +8978,7 @@ async function postGatewayJson(path, payload) {
   }
   if (!response.ok) {
     const message = gatewayErrorMessage(parsed, text, response.status);
+    handleGatewayAuthFailure(response.status);
     throw new Error(message);
   }
   return parsed;
@@ -8832,15 +9028,9 @@ async function refreshFromGateway({ requireShell = false } = {}) {
       renderGovernance();
       renderResidents();
     }
-    if (shellChanged) {
-      renderRooms();
-      renderTimeline();
-    }
-    if (providerChanged) {
-      refreshGatewayBadge();
-    }
     renderRooms();
     renderTimeline();
+    refreshGatewayBadge();
     updateComposerState();
     updateAuthFormState();
     updateResidentLoginSurface();
@@ -9030,10 +9220,9 @@ async function sendMessage(text, { quickAction = "" } = {}) {
   try {
     await postGatewayJson("/v1/shell/message", payload);
     posted = true;
-    clearPendingEchoes(roomId);
     delete roomSendErrors[roomId];
     await refreshFromGateway({ requireShell: true });
-    renderRooms();
+    clearPendingEchoes(roomId);
   } catch (error) {
     markPendingEchoFailed(roomId, pendingEchoId, true);
     const fallback = posted ? "消息可能已发出，但会话同步失败" : "消息发送失败";
@@ -9047,6 +9236,37 @@ async function sendMessage(text, { quickAction = "" } = {}) {
       composerInputEl?.focus();
     });
   }
+}
+
+async function editMessage(roomId, messageId, text) {
+  if (!gatewayUrl) {
+    throw new Error("请先连接网关后再编辑消息");
+  }
+  if (!roomId || !messageId || !text.trim()) {
+    throw new Error("编辑消息需要提供房间、消息 ID 和新内容");
+  }
+  await postGatewayJson("/v1/shell/message/edit", {
+    room_id: roomId,
+    message_id: messageId,
+    actor: currentIdentity(),
+    text: text.trim(),
+  });
+  await refreshFromGateway({ requireShell: true });
+}
+
+async function recallMessage(roomId, messageId) {
+  if (!gatewayUrl) {
+    throw new Error("请先连接网关后再撤回消息");
+  }
+  if (!roomId || !messageId) {
+    throw new Error("撤回消息需要提供房间和消息 ID");
+  }
+  await postGatewayJson("/v1/shell/message/recall", {
+    room_id: roomId,
+    message_id: messageId,
+    actor: currentIdentity(),
+  });
+  await refreshFromGateway({ requireShell: true });
 }
 
 async function submitCreateCity() {
@@ -9435,6 +9655,8 @@ async function verifyEmailOtp() {
   });
   persistSenderIdentity(response.resident_id);
   if (authResidentInputEl) authResidentInputEl.value = response.resident_id;
+  sessionToken = response.session_token || null;
+  safeLocalStorageSet("lobster-session-token", sessionToken || "");
   authSession = {
     challengeId: null,
     maskedEmail: response.email_masked,
@@ -9472,6 +9694,18 @@ function downloadContent(filename, content, mimeType) {
   URL.revokeObjectURL(url);
 }
 
+async function exportCurrentConversation(fallbackMessage = "导出当前会话失败") {
+  try {
+    if (!activeRoomId) {
+      setGovernanceStatus("请先打开一个会话", true);
+      return;
+    }
+    await exportHistory({ conversationId: activeRoomId, includePublic: true });
+  } catch (error) {
+    setGovernanceStatus(localizedRuntimeError(error, fallbackMessage), true);
+  }
+}
+
 async function exportHistory({ conversationId = null, includePublic = true } = {}) {
   if (!gatewayUrl) {
     setGovernanceStatus("请先连接网关后再导出会话", true);
@@ -9489,10 +9723,18 @@ async function exportHistory({ conversationId = null, includePublic = true } = {
   setGovernanceStatus(
     conversationId ? `正在导出会话：${conversationId}` : "正在导出全部可见历史",
   );
-  const response = await fetch(`${gatewayUrl}/v1/export?${params.toString()}`);
-  const payload = await response.json();
+  const response = await fetch(`${gatewayUrl}/v1/export?${params.toString()}`, {
+    headers: gatewayJsonHeaders(),
+  });
+  let payload = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
   if (!response.ok) {
-    throw new Error(payload?.message || payload?.error || "导出失败");
+    handleGatewayAuthFailure(response.status);
+    throw new Error(gatewayErrorMessage(payload, "", response.status) || "导出失败");
   }
   const scopeName = conversationId ? conversationId.replace(/[:/]+/g, "_") : "全部历史";
   const filename = `龙虾聊天_${scopeName}.${exportFileExtension(format)}`;
@@ -9791,15 +10033,7 @@ worldResidentSanctionFormEl?.addEventListener("submit", async (event) => {
 });
 
 exportCurrentButtonEl?.addEventListener("click", async () => {
-  try {
-    if (!activeRoomId) {
-      setGovernanceStatus("请先打开一个会话", true);
-      return;
-    }
-    await exportHistory({ conversationId: activeRoomId, includePublic: true });
-  } catch (error) {
-    setGovernanceStatus(localizedRuntimeError(error, "导出当前会话失败"), true);
-  }
+  await exportCurrentConversation("导出当前会话失败");
 });
 
 exportAllButtonEl?.addEventListener("click", async () => {
@@ -9841,9 +10075,19 @@ if (drawerCloseEl && railDrawerEl) {
 const hudRailToggleEl = document.querySelector("#hud-rail-toggle");
 const sfcRailEl = document.querySelector(".sfc-rail");
 
+function setSfcRailOpen(open) {
+  if (!sfcRailEl) return;
+  sfcRailEl.classList.toggle("open", open);
+  sfcRailEl.setAttribute("aria-hidden", open ? "false" : "true");
+  if (hudRailToggleEl) {
+    hudRailToggleEl.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  document.body.classList.toggle("rail-drawer-open", open);
+}
+
 if (hudRailToggleEl && sfcRailEl) {
   hudRailToggleEl.addEventListener("click", () => {
-    sfcRailEl.classList.toggle("open");
+    setSfcRailOpen(!sfcRailEl.classList.contains("open"));
   });
 }
 
@@ -10135,6 +10379,9 @@ if (sceneClearStageEl) {
     if (event.key === "Escape" && isSceneClearMode()) {
       setSceneClearMode(false);
     }
+    if (event.key === "Escape" && sfcRailEl?.classList.contains("open")) {
+      setSfcRailOpen(false);
+    }
     if (event.key === "Escape") {
       closeSceneHotspotPopover();
     }
@@ -10151,7 +10398,7 @@ document.addEventListener("click", (event) => {
   if (sfcRailEl?.classList.contains("open") &&
       !sfcRailEl.contains(event.target) &&
       !hudRailToggleEl?.contains(event.target)) {
-    sfcRailEl.classList.remove("open");
+    setSfcRailOpen(false);
   }
 });
 

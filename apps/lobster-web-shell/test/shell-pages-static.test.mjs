@@ -10,6 +10,14 @@ async function readShellModule(name) {
   return fs.readFile(new URL(`../${name}`, import.meta.url), "utf8");
 }
 
+function sliceBetween(source, startMarker, endMarker) {
+  const start = source.indexOf(startMarker);
+  assert.notEqual(start, -1, `missing start marker: ${startMarker}`);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.notEqual(end, -1, `missing end marker: ${endMarker}`);
+  return source.slice(start, end);
+}
+
 test("hub page is now main-city group chat page with canvas and timeline", async () => {
   const html = await readShellPage("index.html");
 
@@ -19,8 +27,8 @@ test("hub page is now main-city group chat page with canvas and timeline", async
   assert.match(html, /id="room-stage-canvas"/);
   assert.match(html, /id="timeline"/);
   assert.match(html, /id="composer"/);
-  assert.match(html, /styles\.css\?v=20260430-polish-v1/);
-  assert.match(html, /styles\.pixel-map\.css\?v=20260507-bg-png256-v1/);
+  assert.match(html, /styles\.css\?v=20260514-rail-stage-v1/);
+  assert.match(html, /styles\.pixel-map\.css\?v=20260514-rail-stage-v1/);
   assert.match(html, /app\.js\?v=20260501-contract-v1/);
   assert.match(html, /data-symbol-trigger/);
   assert.match(html, /composer-symbol-category/);
@@ -44,13 +52,13 @@ test("creative page is the residential pixel room entry", async () => {
 
   assert.match(html, /<title>龙虾聊天 · 住宅<\/title>/);
   assert.match(html, /data-shell-variant="creative-terminal"/);
-  assert.match(html, /data-default-room-id="dm:builder:rsaga"/);
+  assert.match(html, /data-default-room-id="dm:rsaga:builder"/);
   assert.match(html, /href="\.\/creative\.html" class="rail-item is-active" aria-current="page"/);
   assert.match(html, /href="\.\/index\.html"/);
   assert.match(html, /href="\.\/unified\.html"/);
   assert.match(html, /class="scene-hotspot scene-hotspot--stairs"/);
   assert.match(html, /href="\.\/index\.html"[\s\S]*楼梯/);
-  assert.match(html, /styles\.pixel-map\.css\?v=20260507-bg-png256-v1/);
+  assert.match(html, /styles\.pixel-map\.css\?v=20260514-rail-stage-v1/);
   assert.match(html, /app\.js\?v=20260501-contract-v1/);
   assert.match(html, /data-symbol-trigger/);
   assert.match(html, /composer-symbol-category/);
@@ -64,7 +72,7 @@ test("admin page has collapsible management navigation and tool groups", async (
   const html = await readShellPage("admin.html");
 
   assert.match(html, /<title>龙虾聊天 · 管理后台<\/title>/);
-  assert.match(html, /href="\.\/styles\.css\?v=20260507-admin-v14"/);
+  assert.match(html, /href="\.\/styles\.css\?v=20260511-admin-std-v1"/);
   assert.match(html, /管理后台/);
 
   // 左侧是可收起管理目录，仍保留会话队列作为首个日常入口。
@@ -72,6 +80,21 @@ test("admin page has collapsible management navigation and tool groups", async (
   assert.match(html, /id="admin-nav-toggle"/);
   assert.match(html, /aria-label="收起后台功能目录"/);
   assert.match(html, /<nav class="admin-nav-list" aria-label="管理后台分类">/);
+  assert.match(html, /<div class="admin-nav-module" data-admin-module="daily">/);
+  assert.match(html, /<div class="admin-nav-module-title">日常处理<\/div>/);
+  assert.match(html, /<div class="admin-nav-module" data-admin-module="advanced" data-admin-module-expanded="false">/);
+  assert.match(html, /<button type="button" class="admin-nav-module-title admin-nav-module-toggle" aria-expanded="false" aria-controls="admin-nav-advanced-items">/);
+  assert.match(html, /<div id="admin-nav-advanced-items" class="admin-nav-module-items">/);
+  const dailyModule = sliceBetween(html, 'data-admin-module="daily"', 'data-admin-module="advanced"');
+  for (const label of ["会话", "居民", "公告", "安全", "系统"]) {
+    assert.match(dailyModule, new RegExp(`<strong>${label}<\/strong>`));
+  }
+  assert.doesNotMatch(dailyModule, /<strong>房间<\/strong>/);
+  assert.doesNotMatch(dailyModule, /<strong>世界<\/strong>/);
+  const advancedModule = html.slice(html.indexOf('data-admin-module="advanced"'));
+  for (const label of ["房间", "世界"]) {
+    assert.match(advancedModule, new RegExp(`<strong>${label}<\/strong>`));
+  }
   for (const label of ["会话", "居民", "房间", "安全", "公告", "世界", "系统"]) {
     assert.match(html, new RegExp(`<strong>${label}<\/strong>`));
   }
@@ -96,10 +119,8 @@ test("admin page has collapsible management navigation and tool groups", async (
   // svg 在 icon wrapper 内
   assert.match(systemNav, /<span class="admin-nav-icon" aria-hidden="true">[\s\S]*?<svg[\s\S]*?<\/svg>[\s\S]*?<\/span>/);
 
-  // 中间是会话工作区 + 分类视图容器（默认隐藏）
+  // 中间只保留会话工作区
   assert.match(html, /<section id="admin-session-workspace" class="panel conversation conversation-shell-admin">[\s\S]*?<div id="admin-workspace-session">/);
-  assert.match(html, /<div id="admin-workspace-category" hidden>/);
-  assert.match(html, /<div class="admin-category-panel" data-admin-category="session" hidden>/);
   assert.match(html, /<form id="composer"/);
   assert.match(html, /<div id="timeline"/);
 
@@ -110,7 +131,7 @@ test("admin page has collapsible management navigation and tool groups", async (
   // 默认首屏右侧不展开常驻 details 表单；表单收进隐藏容器
   assert.doesNotMatch(html, /<div class="admin-tools-content">/);
 
-  // 隐藏表单中保留了所有真实 API 表单（按分类分组）
+  // 隐藏表单中保留真实操作表单（按分类分组）
   assert.match(html, /<form id="auth-request-form" class="inline-form compact-form">/);
   assert.match(html, /<form id="auth-verify-form" class="inline-form compact-form">/);
   assert.match(html, /<form id="world-notice-form" class="inline-form compact-form" data-shell-role="admin">/);
@@ -125,34 +146,28 @@ test("admin page has collapsible management navigation and tool groups", async (
   assert.match(html, /<div data-admin-tool-category="world">/);
   assert.match(html, /<div data-admin-tool-category="system">/);
 
-  // 高级治理折叠保留在"世界"分类中间面板中，但默认不展开
-  assert.match(html, /<details class="tool-group tool-group--advanced">/);
-  assert.doesNotMatch(html, /<details class="tool-group tool-group--advanced" open>/);
-  assert.match(html, /<summary class="tool-group-title">高级 \/ 互联实验<\/summary>/);
-
-  // 每个工具入口都标注了 API
-  assert.match(html, /API：POST \/v1\/auth\/email-otp\/request/);
-  assert.match(html, /API：POST \/v1\/world-square\/notices/);
-  assert.match(html, /API：POST \/v1\/world-safety\/advisories/);
-  assert.match(html, /API：POST \/v1\/world-safety\/residents\/sanction/);
-  assert.match(html, /API：GET \/v1\/shell\/state/);
+  // 产品 UI 不展示 API 路径；接口合同进入测试和开发文档，不进入后台操作界面
+  assert.doesNotMatch(html, /API：/);
+  assert.doesNotMatch(html, /POST \/v1\//);
+  assert.doesNotMatch(html, /GET \/v1\//);
 
   // 按钮状态标签
   assert.match(html, /<span class="action-status action-status-gateway">需网关<\/span>/);
   assert.match(html, /<span class="action-status action-status-readonly">只读预览<\/span>/);
-  assert.match(html, /<span class="action-status action-status-pending">待接 API<\/span>/);
+  assert.match(html, /<span class="action-status action-status-pending">规划中<\/span>/);
 
   // 没有真实接口的按钮 disabled
   assert.match(html, /<button[^>]*disabled[^>]*>接入消息来源<\/button>/);
   assert.match(html, /<button[^>]*disabled[^>]*>新建城市<\/button>/);
   assert.match(html, /<button[^>]*disabled[^>]*>执行制裁<\/button>/);
 
-  // 可用按钮不 disabled
-  assert.match(html, /<button[^>]*id="auth-request-button"[^>]*>申请验证码<\/button>/);
-  assert.doesNotMatch(html, /<button[^>]*id="auth-request-button"[^>]*disabled/);
-  assert.match(html, /<button type="submit" class="action-btn">发布公告<\/button>/);
-  assert.match(html, /<button type="submit" class="action-btn">发布安全通告<\/button>/);
-  assert.match(html, /<button type="submit" class="action-btn">提交举报<\/button>/);
+  // 需要网关的表单按钮已 disabled（无真实 gateway 能力不开放点击）
+  assert.match(html, /<button[^>]*id="auth-request-button"[^>]*disabled[^>]*>申请验证码<\/button>/);
+  assert.match(html, /<button[^>]*id="auth-verify-button"[^>]*disabled[^>]*>完成登录<\/button>/);
+  assert.match(html, /<button type="submit" class="action-btn" disabled aria-disabled="true" title="需要已连接的网关">发布公告<\/button>/);
+  assert.match(html, /<button type="submit" class="action-btn" disabled aria-disabled="true" title="需要已连接的网关">发布安全通告<\/button>/);
+  assert.match(html, /<button type="submit" class="action-btn" disabled aria-disabled="true" title="需要已连接的网关">提交举报<\/button>/);
+  assert.match(html, /<button type="submit" class="action-btn" disabled aria-disabled="true" title="需要已连接的网关">审查举报<\/button>/);
   assert.match(html, /localStorage\?\.setItem\("lobster-admin-nav"/);
 
   // 分类切换脚本
@@ -160,38 +175,24 @@ test("admin page has collapsible management navigation and tool groups", async (
   assert.match(html, /function renderSummary\(category\)/);
   assert.match(html, /switchCategory\("session"\)/);
   assert.match(html, /workspaceSession\.hidden/);
-  assert.match(html, /workspaceCategory\.hidden/);
 
-  // 右侧摘要使用 dataset 标记按钮可用状态（DOM API / textContent，不 innerHTML）
-  assert.match(html, /dataset:\s*\{\s*adminAction:\s*item\.action,\s*actionStatus:\s*"available"/);
-  assert.match(html, /dataset:\s*\{\s*adminAction:\s*item\.action,\s*actionStatus:\s*catalog\.status/);
+  // 右侧摘要使用 dataset 标记（DOM API / textContent，不 innerHTML）
+  assert.match(html, /dataset:\s*\{\s*adminAction:\s*primary\.action,\s*actionStatus:\s*"available"/);
   assert.match(html, /dataset:\s*\{\s*summaryCategory:\s*category\s*\}/);
 
-  // 中心分类面板按钮有明确的 data-action-status
-  assert.match(html, /data-action-status="available"/);
-  assert.match(html, /data-action-status="gateway"/);
-  assert.match(html, /data-action-status="pending"/);
+  // 中间分类面板已移除，data-action-status 不再出现在首屏
+  assert.doesNotMatch(html, /data-action-status="available"/);
+  assert.doesNotMatch(html, /data-action-status="gateway"/);
+  assert.doesNotMatch(html, /data-action-status="pending"/);
 
-  // 待接入动作 disabled + data-action-status="pending"
-  assert.match(html, /data-action-status="pending"[^>]*disabled/);
-
-  // 可执行动作不 disabled
-  assert.doesNotMatch(html, /data-action-status="available"[^>]*disabled/);
-
-  // 右侧摘要不再展开整个分类的表单墙；每个工具只显示说明和按钮
+  // 右侧摘要不再展开整个分类的表单墙；只显示标题 + 说明 + 按钮
   assert.doesNotMatch(html, /admin-summary-more/);
   assert.doesNotMatch(html, /admin-summary-detail/);
-  // 每个动作都有 desc 说明
-  assert.match(html, /admin-summary-item-desc/);
 
-  // 每个分类的 ACTION_CATALOG 都包含 api 字段
-  assert.match(html, /api:\s*"GET \/v1\/shell\/state"/);
-  assert.match(html, /api:\s*"POST \/v1\/auth\/email-otp\/\*"/);
-  assert.match(html, /api:\s*"POST \/v1\/cities\/rooms\/\*"/);
-  assert.match(html, /api:\s*"POST \/v1\/world-safety\/\*"/);
-  assert.match(html, /api:\s*"POST \/v1\/world-square\/notices"/);
-  assert.match(html, /api:\s*"POST \/v1\/provider\/connect"/);
-  assert.match(html, /api:\s*"GET \/v1\/shell\/state · GET \/v1\/provider"/);
+  // 每个分类的 ACTION_CATALOG 都有 desc 和 primaryReason
+  assert.match(html, /primaryReason:\s*""/);
+  assert.match(html, /primaryReason:\s*"需要已连接的网关与已验证的管理员身份。"/);
+  assert.match(html, /primaryReason:\s*"Provider、城市、镜像等高级功能尚未接入后端。"/);
 });
 
 test("admin page default summary is not empty and updates on category switch", async () => {
@@ -201,7 +202,7 @@ test("admin page default summary is not empty and updates on category switch", a
   assert.match(html, /switchCategory\("session"\)/);
   assert.match(html, /function renderSummary\(category\)/);
   assert.match(html, /const ACTION_CATALOG = \{/);
-  assert.match(html, /session:\s*\{\s*desc:\s*"导出当前会话或全部历史记录。"/);
+  assert.match(html, /session:\s*\{\s*desc:\s*"可导出当前会话或全部历史记录。"/);
 
   // 切换每个 data-admin-category 后摘要更新：switchCategory 调用 renderSummary(category)
   assert.match(html, /renderSummary\(category\)/);
@@ -209,9 +210,20 @@ test("admin page default summary is not empty and updates on category switch", a
     assert.match(html, new RegExp(`${cat}:\\s*\\{`));
   }
 
-  // renderSummary 显示分类级 API 文案和每个工具的 API
-  assert.match(html, /api\.textContent\s*=\s*"API："\s*\+\s*catalog\.api/);
-  assert.match(html, /"API："\s*\+\s*item\.api/);
+  // renderSummary 不再展示 API 长串；desc 和 primaryReason 用 textContent
+  assert.match(html, /descEl\.textContent\s*=\s*catalog\.desc/);
+  assert.match(html, /reasonValue\.textContent\s*=\s*reasonText/);
+  assert.doesNotMatch(html, /api:/);
+  assert.doesNotMatch(html, /item\.api/);
+});
+
+test("admin default session summary does not expose advanced world operations", async () => {
+  const html = await readShellPage("admin.html");
+  const sessionCatalog = sliceBetween(html, "session: {", "resident: {");
+
+  // session 分类只保留一个可用操作
+  assert.match(sessionCatalog, /导出当前会话/);
+  assert.doesNotMatch(sessionCatalog, /Provider|新建城市|添加镜像源|加入城市|更新城市状态/);
 });
 
 test("admin page disabled buttons have aria-disabled and reason text", async () => {
@@ -250,19 +262,15 @@ test("admin page disabled buttons have aria-disabled and reason text", async () 
 test("admin page default screen shows only composer, no extra forms", async () => {
   const html = await readShellPage("admin.html");
 
-  // 默认首屏：#admin-workspace-category hidden，#admin-workspace-session 不 hidden
-  assert.match(html, /<div id="admin-workspace-category" hidden>/);
+  // 默认首屏：中间只保留会话工作区，无分类面板
+  assert.doesNotMatch(html, /<div id="admin-workspace-category"/);
   assert.doesNotMatch(html, /<div id="admin-workspace-session" hidden>/);
 
   // #admin-tool-forms 默认隐藏
   assert.match(html, /<div id="admin-tool-forms" hidden>/);
 
-  // 默认不展开高级工具（世界分类的 details 在中间面板中，但默认不展开）
-  assert.match(html, /<details class="tool-group tool-group--advanced">/);
-  assert.doesNotMatch(html, /<details class="tool-group tool-group--advanced" open>/);
-
-  // 默认首屏右侧没有直接展开高级表单、治理表单、Provider 表单、举报表单
-  assert.doesNotMatch(html, /<details class="tool-group" open>/);
+  // 中间面板已移除 details，高级样式标记不再残留
+  assert.doesNotMatch(html, /tool-group--advanced/);
 });
 
 test("admin tool drawer opens and closes per category", async () => {
@@ -346,21 +354,87 @@ test("admin summary has no innerHTML sink", async () => {
   assert.match(source, /body\.textContent = message\.text/);
 });
 
-test("admin summary disabled tools show aria-disabled and reason in product catalog", async () => {
+test("admin summary shows one primary action and opens drawer for full tools", async () => {
   const html = await readShellPage("admin.html");
 
-  // renderSummary 中 pending 工具按钮有 disabled + aria-disabled="true" + title 原因
-  assert.match(html, /disabled:\s*"true",\s*ariaDisabled:\s*"true"/);
-  assert.match(html, /title:\s*item\.reason/);
-  assert.match(html, /catalog\.status === "gateway" \? "需要网关连接" : "功能尚未接入"/);
+  // renderSummary 只取第一个 available 工具作为主操作按钮
+  assert.match(html, /const primary = catalog\.available\[0\]/);
+  assert.match(html, /dataset:\s*\{\s*adminAction:\s*primary\.action,\s*actionStatus:\s*"available"/);
 
-  // renderSummary 为每个 pending 工具生成产品目录卡片：名称 + 状态 + desc + reason + API
-  assert.match(html, /className:\s*"admin-summary-tool-card"/);
-  assert.match(html, /className:\s*"admin-summary-tool-name"/);
+  // 打开工具抽屉按钮通过 data-admin-open-drawer 标记
+  assert.match(html, /dataset:\s*\{\s*adminOpenDrawer:\s*"true"\s*\}/);
 
-  // 每个分类至少有一个工具在 ACTION_CATALOG 中（available 或 pending）
-  assert.match(html, /available:\s*\[/);
-  assert.match(html, /pending:\s*\[/);
+  // 不再有多工具卡截断逻辑
+  assert.doesNotMatch(html, /const VISIBLE_LIMIT/);
+  assert.doesNotMatch(html, /admin-summary-tool-card/);
+  assert.doesNotMatch(html, /admin-summary-section-label/);
+});
+
+test("admin summary disabled tools show reason in primaryReason and catalog", async () => {
+  const html = await readShellPage("admin.html");
+
+  // ACTION_CATALOG 中 pending 项都带有 reason 和 reasonType
+  assert.match(html, /reasonType:\s*"未接网关"/);
+  assert.match(html, /reasonType:\s*"后端未实现"/);
+
+  // 每个有 pending 的分类都有 primaryReason 作为默认摘要的状态说明
+  assert.match(html, /primaryReason:\s*"需要已连接的网关与已验证的管理员身份。"/);
+  assert.match(html, /primaryReason:\s*"Provider、城市、镜像等高级功能尚未接入后端。"/);
+  assert.match(html, /primaryReason:\s*"房间管理功能尚未接入后端能力。"/);
+
+  // renderSummary 用 textContent 展示原因
+  assert.match(html, /reasonValue\.textContent\s*=\s*reasonText/);
+
+  // 抽屉中 disabled 按钮保留 aria-disabled 和 title
+  assert.match(html, /disabled aria-disabled="true" title="需要已连接的网关"/);
+
+  // 标准原因类型在 CSS 中有高对比样式
+  const css = await readShellModule("styles.css");
+  assert.match(css, /\.admin-summary-reason\s*\{/);
+  assert.match(css, /\.admin-summary-reason-type\s*\{/);
+  assert.match(css, /\.admin-summary-reason-label\s*\{/);
+  assert.match(css, /\.admin-summary-reason-value\s*\{/);
+  assert.doesNotMatch(css, /admin-summary-more/);
+  assert.doesNotMatch(css, /tool-group--advanced/);
+});
+
+test("admin default session summary is minimal with no api or advanced cards", async () => {
+  const html = await readShellPage("admin.html");
+
+  // 后台产品界面整体不展示 API 长串
+  assert.doesNotMatch(html, /API：/);
+  assert.doesNotMatch(html, /POST \/v1\//);
+  assert.doesNotMatch(html, /GET \/v1\//);
+  assert.doesNotMatch(html, /api\.textContent\s*=\s*"API："/);
+
+  // 默认 session 摘要只有一个主操作按钮
+  const summaryFn = html.slice(html.indexOf("function renderSummary"), html.indexOf("function openToolDrawer"));
+  assert.doesNotMatch(summaryFn, /admin-summary-tool-card/);
+  assert.doesNotMatch(summaryFn, /admin-summary-section-label/);
+  assert.match(summaryFn, /className:\s*"admin-summary-action-row"/);
+  assert.match(summaryFn, /className:\s*"admin-summary-reason-row"/);
+
+  // world 分类的 primaryReason 明确说明高级功能未接入
+  const worldCatalog = sliceBetween(html, "world: {", "system: {");
+  assert.match(worldCatalog, /Provider、城市、镜像等高级功能尚未接入后端/);
+  assert.doesNotMatch(worldCatalog, /api:/);
+});
+
+test("admin tool forms are hidden by default and show on category switch", async () => {
+  const html = await readShellPage("admin.html");
+
+  // 表单容器默认 hidden
+  assert.match(html, /<div id="admin-tool-forms" hidden>/);
+
+  // switchCategory 关闭抽屉
+  assert.match(html, /closeToolDrawer\(\)/);
+
+  // 抽屉关闭时隐藏表单、显示摘要
+  assert.match(html, /toolForms\.hidden = true/);
+  assert.match(html, /toolsSummary\.hidden = false/);
+
+  // 分类切换后中间始终显示会话
+  assert.match(html, /workspaceSession\.hidden = false/);
 });
 
 test("admin workspace css keeps auth and detail panels workspace-driven", async () => {
@@ -447,7 +521,7 @@ test("world-square page is a readonly public square entry", async () => {
   assert.match(html, /href="\.\/index\.html"/);
   assert.match(css, /world-square-concept-20260427-256\.png/);
   assert.match(css, /世界广场/);
-  assert.match(html, /styles\.world-square\.css\?v=20260507-bg-png256-v1/);
+  assert.match(html, /styles\.world-square\.css\?v=20260514-rail-stage-v1/);
   assert.match(html, /dataset\.timeOfDay/);
   assert.match(html, /\/v1\/world-square/);
   assert.match(html, /textContent/);
@@ -551,6 +625,19 @@ test("pixel scene backgrounds use web-optimized runtime assets", async () => {
   assert.match(squareCss, /world-square-concept-20260428-day-draft-256\.png/);
 });
 
+test("pixel scene hotspot labels stay hidden until hover or focus, including clear mode", async () => {
+  const css = await readShellModule("styles.pixel-map.css");
+
+  assert.match(
+    css,
+    /body\.scene-clear-mode\[data-shell-page="hub"\]\[data-shell-variant="public-square"\] \.scene-hotspot span,\s*body\.scene-clear-mode\[data-shell-variant="creative-terminal"\] \.scene-hotspot span\s*\{\s*opacity:\s*0 !important;/,
+  );
+  assert.match(
+    css,
+    /body\.scene-clear-mode\[data-shell-page="hub"\]\[data-shell-variant="public-square"\] \.scene-hotspot:hover span,[\s\S]*body\.scene-clear-mode\[data-shell-variant="creative-terminal"\] \.scene-hotspot\[aria-expanded="true"\] span\s*\{\s*opacity:\s*1 !important;/,
+  );
+});
+
 test("world-entry hotspot css follows the metro contract", async () => {
   const worldCss = await readShellModule("styles.world-entry.css");
 
@@ -630,12 +717,12 @@ test("timeline message text is rendered through textContent sinks", async () => 
   assert.doesNotMatch(source, /message\.text[^;\n]*innerHTML/);
 });
 
-test("gateway send swaps pending echo before refreshing committed messages", async () => {
+test("gateway send clears pending echo only after successful refresh", async () => {
   const source = await readShellModule("app.js");
 
   assert.match(
     source,
-    /await postGatewayJson\("\/v1\/shell\/message", payload\);\s*posted = true;\s*clearPendingEchoes\(roomId\);\s*delete roomSendErrors\[roomId\];\s*await refreshFromGateway\(\{ requireShell: true \}\);/,
+    /await postGatewayJson\("\/v1\/shell\/message", payload\);\s*posted = true;\s*delete roomSendErrors\[roomId\];\s*await refreshFromGateway\(\{ requireShell: true \}\);\s*clearPendingEchoes\(roomId\);/,
   );
 });
 
@@ -725,12 +812,60 @@ test("pixel scene chrome uses shared dark rail and local time of day", async () 
   assert.match(baseCss, /\.hud-title \{[\s\S]*align-items: center/);
 });
 
+test("scene pages keep one desktop rail width and stretch the stage frame", async () => {
+  const pixelCss = await readShellModule("styles.pixel-map.css");
+  const publicCss = await readShellModule("styles.css");
+  const worldCss = await readShellModule("styles.world-square.css");
+
+  assert.match(
+    pixelCss,
+    /body\[data-shell-variant="creative-terminal"\]\s+\.creative-layout\s*\{\s*grid-template-columns:\s*220px\s+minmax\(0,\s*1fr\)\s*!important;/,
+  );
+  assert.match(
+    pixelCss,
+    /body\[data-shell-variant="creative-terminal"\]\s+\.creative-stage\s*\{[\s\S]*?height:\s*100%;[\s\S]*?justify-self:\s*stretch;[\s\S]*?align-self:\s*stretch;/,
+  );
+  assert.match(
+    publicCss,
+    /body\[data-shell-page="hub"\]\[data-shell-variant="public-square"\]\s+\.public-square-layout\s*\{\s*grid-template-columns:\s*220px\s+minmax\(0,\s*1fr\);/,
+  );
+  assert.match(worldCss, /\.world-square-shell\s*\{[\s\S]*?grid-template-columns:\s*220px\s+minmax\(0,\s*1fr\);/);
+});
+
 test("scene clear mode can be exited with Escape", async () => {
   const source = await readShellModule("app.js");
 
   assert.match(source, /event\.key === "Escape" && isSceneClearMode\(\)/);
   assert.match(source, /setSceneClearMode\(false\)/);
 });
+
+test("creative mobile rail drawer exposes state and closes from Escape", async () => {
+  const html = await readShellPage("creative.html");
+  const source = await readShellModule("app.js");
+  const pixelCss = await readShellModule("styles.pixel-map.css");
+
+  assert.match(html, /id="hud-rail-toggle"[^>]*aria-controls="creative-rail"/);
+  assert.match(html, /id="hud-rail-toggle"[^>]*aria-expanded="false"/);
+  assert.match(html, /<aside[^>]*id="creative-rail"[^>]*aria-hidden="true"/);
+  assert.match(source, /function setSfcRailOpen\(open\)/);
+  assert.match(source, /hudRailToggleEl\.setAttribute\("aria-expanded", open \? "true" : "false"\)/);
+  assert.match(source, /sfcRailEl\.setAttribute\("aria-hidden", open \? "false" : "true"\)/);
+  assert.match(source, /document\.body\.classList\.toggle\("rail-drawer-open", open\)/);
+  assert.match(source, /event\.key === "Escape" && sfcRailEl\?\.classList\.contains\("open"\)/);
+  assert.match(pixelCss, /body\.rail-drawer-open\[data-shell-variant="creative-terminal"\] \.creative-shell::before/);
+  assert.match(pixelCss, /body\[data-shell-variant="creative-terminal"\] \.creative-rail\.open/);
+});
+
+test("scene intro first-run hint is visible but disappears after first visit", async () => {
+  const source = await readShellModule("app.js");
+  const pixelCss = await readShellModule("styles.pixel-map.css");
+
+  assert.match(source, /document\.body\.classList\.add\("scene-intro-first"\)/);
+  assert.match(pixelCss, /body\.scene-intro-first\[data-shell-variant="creative-terminal"\] \.creative-stage::after/);
+  assert.match(pixelCss, /点击空白处收起界面/);
+  assert.match(pixelCss, /body\.scene-intro-seen\[data-shell-variant="creative-terminal"\] \.creative-stage::after/);
+}
+);
 
 test("scene chat empty row space can clear the chrome", async () => {
   const source = await readShellModule("app.js");

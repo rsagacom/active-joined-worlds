@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>龙虾聊天 · 管理后台 (候选方案)</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="./styles.admin-ds.css" />
+</head>
+<body class="admin-ds">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="ds-sidebar" id="dsSidebar">
+    <div class="ds-sidebar-logo">
+      <div class="ds-sidebar-logo-icon">🦞</div>
+      <span class="ds-sidebar-logo-text">龙虾管理后台</span>
+    </div>
+
+    <nav class="ds-sidebar-nav">
+      <!-- 总览 -->
+      <div class="ds-nav-section">
+        <div class="ds-nav-section-title">总览</div>
+        <button class="ds-nav-item active" data-module="dashboard">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          <span class="ds-nav-item-text">仪表盘</span>
+        </button>
+      </div>
+
+      <!-- 用户运营 -->
+      <div class="ds-nav-section">
+        <div class="ds-nav-section-title">用户运营</div>
+        <button class="ds-nav-item" data-module="residents">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span class="ds-nav-item-text">居民管理</span>
+        </button>
+        <button class="ds-nav-item" data-module="rooms">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span class="ds-nav-item-text">会话与房间</span>
+        </button>
+      </div>
+
+      <!-- 内容安全 -->
+      <div class="ds-nav-section">
+        <div class="ds-nav-section-title">内容安全</div>
+        <button class="ds-nav-item" data-module="messages">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span class="ds-nav-item-text">消息审核</span>
+          <span class="ds-nav-badge" id="msgAuditBadge">3</span>
+        </button>
+      </div>
+
+      <!-- 权限配置 -->
+      <div class="ds-nav-section">
+        <div class="ds-nav-section-title">权限配置</div>
+        <button class="ds-nav-item" data-module="permissions">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span class="ds-nav-item-text">权限与邀请</span>
+        </button>
+      </div>
+
+      <!-- 系统管理 -->
+      <div class="ds-nav-section">
+        <div class="ds-nav-section-title">系统管理</div>
+        <button class="ds-nav-item" data-module="sysconfig">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span class="ds-nav-item-text">系统配置</span>
+        </button>
+        <button class="ds-nav-item" data-module="logs">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          <span class="ds-nav-item-text">日志与告警</span>
+          <span class="ds-nav-badge" style="background:var(--ds-warning)">7</span>
+        </button>
+      </div>
+    </nav>
+
+    <div class="ds-sidebar-toggle">
+      <button id="dsSidebarToggle" title="收起侧栏">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        <span class="ds-nav-item-text">收起菜单</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Mobile overlay -->
+  <div class="ds-sidebar-mobile-overlay" id="dsSidebarOverlay"></div>
+
+  <!-- ============ MAIN AREA ============ -->
+  <div class="admin-ds-main-area" id="dsMainArea">
+
+    <!-- Top Bar -->
+    <header class="ds-topbar">
+      <div class="ds-topbar-left">
+        <span class="ds-topbar-brand"><span>🦞</span>龙虾聊天</span>
+        <span class="ds-topbar-divider"></span>
+        <span class="ds-topbar-subtitle">管理后台 v2 候选方案</span>
+      </div>
+      <div class="ds-topbar-right">
+        <span class="ds-status-dot online" id="dsGatewayStatus">Gateway 在线</span>
+        <span class="ds-status-dot info" id="dsOnlineCount">在线 142 人</span>
+        <span class="ds-status-dot warning" id="dsAlertCount">告警 3</span>
+        <div class="ds-topbar-avatar">管</div>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <div class="ds-content" id="dsContent">
+
+      <!-- ======== MODULE: 仪表盘 ======== -->
+      <div class="ds-module active" id="mod-dashboard">
+        <div class="ds-page-header">
+          <h2>总览仪表盘</h2>
+          <p>系统运行状态一览 · 数据更新于 <span id="dashboardTime">--</span></p>
+        </div>
+
+        <!-- Stat Cards -->
+        <div class="ds-stat-grid">
+          <div class="ds-stat-card success">
+            <div class="ds-stat-label">Gateway 状态</div>
+            <div class="ds-stat-value" id="statGateway">在线</div>
+            <div class="ds-stat-sub">wss://gw.lobster-chat.io · 延迟 12ms</div>
+          </div>
+          <div class="ds-stat-card">
+            <div class="ds-stat-label">当前在线居民</div>
+            <div class="ds-stat-value">142</div>
+            <div class="ds-stat-sub">较昨日 +18</div>
+          </div>
+          <div class="ds-stat-card accent">
+            <div class="ds-stat-label">今日消息量</div>
+            <div class="ds-stat-value">8,421</div>
+            <div class="ds-stat-sub">较昨日 +12.3%</div>
+          </div>
+          <div class="ds-stat-card warning">
+            <div class="ds-stat-label">待处理异常</div>
+            <div class="ds-stat-value">3</div>
+            <div class="ds-stat-sub">消息审核 2 · 登录异常 1</div>
+          </div>
+        </div>
+
+        <!-- Events & Gateway info -->
+        <div class="ds-split">
+          <div class="ds-card">
+            <div class="ds-card-header">
+              <span class="ds-card-title">最近系统事件</span>
+              <span class="ds-card-subtitle">近 24 小时</span>
+            </div>
+            <div class="ds-event-list">
+              <div class="ds-event-item">
+                <span class="ds-event-time">14:32</span>
+                <span class="ds-event-text">居民 <strong>@chenxiaoming</strong> 登录成功 · IP 114.25.18.9 (上海)</span>
+                <span class="ds-event-type info">登录</span>
+              </div>
+              <div class="ds-event-item">
+                <span class="ds-event-time">14:28</span>
+                <span class="ds-event-text">房间 <strong>#主城大厅</strong> 消息量达到 1,200 条/小时</span>
+                <span class="ds-event-type info">流量</span>
+              </div>
+              <div class="ds-event-item">
+                <span class="ds-event-time">14:15</span>
+                <span class="ds-event-text">消息审核标记：居民 <strong>@test_user_03</strong> 发送疑似广告内容</span>
+                <span class="ds-event-type warn">审核</span>
+              </div>
+              <div class="ds-event-item">
+                <span class="ds-event-time">13:50</span>
+                <span class="ds-event-text">Gateway 连接池使用率超过 80%，自动扩容中</span>
+                <span class="ds-event-type warn">资源</span>
+              </div>
+              <div class="ds-event-item">
+                <span class="ds-event-time">13:22</span>
+                <span class="ds-event-text">居民 <strong>@wangdana</strong> 被邀请加入房间 #望海别墅</span>
+                <span class="ds-event-type info">邀请</span>
+              </div>
+              <div class="ds-event-item">
+                <span class="ds-event-time">12:08</span>
+                <span class="ds-event-text">AI 助手通道 <strong>gpt-4o-mini</strong> 响应超时，已切换备用通道</span>
+                <span class="ds-event-type warn">AI</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="ds-card">
+            <div class="ds-card-header">
+              <span class="ds-card-title">Gateway 连接详情</span>
+            </div>
+            <div style="font-size:13px; color:var(--ds-text-secondary); line-height:2;">
+              <div style="display:flex;justify-content:space-between;"><span>端点地址</span><span style="color:var(--ds-text);font-family:var(--ds-font-mono);font-size:12px;">wss://gw.lobster-chat.io/ws</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>连接状态</span><span class="ds-tag success">已连接</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>当前连接数</span><span style="color:var(--ds-text);">247 / 500</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>消息吞吐</span><span style="color:var(--ds-text);">142 msg/s</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>平均延迟</span><span style="color:var(--ds-text);">12ms</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>上次重连</span><span style="color:var(--ds-text);">14:05:22 · 成功</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>证书到期</span><span style="color:var(--ds-text);">2026-09-14</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== MODULE: 居民管理 ======== -->
+      <div class="ds-module" id="mod-residents">
+        <div class="ds-page-header">
+          <h2>居民管理</h2>
+          <p>管理所有注册居民，查看资料、状态与最近活动</p>
+        </div>
+
+        <div class="ds-toolbar">
+          <div class="ds-toolbar-left">
+            <input type="text" class="ds-input" placeholder="搜索昵称 / 邮箱 / ID…" id="residentSearch" />
+            <select class="ds-select" id="residentStatusFilter">
+              <option value="all">全部状态</option>
+              <option value="online">在线</option>
+              <option value="offline">离线</option>
+              <option value="banned">已禁用</option>
+            </select>
+            <select class="ds-select" id="residentRoleFilter">
+              <option value="all">全部角色</option>
+              <option value="admin">管理员</option>
+              <option value="resident">居民</option>
+              <option value="guest">访客</option>
+            </select>
+          </div>
+          <div class="ds-toolbar-right">
+            <button class="ds-btn ds-btn-outline ds-btn-sm">导出列表</button>
+            <button class="ds-btn ds-btn-primary ds-btn-sm">+ 新建居民</button>
+          </div>
+        </div>
+
+        <div class="ds-table-wrap">
+          <table class="ds-table" id="residentTable">
+            <thead>
+              <tr>
+                <th>居民 ID</th>
+                <th>昵称</th>
+                <th>登录邮箱</th>
+                <th>角色</th>
+                <th>状态</th>
+                <th>最近在线</th>
+                <th>消息数</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="residentTableBody"></tbody>
+          </table>
+          <div class="ds-pagination">
+            <span class="ds-pagination-info">共 <strong>24</strong> 条，第 1/3 页</span>
+            <div class="ds-pagination-btns">
+              <button class="ds-page-btn" disabled>‹</button>
+              <button class="ds-page-btn active">1</button>
+              <button class="ds-page-btn">2</button>
+              <button class="ds-page-btn">3</button>
+              <button class="ds-page-btn">›</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== MODULE: 会话与房间 ======== -->
+      <div class="ds-module" id="mod-rooms">
+        <div class="ds-page-header">
+          <h2>会话与房间</h2>
+          <p>管理私聊、群聊与世界频道，查看房间详情与成员</p>
+        </div>
+
+        <div class="ds-toolbar">
+          <div class="ds-toolbar-left">
+            <input type="text" class="ds-input" placeholder="搜索房间名 / ID…" id="roomSearch" />
+            <select class="ds-select" id="roomTypeFilter">
+              <option value="all">全部类型</option>
+              <option value="private">私聊</option>
+              <option value="group">群聊</option>
+              <option value="world">世界频道</option>
+            </select>
+          </div>
+          <div class="ds-toolbar-right">
+            <span class="ds-card-subtitle">共 <strong>31</strong> 个房间</span>
+          </div>
+        </div>
+
+        <div class="ds-table-wrap">
+          <table class="ds-table" id="roomTable">
+            <thead>
+              <tr>
+                <th>房间 ID</th>
+                <th>房间名</th>
+                <th>类型</th>
+                <th>成员数</th>
+                <th>今日消息</th>
+                <th>未读总数</th>
+                <th>创建者</th>
+                <th>创建时间</th>
+              </tr>
+            </thead>
+            <tbody id="roomTableBody"></tbody>
+          </table>
+          <div class="ds-pagination">
+            <span class="ds-pagination-info">共 <strong>31</strong> 条，第 1/4 页</span>
+            <div class="ds-pagination-btns">
+              <button class="ds-page-btn" disabled>‹</button>
+              <button class="ds-page-btn active">1</button>
+              <button class="ds-page-btn">2</button>
+              <button class="ds-page-btn">3</button>
+              <button class="ds-page-btn">4</button>
+              <button class="ds-page-btn">›</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== MODULE: 消息审核 ======== -->
+      <div class="ds-module" id="mod-messages">
+        <div class="ds-page-header">
+          <h2>消息审核</h2>
+          <p>实时监控消息流，标记与处理异常内容</p>
+        </div>
+
+        <div class="ds-toolbar">
+          <div class="ds-toolbar-left">
+            <input type="text" class="ds-input" placeholder="搜索消息内容…" id="msgSearch" style="width:240px;" />
+            <select class="ds-select" id="msgRoomFilter">
+              <option value="all">全部房间</option>
+              <option value="main">#主城大厅</option>
+              <option value="villa">#望海别墅</option>
+              <option value="market">#世界广场</option>
+            </select>
+            <select class="ds-select" id="msgStatusFilter">
+              <option value="all">全部状态</option>
+              <option value="pending">待审核</option>
+              <option value="passed">已通过</option>
+              <option value="flagged">已标记</option>
+              <option value="blocked">已屏蔽</option>
+            </select>
+          </div>
+          <div class="ds-toolbar-right">
+            <button class="ds-btn ds-btn-outline ds-btn-sm">批量通过</button>
+            <button class="ds-btn ds-btn-primary ds-btn-sm">刷新</button>
+          </div>
+        </div>
+
+        <div class="ds-table-wrap">
+          <table class="ds-table" id="msgTable">
+            <thead>
+              <tr>
+                <th style="width:140px;">时间</th>
+                <th>发送者</th>
+                <th>房间</th>
+                <th style="min-width:200px;">消息内容</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="msgTableBody"></tbody>
+          </table>
+          <div class="ds-pagination">
+            <span class="ds-pagination-info">共 <strong>156</strong> 条，第 1/16 页</span>
+            <div class="ds-pagination-btns">
+              <button class="ds-page-btn" disabled>‹</button>
+              <button class="ds-page-btn active">1</button>
+              <button class="ds-page-btn">2</button>
+              <button class="ds-page-btn">3</button>
+              <button class="ds-page-btn">…</button>
+              <button class="ds-page-btn">16</button>
+              <button class="ds-page-btn">›</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== MODULE: 权限与邀请 ======== -->
+      <div class="ds-module" id="mod-permissions">
+        <div class="ds-page-header">
+          <h2>权限与邀请</h2>
+          <p>管理居民权限、房间加入规则与邀请码配置</p>
+        </div>
+
+        <div class="ds-split">
+          <!-- 居民权限 -->
+          <div class="ds-card">
+            <div class="ds-card-header">
+              <span class="ds-card-title">居民权限组</span>
+              <button class="ds-btn ds-btn-outline ds-btn-xs">+ 新建权限组</button>
+            </div>
+            <div style="font-size:13px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--ds-border-light);">
+                <div>
+                  <strong>管理员</strong>
+                  <div style="color:var(--ds-text-muted);font-size:12px;">全部权限 · 可管理居民、房间、消息审核</div>
+                </div>
+                <span class="ds-tag info">3 人</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--ds-border-light);">
+                <div>
+                  <strong>正式居民</strong>
+                  <div style="color:var(--ds-text-muted);font-size:12px;">可创建房间、发送消息、邀请他人</div>
+                </div>
+                <span class="ds-tag default">18 人</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--ds-border-light);">
+                <div>
+                  <strong>受限居民</strong>
+                  <div style="color:var(--ds-text-muted);font-size:12px;">仅可加入已有房间、发送消息需审核</div>
+                </div>
+                <span class="ds-tag warning">2 人</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">
+                <div>
+                  <strong>访客</strong>
+                  <div style="color:var(--ds-text-muted);font-size:12px;">仅可浏览世界广场、不可私聊</div>
+                </div>
+                <span class="ds-tag default">1 人</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 房间加入权限 -->
+          <div class="ds-card">
+            <div class="ds-card-header">
+              <span class="ds-card-title">房间加入规则</span>
+            </div>
+            <div style="font-size:13px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--ds-border-light);">
+                <div>
+                  <strong>#主城大厅</strong>
+                  <div style="color:var(--ds-text-muted);font-size:12px;">自由加入 · 所有居民</div>
+                </div>
+                <span class="ds-tag success">开放</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--ds-border-light);">
+                <div>
+                  <strong>#望海别墅</strong>
+                  <div style="color:var(--ds-text-muted);font-size:12px;">邀请制 · 需邀请码</div>
+                </div>
+                <span class="ds-tag warning">邀请</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--ds-border-light);">
+                <div>
+                  <strong>#世界广场</strong>
+                  <div style="color:var(--ds-text-muted);font-size:12px;">自由加入 · 含访客</div>
+                </div>
+                <span class="ds-tag success">开放</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">
+                <div>
+                  <strong>#龙虾文学社</strong>
+                  <div style="color:var(--ds-text-muted);font-size:12px;">白名单制 · 仅限正式居民</div>
+                </div>
+                <span class="ds-tag info">白名单</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 邀请码 -->
+        <div class="ds-card" style="margin-top:20px;">
+          <div class="ds-card-header">
+            <span class="ds-card-title">邀请码管理</span>
+            <button class="ds-btn ds-btn-primary ds-btn-xs">+ 生成邀请码</button>
+          </div>
+          <div class="ds-table-wrap" style="border:none;box-shadow:none;">
+            <table class="ds-table" id="inviteTable">
+              <thead>
+                <tr>
+                  <th>邀请码</th>
+                  <th>目标房间</th>
+                  <th>可使用次数</th>
+                  <th>已使用</th>
+                  <th>有效期</th>
+                  <th>创建人</th>
+                  <th>状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="inviteTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== MODULE: 系统配置 ======== -->
+      <div class="ds-module" id="mod-sysconfig">
+        <div class="ds-page-header">
+          <h2>系统配置</h2>
+          <p>管理 Gateway 连接、邮箱服务与 AI 助手通道状态</p>
+        </div>
+
+        <div class="ds-config-grid">
+          <!-- Gateway -->
+          <div class="ds-config-item">
+            <div class="ds-config-info">
+              <h4>Gateway 端点</h4>
+              <p>wss://gw.lobster-chat.io/ws</p>
+              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">协议版本: v2 · 心跳间隔: 30s</p>
+            </div>
+            <span class="ds-tag success">已连接</span>
+          </div>
+
+          <!-- 备份 Gateway -->
+          <div class="ds-config-item">
+            <div class="ds-config-info">
+              <h4>备用 Gateway 端点</h4>
+              <p>wss://gw-backup.lobster-chat.io/ws</p>
+              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">故障自动切换: 已启用</p>
+            </div>
+            <span class="ds-tag default">待命</span>
+          </div>
+
+          <!-- 邮箱验证码 -->
+          <div class="ds-config-item">
+            <div class="ds-config-info">
+              <h4>邮箱验证码服务</h4>
+              <p>SMTP 发信 · smtp.lobster-chat.io:587</p>
+              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">发信人: noreply@lobster-chat.io · 模板: 6位数字验证码</p>
+            </div>
+            <span class="ds-tag success">正常</span>
+          </div>
+
+          <!-- 验证码配额 -->
+          <div class="ds-config-item">
+            <div class="ds-config-info">
+              <h4>验证码发送配额</h4>
+              <p>每邮箱每日上限 5 次</p>
+              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">今日已发送: 23 次 · 月累计: 412 次</p>
+            </div>
+            <span class="ds-tag info">配额正常</span>
+          </div>
+
+          <!-- AI 主通道 -->
+          <div class="ds-config-item">
+            <div class="ds-config-info">
+              <h4>AI 助手 · 主通道</h4>
+              <p>GPT-4o-mini · api.openai.com</p>
+              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">上下文窗口: 128K · 速率限制: 500 RPM</p>
+            </div>
+            <span class="ds-tag success">可用</span>
+          </div>
+
+          <!-- AI 备用通道 -->
+          <div class="ds-config-item">
+            <div class="ds-config-info">
+              <h4>AI 助手 · 备用通道</h4>
+              <p>Claude Sonnet 4.6 · api.anthropic.com</p>
+              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">上下文窗口: 200K · 自动切换: 已启用</p>
+            </div>
+            <span class="ds-tag info">待命</span>
+          </div>
+
+          <!-- 存储服务 -->
+          <div class="ds-config-item">
+            <div class="ds-config-info">
+              <h4>消息持久化存储</h4>
+              <p>本地历史 + 云端同步</p>
+              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">保留期限: 90 天 · 存储用量: 2.3 GB</p>
+            </div>
+            <span class="ds-tag success">正常</span>
+          </div>
+
+          <!-- Webhook -->
+          <div class="ds-config-item">
+            <div class="ds-config-info">
+              <h4>事件 Webhook</h4>
+              <p>https://hooks.lobster-chat.io/events</p>
+              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">推送: 消息事件 · 登录事件 · 异常事件</p>
+            </div>
+            <span class="ds-tag success">活跃</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== MODULE: 日志与告警 ======== -->
+      <div class="ds-module" id="mod-logs">
+        <div class="ds-page-header">
+          <h2>日志与告警</h2>
+          <p>系统异常日志，包括连接失败、登录失败、消息发送失败与 AI 助手异常</p>
+        </div>
+
+        <div class="ds-toolbar">
+          <div class="ds-toolbar-left">
+            <select class="ds-select" id="logLevelFilter">
+              <option value="all">全部级别</option>
+              <option value="error">错误</option>
+              <option value="warn">警告</option>
+              <option value="info">信息</option>
+            </select>
+            <select class="ds-select" id="logTypeFilter">
+              <option value="all">全部类型</option>
+              <option value="connection">连接失败</option>
+              <option value="login">登录失败</option>
+              <option value="message">消息发送失败</option>
+              <option value="ai">AI 助手异常</option>
+            </select>
+            <input type="text" class="ds-input" placeholder="搜索关键词…" id="logSearch" style="width:200px;" />
+          </div>
+          <div class="ds-toolbar-right">
+            <button class="ds-btn ds-btn-outline ds-btn-sm">导出日志</button>
+            <button class="ds-btn ds-btn-outline ds-btn-sm">清空已处理</button>
+          </div>
+        </div>
+
+        <div class="ds-table-wrap">
+          <table class="ds-table" id="logTable">
+            <thead>
+              <tr>
+                <th style="width:150px;">时间</th>
+                <th style="width:70px;">级别</th>
+                <th style="width:80px;">类型</th>
+                <th>描述</th>
+                <th style="width:100px;">来源</th>
+              </tr>
+            </thead>
+            <tbody id="logTableBody"></tbody>
+          </table>
+          <div class="ds-pagination">
+            <span class="ds-pagination-info">共 <strong>89</strong> 条，第 1/9 页</span>
+            <div class="ds-pagination-btns">
+              <button class="ds-page-btn" disabled>‹</button>
+              <button class="ds-page-btn active">1</button>
+              <button class="ds-page-btn">2</button>
+              <button class="ds-page-btn">3</button>
+              <button class="ds-page-btn">…</button>
+              <button class="ds-page-btn">9</button>
+              <button class="ds-page-btn">›</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /.ds-content -->
+  </div><!-- /.admin-ds-main-area -->
+
+  <!-- ============ DETAIL PANEL (right side) ============ -->
+  <aside class="ds-detail-panel hidden" id="dsDetailPanel">
+    <div class="ds-detail-header">
+      <h3 id="dsDetailTitle">详情</h3>
+      <button class="ds-btn-close" id="dsDetailClose" title="关闭详情">✕</button>
+    </div>
+    <div class="ds-detail-body" id="dsDetailBody">
+      <p class="ds-empty">点击表格行查看详情</p>
+    </div>
+    <div class="ds-detail-actions" id="dsDetailActions" style="display:none;"></div>
+  </aside>
+
+  <!-- ============ SCRIPTS ============ -->
+  <script src="./admin-ds.js"></script>
+</body>
+</html>

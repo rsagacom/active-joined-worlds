@@ -95,6 +95,125 @@ test("creative resident shell opens with the first room selected and composer en
   }
 });
 
+test("creative resident login starts in request step and switches to verify after OTP request", serial, async () => {
+  const html = await fs.readFile(new URL("../creative.html", import.meta.url), "utf8");
+  assert.match(html, /id="auth-verify-form"[^>]*resident-login-verify[^>]*shell-hidden/);
+
+  const app = await loadUserShellApp({
+    useGeneratedFixtures: true,
+    generatedShellFixture: "generated/state.contract.json",
+    locationSearch: "?gateway=http://127.0.0.1:50651",
+    gatewayBaseUrl: "http://127.0.0.1:50651",
+  });
+  try {
+    const { document } = app;
+    const requestForm = document.querySelector("#auth-request-form");
+    const verifyForm = document.querySelector("#auth-verify-form");
+    const emailInput = document.querySelector("#auth-email-input");
+
+    assert.equal(verifyForm?.classList.contains("shell-hidden"), true);
+    assert.equal(requestForm?.dataset.authStep, "request");
+
+    emailInput.value = "qa@example.com";
+    requestForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    assert.equal(requestForm?.dataset.authStep, "verify");
+    assert.equal(verifyForm?.classList.contains("shell-hidden"), false);
+    assert.equal(emailInput.disabled, true);
+    assert.match(document.querySelector("#auth-status")?.textContent || "", /验证码已发往/);
+  } finally {
+    app.cleanup();
+  }
+});
+
+test("creative resident composer auto-resizes to five-line cap", serial, async () => {
+  const app = await loadUserShellApp();
+  try {
+    const { document } = app;
+    const composerInput = document.querySelector("#composer-input");
+
+    composerInput.scrollHeight = 260;
+    composerInput.value = "第一行\n第二行\n第三行\n第四行\n第五行\n第六行";
+    composerInput.dispatchEvent(new Event("input", { bubbles: true }));
+
+    assert.equal(composerInput.style.height, "120px");
+    assert.equal(composerInput.style.overflowY, "auto");
+  } finally {
+    app.cleanup();
+  }
+});
+
+test("creative resident timeline follows only when user is already near bottom", serial, async () => {
+  const app = await loadUserShellApp({
+    useGeneratedFixtures: true,
+    generatedShellFixture: "generated/state.contract.json",
+  });
+  try {
+    const { document } = app;
+    const timeline = document.querySelector("#timeline");
+    const roomButtons = document.querySelectorAll(".room-button");
+
+    timeline.scrollHeight = 1200;
+    timeline.clientHeight = 320;
+    timeline.scrollTop = 160;
+    roomButtons[1].click();
+    await flushAsyncWork();
+    assert.equal(timeline.scrollTop, 160);
+
+    timeline.scrollHeight = 1200;
+    timeline.clientHeight = 320;
+    timeline.scrollTop = 880;
+    roomButtons[0].click();
+    await flushAsyncWork();
+    assert.equal(timeline.scrollTop, 1200);
+  } finally {
+    app.cleanup();
+  }
+});
+
+test("creative resident empty conversation renders IM skeleton bubbles", serial, async () => {
+  const app = await loadUserShellApp({
+    useGeneratedFixtures: true,
+    generatedShellFixture: "generated/state.contract.json",
+  });
+  try {
+    const { document } = app;
+    const builderRoom = Array.from(document.querySelectorAll(".room-button")).find((node) =>
+      /builder/.test(node.textContent || ""),
+    );
+
+    assert.ok(builderRoom);
+    builderRoom.click();
+    await flushAsyncWork();
+
+    const skeletonRows = document.querySelectorAll(".message-row.timeline-skeleton-row");
+    assert.equal(skeletonRows.length, 4);
+    assert.equal(document.querySelector(".timeline-empty"), null);
+    assert.equal(skeletonRows[0]?.dataset.messageKind, "skeleton");
+    assert.equal(skeletonRows[1]?.classList.contains("self"), true);
+    assert.ok(skeletonRows[0]?.querySelector(".timeline-skeleton-bubble"));
+  } finally {
+    app.cleanup();
+  }
+});
+
+test("creative shell CSS keeps pixel scene, hotspots and mobile composer in one safe coordinate system", serial, async () => {
+  const pixelCss = await fs.readFile(new URL("../styles.pixel-map.css", import.meta.url), "utf8");
+  const creativeCss = await fs.readFile(new URL("../styles.creative.css", import.meta.url), "utf8");
+
+  assert.match(pixelCss, /--creative-scene-aspect:\s*16\s*\/\s*9/);
+  assert.match(pixelCss, /body\[data-shell-variant="creative-terminal"\]\s+\.creative-stage[\s\S]*aspect-ratio:\s*var\(--creative-scene-aspect\)/);
+  assert.match(pixelCss, /body\[data-shell-variant="creative-terminal"\]\s+\.creative-stage[\s\S]*background:[\s\S]*contain\s+no-repeat/);
+  assert.match(pixelCss, /body\[data-shell-variant="creative-terminal"\]\s+\.scene-hotspots[\s\S]*aspect-ratio:\s*var\(--creative-scene-aspect\)/);
+  assert.match(pixelCss, /env\(safe-area-inset-bottom\)/);
+  assert.match(creativeCss, /\.creative-composer textarea[\s\S]*max-height:\s*120px/);
+  const composerRule = pixelCss.match(/body\[data-shell-page="hub"\]\[data-shell-variant="public-square"\]\s+\.public-square-composer textarea,\s*body\[data-shell-variant="creative-terminal"\]\s+\.creative-composer textarea\s*\{[^}]*\}/)?.[0] ?? "";
+  assert.ok(composerRule, "expected creative composer textarea override");
+  assert.doesNotMatch(composerRule, /height:\s*34px\s*!important/);
+});
+
 test("creative resident shell can refresh gateway badges without provider controls on the chat page", serial, async () => {
   const app = await loadUserShellApp({
     useGeneratedFixtures: true,
@@ -107,6 +226,35 @@ test("creative resident shell can refresh gateway badges without provider contro
     assert.match(document.querySelector("#gateway-state")?.textContent || "", /127\.0\.0\.1:50651/);
     assert.match(document.querySelector("#provider-state")?.textContent || "", /cloudflare\.com|消息来源/);
     assert.ok(document.querySelector(".room-button.active"));
+  } finally {
+    app.cleanup();
+  }
+});
+
+test("creative resident gateway offline state disables composer and marks the shell offline", serial, async () => {
+  const app = await loadUserShellApp({
+    useGeneratedFixtures: true,
+    generatedShellFixture: "generated/state.contract.json",
+    locationSearch: "?gateway=http://127.0.0.1:50651",
+    gatewayBaseUrl: "http://127.0.0.1:50651",
+    localStorageEntries: { "lobster-identity": "rsaga" },
+    gatewayProviderState: {
+      mode: "cloudflare",
+      reachable: false,
+      connection_state: "Disconnected",
+      base_url: "https://cloudflare.com/fake-provider",
+    },
+  });
+  try {
+    const { document } = app;
+    const composerInput = document.querySelector("#composer-input");
+    const composerSend = document.querySelector("#composer-send");
+
+    assert.equal(document.body.dataset.gatewayConnection, "offline");
+    assert.match(document.querySelector("#provider-state")?.textContent || "", /已断开|降级/);
+    assert.equal(composerInput?.disabled, true);
+    assert.equal(composerSend?.disabled, true);
+    assert.match(composerInput?.placeholder || "", /离线|同步恢复/);
   } finally {
     app.cleanup();
   }
@@ -195,6 +343,140 @@ test("gateway creative resident send clears composer and posts once", serial, as
   }
 });
 
+test("gateway creative resident send commits one stable self bubble with avatar", serial, async () => {
+  const app = await loadUserShellApp({
+    useGeneratedFixtures: true,
+    generatedShellFixture: "generated/state.contract.json",
+    locationSearch: "?gateway=http://127.0.0.1:50651&identity=qa-a",
+    gatewayBaseUrl: "http://127.0.0.1:50651",
+    localStorageEntries: { "lobster-identity": "qa-a" },
+  });
+  try {
+    const { document, fetchCalls } = app;
+    const composerForm = document.querySelector("#composer");
+    const composerInput = document.querySelector("#composer-input");
+    const text = `双端回归-${Date.now()}`;
+
+    assert.ok(composerForm);
+    assert.ok(composerInput);
+    assert.equal(composerInput.disabled, false);
+
+    composerInput.value = text;
+    composerInput.dispatchEvent(new Event("input", { bubbles: true }));
+    composerForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    for (let index = 0; index < 6; index += 1) {
+      await flushAsyncWork();
+    }
+
+    const matchingRows = Array.from(document.querySelectorAll(".message-row")).filter((row) =>
+      (row.textContent || "").includes(text),
+    );
+
+    assert.equal(composerInput.value, "");
+    assert.equal(
+      fetchCalls.filter((url) => url === "http://127.0.0.1:50651/v1/shell/message").length,
+      1,
+    );
+    assert.equal(matchingRows.length, 1);
+    assert.equal(matchingRows[0]?.classList.contains("self"), true);
+    assert.equal(matchingRows[0]?.dataset?.messageKind, "self");
+    assert.ok(matchingRows[0]?.querySelector(".message-avatar"));
+    assert.equal(matchingRows[0]?.querySelector(".message-pending"), null);
+    assert.doesNotMatch(matchingRows[0]?.textContent || "", /待同步|正在投递|发送失败|待重发/);
+  } finally {
+    app.cleanup();
+  }
+});
+
+test("gateway creative resident export surfaces gateway Error message", serial, async () => {
+  const app = await loadUserShellApp({
+    useGeneratedFixtures: true,
+    generatedShellFixture: "generated/state.contract.json",
+    locationSearch: "?gateway=http://127.0.0.1:50651&identity=rsaga",
+    gatewayBaseUrl: "http://127.0.0.1:50651",
+    localStorageEntries: { "lobster-identity": "rsaga" },
+    exportResponse: {
+      status: 403,
+      body: {
+        Error: {
+          message: "导出权限不足",
+        },
+      },
+    },
+  });
+  try {
+    const { document, fetchCalls } = app;
+    const exportButton = Array.from(document.querySelectorAll("button")).find((node) =>
+      /导出当前|导出聊天|导出会话/.test(node.textContent || ""),
+    );
+    assert.ok(exportButton);
+    assert.equal(exportButton.disabled, false);
+
+    exportButton.click();
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    assert.ok(fetchCalls.some((url) => url.startsWith("http://127.0.0.1:50651/v1/export?")));
+    assert.match(document.querySelector("#world-state")?.textContent || "", /导出权限不足/);
+  } finally {
+    app.cleanup();
+  }
+});
+
+test("gateway creative resident peer message renders on the left with its own avatar", serial, async () => {
+  const baseFixtureUrl = new URL("../generated/state.contract.json", import.meta.url);
+  const tempFixtureName = `state.contract.peer-message-${process.pid}-${Date.now()}.json`;
+  const tempFixtureUrl = new URL(`../generated/${tempFixtureName}`, import.meta.url);
+  const payload = JSON.parse(await fs.readFile(baseFixtureUrl, "utf8"));
+  const conversation = payload?.conversation_shell?.conversations?.find(
+    (item) => item?.conversation_id === "room:world:lobby",
+  );
+  const text = `对端消息-${Date.now()}`;
+
+  assert.ok(conversation);
+  conversation.messages = [
+    ...(Array.isArray(conversation.messages) ? conversation.messages : []),
+    {
+      message_id: "msg:test-peer-visible",
+      sender: "qa-a",
+      timestamp_ms: Date.now(),
+      timestamp_label: "刚刚",
+      timestamp: "刚刚",
+      text,
+      delivery_status: "delivered",
+    },
+  ];
+  await fs.writeFile(tempFixtureUrl, JSON.stringify(payload, null, 2), "utf8");
+
+  try {
+    const app = await loadUserShellApp({
+      useGeneratedFixtures: true,
+      generatedShellFixture: `generated/${tempFixtureName}`,
+      locationSearch: "?gateway=http://127.0.0.1:50651&identity=qa-b",
+      gatewayBaseUrl: "http://127.0.0.1:50651",
+      localStorageEntries: { "lobster-identity": "qa-b" },
+    });
+    try {
+      const { document, fetchCalls, eventSourceCalls } = app;
+      const matchingRows = Array.from(document.querySelectorAll(".message-row")).filter((row) =>
+        (row.textContent || "").includes(text),
+      );
+
+      assert.ok(fetchCalls.includes("http://127.0.0.1:50651/v1/shell/state?resident_id=qa-b"));
+      assert.ok(eventSourceCalls.includes("http://127.0.0.1:50651/v1/shell/events?resident_id=qa-b"));
+      assert.equal(matchingRows.length, 1);
+      assert.equal(matchingRows[0]?.classList.contains("self"), false);
+      assert.equal(matchingRows[0]?.dataset?.messageSide, "peer");
+      assert.ok(matchingRows[0]?.querySelector(".message-avatar"));
+      assert.match(matchingRows[0]?.querySelector(".message-avatar")?.textContent || "", /QA|聊/);
+    } finally {
+      app.cleanup();
+    }
+  } finally {
+    await fs.unlink(tempFixtureUrl).catch(() => {});
+  }
+});
+
 test("gateway creative resident shell keeps visitor scoped and blocks sending before login", serial, async () => {
   const app = await loadUserShellApp({
     useGeneratedFixtures: true,
@@ -278,6 +560,129 @@ test("gateway creative resident shell refreshes resident conversations after OTP
     assert.ok(fetchCalls.includes("http://127.0.0.1:50651/v1/shell/state?resident_id=rsaga"));
     assert.equal(document.querySelector("#resident-login-card")?.classList.contains("shell-hidden"), true);
     assert.equal(document.querySelector("#composer-input")?.disabled, false);
+  } finally {
+    app.cleanup();
+  }
+});
+
+test("gateway creative resident sends bearer session token after OTP login", serial, async () => {
+  const app = await loadUserShellApp({
+    useGeneratedFixtures: true,
+    generatedShellFixture: "generated/state.contract.json",
+    locationSearch: "?gateway=http://127.0.0.1:50651",
+    gatewayBaseUrl: "http://127.0.0.1:50651",
+  });
+  try {
+    const { document, window, fetchRequests } = app;
+    const challengeInput = document.querySelector("#auth-challenge-input");
+    const residentInput = document.querySelector("#auth-resident-input");
+    const codeInput = document.querySelector("#auth-code-input");
+    const verifyForm = document.querySelector("#auth-verify-form");
+    const composerForm = document.querySelector("#composer");
+    const composerInput = document.querySelector("#composer-input");
+
+    challengeInput.value = "otp:test";
+    residentInput.value = "rsaga";
+    codeInput.value = "123456";
+    verifyForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    assert.equal(window.localStorage.getItem("lobster-session-token"), "lbst_test_session_token");
+
+    composerInput.value = "带 token 发送";
+    composerInput.dispatchEvent(new Event("input", { bubbles: true }));
+    composerForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    const messageRequest = fetchRequests.find(
+      (request) => request.url === "http://127.0.0.1:50651/v1/shell/message",
+    );
+    assert.equal(messageRequest?.init?.headers?.Authorization, "Bearer lbst_test_session_token");
+  } finally {
+    app.cleanup();
+  }
+});
+
+test("gateway creative resident export sends bearer session token after OTP login", serial, async () => {
+  const app = await loadUserShellApp({
+    useGeneratedFixtures: true,
+    generatedShellFixture: "generated/state.contract.json",
+    locationSearch: "?gateway=http://127.0.0.1:50651",
+    gatewayBaseUrl: "http://127.0.0.1:50651",
+  });
+  try {
+    const { document, fetchRequests } = app;
+    const challengeInput = document.querySelector("#auth-challenge-input");
+    const residentInput = document.querySelector("#auth-resident-input");
+    const codeInput = document.querySelector("#auth-code-input");
+    const verifyForm = document.querySelector("#auth-verify-form");
+
+    challengeInput.value = "otp:test";
+    residentInput.value = "rsaga";
+    codeInput.value = "123456";
+    verifyForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    const exportButton = Array.from(document.querySelectorAll("button")).find((node) =>
+      /导出当前|导出聊天|导出会话/.test(node.textContent || ""),
+    );
+    assert.ok(exportButton);
+    exportButton.click();
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    const exportRequest = fetchRequests.find((request) =>
+      request.url.startsWith("http://127.0.0.1:50651/v1/export?"),
+    );
+    assert.equal(exportRequest?.init?.headers?.Authorization, "Bearer lbst_test_session_token");
+  } finally {
+    app.cleanup();
+  }
+});
+
+test("gateway creative resident export clears session when bearer token is rejected", serial, async () => {
+  const app = await loadUserShellApp({
+    useGeneratedFixtures: true,
+    generatedShellFixture: "generated/state.contract.json",
+    locationSearch: "?gateway=http://127.0.0.1:50651",
+    gatewayBaseUrl: "http://127.0.0.1:50651",
+    exportResponse: {
+      status: 401,
+      body: {
+        Error: {
+          message: "authorization bearer token required",
+        },
+      },
+    },
+  });
+  try {
+    const { document, window } = app;
+    const challengeInput = document.querySelector("#auth-challenge-input");
+    const residentInput = document.querySelector("#auth-resident-input");
+    const codeInput = document.querySelector("#auth-code-input");
+    const verifyForm = document.querySelector("#auth-verify-form");
+
+    challengeInput.value = "otp:test";
+    residentInput.value = "rsaga";
+    codeInput.value = "123456";
+    verifyForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await flushAsyncWork();
+    await flushAsyncWork();
+    assert.equal(window.localStorage.getItem("lobster-session-token"), "lbst_test_session_token");
+
+    const exportButton = Array.from(document.querySelectorAll("button")).find((node) =>
+      /导出当前|导出聊天|导出会话/.test(node.textContent || ""),
+    );
+    assert.ok(exportButton);
+    exportButton.click();
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    assert.equal(window.localStorage.getItem("lobster-session-token"), "");
+    assert.match(document.querySelector("#auth-status")?.textContent || "", /登录已失效，请重新登录/);
   } finally {
     app.cleanup();
   }
@@ -500,6 +905,37 @@ test("contract preview and activity labels can drive room button copy without le
   } finally {
     app.cleanup();
   }
+});
+
+test("creative resident rail exposes unread badge and latest preview as IM list metadata", serial, async () => {
+  const app = await loadUserShellApp();
+  try {
+    const { document } = app;
+    const publicRoom = Array.from(document.querySelectorAll(".room-button")).find((node) =>
+      /世界广场/.test(node.textContent || ""),
+    );
+
+    assert.ok(publicRoom);
+    assert.equal(publicRoom.classList.contains("room-button-unread"), true);
+    assert.equal(publicRoom.querySelector(".room-unread-badge")?.textContent, "4");
+    assert.match(publicRoom.querySelector(".room-preview")?.textContent || "", /当前频道正常/);
+    assert.match(publicRoom.querySelector(".room-activity")?.textContent || "", /09:44/);
+  } finally {
+    app.cleanup();
+  }
+});
+
+test("creative rail CSS keeps IM metadata visible in the session list", serial, async () => {
+  const creativeCss = await fs.readFile(new URL("../styles.creative.css", import.meta.url), "utf8");
+  const pixelCss = await fs.readFile(new URL("../styles.pixel-map.css", import.meta.url), "utf8");
+  const hiddenRule = creativeCss.match(/\.creative-rail \.room-section-header,[\s\S]*?\{\s*display: none !important;\s*\}/)?.[0] ?? "";
+  const pixelHiddenRule = pixelCss.match(/body\[data-shell-page="hub"\]\[data-shell-variant="public-square"\] \.public-square-rail-head,[\s\S]*?\{\s*display: none;\s*\}/)?.[0] ?? "";
+
+  assert.ok(hiddenRule, "expected creative rail hidden metadata rule");
+  assert.doesNotMatch(hiddenRule, /\.creative-rail \.room-preview/);
+  assert.doesNotMatch(hiddenRule, /\.creative-rail \.room-badges/);
+  assert.doesNotMatch(pixelHiddenRule, /body\[data-shell-variant="creative-terminal"\] \.creative-room-list/);
+  assert.match(creativeCss, /\.creative-rail \.room-unread-badge/);
 });
 
 test("selecting another room keeps the composer editable and moves the active marker", serial, async () => {

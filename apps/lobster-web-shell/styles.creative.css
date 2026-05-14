@@ -266,7 +266,7 @@ body[data-shell-variant="creative-terminal"]::after {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) auto;
   gap: 8px;
-  align-items: end;
+  align-items: center;
   background:
     url("assets/pixel/chinese-modern-city/ui/chat_composer_bar.avif") center / cover no-repeat,
     rgba(44, 27, 12, 0.90);
@@ -687,20 +687,18 @@ body::before {
 
 .creative-rail .room-section-header,
 .creative-rail .room-digest,
-.creative-rail .room-avatar,
 .creative-rail .room-kicker,
-.creative-rail .room-badges,
-.creative-rail .room-preview,
 .creative-rail .room-sub,
 .creative-rail .room-status-line,
-.creative-rail .room-tag-row,
-.creative-rail .room-activity,
-.creative-rail .room-top-meta {
+.creative-rail .room-tag-row {
   display: none !important;
 }
 
 .creative-rail .room-button {
-  display: block;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 7px;
+  align-items: start;
   width: 100%;
   padding: 7px 8px;
   border: 1px solid transparent;
@@ -723,8 +721,36 @@ body::before {
 .creative-rail .room-content,
 .creative-rail .room-topline,
 .creative-rail .room-title-stack {
-  display: block;
   min-width: 0;
+}
+
+.creative-rail .room-content {
+  display: grid;
+  gap: 3px;
+}
+
+.creative-rail .room-topline {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 6px;
+}
+
+.creative-rail .room-title-stack {
+  display: block;
+}
+
+.creative-rail .room-avatar {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  color: #1f1309;
+  background: #f1c978;
+  border: 1px solid rgba(43, 28, 17, 0.86);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .creative-rail .room-name {
@@ -732,6 +758,66 @@ body::before {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.creative-rail .room-preview,
+.creative-rail .room-activity {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--creative-font-body);
+  letter-spacing: 0;
+}
+
+.creative-rail .room-preview {
+  color: rgba(255, 242, 201, 0.72);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.creative-rail .room-top-meta {
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+  min-width: 0;
+}
+
+.creative-rail .room-activity {
+  max-width: 52px;
+  color: rgba(120, 191, 209, 0.78);
+  font-size: 11px;
+}
+
+.creative-rail .room-badges {
+  display: flex;
+  justify-content: flex-end;
+  gap: 3px;
+  min-width: 0;
+}
+
+.creative-rail .room-badges .pill {
+  max-width: 58px;
+  padding-inline: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.creative-rail .room-unread-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  color: #fff2c9;
+  background: #b53025;
+  border: 1px solid rgba(255, 226, 145, 0.82);
+  font-family: var(--creative-font-body);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .creative-rail-note {
@@ -1024,6 +1110,8 @@ body::before {
 .creative-composer textarea {
   width: 100%;
   min-height: 52px;
+  max-height: 120px;
+  overflow-y: hidden;
   border: none;
   outline: none;
   resize: none;

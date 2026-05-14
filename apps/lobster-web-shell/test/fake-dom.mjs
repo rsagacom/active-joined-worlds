@@ -3,6 +3,8 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+const WEB_SHELL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
 class FakeEvent {
   constructor(type, init = {}) {
     this.type = type;
@@ -338,6 +340,18 @@ class FakeElement {
 
   select() {}
 
+  reset() {
+    const visit = (node) => {
+      if ("value" in node) {
+        node.value = "";
+      }
+      for (const child of node.children || []) {
+        visit(child);
+      }
+    };
+    visit(this);
+  }
+
   scrollIntoView() {}
 
   getBoundingClientRect() {
@@ -602,18 +616,15 @@ function makeSelect(document, id, options, value) {
 }
 
 async function readJsonFixture(relativePath) {
-  const filePath = path.join(
-    "apps/lobster-web-shell",
-    relativePath,
-  );
+  const filePath = path.join(WEB_SHELL_ROOT, relativePath);
   const text = await fs.readFile(filePath, "utf8");
   return JSON.parse(text);
 }
 
-function responseFromJson(payload) {
+function responseFromJson(payload, { status = 200 } = {}) {
   return {
-    ok: true,
-    status: 200,
+    ok: status >= 200 && status < 300,
+    status,
     async json() {
       return structuredClone(payload);
     },
@@ -723,10 +734,20 @@ function buildHubPage(document) {
         createPageNode(document, "ul", { id: "city-list", className: "city-list" }),
         createPageNode(document, "ul", { id: "resident-list", className: "city-list" }),
       ]),
+      createPageNode(document, "section", { className: "panel rooms" }, [
+        createPageNode(document, "div", { className: "panel-title", textContent: "会话列表" }),
+        createPageNode(document, "ul", { id: "room-list", className: "room-list" }),
+      ]),
+    ]),
+    createPageNode(document, "section", { className: "panel conversation" }, [
+      createConversationStage(document),
+      createConversationTools(document),
+      createPageNode(document, "div", { id: "timeline", className: "timeline" }),
+      createComposer(document),
     ]),
   ]);
 
-  app.append(topbar, layout);
+  app.append(topbar, createCompactUserLoginCard(document), layout);
   body.appendChild(app);
 }
 
@@ -741,7 +762,11 @@ function createCompactUserLoginCard(document) {
       createPageNode(document, "strong", { id: "auth-status", textContent: "登录状态：访客模式" }),
       createPageNode(document, "span", { textContent: "连接网关后先用邮箱验证码登录；登录后只显示该居民可见会话。" }),
     ]),
-    createPageNode(document, "form", { id: "auth-request-form", className: "wechat-login-form" }, [
+    createPageNode(document, "form", {
+      id: "auth-request-form",
+      className: "wechat-login-form",
+      dataset: { authStep: "request" },
+    }, [
       makeInput(document, "auth-resident-input", "text", "居民名/可选，新注册时使用"),
       makeSelect(document, "auth-delivery-select", [
         { value: "email", text: "邮箱验证码", selected: true },
@@ -753,7 +778,11 @@ function createCompactUserLoginCard(document) {
       makeInput(document, "auth-device-input", "text", "设备名/可选反滥用"),
       createButton(document, "auth-request-button", "登录 / 注册", "submit"),
     ]),
-    createPageNode(document, "form", { id: "auth-verify-form", className: "wechat-login-form wechat-login-verify" }, [
+    createPageNode(document, "form", {
+      id: "auth-verify-form",
+      className: "wechat-login-form wechat-login-verify shell-hidden",
+      dataset: { authStep: "verify" },
+    }, [
       makeInput(document, "auth-challenge-input", "hidden", ""),
       createPageNode(document, "span", { className: "wechat-login-hint", textContent: "验证码来自上一步邮件" }),
       makeInput(document, "auth-code-input", "text", "输入邮箱验证码"),
@@ -1341,6 +1370,10 @@ async function loadShellApp(shellPage, options = {}) {
     localStorageEntries = {},
     locationSearch = "",
     gatewayBaseUrl = "",
+    exportResponse = null,
+    gatewayMessageShouldFail = false,
+    gatewayMessageFailuresBeforeSuccess = 0,
+    gatewayProviderState = null,
   } = options;
   const previous = captureGlobals();
   const document = new FakeDocument();
@@ -1399,8 +1432,117 @@ async function loadShellApp(shellPage, options = {}) {
     window.localStorage.setItem(key, value);
   }
   const fetchCalls = [];
+  const fetchRequests = [];
   const eventSourceCalls = [];
   const eventSources = new Set();
+  let gatewayMessageFailureCount = 0;
+  let shellStateFixture = null;
+
+  async function readGatewayShellState() {
+    if (!shellStateFixture) {
+      shellStateFixture = await readJsonFixture(generatedShellFixture);
+    }
+    return shellStateFixture;
+  }
+
+  function appendGatewayMessage(payload = {}) {
+    if (!shellStateFixture) return null;
+    const roomId = typeof payload.room_id === "string" ? payload.room_id : "";
+    const sender = typeof payload.sender === "string" ? payload.sender : "";
+    const text = typeof payload.text === "string" ? payload.text : "";
+    const quickAction = typeof payload.quick_action === "string" ? payload.quick_action : "";
+    if (!roomId || !sender || !text) return null;
+    const timestampMs = Date.now();
+    const messageId = `msg:test-shell-message:${timestampMs}`;
+    const message = {
+      message_id: messageId,
+      id: messageId,
+      sender,
+      timestamp_ms: timestampMs,
+      timestamp_label: "刚刚",
+      timestamp: "刚刚",
+      text,
+      delivery_status: "delivered",
+    };
+    if (quickAction) {
+      message.quick_action = quickAction;
+    }
+    const conversations = shellStateFixture?.conversation_shell?.conversations;
+    const conversation = Array.isArray(conversations)
+      ? conversations.find((item) => item?.conversation_id === roomId)
+      : null;
+    if (conversation) {
+      conversation.messages = Array.isArray(conversation.messages) ? conversation.messages : [];
+      conversation.messages.push(message);
+      shellStateFixture.conversation_shell.active_conversation_id = roomId;
+    }
+    const rooms = shellStateFixture?.rooms;
+    const room = Array.isArray(rooms) ? rooms.find((item) => item?.id === roomId) : null;
+    if (room) {
+      room.messages = Array.isArray(room.messages) ? room.messages : [];
+      room.messages.push(message);
+      shellStateFixture.active_room_id = roomId;
+    }
+    shellStateFixture.state_version = `shell:v1:${timestampMs}`;
+    return message;
+  }
+
+  function openGatewayDirectConversation(payload = {}) {
+    if (!shellStateFixture) return null;
+    const requester = typeof payload.requester_id === "string" ? payload.requester_id.trim() : "";
+    const peer = typeof payload.peer_id === "string" ? payload.peer_id.trim() : "";
+    if (!requester || !peer) return null;
+    const conversationId = `dm:${[requester, peer].sort().join(":")}`;
+    const title = `正在与 ${peer} 聊天`;
+    const conversations = shellStateFixture.conversation_shell?.conversations;
+    if (Array.isArray(conversations) && !conversations.some((item) => item?.conversation_id === conversationId)) {
+      conversations.push({
+        conversation_id: conversationId,
+        title,
+        subtitle: "私聊",
+        meta: "",
+        kind_hint: "direct",
+        participant_label: peer,
+        route_label: "居所直聊",
+        list_summary: `${peer} · 私聊已就绪`,
+        status_line: "私聊正常",
+        thread_headline: title,
+        chat_status_summary: "私聊正常",
+        queue_summary: null,
+        preview_text: null,
+        last_activity_label: "刚刚",
+        activity_time_label: "刚刚",
+        overview_summary: `与 ${peer} 的私聊`,
+        context_summary: "点对点会话",
+        member_count: 2,
+        caretaker: null,
+        detail_card: null,
+        workflow: null,
+        inline_actions: [],
+        messages: [],
+      });
+    }
+    if (shellStateFixture.conversation_shell) {
+      shellStateFixture.conversation_shell.active_conversation_id = conversationId;
+    }
+    shellStateFixture.scene_render = shellStateFixture.scene_render || {};
+    shellStateFixture.scene_render.scenes = Array.isArray(shellStateFixture.scene_render.scenes)
+      ? shellStateFixture.scene_render.scenes
+      : [];
+    if (!shellStateFixture.scene_render.scenes.some((item) => item?.conversation_id === conversationId)) {
+      shellStateFixture.scene_render.scenes.push({
+        conversation_id: conversationId,
+        scene_banner: null,
+        scene_summary: `与 ${peer} 的居所私聊`,
+        room_variant: "home",
+        room_motif: "residence",
+        stage: null,
+        portrait: null,
+      });
+    }
+    shellStateFixture.state_version = `shell:v1:${Date.now()}`;
+    return conversationId;
+  }
 
   class FakeEventSource {
     constructor(url) {
@@ -1457,6 +1599,7 @@ async function loadShellApp(shellPage, options = {}) {
   globalThis.EventSource = FakeEventSource;
   globalThis.fetch = async (url, init = {}) => {
     fetchCalls.push(String(url));
+    fetchRequests.push({ url: String(url), init });
     if (gatewayBaseUrl && typeof url === "string" && url.startsWith(gatewayBaseUrl)) {
       if (url === `${gatewayBaseUrl}/v1/shell/bootstrap`) {
         return responseFromJson(
@@ -1464,14 +1607,49 @@ async function loadShellApp(shellPage, options = {}) {
         );
       }
       if (url === `${gatewayBaseUrl}/v1/shell/state` || url.startsWith(`${gatewayBaseUrl}/v1/shell/state?`)) {
-        return responseFromJson(await readJsonFixture(generatedShellFixture));
+        return responseFromJson(await readGatewayShellState());
       }
       if (url === `${gatewayBaseUrl}/v1/shell/message`) {
+        await readGatewayShellState();
+        let payload = {};
+        try {
+          payload = typeof init?.body === "string" ? JSON.parse(init.body) : {};
+        } catch {
+          payload = {};
+        }
+        if (
+          gatewayMessageShouldFail ||
+          gatewayMessageFailureCount < gatewayMessageFailuresBeforeSuccess
+        ) {
+          gatewayMessageFailureCount += 1;
+          return responseFromJson(
+            { Error: { message: "模拟发送失败" } },
+            { status: 400 },
+          );
+        }
+        const message = appendGatewayMessage(payload);
         return responseFromJson({
           ok: true,
-          conversation_id: "room:city:core-harbor:lobby",
-          message_id: "msg:test-shell-message",
-          delivered_at_ms: Date.now(),
+          conversation_id: payload?.room_id || "room:city:core-harbor:lobby",
+          message_id: message?.message_id || "msg:test-shell-message",
+          delivery_status: "delivered",
+          delivered_at_ms: message?.timestamp_ms || Date.now(),
+        });
+      }
+      if (url === `${gatewayBaseUrl}/v1/direct/open`) {
+        await readGatewayShellState();
+        let payload = {};
+        try {
+          payload = typeof init?.body === "string" ? JSON.parse(init.body) : {};
+        } catch {
+          payload = {};
+        }
+        const conversationId = openGatewayDirectConversation(payload);
+        return responseFromJson({
+          conversation_id: conversationId || "dm:rsaga:qa-peer",
+          kind: "direct",
+          scope: "private",
+          members: [payload.requester_id, payload.peer_id].filter(Boolean),
         });
       }
       if (url === `${gatewayBaseUrl}/v1/auth/preflight`) {
@@ -1490,15 +1668,34 @@ async function loadShellApp(shellPage, options = {}) {
         return responseFromJson({
           resident_id: "rsaga",
           email_masked: "r***@example.com",
+          token_type: "Bearer",
+          session_token: "lbst_test_session_token",
+          session: {
+            session_id: "session:test",
+            resident_id: "rsaga",
+            issued_at_ms: Date.now(),
+            expires_at_ms: Date.now() + 300000,
+          },
         });
       }
       if (url === `${gatewayBaseUrl}/v1/provider`) {
-        return responseFromJson({
-          mode: "cloudflare",
-          reachable: true,
-          connection_state: "connected",
-          base_url: "https://cloudflare.com/fake-provider",
-        });
+        return responseFromJson(
+          gatewayProviderState || {
+            mode: "cloudflare",
+            reachable: true,
+            connection_state: "connected",
+            base_url: "https://cloudflare.com/fake-provider",
+          },
+        );
+      }
+      if (url.startsWith(`${gatewayBaseUrl}/v1/export?`)) {
+        const response = exportResponse || {
+          status: 200,
+          body: {
+            content: "# 龙虾聊天导出\n\n测试导出内容",
+          },
+        };
+        return responseFromJson(response.body, { status: response.status || 200 });
       }
       if (url === `${gatewayBaseUrl}/v1/world-entry` && !gatewayBaseUrl.includes("59999")) {
         return responseFromJson({
@@ -1618,11 +1815,19 @@ async function loadShellApp(shellPage, options = {}) {
     const activeRoom = document.querySelector(".room-button.active");
     const allowsLoginBlockedComposer =
       shellPage === "user" && Boolean(gatewayBaseUrl) && !localStorageEntries["lobster-identity"];
+    const providerConnectionState = String(gatewayProviderState?.connection_state || "").toLowerCase();
+    const allowsOfflineBlockedComposer =
+      Boolean(gatewayBaseUrl) &&
+      Boolean(
+        gatewayProviderState?.reachable === false ||
+          providerConnectionState === "disconnected" ||
+          providerConnectionState === "offline",
+      );
     return (
       document.body?.dataset?.shellMode === shellPage &&
       Boolean(activeRoom) &&
       Boolean(composer) &&
-      (composer.disabled === false || allowsLoginBlockedComposer) &&
+      (composer.disabled === false || allowsLoginBlockedComposer || allowsOfflineBlockedComposer) &&
       typeof composer.placeholder === "string" &&
       composer.placeholder.length > 0
     );
@@ -1635,6 +1840,7 @@ async function loadShellApp(shellPage, options = {}) {
     document,
     window,
     fetchCalls,
+    fetchRequests,
     eventSourceCalls,
     emitEventSource(type, data) {
       for (const eventSource of Array.from(eventSources)) {

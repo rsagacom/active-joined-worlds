@@ -349,3 +349,41 @@ test("non-user room search can match contract workflow summaries", serial, async
     app.cleanup();
   }
 });
+
+test("admin direct open sends bearer token and switches to peer thread", serial, async () => {
+  const app = await loadAdminShellApp({
+    useGeneratedFixtures: true,
+    generatedShellFixture: "generated/state.contract.json",
+    locationSearch: "?gateway=http://127.0.0.1:50651",
+    gatewayBaseUrl: "http://127.0.0.1:50651",
+    localStorageEntries: {
+      "lobster-identity": "rsaga",
+      "lobster-session-token": "lbst_test_session_token",
+    },
+  });
+  try {
+    const { document, fetchRequests } = app;
+    const directPeerInput = document.querySelector("#direct-peer-input");
+    const directForm = document.querySelector("#direct-open-form");
+
+    assert.ok(directPeerInput);
+    assert.ok(directForm);
+
+    directPeerInput.value = "qa-peer";
+    directForm.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    for (let i = 0; i < 8; i += 1) {
+      await flushAsyncWork();
+    }
+
+    const directRequest = fetchRequests.find((request) =>
+      request.url === "http://127.0.0.1:50651/v1/direct/open",
+    );
+    assert.equal(directRequest?.init?.headers?.Authorization, "Bearer lbst_test_session_token");
+
+    const activeRoom = document.querySelector(".room-button.active");
+    assert.match(activeRoom?.textContent || "", /qa-peer|正在与 qa-peer 聊天/);
+    assert.match(document.querySelector("#governance-status")?.textContent || "", /私聊已就绪：qa-peer/);
+  } finally {
+    app.cleanup();
+  }
+});

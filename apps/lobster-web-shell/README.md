@@ -6,7 +6,7 @@ Thin H5 shell for `lobster-chat`.
 
 这个壳层用于让手机浏览器或类 PWA 包装先行接入，方便移动端在原生应用完成前尽早加入。
 当前收口目标是把 `creative`、`admin` 和 `unified` 都尽量表现成正常聊天窗口，尤其 `creative.html` 要贴近“房间内聊天主界面”；`user.html` 只保留 query-preserving 兼容跳转，不再承载独立住宅 UI。`admin` / `unified` 要像线性的城主治理页和世界外壳；治理与扩展能力保留，但不抢首屏。
-其中 `creative.html` 侧优先走房间内聊天视角，`admin` / `unified` 侧优先走城市外 / 治理线性壳视角。
+其中 `creative.html` 侧优先走 [02.jpg](/Users/rsaga/Desktop/02.jpg) 那种房间内聊天视角，`admin` / `unified` 侧优先走 [01.jpg](/Users/rsaga/Desktop/01.jpg) 那种城市外 / 治理线性壳视角。
 
 It is intentionally:
 
@@ -68,9 +68,9 @@ Use this checklist when you want to verify the current web shell without reading
 
 See also:
 
-- [docs/WEB_SHELL_ACCEPTANCE.md](docs/WEB_SHELL_ACCEPTANCE.md)
-- [docs/VISUAL_REFERENCE_STACK.md](docs/VISUAL_REFERENCE_STACK.md)
-- local visual references
+- [/Users/rsaga/Documents/Playground/lobster-chat/docs/WEB_SHELL_ACCEPTANCE.md](/Users/rsaga/Documents/Playground/lobster-chat/docs/WEB_SHELL_ACCEPTANCE.md)
+- [/Users/rsaga/Documents/Playground/lobster-chat/docs/VISUAL_REFERENCE_STACK.md](/Users/rsaga/Documents/Playground/lobster-chat/docs/VISUAL_REFERENCE_STACK.md)
+- [01.jpg](/Users/rsaga/Desktop/01.jpg) / [02.jpg](/Users/rsaga/Desktop/02.jpg)
 
 ## How to preview
 
@@ -97,7 +97,7 @@ If you are using the current local operator server, the same pages are also reac
 For the shared local preview launcher, use:
 
 ```bash
-scripts/start-web-preview.sh
+/Users/rsaga/Documents/Playground/lobster-chat/scripts/start-web-preview.sh
 ```
 
 It defaults to `18080`, reuses an already-running preview when it matches the same root directory, and will refuse to kill an unrelated process that happens to occupy the port. Optional overrides:
@@ -133,6 +133,14 @@ TUI note:
 - Expose it over the web only through a separate browser wrapper if we later add one; that is not part of the current shell.
 
 ## Verify
+
+For the current web shell regression suite, run:
+
+```bash
+npm test
+```
+
+This runs the Node shell tests and a Playwright layout check for the main IM scene pages.
 
 1. open the root URL and confirm the two primary entry cards are visible on the home screen
 2. open `/creative.html` and confirm admin-only controls are hidden

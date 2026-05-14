@@ -8,7 +8,7 @@
     />
     <title>龙虾聊天 · 管理后台</title>
     <link rel="icon" href="data:," />
-    <link rel="stylesheet" href="./styles.css?v=20260507-admin-v14" />
+    <link rel="stylesheet" href="./styles.css?v=20260511-admin-std-v1" />
   </head>
   <body
     data-shell-page="admin"
@@ -56,69 +56,80 @@
               </button>
             </div>
             <nav class="admin-nav-list" aria-label="管理后台分类">
-              <a class="admin-nav-item is-active" href="#admin-session-workspace" data-admin-category="session" data-admin-tool-status="可用" aria-label="会话处理：全部、未读、待处理、归档">
-                <span class="admin-nav-icon" aria-hidden="true">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                </span>
-                <span class="admin-nav-copy">
-                  <strong>会话</strong>
-                  <small>全部、未读、待处理、归档</small>
-                </span>
-              </a>
-              <a class="admin-nav-item" href="#admin-resident-tools" data-admin-category="resident" data-admin-tool-status="可用" aria-label="居民管理：资料、身份状态、备注">
-                <span class="admin-nav-icon" aria-hidden="true">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                </span>
-                <span class="admin-nav-copy">
-                  <strong>居民</strong>
-                  <small>资料、身份状态、备注</small>
-                </span>
-              </a>
-              <a class="admin-nav-item" href="#admin-room-tools" data-admin-category="room" data-admin-tool-status="待接入" aria-label="房间管理：成员、公告、冻结状态（待接入）">
-                <span class="admin-nav-icon" aria-hidden="true">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                </span>
-                <span class="admin-nav-copy">
-                  <strong>房间</strong>
-                  <small>成员、公告、冻结状态</small>
-                </span>
-              </a>
-              <a class="admin-nav-item" href="#admin-safety-tools" data-admin-category="safety" data-admin-tool-status="需网关" aria-label="安全管理：举报队列、审核、安全通告（需网关）">
-                <span class="admin-nav-icon" aria-hidden="true">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-                </span>
-                <span class="admin-nav-copy">
-                  <strong>安全</strong>
-                  <small>举报队列、审核、安全通告</small>
-                </span>
-              </a>
-              <a class="admin-nav-item" href="#admin-notice-tools" data-admin-category="notice" data-admin-tool-status="需网关" aria-label="公告发布：世界、城市、房间公告（需网关）">
-                <span class="admin-nav-icon" aria-hidden="true">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-                </span>
-                <span class="admin-nav-copy">
-                  <strong>公告</strong>
-                  <small>世界、城市、房间公告</small>
-                </span>
-              </a>
-              <a class="admin-nav-item" href="#admin-world-tools" data-admin-category="world" data-admin-tool-status="高级" aria-label="世界互联：目录、广场、镜像、Provider（高级）">
-                <span class="admin-nav-icon" aria-hidden="true">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                </span>
-                <span class="admin-nav-copy">
-                  <strong>世界</strong>
-                  <small>目录、广场、镜像、Provider</small>
-                </span>
-              </a>
-              <a class="admin-nav-item" href="#admin-system-tools" data-admin-category="system" data-admin-tool-status="可用" aria-label="系统管理：网关状态、导出、审计">
-                <span class="admin-nav-icon" aria-hidden="true">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                </span>
-                <span class="admin-nav-copy">
-                  <strong>系统</strong>
-                  <small>网关状态、导出、审计</small>
-                </span>
-              </a>
+              <div class="admin-nav-module" data-admin-module="daily">
+                <div class="admin-nav-module-title">日常处理</div>
+                <a class="admin-nav-item is-active" href="#admin-session-workspace" data-admin-category="session" data-admin-tool-status="可用" aria-label="会话处理：全部、未读、待处理、归档">
+                  <span class="admin-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                  </span>
+                  <span class="admin-nav-copy">
+                    <strong>会话</strong>
+                    <small>全部、未读、待处理、归档</small>
+                  </span>
+                </a>
+                <a class="admin-nav-item" href="#admin-resident-tools" data-admin-category="resident" data-admin-tool-status="可用" aria-label="居民管理：资料、身份状态、备注">
+                  <span class="admin-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  </span>
+                  <span class="admin-nav-copy">
+                    <strong>居民</strong>
+                    <small>资料、身份状态、备注</small>
+                  </span>
+                </a>
+                <a class="admin-nav-item" href="#admin-notice-tools" data-admin-category="notice" data-admin-tool-status="需网关" aria-label="公告发布：世界、城市、房间公告（需网关）">
+                  <span class="admin-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                  </span>
+                  <span class="admin-nav-copy">
+                    <strong>公告</strong>
+                    <small>世界、城市、房间公告</small>
+                  </span>
+                </a>
+                <a class="admin-nav-item" href="#admin-safety-tools" data-admin-category="safety" data-admin-tool-status="需网关" aria-label="安全管理：举报队列、审核、安全通告（需网关）">
+                  <span class="admin-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                  </span>
+                  <span class="admin-nav-copy">
+                    <strong>安全</strong>
+                    <small>举报队列、审核、安全通告</small>
+                  </span>
+                </a>
+                <a class="admin-nav-item" href="#admin-system-tools" data-admin-category="system" data-admin-tool-status="可用" aria-label="系统管理：网关状态、导出、审计">
+                  <span class="admin-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                  </span>
+                  <span class="admin-nav-copy">
+                    <strong>系统</strong>
+                    <small>网关状态、导出、审计</small>
+                  </span>
+                </a>
+              </div>
+              <div class="admin-nav-module" data-admin-module="advanced" data-admin-module-expanded="false">
+                <button type="button" class="admin-nav-module-title admin-nav-module-toggle" aria-expanded="false" aria-controls="admin-nav-advanced-items">
+                  高级与配置
+                  <span class="admin-nav-module-toggle-icon" aria-hidden="true">&#9654;</span>
+                </button>
+                <div id="admin-nav-advanced-items" class="admin-nav-module-items">
+                <a class="admin-nav-item" href="#admin-room-tools" data-admin-category="room" data-admin-tool-status="待接入" aria-label="房间管理：成员、公告、冻结状态（待接入）">
+                  <span class="admin-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                  </span>
+                  <span class="admin-nav-copy">
+                    <strong>房间</strong>
+                    <small>成员、公告、冻结状态</small>
+                  </span>
+                </a>
+                <a class="admin-nav-item" href="#admin-world-tools" data-admin-category="world" data-admin-tool-status="高级" aria-label="世界互联：目录、广场、镜像、Provider（高级）">
+                  <span class="admin-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                  </span>
+                  <span class="admin-nav-copy">
+                    <strong>世界</strong>
+                    <small>目录、广场、镜像、Provider</small>
+                  </span>
+                </a>
+                </div>
+              </div>
             </nav>
           </section>
 
@@ -181,168 +192,6 @@
             </div>
           </form>
           </div>
-
-          <!-- 分类视图（默认隐藏，点击左侧分类时切换） -->
-          <div id="admin-workspace-category" hidden>
-            <!-- 会话分类 -->
-            <div class="admin-category-panel" data-admin-category="session" hidden>
-              <div class="admin-category-head">
-                <div class="panel-kicker">会话处理</div>
-                <h2 class="admin-category-title">当前会话</h2>
-                <p class="admin-category-desc">查看消息、发送跟进、导出历史记录。</p>
-              </div>
-              <div class="admin-category-status">
-                <span class="action-status action-status-available">可用</span>
-                <span class="admin-category-status-copy">会话队列实时同步中</span>
-              </div>
-              <div class="admin-category-actions">
-                <button type="button" class="action-btn" id="category-session-export" data-admin-action="export-current" data-action-status="available">导出当前会话</button>
-                <button type="button" class="action-btn secondary" id="category-session-all" data-admin-action="export-all" data-action-status="available">导出全部历史</button>
-              </div>
-            </div>
-
-            <!-- 居民分类 -->
-            <div class="admin-category-panel" data-admin-category="resident" hidden>
-              <div class="admin-category-head">
-                <div class="panel-kicker">居民管理</div>
-                <h2 class="admin-category-title">居民与身份</h2>
-                <p class="admin-category-desc">查看居民资料、管理身份状态、验证码登录。</p>
-              </div>
-              <div class="admin-category-status">
-                <span class="action-status action-status-gateway">需网关</span>
-                <span class="admin-category-status-copy">需要已验证的城主或管理员身份</span>
-              </div>
-              <div class="admin-category-actions">
-                <button type="button" class="action-btn" id="category-resident-login" data-admin-action="resident-login" data-action-status="gateway" disabled aria-disabled="true" title="需要已连接的网关与已验证的管理员身份">居民登录</button>
-                <button type="button" class="action-btn secondary" id="category-resident-identity" data-admin-action="view-identity" data-action-status="gateway" disabled aria-disabled="true" title="需要已连接的网关与已验证的管理员身份">查看身份</button>
-              </div>
-            </div>
-
-            <!-- 房间分类 -->
-            <div class="admin-category-panel" data-admin-category="room" hidden>
-              <div class="admin-category-head">
-                <div class="panel-kicker">房间管理</div>
-                <h2 class="admin-category-title">房间与成员</h2>
-                <p class="admin-category-desc">查看房间状态、公告与冻结状态。首版只读展示。</p>
-              </div>
-              <div class="admin-category-status">
-                <span class="action-status action-status-pending">待接入</span>
-                <span class="admin-category-status-copy">成员管理与冻结功能尚未接入</span>
-              </div>
-              <div class="admin-category-actions">
-                <button type="button" class="action-btn" data-admin-action="room-list" data-action-status="pending" disabled aria-disabled="true" title="房间管理功能尚未接入后端 API">房间列表</button>
-              </div>
-            </div>
-
-            <!-- 安全分类 -->
-            <div class="admin-category-panel" data-admin-category="safety" hidden>
-              <div class="admin-category-head">
-                <div class="panel-kicker">安全管理</div>
-                <h2 class="admin-category-title">安全与举报</h2>
-                <p class="admin-category-desc">处理举报队列、发布安全通告、审查违规内容。</p>
-              </div>
-              <div class="admin-category-status">
-                <span class="action-status action-status-gateway">需网关</span>
-                <span class="admin-category-status-copy">安全通告可发布，举报列表待接入</span>
-              </div>
-              <div class="admin-category-actions">
-                <button type="button" class="action-btn" id="category-safety-advisory" data-admin-action="publish-advisory" data-action-status="gateway" disabled aria-disabled="true" title="需要已连接的网关与发布权限">发布安全通告</button>
-                <button type="button" class="action-btn secondary" data-admin-action="view-reports" data-action-status="pending" disabled aria-disabled="true" title="举报列表功能尚未接入">查看举报</button>
-              </div>
-            </div>
-
-            <!-- 公告分类 -->
-            <div class="admin-category-panel" data-admin-category="notice" hidden>
-              <div class="admin-category-head">
-                <div class="panel-kicker">公告发布</div>
-                <h2 class="admin-category-title">公告与通知</h2>
-                <p class="admin-category-desc">发布世界公告、城市公告、房间公告。</p>
-              </div>
-              <div class="admin-category-status">
-                <span class="action-status action-status-gateway">需网关</span>
-                <span class="admin-category-status-copy">需要已连接的网关与发布权限</span>
-              </div>
-              <div class="admin-category-actions">
-                <button type="button" class="action-btn" id="category-notice-publish" data-admin-action="publish-notice" data-action-status="gateway" disabled aria-disabled="true" title="需要已连接的网关与发布权限">发布公告</button>
-                <button type="button" class="action-btn secondary" data-admin-action="history-notice" data-action-status="pending" disabled aria-disabled="true" title="历史公告功能尚未接入">历史公告</button>
-              </div>
-            </div>
-
-            <!-- 世界分类 -->
-            <div class="admin-category-panel" data-admin-category="world" hidden>
-              <div class="admin-category-head">
-                <div class="panel-kicker">世界互联</div>
-                <h2 class="admin-category-title">世界与Provider</h2>
-                <p class="admin-category-desc">管理城市目录、镜像源、Provider 连接与信任状态。</p>
-              </div>
-              <div class="admin-category-status">
-                <span class="action-status action-status-pending">待接入</span>
-                <span class="admin-category-status-copy">Provider 连接与城市创建尚未接入</span>
-              </div>
-              <div class="admin-category-actions">
-                <button type="button" class="action-btn" data-admin-action="connect-provider" data-action-status="pending" disabled aria-disabled="true" title="Provider 连接功能尚未接入">接入消息来源</button>
-              </div>
-              <details class="tool-group tool-group--advanced">
-                <summary class="tool-group-title">高级 / 互联实验</summary>
-                <div class="tool-group-body">
-                  <div class="action-row">
-                    <span class="action-desc">Provider 互联、城市与房间创建、镜像注册、信任状态深改。</span>
-                    <span class="action-status action-status-pending">待接入</span>
-                  </div>
-                  <div class="action-row">
-                    <button type="button" class="action-btn" disabled aria-disabled="true" title="Provider 连接功能尚未接入">接入消息来源</button>
-                    <span class="action-status action-status-pending">待接 API</span>
-                  </div>
-                  <div class="action-row">
-                    <button type="button" class="action-btn secondary" disabled aria-disabled="true" title="断开连接功能尚未接入">断开连接</button>
-                    <span class="action-status action-status-pending">待接 API</span>
-                  </div>
-                  <div class="action-row">
-                    <button type="button" class="action-btn" disabled aria-disabled="true" title="镜像源功能尚未接入">添加镜像源</button>
-                    <span class="action-status action-status-pending">待接 API</span>
-                  </div>
-                  <div class="action-row">
-                    <button type="button" class="action-btn" disabled aria-disabled="true" title="城市创建功能尚未接入">新建城市</button>
-                    <span class="action-status action-status-pending">待接 API</span>
-                  </div>
-                  <div class="action-row">
-                    <button type="button" class="action-btn" disabled aria-disabled="true" title="加入城市功能尚未接入">加入城市</button>
-                    <span class="action-status action-status-pending">待接 API</span>
-                  </div>
-                  <div class="action-row">
-                    <button type="button" class="action-btn" disabled aria-disabled="true" title="房间创建功能尚未接入">新建房间</button>
-                    <span class="action-status action-status-pending">待接 API</span>
-                  </div>
-                  <div class="action-row">
-                    <button type="button" class="action-btn" disabled aria-disabled="true" title="私聊功能尚未接入">打开私聊</button>
-                    <span class="action-status action-status-pending">待接 API</span>
-                  </div>
-                  <div class="action-row">
-                    <button type="button" class="action-btn" disabled aria-disabled="true" title="城市状态更新功能尚未接入">更新城市状态</button>
-                    <span class="action-status action-status-pending">待接 API</span>
-                  </div>
-                  <div id="mode-guide" class="guide-list compact-guide-list">正在准备中文指引…</div>
-                </div>
-              </details>
-            </div>
-
-            <!-- 系统分类 -->
-            <div class="admin-category-panel" data-admin-category="system" hidden>
-              <div class="admin-category-head">
-                <div class="panel-kicker">系统管理</div>
-                <h2 class="admin-category-title">系统与导出</h2>
-                <p class="admin-category-desc">网关状态、同步状态、会话导出与审计日志。</p>
-              </div>
-              <div class="admin-category-status">
-                <span class="action-status action-status-available">可用</span>
-                <span class="admin-category-status-copy">导出功能可用，审计日志待接入</span>
-              </div>
-              <div class="admin-category-actions">
-                <button type="button" class="action-btn" id="category-system-export" data-admin-action="export-all" data-action-status="available">导出全部历史</button>
-                <button type="button" class="action-btn secondary" data-admin-action="gateway-diag" data-action-status="pending" disabled aria-disabled="true" title="网关诊断功能尚未接入">网关诊断</button>
-              </div>
-            </div>
-          </div>
         </section>
 
         <aside class="panel chat-detail admin-context-panel">
@@ -381,7 +230,7 @@
                     <span class="action-status action-status-available">可用</span>
                   </div>
                   <div class="action-row">
-                    <span class="action-desc">数据来源：本地会话状态 / GET /v1/shell/state</span>
+                    <span class="action-desc">数据来源：当前会话状态。</span>
                   </div>
                   <div class="conversation-tools admin-conversation-tools">
                     <select id="export-format-select" aria-label="导出格式">
@@ -408,16 +257,13 @@
                     <span class="action-desc">城主/居民身份查看与验证码登录。</span>
                     <span class="action-status action-status-gateway">需网关</span>
                   </div>
-                  <div class="action-row">
-                    <span class="action-desc">API：POST /v1/auth/email-otp/request · POST /v1/auth/email-otp/verify</span>
-                  </div>
                   <form id="auth-request-form" class="inline-form compact-form">
                     <div class="section-label">申请验证码</div>
                     <input id="auth-email-input" type="email" placeholder="邮箱地址" autocomplete="email" />
                     <input id="auth-mobile-input" type="text" placeholder="手机号（反滥用句柄）" autocomplete="tel" />
                     <input id="auth-device-input" type="text" placeholder="设备物理地址（可选）" autocomplete="off" />
                     <div class="action-row">
-                      <button id="auth-request-button" type="submit" class="action-btn">申请验证码</button>
+                      <button id="auth-request-button" type="submit" class="action-btn" disabled aria-disabled="true" title="需要已连接的网关">申请验证码</button>
                     </div>
                   </form>
                   <form id="auth-verify-form" class="inline-form compact-form">
@@ -425,7 +271,7 @@
                     <input id="auth-challenge-input" type="text" placeholder="挑战编号" autocomplete="off" />
                     <input id="auth-code-input" type="text" placeholder="6 位验证码" inputmode="numeric" autocomplete="one-time-code" />
                     <div class="action-row">
-                      <button id="auth-verify-button" type="submit" class="action-btn">完成登录</button>
+                      <button id="auth-verify-button" type="submit" class="action-btn" disabled aria-disabled="true" title="需要已连接的网关">完成登录</button>
                     </div>
                   </form>
                 </div>
@@ -440,9 +286,6 @@
                     <span class="action-desc">发布世界公告或城邦公告。</span>
                     <span class="action-status action-status-gateway">需网关</span>
                   </div>
-                  <div class="action-row">
-                    <span class="action-desc">API：POST /v1/world-square/notices</span>
-                  </div>
                   <form id="world-notice-form" class="inline-form compact-form" data-shell-role="admin">
                     <div class="section-label">发布世界公告</div>
                     <input id="world-notice-title-input" type="text" placeholder="公告标题" autocomplete="off" />
@@ -454,7 +297,7 @@
                     <input id="world-notice-tags-input" type="text" placeholder="标签，用逗号分隔（可选）" autocomplete="off" />
                     <textarea id="world-notice-body-input" rows="3" placeholder="公告正文"></textarea>
                     <div class="action-row">
-                      <button type="submit" class="action-btn">发布公告</button>
+                      <button type="submit" class="action-btn" disabled aria-disabled="true" title="需要已连接的网关">发布公告</button>
                     </div>
                   </form>
                 </div>
@@ -469,9 +312,6 @@
                     <span class="action-desc">发布安全提示、处理安全状态。</span>
                     <span class="action-status action-status-gateway">需网关</span>
                   </div>
-                  <div class="action-row">
-                    <span class="action-desc">API：POST /v1/world-safety/advisories</span>
-                  </div>
                   <form id="world-advisory-form" class="inline-form compact-form" data-shell-role="admin">
                     <div class="section-label">发布安全通告</div>
                     <select id="world-advisory-subject-kind-select" aria-label="通告对象类型">
@@ -483,7 +323,7 @@
                     <input id="world-advisory-action-input" type="text" placeholder="处置动作" autocomplete="off" />
                     <textarea id="world-advisory-reason-input" rows="3" placeholder="原因与说明"></textarea>
                     <div class="action-row">
-                      <button type="submit" class="action-btn">发布安全通告</button>
+                      <button type="submit" class="action-btn" disabled aria-disabled="true" title="需要已连接的网关">发布安全通告</button>
                     </div>
                   </form>
                   <form id="world-report-review-form" class="inline-form compact-form" data-shell-role="admin">
@@ -502,7 +342,7 @@
                     </select>
                     <textarea id="world-report-review-resolution-input" rows="3" placeholder="处理结论"></textarea>
                     <div class="action-row">
-                      <button type="submit" class="action-btn">审查举报</button>
+                      <button type="submit" class="action-btn" disabled aria-disabled="true" title="需要已连接的网关">审查举报</button>
                     </div>
                   </form>
                   <form id="world-report-form" class="inline-form compact-form">
@@ -518,7 +358,7 @@
                     <textarea id="world-report-summary-input" rows="3" placeholder="违规摘要"></textarea>
                     <textarea id="world-report-evidence-input" rows="2" placeholder="证据链接，每行一个（可选）"></textarea>
                     <div class="action-row">
-                      <button type="submit" class="action-btn">提交举报</button>
+                      <button type="submit" class="action-btn" disabled aria-disabled="true" title="需要已连接的网关">提交举报</button>
                     </div>
                   </form>
                   <div class="action-row">
@@ -526,11 +366,8 @@
                     <span class="action-status action-status-pending">待接入</span>
                   </div>
                   <div class="action-row">
-                    <span class="action-desc">API：POST /v1/world-safety/residents/sanction</span>
-                  </div>
-                  <div class="action-row">
                     <button id="world-resident-sanction-button" type="submit" class="action-btn" disabled aria-disabled="true" title="居民制裁功能尚未接入">执行制裁</button>
-                    <span class="action-status action-status-pending">待接 API</span>
+                    <span class="action-status action-status-pending">规划中</span>
                   </div>
                 </div>
               </div>
@@ -545,62 +382,56 @@
                     <span class="action-status action-status-pending">待接入</span>
                   </div>
                   <div class="action-row">
-                    <span class="action-desc">API：POST /v1/cities/rooms/freeze · POST /v1/cities/stewards</span>
-                  </div>
-                  <div class="action-row">
                     <button type="button" class="action-btn" disabled aria-disabled="true" title="成员管理功能尚未接入">成员管理</button>
-                    <span class="action-status action-status-pending">待接 API</span>
+                    <span class="action-status action-status-pending">规划中</span>
                   </div>
                   <div class="action-row">
                     <button type="button" class="action-btn" disabled aria-disabled="true" title="房间冻结功能尚未接入">冻结房间</button>
-                    <span class="action-status action-status-pending">待接 API</span>
+                    <span class="action-status action-status-pending">规划中</span>
                   </div>
                 </div>
               </div>
             </div>
 
             <div data-admin-tool-category="world">
-              <div class="tool-group tool-group--advanced">
-                <div class="tool-group-title tool-group-title--static">高级 / 互联实验</div>
+              <div class="tool-group">
+                <div class="tool-group-title tool-group-title--static">世界互联</div>
                 <div class="tool-group-body">
                   <div class="action-row">
-                    <span class="action-desc">Provider 互联、城市与房间创建、镜像注册、信任状态深改。</span>
+                    <span class="action-desc">高级能力默认收进抽屉：Provider、城市、房间、镜像和信任状态只在确认需要时处理。</span>
                     <span class="action-status action-status-pending">待接入</span>
                   </div>
                   <div class="action-row">
-                    <span class="action-desc">API：POST /v1/provider/connect · POST /v1/cities · POST /v1/cities/rooms · POST /v1/world-mirror-sources · POST /v1/cities/federation-policy</span>
-                  </div>
-                  <div class="action-row">
                     <button id="provider-connect-button" type="submit" class="action-btn" disabled aria-disabled="true" title="Provider 连接功能尚未接入">接入消息来源</button>
-                    <span class="action-status action-status-pending">待接 API</span>
+                    <span class="action-status action-status-pending">规划中</span>
                   </div>
                   <div class="action-row">
                     <button id="provider-disconnect-button" type="button" class="action-btn secondary" disabled aria-disabled="true" title="断开连接功能尚未接入">断开连接</button>
-                    <span class="action-status action-status-pending">待接 API</span>
+                    <span class="action-status action-status-pending">规划中</span>
                   </div>
                   <div class="action-row">
                     <button id="world-mirror-button" type="submit" class="action-btn" disabled aria-disabled="true" title="镜像源功能尚未接入">添加镜像源</button>
-                    <span class="action-status action-status-pending">待接 API</span>
+                    <span class="action-status action-status-pending">规划中</span>
                   </div>
                   <div class="action-row">
                     <button id="city-create-button" type="submit" class="action-btn" disabled aria-disabled="true" title="城市创建功能尚未接入">新建城市</button>
-                    <span class="action-status action-status-pending">待接 API</span>
+                    <span class="action-status action-status-pending">规划中</span>
                   </div>
                   <div class="action-row">
                     <button id="city-join-button" type="submit" class="action-btn" disabled aria-disabled="true" title="加入城市功能尚未接入">加入城市</button>
-                    <span class="action-status action-status-pending">待接 API</span>
+                    <span class="action-status action-status-pending">规划中</span>
                   </div>
                   <div class="action-row">
                     <button id="room-create-button" type="submit" class="action-btn" disabled aria-disabled="true" title="房间创建功能尚未接入">新建房间</button>
-                    <span class="action-status action-status-pending">待接 API</span>
+                    <span class="action-status action-status-pending">规划中</span>
                   </div>
                   <div class="action-row">
                     <button id="direct-open-button" type="submit" class="action-btn" disabled aria-disabled="true" title="私聊功能尚未接入">打开私聊</button>
-                    <span class="action-status action-status-pending">待接 API</span>
+                    <span class="action-status action-status-pending">规划中</span>
                   </div>
                   <div class="action-row">
                     <button id="world-trust-button" type="submit" class="action-btn" disabled aria-disabled="true" title="城市状态更新功能尚未接入">更新城市状态</button>
-                    <span class="action-status action-status-pending">待接 API</span>
+                    <span class="action-status action-status-pending">规划中</span>
                   </div>
 
                   <div id="mode-guide" class="guide-list compact-guide-list">正在准备中文指引…</div>
@@ -650,7 +481,7 @@
                   </form>
 
                   <form id="world-trust-form" class="inline-form compact-form" data-shell-role="admin">
-                    <div class="section-label">H. 更新城市状态</div>
+                    <div class="section-label">G. 更新城市状态</div>
                     <input id="world-trust-city-input" type="text" placeholder="城市标识或城市 ID" autocomplete="off" />
                     <select id="world-trust-state-select" aria-label="世界城市信任状态">
                       <option value="Healthy">健康</option>
@@ -674,11 +505,8 @@
                     <span class="action-status action-status-available">可用</span>
                   </div>
                   <div class="action-row">
-                    <span class="action-desc">API：GET /v1/shell/state · GET /v1/shell/events · GET /v1/provider</span>
-                  </div>
-                  <div class="action-row">
                     <button type="button" class="action-btn secondary" disabled aria-disabled="true" title="审计日志功能尚未接入">查看审计日志</button>
-                    <span class="action-status action-status-pending">待接 API</span>
+                    <span class="action-status action-status-pending">规划中</span>
                   </div>
                   <div class="action-row">
                     <button type="button" class="action-btn secondary" disabled aria-disabled="true" title="网关诊断功能尚未接入">网关诊断</button>
@@ -694,7 +522,7 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=20260501-contract-v1"></script>
+    <script type="module" src="./app.js?v=20260511-contract-v1"></script>
     <script>
       (() => {
         // ---------- 导航折叠 ----------
@@ -717,9 +545,25 @@
           });
         }
 
+        // ---------- 高级模块折叠 ----------
+        const advancedModule = document.querySelector('[data-admin-module="advanced"]');
+        const advancedToggle = advancedModule?.querySelector('.admin-nav-module-toggle');
+        if (advancedModule && advancedToggle) {
+          const setAdvancedExpanded = (expanded) => {
+            advancedModule.dataset.adminModuleExpanded = expanded ? "true" : "false";
+            advancedToggle.setAttribute("aria-expanded", String(expanded));
+          };
+          const saved = window.localStorage?.getItem("lobster-admin-advanced-expanded");
+          setAdvancedExpanded(saved === "true");
+          advancedToggle.addEventListener("click", () => {
+            const expanded = advancedModule.dataset.adminModuleExpanded !== "true";
+            setAdvancedExpanded(expanded);
+            window.localStorage?.setItem("lobster-admin-advanced-expanded", expanded ? "true" : "false");
+          });
+        }
+
         // ---------- 分类切换 ----------
         const workspaceSession = document.getElementById("admin-workspace-session");
-        const workspaceCategory = document.getElementById("admin-workspace-category");
         const toolsSummary = document.getElementById("admin-tools-summary");
         const toolForms = document.getElementById("admin-tool-forms");
         const moduleTitle = document.getElementById("admin-current-module");
@@ -752,79 +596,78 @@
 
         const ACTION_CATALOG = {
           session: {
-            desc: "导出当前会话或全部历史记录。",
+            desc: "可导出当前会话或全部历史记录。",
             status: "available",
             statusLabel: "可用",
-            api: "GET /v1/shell/state",
+            primaryReason: "",
             available: [
-              { action: "export-current", label: "导出当前会话", reason: "", desc: "将当前会话导出为 Markdown、纯文本或 JSONL。", api: "GET /v1/shell/state" },
-              { action: "export-all", label: "导出全部历史", reason: "", desc: "导出所有历史会话记录。", api: "GET /v1/shell/state" },
+              { action: "export-current", label: "导出当前会话", reason: "", reasonType: "", desc: "将当前会话导出为 Markdown、纯文本或 JSONL。" },
             ],
             pending: [],
           },
           resident: {
-            desc: "城主/居民身份查看与验证码登录。",
+            desc: "可查看居民身份与验证码登录。",
             status: "gateway",
             statusLabel: "需网关",
-            api: "POST /v1/auth/email-otp/*",
+            primaryReason: "需要已连接的网关与已验证的管理员身份。",
             available: [],
             pending: [
-              { action: "resident-login", label: "居民登录", reason: "需要已连接的网关与已验证的管理员身份", desc: "通过邮箱验证码验证居民身份。", api: "POST /v1/auth/email-otp/request · POST /v1/auth/email-otp/verify" },
-              { action: "view-identity", label: "查看身份", reason: "需要已连接的网关与已验证的管理员身份", desc: "查看当前登录居民的身份资料。", api: "GET /v1/shell/identity" },
+              { action: "resident-login", label: "居民登录", reason: "需要已连接的网关与已验证的管理员身份", reasonType: "未接网关", desc: "通过邮箱验证码验证居民身份。" },
+              { action: "view-identity", label: "查看身份", reason: "需要已连接的网关与已验证的管理员身份", reasonType: "未接网关", desc: "查看当前登录居民的身份资料。" },
             ],
           },
           room: {
-            desc: "首版只读展示房间状态。",
+            desc: "可查看房间列表与基本信息。",
             status: "pending",
             statusLabel: "待接入",
-            api: "POST /v1/cities/rooms/*",
+            primaryReason: "房间管理功能尚未接入后端能力。",
             available: [],
             pending: [
-              { action: "room-list", label: "房间列表", reason: "房间管理功能尚未接入后端 API", desc: "查看所有房间列表与基本信息。", api: "GET /v1/cities/rooms" },
+              { action: "room-list", label: "房间列表", reason: "房间管理功能尚未接入后端能力", reasonType: "后端未实现", desc: "查看所有房间列表与基本信息。" },
             ],
           },
           safety: {
-            desc: "处理举报队列、发布安全通告。",
+            desc: "可发布安全通告、提交举报。",
             status: "gateway",
             statusLabel: "需网关",
-            api: "POST /v1/world-safety/*",
+            primaryReason: "需要已连接的网关与发布权限。",
             available: [],
             pending: [
-              { action: "publish-advisory", label: "发布安全通告", reason: "需要已连接的网关与发布权限", desc: "向指定对象发布安全提示或处置通告。", api: "POST /v1/world-safety/advisories" },
-              { action: "view-reports", label: "查看举报", reason: "举报列表功能尚未接入", desc: "查看和处理用户举报队列。", api: "GET /v1/world-safety/reports" },
+              { action: "publish-advisory", label: "发布安全通告", reason: "需要已连接的网关与发布权限", reasonType: "未接网关", desc: "向指定对象发布安全提示或处置通告。" },
+              { action: "view-reports", label: "查看举报", reason: "举报列表功能尚未接入", reasonType: "后端未实现", desc: "查看和处理用户举报队列。" },
             ],
           },
           notice: {
-            desc: "发布世界公告或城邦公告。",
+            desc: "可发布公告至世界或城邦。",
             status: "gateway",
             statusLabel: "需网关",
-            api: "POST /v1/world-square/notices",
+            primaryReason: "需要已连接的网关与发布权限。",
             available: [],
             pending: [
-              { action: "publish-notice", label: "发布公告", reason: "需要已连接的网关与发布权限", desc: "发布世界公告或城市级通知。", api: "POST /v1/world-square/notices" },
-              { action: "history-notice", label: "历史公告", reason: "历史公告功能尚未接入", desc: "查看历史发布公告。", api: "GET /v1/world-square/notices" },
+              { action: "publish-notice", label: "发布公告", reason: "需要已连接的网关与发布权限", reasonType: "未接网关", desc: "发布世界公告或城市级通知。" },
+              { action: "history-notice", label: "历史公告", reason: "历史公告功能尚未接入", reasonType: "后端未实现", desc: "查看历史发布公告。" },
             ],
           },
           world: {
-            desc: "Provider 互联、城市与房间创建。",
+            desc: "高级治理：Provider、城市、镜像与信任状态。",
             status: "pending",
             statusLabel: "待接入",
-            api: "POST /v1/provider/connect",
+            primaryReason: "Provider、城市、镜像等高级功能尚未接入后端。",
             available: [],
             pending: [
-              { action: "connect-provider", label: "接入消息来源", reason: "Provider 连接功能尚未接入", desc: "连接外部消息来源 Provider。", api: "POST /v1/provider/connect" },
+              { action: "connect-provider", label: "接入消息来源", reason: "Provider 连接功能尚未接入", reasonType: "后端未实现", desc: "连接外部消息来源 Provider。" },
             ],
           },
           system: {
-            desc: "网关状态、同步状态与会话导出。",
+            desc: "可查看网关状态、导出会话记录。",
             status: "available",
             statusLabel: "可用",
-            api: "GET /v1/shell/state · GET /v1/provider",
+            primaryReason: "",
             available: [
-              { action: "export-all", label: "导出全部历史", reason: "", desc: "导出所有历史会话记录。", api: "GET /v1/shell/state" },
+              { action: "export-all", label: "导出全部历史", reason: "", reasonType: "", desc: "导出所有历史会话记录。" },
             ],
             pending: [
-              { action: "gateway-diag", label: "网关诊断", reason: "网关诊断功能尚未接入", desc: "检查网关连接与同步状态。", api: "GET /v1/provider" },
+              { action: "gateway-diag", label: "网关诊断", reason: "网关诊断功能尚未接入", reasonType: "后端未实现", desc: "检查网关连接与同步状态。" },
             ],
           },
         };
@@ -841,142 +684,71 @@
           // 标题
           const head = createElement("div", { className: "admin-summary-head" });
           const title = createElement("div", { className: "tool-group-title tool-group-title--static" });
-          title.textContent = CATEGORY_LABELS[category] + "工具";
+          title.textContent = CATEGORY_LABELS[category] + "处理";
           head.appendChild(title);
-
-          // 描述 + 状态
-          const descRow = createElement("div", { className: "action-row" });
-          const desc = createElement("span", { className: "action-desc" });
-          desc.textContent = catalog.desc;
-          const status = createElement("span", { className: "action-status action-status-" + catalog.status });
-          status.textContent = catalog.statusLabel;
-          descRow.appendChild(desc);
-          descRow.appendChild(status);
-          head.appendChild(descRow);
-
-          // API
-          if (catalog.api) {
-            const apiRow = createElement("div", { className: "action-row" });
-            const api = createElement("span", { className: "action-desc" });
-            api.textContent = "API：" + catalog.api;
-            apiRow.appendChild(api);
-            head.appendChild(apiRow);
-          }
-
           panel.appendChild(head);
 
-          // 可用工具：最多 1 主 + 1 次按钮
-          if (catalog.available.length > 0) {
-            const availSection = createElement("div", { className: "admin-summary-section" });
-            const availLabel = createElement("div", { className: "admin-summary-section-label" });
-            availLabel.textContent = "可用";
-            availSection.appendChild(availLabel);
+          // 一句话说明
+          const descEl = createElement("div", { className: "admin-summary-desc" });
+          descEl.textContent = catalog.desc;
+          panel.appendChild(descEl);
 
-            catalog.available.forEach((item, idx) => {
-              const card = createElement("div", { className: "admin-summary-tool-card" });
+          // 状态标签
+          const statusRow = createElement("div", { className: "admin-summary-status-row" });
+          const status = createElement("span", { className: "action-status action-status-" + catalog.status });
+          status.textContent = catalog.statusLabel;
+          statusRow.appendChild(status);
+          panel.appendChild(statusRow);
 
-              const nameRow = createElement("div", { className: "action-row" });
-              const name = createElement("span", { className: "admin-summary-tool-name" });
-              name.textContent = item.label;
-              const itemStatus = createElement("span", { className: "action-status action-status-available" });
-              itemStatus.textContent = "可用";
-              nameRow.appendChild(name);
-              nameRow.appendChild(itemStatus);
-              card.appendChild(nameRow);
-
-              if (item.desc) {
-                const itemDesc = createElement("div", { className: "admin-summary-item-desc" });
-                itemDesc.textContent = item.desc;
-                card.appendChild(itemDesc);
-              }
-
-              if (item.api) {
-                const itemApi = createElement("div", { className: "admin-summary-item-desc" });
-                itemApi.textContent = "API：" + item.api;
-                card.appendChild(itemApi);
-              }
-
-              const btnClass = idx === 0 ? "action-btn" : "action-btn secondary";
-              const btn = createElement("button", {
-                type: "button",
-                className: btnClass,
-                dataset: { adminAction: item.action, actionStatus: "available" },
-              }, item.label);
-              card.appendChild(btn);
-              availSection.appendChild(card);
-            });
-            panel.appendChild(availSection);
-          }
-
-          // 待接入 / 需网关工具：产品目录式列出，带原因
-          if (catalog.pending.length > 0) {
-            const pendingSection = createElement("div", { className: "admin-summary-section" });
-            const pendingLabel = createElement("div", { className: "admin-summary-section-label" });
-            pendingLabel.textContent = catalog.status === "gateway" ? "需网关" : "待接入";
-            pendingSection.appendChild(pendingLabel);
-
-            catalog.pending.forEach((item) => {
-              const card = createElement("div", { className: "admin-summary-tool-card" });
-
-              const nameRow = createElement("div", { className: "action-row" });
-              const name = createElement("span", { className: "admin-summary-tool-name" });
-              name.textContent = item.label;
-              const itemStatus = createElement("span", { className: "action-status action-status-" + catalog.status });
-              itemStatus.textContent = catalog.status === "gateway" ? "需网关" : "待接入";
-              nameRow.appendChild(name);
-              nameRow.appendChild(itemStatus);
-              card.appendChild(nameRow);
-
-              if (item.desc) {
-                const itemDesc = createElement("div", { className: "admin-summary-item-desc" });
-                itemDesc.textContent = item.desc;
-                card.appendChild(itemDesc);
-              }
-
-              if (item.reason) {
-                const itemReason = createElement("div", { className: "admin-summary-item-desc" });
-                itemReason.textContent = "原因：" + item.reason;
-                card.appendChild(itemReason);
-              }
-
-              if (item.api) {
-                const itemApi = createElement("div", { className: "admin-summary-item-desc" });
-                itemApi.textContent = "API：" + item.api;
-                card.appendChild(itemApi);
-              }
-
-              const btn = createElement("button", {
-                type: "button",
-                className: "action-btn secondary",
-                dataset: { adminAction: item.action, actionStatus: catalog.status },
-                disabled: "true",
-                ariaDisabled: "true",
-                title: item.reason || (catalog.status === "gateway" ? "需要网关连接" : "功能尚未接入"),
-              }, item.label);
-              card.appendChild(btn);
-              pendingSection.appendChild(card);
-            });
-            panel.appendChild(pendingSection);
-          }
-
-          // 打开工具按钮（展开该分类的表单抽屉）
-          const hasForms = toolForms?.querySelector(`[data-admin-tool-category="${category}"]`);
-          if (hasForms) {
-            const drawerSection = createElement("div", { className: "admin-summary-section" });
-            const openBtn = createElement("button", {
+          // 主操作按钮（只取第一个可用工具）
+          const hasAvailable = catalog.available && catalog.available.length > 0;
+          if (hasAvailable) {
+            const primary = catalog.available[0];
+            const actionRow = createElement("div", { className: "admin-summary-action-row" });
+            const btn = createElement("button", {
               type: "button",
               className: "action-btn",
+              dataset: { adminAction: primary.action, actionStatus: "available" },
+            }, primary.label);
+            btn.addEventListener("click", () => {
+              if (primary.action === "export-current") {
+                document.querySelector("#export-current-button")?.click();
+              } else if (primary.action === "export-all") {
+                document.querySelector("#export-all-button")?.click();
+              }
+            });
+            actionRow.appendChild(btn);
+            panel.appendChild(actionRow);
+          }
+
+          // 原因/状态说明
+          const reasonText = catalog.primaryReason || "";
+          if (reasonText) {
+            const reasonRow = createElement("div", { className: "admin-summary-reason-row" });
+            const reasonLabel = createElement("span", { className: "admin-summary-reason-label" });
+            reasonLabel.textContent = "原因：";
+            const reasonValue = createElement("span", { className: "admin-summary-reason-value" });
+            reasonValue.textContent = reasonText;
+            reasonRow.appendChild(reasonLabel);
+            reasonRow.appendChild(reasonValue);
+            panel.appendChild(reasonRow);
+          }
+
+          // 打开工具抽屉按钮
+          const hasForms = toolForms?.querySelector(`[data-admin-tool-category="${category}"]`);
+          if (hasForms) {
+            const drawerRow = createElement("div", { className: "admin-summary-drawer-row" });
+            const openBtn = createElement("button", {
+              type: "button",
+              className: "action-btn secondary",
               dataset: { adminOpenDrawer: "true" },
             }, "打开工具");
             openBtn.addEventListener("click", () => openToolDrawer(category));
-            drawerSection.appendChild(openBtn);
-            panel.appendChild(drawerSection);
+            drawerRow.appendChild(openBtn);
+            panel.appendChild(drawerRow);
           }
 
           toolsSummary.appendChild(panel);
-
-          // 绑定可用按钮的真实处理逻辑
-          bindAdminActions(panel);
         }
 
         function openToolDrawer(category) {
@@ -1010,25 +782,9 @@
           container.querySelectorAll("[data-admin-action]").forEach((btn) => {
             const action = btn.dataset.adminAction;
             if (btn.disabled) return;
-            // 移除旧监听器（简单方案：clone 替换）
             const clone = btn.cloneNode(true);
             btn.parentNode.replaceChild(clone, btn);
             clone.addEventListener("click", () => {
-              if (action === "export-current") {
-                document.querySelector("#export-current-button")?.click();
-              } else if (action === "export-all") {
-                document.querySelector("#export-all-button")?.click();
-              }
-            });
-          });
-        }
-
-        // 同时绑定中心区域分类面板中的可用按钮
-        function bindCategoryPanelActions() {
-          workspaceCategory?.querySelectorAll("[data-admin-action]").forEach((btn) => {
-            const action = btn.dataset.adminAction;
-            if (btn.disabled) return;
-            btn.addEventListener("click", () => {
               if (action === "export-current") {
                 document.querySelector("#export-current-button")?.click();
               } else if (action === "export-all") {
@@ -1052,10 +808,9 @@
             moduleTitle.textContent = (CATEGORY_LABELS[category] || "") + "处理";
           }
 
-          // 中间区域永远显示会话，分类面板保持隐藏
-          if (workspaceSession && workspaceCategory) {
+          // 中间区域永远显示会话
+          if (workspaceSession) {
             workspaceSession.hidden = false;
-            workspaceCategory.hidden = true;
           }
 
           // 渲染右侧摘要
@@ -1074,9 +829,6 @@
 
         // 绑定工具抽屉关闭按钮
         document.getElementById("admin-tool-drawer-close")?.addEventListener("click", closeToolDrawer);
-
-        // 同时绑定中心区域分类面板的可用按钮（只绑一次）
-        bindCategoryPanelActions();
 
         // 默认选中会话
         switchCategory("session");
