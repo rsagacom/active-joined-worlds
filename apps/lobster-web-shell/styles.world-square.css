@@ -185,13 +185,24 @@ body[data-shell-page="world-square"] {
 .world-square-scene {
   position: absolute;
   inset: 0;
+  overflow: hidden;
+  background: #15130f;
+}
+
+.world-square-scene::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(-1 * clamp(86px, 8.2vw, 138px));
+  width: calc(100% + clamp(86px, 8.2vw, 138px));
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, 0.12)),
     url("./assets/pixel/concepts/world-square-concept-20260427-256.png") center / cover no-repeat;
 }
 
 /* Day scene: real asset, no overlay/filter/brightness/mix-blend-mode fake. */
-body[data-time-of-day="day"] .world-square-scene {
+body[data-time-of-day="day"] .world-square-scene::before {
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, 0.08)),
     url("./assets/pixel/concepts/world-square-concept-20260428-day-draft-256.png") center / cover no-repeat;
