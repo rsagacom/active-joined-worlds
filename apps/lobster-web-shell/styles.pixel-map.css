@@ -12,6 +12,7 @@
   --scene-z-rail-mobile: 20;
   --scene-z-hud-mobile: 21;
   --scene-z-hotspot-clear: 30;
+  --creative-scene-aspect: 16 / 9;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"],
@@ -79,7 +80,7 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-l
 body[data-shell-variant="creative-terminal"] .creative-layout {
   min-height: 0;
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
+  grid-template-columns: 220px minmax(0, 1fr);
   gap: 10px;
 }
 
@@ -101,10 +102,7 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .rail-title,
 body[data-shell-page="hub"][data-shell-variant="public-square"] .rail-section,
 body[data-shell-variant="creative-terminal"] .creative-rail-head,
 body[data-shell-variant="creative-terminal"] .creative-rail-status,
-body[data-shell-variant="creative-terminal"] .creative-rail-note,
-body[data-shell-variant="creative-terminal"] .rail-title,
-body[data-shell-variant="creative-terminal"] .creative-rail-divider,
-body[data-shell-variant="creative-terminal"] .creative-room-list {
+body[data-shell-variant="creative-terminal"] .creative-rail-note {
   display: none;
 }
 
@@ -156,7 +154,7 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-s
 
 body[data-shell-variant="creative-terminal"] .creative-stage {
   background:
-    url("assets/pixel/composed/creative-room-scene-v2-256.png") left center / cover no-repeat,
+    url("assets/pixel/composed/creative-room-scene-v2-256.png") center / contain no-repeat,
     #1b110a;
 }
 
@@ -663,8 +661,9 @@ body[data-shell-variant="creative-terminal"] .creative-rail::after {
 }
 
 body[data-shell-variant="creative-terminal"] .creative-stage {
+  aspect-ratio: var(--creative-scene-aspect);
   background:
-    url("assets/pixel/composed/creative-room-scene-v2-256.png") left center / cover no-repeat,
+    url("assets/pixel/composed/creative-room-scene-v2-256.png") center / contain no-repeat,
     #1b110a;
 }
 
@@ -687,6 +686,13 @@ body[data-shell-variant="creative-terminal"] .scene-hotspots {
   inset: 0;
   z-index: var(--scene-z-hotspot);
   pointer-events: none;
+}
+
+body[data-shell-variant="creative-terminal"] .scene-hotspots {
+  aspect-ratio: var(--creative-scene-aspect);
+  width: 100%;
+  max-height: 100%;
+  margin: auto;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot,
@@ -1918,6 +1924,15 @@ body.scene-clear-mode[data-shell-variant="creative-terminal"] .scene-hotspot {
 
 body.scene-clear-mode[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot span,
 body.scene-clear-mode[data-shell-variant="creative-terminal"] .scene-hotspot span {
+  opacity: 0 !important;
+}
+
+body.scene-clear-mode[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot:hover span,
+body.scene-clear-mode[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot:focus-visible span,
+body.scene-clear-mode[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot[aria-expanded="true"] span,
+body.scene-clear-mode[data-shell-variant="creative-terminal"] .scene-hotspot:hover span,
+body.scene-clear-mode[data-shell-variant="creative-terminal"] .scene-hotspot:focus-visible span,
+body.scene-clear-mode[data-shell-variant="creative-terminal"] .scene-hotspot[aria-expanded="true"] span {
   opacity: 1 !important;
 }
 
@@ -2280,8 +2295,7 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-f
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer textarea,
 body[data-shell-variant="creative-terminal"] .creative-composer textarea {
   min-height: 34px !important;
-  height: 34px !important;
-  max-height: min(24vh, 160px) !important;
+  max-height: 120px !important;
   resize: vertical !important;
   overflow-y: auto !important;
   padding-block: 5px !important;
@@ -2293,6 +2307,32 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public
 body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .message-pending-failed {
   animation: none !important;
   background-image: none !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .message-pending-actions,
+body[data-shell-variant="creative-terminal"] .message-pending-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .message-pending-retry,
+body[data-shell-variant="creative-terminal"] .message-pending-retry {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 2px solid rgba(255, 213, 128, 0.74);
+  border-radius: 0;
+  color: #fff2c9;
+  background: #8f4025;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.28);
+  font: 700 12px/1 var(--creative-font-pixel);
+  cursor: pointer;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .message-pending-retry:disabled,
+body[data-shell-variant="creative-terminal"] .message-pending-retry:disabled {
+  cursor: wait;
+  opacity: 0.62;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .composer-symbol-trigger,
@@ -2466,6 +2506,36 @@ body.scene-intro-seen[data-shell-variant="creative-terminal"] #timeline.creative
   display: none !important;
 }
 
+body.scene-intro-first[data-shell-variant="creative-terminal"] .creative-stage::after {
+  content: "点击空白处收起界面" !important;
+  position: absolute !important;
+  inset: auto auto clamp(154px, 23vh, 220px) 50% !important;
+  z-index: calc(var(--scene-z-chat) + 1) !important;
+  width: max-content !important;
+  max-width: min(240px, calc(100% - 32px)) !important;
+  padding: 7px 10px !important;
+  color: #fff2c9 !important;
+  font: 700 12px/1.2 var(--creative-font-body, "Noto Sans SC", "PingFang SC", sans-serif) !important;
+  text-align: center !important;
+  background: rgba(31, 18, 9, 0.88) !important;
+  border: 2px solid rgba(241, 201, 120, 0.82) !important;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.34) !important;
+  opacity: 1 !important;
+  pointer-events: none !important;
+  transform: translateX(-50%) !important;
+  animation: scene-intro-pulse 1800ms ease-in-out 2;
+}
+
+body.scene-intro-seen[data-shell-variant="creative-terminal"] .creative-stage::after {
+  content: "" !important;
+  opacity: 0 !important;
+}
+
+@keyframes scene-intro-pulse {
+  0%, 100% { opacity: 0.48; }
+  50% { opacity: 1; }
+}
+
 @media (max-width: 820px) {
   body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log,
   body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log {
@@ -2497,5 +2567,158 @@ body.scene-intro-seen[data-shell-variant="creative-terminal"] #timeline.creative
   body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .message-stack,
   body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .message-stack {
     max-width: 76% !important;
+  }
+}
+
+/* Phase 1 IM hardening: keep the composed room image and hotspots in the same
+   16:9 coordinate space, and keep the mobile composer above safe areas. */
+body[data-shell-variant="creative-terminal"] .creative-stage {
+  min-height: 0;
+  width: 100%;
+  height: 100%;
+  justify-self: stretch;
+  align-self: stretch;
+  background:
+    url("assets/pixel/composed/creative-room-scene-v2-256.png") center / contain no-repeat,
+    #1b110a !important;
+}
+
+body[data-shell-variant="creative-terminal"] .scene-hotspots {
+  aspect-ratio: var(--creative-scene-aspect);
+  width: 100%;
+  max-height: 100%;
+  margin: auto;
+}
+
+body[data-shell-variant="creative-terminal"] .creative-composer textarea {
+  max-height: 120px !important;
+  resize: none !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .timeline-skeleton-row,
+body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .timeline-skeleton-row {
+  opacity: 0.82 !important;
+  pointer-events: none !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .timeline-skeleton-avatar,
+body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .timeline-skeleton-avatar {
+  color: transparent !important;
+  background:
+    linear-gradient(90deg, rgba(255, 242, 201, 0.12), rgba(255, 242, 201, 0.24), rgba(255, 242, 201, 0.12)) !important;
+  background-size: 180% 100% !important;
+  border-color: rgba(241, 201, 120, 0.34) !important;
+  animation: timeline-skeleton-pulse 1500ms ease-in-out infinite;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .timeline-skeleton-bubble,
+body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .timeline-skeleton-bubble {
+  width: var(--skeleton-width, 68%) !important;
+  min-width: 124px !important;
+  max-width: 100% !important;
+  padding: 10px 12px !important;
+  display: grid !important;
+  gap: 8px !important;
+  justify-self: start !important;
+  background: rgba(25, 15, 9, 0.70) !important;
+  border: 2px solid rgba(255, 224, 143, 0.36) !important;
+  border-radius: 0 !important;
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.28) !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .message-row.self .timeline-skeleton-bubble,
+body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .message-row.self .timeline-skeleton-bubble {
+  justify-self: end !important;
+  background: rgba(142, 64, 37, 0.48) !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .timeline-skeleton-line,
+body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .timeline-skeleton-line {
+  height: 9px !important;
+  display: block !important;
+  background:
+    linear-gradient(90deg, rgba(255, 242, 201, 0.12), rgba(255, 242, 201, 0.30), rgba(255, 242, 201, 0.12)) !important;
+  background-size: 180% 100% !important;
+  animation: timeline-skeleton-pulse 1500ms ease-in-out infinite;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .timeline-skeleton-line-primary,
+body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .timeline-skeleton-line-primary {
+  width: 100% !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .timeline-skeleton-line-secondary,
+body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .timeline-skeleton-line-secondary {
+  width: 58% !important;
+}
+
+@keyframes timeline-skeleton-pulse {
+  0% { background-position: 120% 0; }
+  100% { background-position: -80% 0; }
+}
+
+/* Phase 2 IM rail: keep conversations visible as a compact session list. */
+body[data-shell-variant="creative-terminal"] .creative-layout {
+  grid-template-columns: 220px minmax(0, 1fr) !important;
+}
+
+body[data-shell-variant="creative-terminal"] .creative-rail {
+  width: auto !important;
+  min-width: 0 !important;
+}
+
+body[data-shell-variant="creative-terminal"] .rail-title,
+body[data-shell-variant="creative-terminal"] .creative-rail-divider {
+  display: block !important;
+}
+
+body[data-shell-variant="creative-terminal"] .creative-room-list,
+body[data-shell-variant="creative-terminal"] .creative-rail .room-section-list {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 6px !important;
+}
+
+@media (max-width: 820px) {
+  body[data-shell-variant="creative-terminal"] .creative-shell {
+    position: relative;
+  }
+
+  body[data-shell-variant="creative-terminal"] .creative-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  body.rail-drawer-open[data-shell-variant="creative-terminal"] .creative-shell::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--scene-z-rail-mobile) - 1);
+    background: rgba(10, 6, 4, 0.48);
+    pointer-events: none;
+  }
+
+  body[data-shell-variant="creative-terminal"] .creative-rail {
+    position: fixed !important;
+    top: calc(56px + env(safe-area-inset-top)) !important;
+    left: 8px !important;
+    bottom: calc(8px + env(safe-area-inset-bottom)) !important;
+    width: min(232px, calc(100vw - 28px)) !important;
+    max-height: none !important;
+    transform: translateX(calc(-100% - 16px)) !important;
+    transition: transform 180ms ease;
+  }
+
+  body[data-shell-variant="creative-terminal"] .creative-rail.open {
+    transform: translateX(0) !important;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer,
+  body[data-shell-variant="creative-terminal"] .creative-composer {
+    bottom: calc(8px + env(safe-area-inset-bottom));
+    padding-bottom: calc(7px + env(safe-area-inset-bottom));
+  }
+
+  body[data-shell-variant="creative-terminal"] .chat-focus-toggle {
+    bottom: calc(12px + env(safe-area-inset-bottom));
   }
 }

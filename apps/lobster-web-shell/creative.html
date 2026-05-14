@@ -6,13 +6,13 @@
     <title>龙虾聊天 · 住宅</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="./styles.creative.css?v=20260430-polish-v1" />
-    <link rel="stylesheet" href="./styles.pixel-map.css?v=20260507-bg-png256-v1" />
+    <link rel="stylesheet" href="./styles.pixel-map.css?v=20260514-rail-stage-v1" />
   </head>
   <body
     data-shell-page="hub"
     data-shell-variant="creative-terminal"
     data-default-shell-mode="hub"
-    data-default-room-id="dm:builder:rsaga"
+    data-default-room-id="dm:rsaga:builder"
     data-workspace="chat"
     data-sfc-theme="city"
     data-resident-login="enabled"
@@ -25,7 +25,7 @@
           <strong id="auth-status">登录状态：访客模式</strong>
           <span>连接网关后先用邮箱验证码登录；登录后只显示该居民可见会话。</span>
         </div>
-        <form id="auth-request-form" class="resident-login-form">
+        <form id="auth-request-form" class="resident-login-form" data-auth-step="request">
           <input id="auth-resident-input" type="text" placeholder="居民名/可选，新注册时使用" autocomplete="username" />
           <select id="auth-delivery-select" aria-label="验证码接收方式">
             <option value="email" selected>邮箱验证码</option>
@@ -37,7 +37,7 @@
           <input id="auth-device-input" type="text" placeholder="设备名/可选反滥用" autocomplete="off" />
           <button id="auth-request-button" type="submit">登录 / 注册</button>
         </form>
-        <form id="auth-verify-form" class="resident-login-form resident-login-verify">
+        <form id="auth-verify-form" class="resident-login-form resident-login-verify shell-hidden" data-auth-step="verify">
           <input id="auth-challenge-input" type="hidden" autocomplete="off" />
           <span class="resident-login-hint">验证码来自上一步邮件</span>
           <input id="auth-code-input" type="text" placeholder="输入邮箱验证码" autocomplete="one-time-code" />
@@ -49,7 +49,13 @@
     <div class="app app-hub-shell sfc-shell sfc-city-shell creative-shell">
       <header class="sfc-hud creative-hud">
         <div class="hud-left">
-          <button class="hud-rail-toggle" id="hud-rail-toggle" aria-label="切换会话">≡</button>
+          <button
+            id="hud-rail-toggle"
+            class="hud-rail-toggle"
+            aria-label="切换会话"
+            aria-controls="creative-rail"
+            aria-expanded="false"
+          >≡</button>
           <div class="creative-hud-copy">
             <span class="hud-kicker">private room</span>
             <span class="hud-title">住宅</span>
@@ -63,7 +69,7 @@
       </header>
 
       <main class="sfc-layout creative-layout" aria-label="创意聊天终端">
-        <aside class="sfc-rail creative-rail" data-shell-column="rooms">
+        <aside id="creative-rail" class="sfc-rail creative-rail" data-shell-column="rooms" aria-hidden="true">
           <div class="creative-rail-stack">
             <div class="rail-title">导航</div>
             <div class="rail-actions">

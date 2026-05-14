@@ -20,7 +20,7 @@ body[data-shell-page="world-square"] {
   padding: 12px;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  grid-template-columns: 128px minmax(0, 1fr);
+  grid-template-columns: 220px minmax(0, 1fr);
   gap: 10px;
 }
 
