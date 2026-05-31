@@ -383,6 +383,40 @@ test("gateway creative resident Enter key sends and Shift Enter keeps a draft", 
   }
 });
 
+test("Enter sends on scene composer regardless of viewport width", serial, async () => {
+  const app = await loadUserShellApp({
+    useGeneratedFixtures: true,
+    generatedShellFixture: "generated/state.contract.json",
+    locationSearch: "?gateway=http://127.0.0.1:50651",
+    gatewayBaseUrl: "http://127.0.0.1:50651",
+    localStorageEntries: { "lobster-identity": "qa2" },
+  });
+  try {
+    const { document, fetchCalls } = app;
+    const composerForm = document.querySelector("#composer");
+    const composerInput = document.querySelector("#composer-input");
+    assert.ok(composerForm);
+    assert.ok(composerInput);
+
+    // Ensure the composer has a scene-composer class
+    composerForm.classList.add("public-square-composer");
+
+    composerInput.value = "移动端发送测试";
+    composerInput.dispatchEvent(new Event("input", { bubbles: true }));
+    composerInput.dispatchEvent(new Event("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await flushAsyncWork();
+    await flushAsyncWork();
+
+    assert.equal(composerInput.value, "");
+    assert.equal(
+      fetchCalls.filter((url) => url === "http://127.0.0.1:50651/v1/shell/message").length,
+      1,
+    );
+  } finally {
+    app.cleanup();
+  }
+});
+
 test("gateway creative resident send commits one stable self bubble with avatar", serial, async () => {
   const app = await loadUserShellApp({
     useGeneratedFixtures: true,

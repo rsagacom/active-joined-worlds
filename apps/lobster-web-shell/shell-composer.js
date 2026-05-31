@@ -335,11 +335,6 @@ export function handleComposerInputKeydown(event) {
     !event.isComposing &&
     !event.repeat
   ) {
-    const isMobile = window.innerWidth <= 820;
-    const isSceneComposer = !!_ctx.composerInputEl?.closest(".public-square-composer, .creative-composer");
-    if (isMobile && isSceneComposer) {
-      return;
-    }
     event.preventDefault();
     event.stopPropagation();
     triggerComposerKeyboardSubmit();
