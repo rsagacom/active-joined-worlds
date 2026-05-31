@@ -19,6 +19,7 @@ node_modules/
 .DS_Store
 *.swp
 *.swo
+*.bak_*
 
 # Deployment/runtime leftovers copied into the repo during manual tests
 *.log
