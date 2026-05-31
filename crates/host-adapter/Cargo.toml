@@ -1,0 +1,10 @@
+[package]
+name = "host-adapter"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+authors.workspace = true
+
+[dependencies]
+chat-core.workspace = true
+serde = { version = "1", features = ["derive"] }

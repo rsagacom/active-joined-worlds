@@ -1,0 +1,273 @@
+import { safeLocalStorageGet, safeLocalStorageSet, translateDeliveryMode } from "./shell-shared.js";
+
+// --- module-scoped state ---
+let _authSession = {
+  challengeId: null,
+  maskedEmail: null,
+  expiresAtMs: null,
+  deliveryMode: null,
+};
+let _sessionToken = null;
+
+// --- cached DOM refs ---
+let _els = {};
+
+// --- callbacks to app.js ---
+let _callbacks = {
+  postJson: null,
+  refreshFromGateway: null,
+  persistIdentity: null,
+  userProjection: null,
+  gatewayUrl: null,
+  desiredResidentId: null,
+};
+
+/**
+ * Initialize auth module with DOM element references and required callbacks.
+ * @param {object} elMap - DOM element references
+ * @param {object} cbs   - Required callbacks { postJson, refreshFromGateway, persistIdentity, userProjection, gatewayUrl }
+ */
+export function initAuth(elMap, cbs) {
+  _els = {
+    statusEl: elMap.statusEl || null,
+    requestFormEl: elMap.requestFormEl || null,
+    deliverySelectEl: elMap.deliverySelectEl || null,
+    residentInputEl: elMap.residentInputEl || null,
+    emailInputEl: elMap.emailInputEl || null,
+    mobileInputEl: elMap.mobileInputEl || null,
+    deviceInputEl: elMap.deviceInputEl || null,
+    verifyFormEl: elMap.verifyFormEl || null,
+    challengeInputEl: elMap.challengeInputEl || null,
+    codeInputEl: elMap.codeInputEl || null,
+    loginCardEl: elMap.loginCardEl || null,
+    loginOverlayEl: elMap.loginOverlayEl || null,
+    hudLoginToggleEl: elMap.hudLoginToggleEl || null,
+  };
+  _callbacks = {
+    postJson: cbs.postJson || null,
+    refreshFromGateway: cbs.refreshFromGateway || null,
+    persistIdentity: cbs.persistIdentity || null,
+    userProjection: cbs.userProjection || null,
+    gatewayUrl: cbs.gatewayUrl || null,
+    desiredResidentId: cbs.desiredResidentId || null,
+  };
+}
+
+// --- state accessors ---
+export function getSessionToken() {
+  return _sessionToken;
+}
+
+export function getAuthSession() {
+  return _authSession;
+}
+
+export function clearSession() {
+  _sessionToken = null;
+  safeLocalStorageSet("lobster-session-token", "");
+}
+
+export function setSessionToken(token) {
+  _sessionToken = token || null;
+  safeLocalStorageSet("lobster-session-token", token || "");
+}
+
+// --- auth UI helpers ---
+export function setAuthStatus(message, isError = false) {
+  if (!_els.statusEl) return;
+  _els.statusEl.textContent = `登录状态：${message}`;
+  _els.statusEl.classList.toggle("notice-pending", isError);
+}
+
+export function currentDesiredResidentId() {
+  const value = _els.residentInputEl?.value?.trim();
+  return value || undefined;
+}
+
+export function residentGatewayLoginRequired(userProjection, gatewayUrl, senderIdentity) {
+  const isVisitor = !senderIdentity || String(senderIdentity).trim() === "访客" || !String(senderIdentity).trim();
+  return Boolean(userProjection && gatewayUrl && isVisitor);
+}
+
+export function updateResidentLoginSurface(userProjection, gatewayUrl, senderIdentity, dismissed) {
+  if (!_els.loginCardEl) return;
+  const needsLogin = Boolean(userProjection && gatewayUrl &&
+    (!senderIdentity || String(senderIdentity).trim() === "访客" || !String(senderIdentity).trim()));
+  const showOverlay = needsLogin && !dismissed;
+
+  _els.loginCardEl.classList.toggle("shell-hidden", !needsLogin);
+  _els.loginCardEl.dataset.loginState = needsLogin ? "visitor" : "signed-in";
+
+  if (_els.loginOverlayEl) {
+    _els.loginOverlayEl.classList.toggle("shell-hidden", !showOverlay);
+    _els.loginOverlayEl.setAttribute("aria-hidden", !showOverlay ? "true" : "false");
+  }
+  if (_els.hudLoginToggleEl) {
+    _els.hudLoginToggleEl.classList.toggle("shell-hidden", !(needsLogin && dismissed));
+  }
+  if (needsLogin && _els.statusEl && !_authSession.challengeId) {
+    setAuthStatus("访客模式 · 请登录后发送");
+  }
+}
+
+export function updateAuthFormState() {
+  const gatewayUrl = typeof _callbacks.gatewayUrl === "function" ? _callbacks.gatewayUrl() : null;
+  const enabled = Boolean(gatewayUrl);
+  const verifyStep = Boolean(_authSession.challengeId);
+  for (const element of [
+    _els.deliverySelectEl,
+    _els.emailInputEl,
+    _els.mobileInputEl,
+    _els.deviceInputEl,
+  ]) {
+    if (!element) continue;
+    element.disabled = !enabled || verifyStep;
+  }
+  for (const element of [_els.challengeInputEl, _els.codeInputEl]) {
+    if (!element) continue;
+    element.disabled = !enabled || !verifyStep;
+  }
+  const authRequestButton = _els.requestFormEl?.querySelector("button");
+  if (authRequestButton) authRequestButton.disabled = !enabled || verifyStep;
+  const authVerifyButton = _els.verifyFormEl?.querySelector("button");
+  if (authVerifyButton) authVerifyButton.disabled = !enabled || !verifyStep;
+  _els.requestFormEl?.classList.toggle("is-auth-verify-step", verifyStep);
+  _els.verifyFormEl?.classList.toggle("shell-hidden", !verifyStep);
+  if (_els.requestFormEl) {
+    _els.requestFormEl.dataset.authStep = verifyStep ? "verify" : "request";
+  }
+  if (_els.verifyFormEl) {
+    _els.verifyFormEl.dataset.authStep = verifyStep ? "verify" : "request";
+  }
+}
+
+// --- persistence ---
+export function loadAuthDraft() {
+  const email = safeLocalStorageGet("lobster-auth-email");
+  const mobile = safeLocalStorageGet("lobster-auth-mobile");
+  const resident = safeLocalStorageGet("lobster-auth-resident-id");
+  const challengeId = safeLocalStorageGet("lobster-auth-challenge-id");
+  const maskedEmail = safeLocalStorageGet("lobster-auth-masked-email");
+  const deliveryMode = safeLocalStorageGet("lobster-auth-delivery-mode");
+  const expiresAtMsRaw = safeLocalStorageGet("lobster-auth-expires-at-ms");
+  const expiresAtMs = expiresAtMsRaw ? Number(expiresAtMsRaw) : null;
+  const savedSessionToken = safeLocalStorageGet("lobster-session-token");
+  _sessionToken = savedSessionToken || null;
+  if (_els.emailInputEl && email) _els.emailInputEl.value = email;
+  if (_els.mobileInputEl && mobile) _els.mobileInputEl.value = mobile;
+  if (_els.residentInputEl && resident) _els.residentInputEl.value = resident;
+  if (_els.challengeInputEl && challengeId) _els.challengeInputEl.value = challengeId;
+  _authSession = {
+    challengeId: challengeId || null,
+    maskedEmail: maskedEmail || null,
+    expiresAtMs: Number.isFinite(expiresAtMs) ? expiresAtMs : null,
+    deliveryMode: deliveryMode || null,
+  };
+}
+
+export function persistAuthDraft() {
+  safeLocalStorageSet("lobster-auth-resident-id", _els.residentInputEl?.value?.trim() || "");
+  safeLocalStorageSet("lobster-auth-email", _els.emailInputEl?.value?.trim() || "");
+  safeLocalStorageSet("lobster-auth-mobile", _els.mobileInputEl?.value?.trim() || "");
+  safeLocalStorageSet("lobster-auth-challenge-id", _authSession.challengeId || "");
+  safeLocalStorageSet("lobster-auth-masked-email", _authSession.maskedEmail || "");
+  safeLocalStorageSet("lobster-auth-delivery-mode", _authSession.deliveryMode || "");
+  safeLocalStorageSet(
+    "lobster-auth-expires-at-ms",
+    _authSession.expiresAtMs ? String(_authSession.expiresAtMs) : "",
+  );
+}
+
+// --- gateway auth failure ---
+export function handleGatewayAuthFailure(status) {
+  if (status !== 401 && status !== 403) return false;
+  _sessionToken = null;
+  safeLocalStorageSet("lobster-session-token", "");
+  setAuthStatus("登录已失效，请重新登录", true);
+  return true;
+}
+
+// --- OTP flow ---
+export async function requestEmailOtp() {
+  const deliveryMode = _els.deliverySelectEl?.value || "email";
+  if (deliveryMode !== "email") {
+    setAuthStatus("当前只开通邮箱验证码，请选择邮箱验证码", true);
+    return;
+  }
+  const email = _els.emailInputEl.value.trim();
+  const mobile = _els.mobileInputEl.value.trim();
+  const devicePhysicalAddress = _els.deviceInputEl.value.trim();
+  if (!email) {
+    setAuthStatus("请填写邮箱地址", true);
+    return;
+  }
+  setAuthStatus("正在检查注册句柄");
+  const preflight = await _callbacks.postJson("/v1/auth/preflight", {
+    email,
+    mobile: mobile || undefined,
+    device_physical_address: devicePhysicalAddress || undefined,
+  });
+  if (!preflight.allowed) {
+    setAuthStatus(preflight.blocked_reasons.join(" · ") || "认证预检未通过", true);
+    return;
+  }
+  setAuthStatus(`正在为 ${preflight.normalized_email || email} 申请邮箱验证码`);
+  const response = await _callbacks.postJson("/v1/auth/email-otp/request", {
+    email,
+    mobile: mobile || undefined,
+    device_physical_address: devicePhysicalAddress || undefined,
+    resident_id: _callbacks.desiredResidentId ? _callbacks.desiredResidentId() : undefined,
+  });
+  _authSession = {
+    challengeId: response.challenge_id,
+    maskedEmail: response.masked_email,
+    expiresAtMs: response.expires_at_ms,
+    deliveryMode: response.delivery_mode,
+  };
+  if (_els.challengeInputEl) _els.challengeInputEl.value = response.challenge_id;
+  if (response.dev_code && _els.codeInputEl) {
+    _els.codeInputEl.value = response.dev_code;
+  }
+  persistAuthDraft();
+  const expiresAt = new Date(response.expires_at_ms).toLocaleTimeString();
+  const deliveryNote = response.dev_code
+    ? `开发验证码已预填 · ${expiresAt} 前有效`
+    : `${translateDeliveryMode(response.delivery_mode)} · ${expiresAt} 前有效`;
+  setAuthStatus(`邮箱验证码已发往 ${response.masked_email} · ${deliveryNote}`);
+}
+
+export async function verifyEmailOtp() {
+  const challengeId = (_authSession.challengeId || _els.challengeInputEl?.value || "").trim();
+  const code = _els.codeInputEl?.value?.trim() || "";
+  if (!challengeId) {
+    setAuthStatus("请先获取邮箱验证码", true);
+    return;
+  }
+  if (!code) {
+    setAuthStatus("请填写邮箱验证码", true);
+    return;
+  }
+  setAuthStatus("正在校验邮箱验证码");
+  const response = await _callbacks.postJson("/v1/auth/email-otp/verify", {
+    challenge_id: challengeId,
+    code,
+    resident_id: _callbacks.desiredResidentId ? _callbacks.desiredResidentId() : undefined,
+  });
+  if (_callbacks.persistIdentity) {
+    _callbacks.persistIdentity(response.resident_id);
+  }
+  if (_els.residentInputEl) _els.residentInputEl.value = response.resident_id;
+  _sessionToken = response.session_token || null;
+  safeLocalStorageSet("lobster-session-token", _sessionToken || "");
+  _authSession = {
+    challengeId: null,
+    maskedEmail: response.email_masked,
+    expiresAtMs: null,
+    deliveryMode: null,
+  };
+  if (_els.challengeInputEl) _els.challengeInputEl.value = "";
+  if (_els.codeInputEl) _els.codeInputEl.value = "";
+  persistAuthDraft();
+  await _callbacks.refreshFromGateway();
+  setAuthStatus(`已登录为 ${response.resident_id} · ${response.email_masked}`);
+}

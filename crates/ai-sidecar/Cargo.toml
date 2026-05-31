@@ -1,0 +1,6 @@
+[package]
+name = "ai-sidecar"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+authors.workspace = true

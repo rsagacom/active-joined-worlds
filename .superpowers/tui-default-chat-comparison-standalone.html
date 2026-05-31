@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>lobster-chat TUI 默认聊天页对比</title>
+  <style>
+    :root {
+      --bg: #0d0b12;
+      --panel: #17131f;
+      --panel-2: #1f1829;
+      --text: #f2edf8;
+      --muted: #9d92b3;
+      --line: #352b44;
+      --gold: #f0d88a;
+      --cyan: #83c9ea;
+      --pink: #d48fd2;
+      --green: #7bc38b;
+      --bad: #ff908f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #1d1528 0%, var(--bg) 55%);
+      color: var(--text);
+    }
+    .page {
+      max-width: 1500px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+    h1 { margin: 0 0 8px; font-size: 28px; }
+    .subtitle { color: var(--muted); margin-bottom: 20px; }
+    .split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+    .card {
+      background: rgba(21, 17, 29, 0.92);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    }
+    .card-header {
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--line);
+      font-weight: 700;
+    }
+    .card-body { padding: 18px; }
+    .tui {
+      background: #120f18;
+      border: 1px solid #2f2840;
+      border-radius: 12px;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .topline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .chip {
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #121212;
+    }
+    .chip.gold { background: var(--gold); }
+    .chip.cyan { background: var(--cyan); }
+    .chip.green { background: var(--green); }
+    .chip.pink { background: var(--pink); }
+    .chip.gray { background: #788099; color: #111; }
+    .grid {
+      display: grid;
+      grid-template-columns: 170px 1fr;
+      gap: 10px;
+    }
+    .panel {
+      border: 1px solid #3a314b;
+      border-radius: 10px;
+      padding: 8px;
+    }
+    .panel-title {
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+    .nav-item { margin-bottom: 6px; }
+    .nav-active { color: #111; background: var(--gold); border-radius: 8px; padding: 6px 8px; }
+    .nav-sel { color: var(--cyan); }
+    .nav-idle { color: #9aa0b1; }
+    .scene-grid {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 2px;
+      background: #0b0a0f;
+      padding: 8px;
+      border-radius: 8px;
+    }
+    .px { height: 18px; }
+    .wall { background: #4b4f58; }
+    .window { background: #79d4ee; }
+    .lamp { background: #e9cb4d; }
+    .wood { background: #8d6a42; }
+    .sofa { background: #b56da0; }
+    .floor { background: #7d5d36; }
+    .line { border-top: 1px solid #32293f; margin: 12px 0; }
+    .msg { margin-bottom: 10px; color: #d8d0e4; }
+    .msg strong { color: var(--text); }
+    .input {
+      background: #18131f;
+      border: 1px solid #3a314b;
+      border-radius: 10px;
+      padding: 10px;
+      margin-top: 10px;
+    }
+    .context-strip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #21192b;
+      border: 1px solid #3e2c52;
+      border-radius: 10px;
+      padding: 8px 10px;
+      margin-bottom: 10px;
+    }
+    .mini-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 10px);
+      gap: 1px;
+    }
+    .mini-grid .px { width: 10px; height: 10px; }
+    .bullet-list { margin: 14px 0 0; padding-left: 18px; color: #d4ccdf; }
+    .bullet-list li { margin-bottom: 8px; }
+    .footer {
+      margin-top: 20px;
+      padding: 14px 18px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(22, 18, 30, 0.92);
+    }
+    .choice {
+      display: inline-block;
+      padding: 10px 14px;
+      margin-right: 10px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+    }
+    @media (max-width: 1100px) {
+      .split { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>lobster-chat TUI 默认聊天页对比</h1>
+    <div class="subtitle">左边是当前问题结构，右边是按像素画布方向收敛后的默认聊天页。目标不是“更花”，而是“聊天重新成为主位”。</div>
+
+    <div class="split">
+      <section class="card">
+        <div class="card-header">当前：强主景 + 强 chrome + 聊天退后</div>
+        <div class="card-body">
+          <div class="tui">
+            <div class="topline">
+              <span class="chip gold">城邦像素终端</span>
+              <span class="chip cyan">房内 / 同窗牌</span>
+              <span class="chip green">居民位</span>
+              <span style="color:#8c93a8">▚A 地图▞ ▚B 委托▞</span>
+            </div>
+
+            <div class="grid">
+              <div class="panel">
+                <div class="panel-title">门牌簿</div>
+                <div class="nav-item nav-active">▶ 01 第一城大厅</div>
+                <div class="nav-item nav-sel">▷ 02 私帖 guide</div>
+                <div class="nav-item nav-idle">· 03 钟塔</div>
+                <div class="nav-item nav-idle">· 04 许愿井</div>
+              </div>
+
+              <div>
+                <div class="panel">
+                  <div class="panel-title">房间主景 · 已入 · 第一城大厅</div>
+                  <div class="scene-grid">
+                    <div class="px wall"></div><div class="px window"></div><div class="px window"></div><div class="px wall"></div><div class="px lamp"></div><div class="px wall"></div><div class="px wood"></div><div class="px wood"></div><div class="px wall"></div><div class="px wall"></div>
+                    <div class="px wall"></div><div class="px floor"></div><div class="px floor"></div><div class="px floor"></div><div class="px floor"></div><div class="px floor"></div><div class="px floor"></div><div class="px floor"></div><div class="px floor"></div><div class="px wall"></div>
+                    <div class="px wall"></div><div class="px floor"></div><div class="px sofa"></div><div class="px sofa"></div><div class="px floor"></div><div class="px floor"></div><div class="px floor"></div><div class="px lamp"></div><div class="px floor"></div><div class="px wall"></div>
+                  </div>
+                </div>
+                <div class="panel" style="margin-top:10px; min-height:150px;">
+                  <div class="panel-title">房间回声墙</div>
+                  <div class="msg"><strong>guide：</strong>今晚先回大厅，再拆默认页。</div>
+                  <div class="msg"><strong>you：</strong>我现在看到的是一堆块，不像聊天器。</div>
+                  <div class="msg"><strong>system：</strong>连接正常 · 已入 第一城大厅</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="input">
+              <div class="panel-title">房内落字栏</div>
+              <div>&gt; 输入正文……</div>
+            </div>
+          </div>
+
+          <ul class="bullet-list">
+            <li>主景卡常驻，占走聊天高度。</li>
+            <li>顶部和侧栏符号化装饰太多，阅读重心发散。</li>
+            <li>像素块承担了主视觉，但没有承载关键决策信息。</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">建议：像素画布退到上下文层，聊天成为唯一主位</div>
+        <div class="card-body">
+          <div class="tui">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;">
+              <div style="font-weight:700;color:var(--gold);">第一城大厅</div>
+              <div style="color:var(--muted);">居民位 · 已合线 · 住客 12</div>
+            </div>
+
+            <div class="grid">
+              <div style="border-right:1px solid #332d42;padding-right:10px;">
+                <div class="panel-title">会话</div>
+                <div class="nav-item" style="color:var(--gold);">▶ 第一城大厅</div>
+                <div class="nav-item" style="color:var(--pink);">@ guide</div>
+                <div class="nav-item nav-idle">钟塔提醒</div>
+                <div class="nav-item nav-idle">许愿井草稿</div>
+              </div>
+
+              <div>
+                <div class="context-strip">
+                  <div class="mini-grid">
+                    <div class="px wall"></div><div class="px wall"></div><div class="px window"></div><div class="px window"></div><div class="px lamp"></div><div class="px wall"></div>
+                    <div class="px floor"></div><div class="px floor"></div><div class="px sofa"></div><div class="px sofa"></div><div class="px floor"></div><div class="px floor"></div>
+                  </div>
+                  <div>
+                    <div style="color:var(--text);">房内夜灯未灭，guide 在线。</div>
+                    <div style="color:var(--muted);font-size:12px;">像素感只留在上下文条，不再让主景卡吞掉聊天空间。</div>
+                  </div>
+                </div>
+
+                <div class="panel" style="min-height:190px;">
+                  <div class="panel-title">聊天</div>
+                  <div class="msg"><strong>guide：</strong>今晚先把默认聊天页收回来，像素感只留在上下文层。</div>
+                  <div class="msg"><strong>you：</strong>这样才像 IM，不像一张拼贴图。</div>
+                  <div class="msg"><strong>system：</strong>scene strip 已同步，消息区保持主位。</div>
+                </div>
+
+                <div class="input">
+                  <div class="panel-title">输入</div>
+                  <div>&gt; 在第一城大厅输入正文……</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <ul class="bullet-list">
+            <li>像素画布缩成上下文条，只负责氛围和场景摘要。</li>
+            <li>时间线成为唯一主位，输入区稳定钉在底部。</li>
+            <li>会话栏回到单行高信息密度，不再默认卡片化。</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+
+    <div class="footer">
+      <div style="margin-bottom:10px;">看完后你只需要告诉我一件事：</div>
+      <span class="choice">A：按右侧“默认聊天优先”推进</span>
+      <span class="choice">B：继续保留强主景，只做减噪</span>
+    </div>
+  </div>
+</body>
+</html>

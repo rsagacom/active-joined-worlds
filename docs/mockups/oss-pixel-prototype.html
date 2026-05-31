@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>lobster-chat OSS Pixel Prototype</title>
+    <link
+      rel="stylesheet"
+      href="../../apps/lobster-web-shell/node_modules/rpgui/rpgui.css"
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #140f12;
+      }
+
+      body {
+        font-family: "Press Start 2P", monospace;
+        color: #f5e6c8;
+      }
+
+      .rpgui-content {
+        padding: 14px 18px 20px;
+      }
+
+      .masthead {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+
+      .masthead-copy {
+        display: grid;
+        gap: 4px;
+      }
+
+      .eyebrow {
+        color: #cdb482;
+        font-size: 10px;
+      }
+
+      .title {
+        color: #f7d45d;
+        font-size: 20px;
+      }
+
+      .subtitle {
+        color: #d8c9aa;
+        font-size: 11px;
+        line-height: 1.5;
+        max-width: 920px;
+      }
+
+      .tabs {
+        display: flex;
+        gap: 10px;
+      }
+
+      .tabs .rpgui-button {
+        min-width: 150px;
+      }
+
+      .top-pills {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+      }
+
+      .pill {
+        padding: 9px 12px;
+        border: 2px solid #6f5f4b;
+        background: #231b20;
+        color: #d9c89f;
+        font-size: 10px;
+      }
+
+      .shell {
+        display: grid;
+        grid-template-columns: 180px minmax(0, 1fr) 270px;
+        gap: 12px;
+        align-items: stretch;
+      }
+
+      .scene-city.shell {
+        grid-template-columns: minmax(0, 1fr) 270px;
+      }
+
+      .scene-city .left-rail {
+        display: none;
+      }
+
+      .left-rail,
+      .stage-shell,
+      .right-card,
+      .transcript-shell,
+      .input-shell {
+        position: relative;
+      }
+
+      .left-rail .rpgui-container,
+      .stage-shell .rpgui-container,
+      .right-card .rpgui-container,
+      .transcript-shell .rpgui-container,
+      .input-shell .rpgui-container {
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        position: relative;
+      }
+
+      .left-rail .rpgui-container {
+        min-height: 548px;
+        padding: 18px 14px;
+        background: #6e5b48;
+      }
+
+      .left-title,
+      .stage-title,
+      .card-title,
+      .transcript-title {
+        color: #f6d978;
+        font-size: 12px;
+        margin-bottom: 12px;
+      }
+
+      .menu {
+        display: grid;
+        gap: 10px;
+      }
+
+      .menu-item {
+        padding: 14px 14px;
+        border: 2px solid #8b785d;
+        background: rgba(255, 247, 217, 0.18);
+        color: #1c1510;
+        font-size: 12px;
+      }
+
+      .menu-item.active {
+        background: rgba(255, 236, 178, 0.94);
+        font-weight: 700;
+      }
+
+      .main-stack {
+        display: grid;
+        grid-template-rows: 548px 210px 92px;
+        gap: 12px;
+      }
+
+      .stage-shell .rpgui-container,
+      .right-card .rpgui-container,
+      .transcript-shell .rpgui-container,
+      .input-shell .rpgui-container {
+        background: #121014;
+      }
+
+      .stage-shell .rpgui-container {
+        padding: 14px;
+        position: relative;
+      }
+
+      .phaser-host {
+        width: 100%;
+        height: calc(100% - 24px);
+        overflow: hidden;
+        background: #09070c;
+      }
+
+      .phaser-host canvas {
+        display: block;
+        margin: 0 auto;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+
+      .scene-overlay {
+        position: absolute;
+        inset: 42px 16px 16px;
+        pointer-events: none;
+      }
+
+      .scene-label {
+        position: absolute;
+        padding: 4px 6px;
+        background: rgba(15, 12, 17, 0.88);
+        border: 1px solid rgba(246, 217, 120, 0.42);
+        color: #f6d978;
+        font-size: 9px;
+        line-height: 1;
+      }
+
+      .scene-home .city-label {
+        display: none;
+      }
+
+      .label-palace { top: 24px; left: 47%; transform: translateX(-50%); }
+      .label-residents-left { bottom: 96px; left: 86px; }
+      .label-residents-right { bottom: 100px; right: 126px; }
+      .label-tower { top: 56px; right: 92px; }
+      .label-portal { top: 118px; right: 74px; animation: portalPulse 1.4s steps(2) infinite; }
+
+      @keyframes portalPulse {
+        0%, 100% { transform: scale(1); opacity: 0.92; }
+        50% { transform: scale(1.06); opacity: 1; }
+      }
+
+      .right-card .rpgui-container {
+        min-height: 548px;
+        padding: 14px;
+      }
+
+      .portrait-host {
+        width: 100%;
+        height: 180px;
+        margin-bottom: 14px;
+        background: #0c0910;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .portrait-host svg {
+        width: 100%;
+        height: 100%;
+        display: block;
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+      }
+
+      .scene-city .portrait-host {
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' fill='%23100c11'/><rect x='28' y='14' width='40' height='18' fill='%23b75055'/><rect x='38' y='8' width='20' height='10' fill='%23efcb73'/><rect x='24' y='28' width='48' height='42' fill='%23f1d3a3'/><rect x='28' y='40' width='10' height='8' fill='%23181319'/><rect x='58' y='40' width='10' height='8' fill='%23181319'/><rect x='36' y='56' width='20' height='8' fill='%238b5331'/><rect x='18' y='68' width='60' height='16' fill='%237c2430'/></svg>");
+        background-size: 160px 160px;
+        background-repeat: no-repeat;
+        background-position: center;
+      }
+
+      .scene-home .portrait-host {
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect width='96' height='96' fill='%23100c11'/><rect x='24' y='18' width='48' height='18' fill='%235b8dcf'/><rect x='26' y='30' width='44' height='38' fill='%23f2d1a2'/><rect x='34' y='42' width='10' height='8' fill='%23181319'/><rect x='54' y='42' width='10' height='8' fill='%23181319'/><rect x='40' y='56' width='14' height='8' fill='%238d5343'/><rect x='18' y='68' width='60' height='18' fill='%234d6578'/></svg>");
+        background-size: 160px 160px;
+        background-repeat: no-repeat;
+        background-position: center;
+      }
+
+      .meta {
+        display: grid;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .meta-line {
+        font-size: 11px;
+        line-height: 1.45;
+        color: #ecd9ad;
+      }
+
+      .meta-line strong {
+        color: #f6d978;
+      }
+
+      .action-row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .action-row .rpgui-button {
+        min-width: 92px;
+      }
+
+      .transcript-shell .rpgui-container {
+        padding: 12px 14px;
+      }
+
+      .log {
+        display: grid;
+        gap: 9px;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      .sys {
+        color: #f5dfb0;
+      }
+
+      .npc {
+        color: #90d0f3;
+      }
+
+      .lord {
+        color: #a9d28c;
+      }
+
+      .user {
+        color: #f4e7cf;
+      }
+
+      .input-shell .rpgui-container {
+        padding: 14px;
+      }
+
+      .composer {
+        display: grid;
+        grid-template-columns: 1fr 140px;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .composer textarea {
+        width: 100%;
+        min-height: 56px;
+        resize: none;
+      }
+
+      .scene-home .left-rail .rpgui-container {
+        background: #5d4435;
+      }
+
+      @media (max-width: 1240px) {
+        .shell {
+          grid-template-columns: 1fr;
+        }
+
+        .main-stack {
+          grid-template-rows: 548px 210px 92px;
+        }
+      }
+    </style>
+    <script src="../../apps/lobster-web-shell/node_modules/phaser/dist/phaser.js"></script>
+    <script src="../../apps/lobster-web-shell/node_modules/rpgui/rpgui.min.js"></script>
+  </head>
+  <body>
+    <div class="rpgui-content">
+      <div class="masthead">
+        <div class="masthead-copy">
+          <div class="eyebrow">OSS-backed prototype</div>
+          <div class="title">lobster-chat</div>
+          <div class="subtitle">
+            这版直接使用开源像素代码：`RPGUI` 负责面板和按钮，`Phaser` 负责场景与立绘承载。
+            `TUI` 后续只保留输入与消息壳，不再伪造像素主景。
+          </div>
+        </div>
+        <div class="tabs">
+          <button class="rpgui-button golden" type="button" data-scene="city"><p>城市公共页</p></button>
+          <button class="rpgui-button" type="button" data-scene="home"><p>住宅私聊页</p></button>
+        </div>
+      </div>
+
+      <div class="top-pills">
+        <div class="pill">TUI 壳：会话 / 消息 / 输入</div>
+        <div class="pill">RPGUI：frame / button / card</div>
+        <div class="pill">Phaser：scene / portrait / tilemap</div>
+      </div>
+
+      <div class="shell scene-city" id="appShell">
+        <aside class="left-rail">
+          <div class="rpgui-container framed-golden-2">
+            <div class="left-title" id="leftTitle">城内目录</div>
+            <div class="menu" id="menu"></div>
+          </div>
+        </aside>
+
+        <section class="main-stack">
+          <div class="stage-shell">
+            <div class="rpgui-container framed-golden">
+              <div class="stage-title" id="stageTitle">第一城 / 公共频道</div>
+              <div class="phaser-host" id="stageHost"></div>
+              <div class="scene-overlay">
+                <div class="scene-label city-label label-palace">城主府</div>
+                <div class="scene-label city-label label-residents-left">居民区</div>
+                <div class="scene-label city-label label-residents-right">居民区</div>
+                <div class="scene-label city-label label-tower">钟塔</div>
+                <div class="scene-label city-label label-portal">传送阵</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="transcript-shell">
+            <div class="rpgui-container framed">
+              <div class="transcript-title" id="transcriptTitle">第一城 - 公共频道</div>
+              <div class="log" id="log"></div>
+            </div>
+          </div>
+
+          <div class="input-shell">
+            <div class="rpgui-container framed-grey">
+              <div class="composer">
+                <textarea id="inputBox">可以描述任务或提出任何问题，按 Enter 发送…</textarea>
+                <button class="rpgui-button golden" type="button"><p>发送</p></button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="right-card">
+          <div class="rpgui-container framed-golden">
+            <div class="card-title" id="cardTitle">角色资料 / 状态</div>
+            <div class="portrait-host" id="portraitHost"></div>
+            <div class="meta" id="meta"></div>
+            <div class="action-row" id="actions"></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+
+    <script>
+      const scenes = {
+        city: {
+          leftTitle: "城内目录",
+          stageTitle: "第一城 / 公共频道",
+          transcriptTitle: "第一城 - 公共频道",
+          cardTitle: "角色资料 / 状态",
+          menu: ["搜索", "消息", "定时任务", "灵感广场"],
+          meta: [
+            ["角色", "城市向导"],
+            ["称号", "公共频道引路"],
+            ["当前", "第一城大厅"],
+            ["状态", "正常"]
+          ],
+          actions: ["私聊", "委托", "交易"],
+          log: [
+            ["sys", "<系统> 欢迎来到第一城。"],
+            ["npc", "<居民_阿尔法> 今天市场那边很热闹。"],
+            ["lord", "<城主_奥瑞利安> 傍晚前会有商队进城。"],
+            ["user", "<玩家_tiyan> 收到，我先去钟塔那边看看。"]
+          ],
+          input: "可以描述任务或提出任何问题，按 Enter 发送…"
+        },
+        home: {
+          leftTitle: "居所侧栏",
+          stageTitle: "新手居所 / 私聊",
+          transcriptTitle: "新手居所 - guide 私聊",
+          cardTitle: "房内状态",
+          menu: ["续聊", "整理", "住户档", "灯火"],
+          meta: [
+            ["住户", "tiyan"],
+            ["同住AI", "guide"],
+            ["当前", "新手居所"],
+            ["状态", "房内连线"]
+          ],
+          actions: ["续聊", "整理", "留条"],
+          log: [
+            ["sys", "<系统> 住宅私聊已接通。"],
+            ["npc", "<guide> 先把今天的想法说出来，我帮你整理。"],
+            ["user", "<tiyan> 先记三件事：剧情、功能、部署。"],
+            ["npc", "<guide> 好，我先给你拆成小任务。"]
+          ],
+          input: "继续聊、记任务、问问题，按 Enter 发送…"
+        }
+      };
+
+      let current = "city";
+      let stageGame;
+
+      function makeMenu(items) {
+        return items.map((label, index) => `
+          <div class="menu-item ${index === 1 ? "active" : ""}">${label}</div>
+        `).join("");
+      }
+
+      function makeActions(items) {
+        return items.map((label, index) => `
+          <button class="rpgui-button ${index === 0 ? "golden" : ""}" type="button"><p>${label}</p></button>
+        `).join("");
+      }
+
+      function makeLog(items) {
+        return items.map(([cls, text]) => `<div class="${cls}">${text}</div>`).join("");
+      }
+
+      function renderUI(name) {
+        current = name;
+        const cfg = scenes[name];
+        document.getElementById("appShell").className = `shell scene-${name}`;
+        document.getElementById("leftTitle").textContent = cfg.leftTitle;
+        document.getElementById("stageTitle").textContent = cfg.stageTitle;
+        document.getElementById("transcriptTitle").textContent = cfg.transcriptTitle;
+        document.getElementById("cardTitle").textContent = cfg.cardTitle;
+        document.getElementById("menu").innerHTML = makeMenu(cfg.menu);
+        document.getElementById("meta").innerHTML = cfg.meta
+          .map(([k, v]) => `<div class="meta-line"><strong>${k}</strong>：${v}</div>`)
+          .join("");
+        document.getElementById("actions").innerHTML = makeActions(cfg.actions);
+        document.getElementById("log").innerHTML = makeLog(cfg.log);
+        document.getElementById("inputBox").value = cfg.input;
+      }
+
+      function tileRect(graphics, x, y, w, h, color) {
+        graphics.fillStyle(color, 1);
+        graphics.fillRect(x, y, w, h);
+      }
+
+      function drawCity(graphics) {
+        graphics.clear();
+        tileRect(graphics, 0, 0, 256, 144, 0x0b0910);
+        tileRect(graphics, 0, 114, 256, 30, 0x17161d);
+
+        for (let i = 0; i < 9; i++) {
+          tileRect(graphics, 6 + i * 7, 18 + i * 12, 3, 12, 0x388df7);
+          tileRect(graphics, 220 + (i % 2) * 4 - i * 5, 16 + i * 10, 3, 12, 0x388df7);
+        }
+
+        for (let i = 0; i < 8; i++) {
+          tileRect(graphics, 18 + i * 13, 24 + (i % 3) * 8, 4, 12, 0x3b8f52);
+          tileRect(graphics, 194 + i * 6, 16 + (i % 4) * 7, 4, 10, 0x8f9098);
+        }
+
+        tileRect(graphics, 48, 28, 132, 72, 0x6f7079);
+        graphics.lineStyle(2, 0xe9dcc1, 1);
+        graphics.strokeRect(48, 28, 132, 72);
+
+        tileRect(graphics, 86, 34, 56, 30, 0xf4e5c2);
+        tileRect(graphics, 96, 26, 36, 16, 0xc85649);
+        tileRect(graphics, 104, 22, 20, 10, 0xd36a4d);
+        tileRect(graphics, 112, 48, 6, 16, 0x6f4a2e);
+        tileRect(graphics, 122, 48, 6, 16, 0x6f4a2e);
+
+        for (let i = 0; i < 4; i++) {
+          tileRect(graphics, 60 + i * 14, 72, 10, 12, 0x8f6440);
+          tileRect(graphics, 60 + i * 14, 66, 10, 6, 0xd3b28b);
+        }
+
+        for (let i = 0; i < 4; i++) {
+          tileRect(graphics, 132 + i * 14, 72, 10, 12, 0x8f6440);
+          tileRect(graphics, 132 + i * 14, 66, 10, 6, 0xd3b28b);
+        }
+
+        tileRect(graphics, 92, 84, 44, 8, 0xd9c48d);
+        tileRect(graphics, 108, 84, 8, 42, 0xd9c48d);
+        tileRect(graphics, 100, 118, 24, 14, 0xd9c48d);
+        graphics.lineStyle(2, 0x8a7a52, 1);
+        graphics.strokeRect(100, 118, 24, 14);
+
+        tileRect(graphics, 164, 44, 10, 24, 0xb6b7be);
+        tileRect(graphics, 166, 34, 6, 12, 0xe7dcae);
+        tileRect(graphics, 160, 72, 18, 8, 0x6f7079);
+
+        tileRect(graphics, 184, 78, 14, 16, 0x61317f);
+        tileRect(graphics, 187, 81, 8, 10, 0xcf82ff);
+        tileRect(graphics, 180, 94, 22, 4, 0xa55de1);
+      }
+
+      function drawHome(graphics) {
+        graphics.clear();
+        tileRect(graphics, 0, 0, 256, 144, 0x1a1114);
+        tileRect(graphics, 0, 0, 256, 92, 0x745033);
+        tileRect(graphics, 0, 92, 256, 52, 0x513121);
+
+        tileRect(graphics, 16, 18, 70, 54, 0x8e6a4c);
+        graphics.lineStyle(2, 0xe0c792, 1);
+        graphics.strokeRect(16, 18, 70, 54);
+        tileRect(graphics, 28, 28, 32, 20, 0xf0ead5);
+        tileRect(graphics, 40, 72, 10, 14, 0x201814);
+
+        tileRect(graphics, 102, 20, 54, 34, 0x8e6848);
+        tileRect(graphics, 118, 30, 20, 12, 0xe6cf97);
+        tileRect(graphics, 110, 66, 32, 16, 0xcf9f79);
+
+        tileRect(graphics, 166, 58, 48, 22, 0xd9bf95);
+        tileRect(graphics, 174, 52, 34, 10, 0xae7d59);
+        tileRect(graphics, 220, 22, 24, 62, 0xab8d6e);
+        tileRect(graphics, 224, 30, 16, 12, 0xf2e8d2);
+        tileRect(graphics, 224, 50, 16, 28, 0xdab482);
+
+        tileRect(graphics, 154, 92, 70, 8, 0xebd6a2);
+        tileRect(graphics, 34, 92, 58, 8, 0xebd6a2);
+        tileRect(graphics, 34, 100, 8, 30, 0xebd6a2);
+        tileRect(graphics, 84, 100, 8, 30, 0xebd6a2);
+        tileRect(graphics, 136, 62, 10, 28, 0xeaa352);
+        tileRect(graphics, 139, 54, 4, 8, 0xffe58d);
+      }
+
+      function drawGuidePortrait(graphics) {
+        graphics.clear();
+        tileRect(graphics, 0, 0, 96, 96, 0x100c11);
+        tileRect(graphics, 28, 14, 40, 18, 0xb75055);
+        tileRect(graphics, 38, 8, 20, 10, 0xefcb73);
+        tileRect(graphics, 24, 28, 48, 42, 0xf1d3a3);
+        tileRect(graphics, 28, 40, 10, 8, 0x181319);
+        tileRect(graphics, 58, 40, 10, 8, 0x181319);
+        tileRect(graphics, 36, 56, 20, 8, 0x8b5331);
+        tileRect(graphics, 18, 68, 60, 16, 0x7c2430);
+      }
+
+      function drawResidentPortrait(graphics) {
+        graphics.clear();
+        tileRect(graphics, 0, 0, 96, 96, 0x100c11);
+        tileRect(graphics, 24, 18, 48, 18, 0x5b8dcf);
+        tileRect(graphics, 26, 30, 44, 38, 0xf2d1a2);
+        tileRect(graphics, 34, 42, 10, 8, 0x181319);
+        tileRect(graphics, 54, 42, 10, 8, 0x181319);
+        tileRect(graphics, 40, 56, 14, 8, 0x8d5343);
+        tileRect(graphics, 18, 68, 60, 18, 0x4d6578);
+      }
+
+      function mountPhaserStage() {
+        if (stageGame) stageGame.destroy(true);
+        stageGame = new Phaser.Game({
+          type: Phaser.CANVAS,
+          parent: "stageHost",
+          width: 256,
+          height: 144,
+          backgroundColor: "#09070c",
+          pixelArt: true,
+          scale: {
+            mode: Phaser.Scale.FIT,
+            autoCenter: Phaser.Scale.CENTER_BOTH
+          },
+          scene: {
+            create() {
+              const g = this.add.graphics();
+              if (current === "city") {
+                drawCity(g);
+              } else {
+                drawHome(g);
+              }
+            }
+          }
+        });
+
+      }
+
+      function renderPortrait(name) {
+        const host = document.getElementById("portraitHost");
+        host.innerHTML = "";
+        if (name === "city") {
+          host.innerHTML = `
+            <svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" aria-label="城市向导像素立绘">
+              <rect width="96" height="96" fill="#100c11"/>
+              <rect x="28" y="14" width="40" height="18" fill="#b75055"/>
+              <rect x="38" y="8" width="20" height="10" fill="#efcb73"/>
+              <rect x="24" y="28" width="48" height="42" fill="#f1d3a3"/>
+              <rect x="28" y="40" width="10" height="8" fill="#181319"/>
+              <rect x="58" y="40" width="10" height="8" fill="#181319"/>
+              <rect x="36" y="56" width="20" height="8" fill="#8b5331"/>
+              <rect x="18" y="68" width="60" height="16" fill="#7c2430"/>
+            </svg>
+          `;
+        } else {
+          host.innerHTML = `
+            <svg viewBox="0 0 96 96" xmlns="http://www.w3.org/2000/svg" aria-label="住户像素立绘">
+              <rect width="96" height="96" fill="#100c11"/>
+              <rect x="24" y="18" width="48" height="18" fill="#5b8dcf"/>
+              <rect x="26" y="30" width="44" height="38" fill="#f2d1a2"/>
+              <rect x="34" y="42" width="10" height="8" fill="#181319"/>
+              <rect x="54" y="42" width="10" height="8" fill="#181319"/>
+              <rect x="40" y="56" width="14" height="8" fill="#8d5343"/>
+              <rect x="18" y="68" width="60" height="18" fill="#4d6578"/>
+            </svg>
+          `;
+        }
+      }
+
+      function render(name) {
+        renderUI(name);
+        renderPortrait(name);
+        mountPhaserStage();
+        document.querySelectorAll("[data-scene]").forEach((button) => {
+          const on = button.dataset.scene === name;
+          button.classList.toggle("golden", on);
+        });
+      }
+
+      document.querySelectorAll("[data-scene]").forEach((button) => {
+        button.addEventListener("click", () => render(button.dataset.scene));
+      });
+
+      render("city");
+    </script>
+  </body>
+</html>

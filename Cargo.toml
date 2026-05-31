@@ -1,0 +1,27 @@
+[workspace]
+members = [
+  "crates/chat-core",
+  "crates/chat-storage",
+  "crates/host-adapter",
+  "crates/transport-waku",
+  "crates/crypto-mls",
+  "crates/ai-sidecar",
+  "apps/lobster-cli",
+  "apps/lobster-tui",
+  "apps/lobster-waku-gateway",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+version = "0.1.0"
+authors = ["Rsaga"]
+
+[workspace.dependencies]
+chat-core = { path = "crates/chat-core" }
+chat-storage = { path = "crates/chat-storage" }
+host-adapter = { path = "crates/host-adapter" }
+transport-waku = { path = "crates/transport-waku" }
+crypto-mls = { path = "crates/crypto-mls" }
+ai-sidecar = { path = "crates/ai-sidecar" }

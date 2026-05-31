@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact",
+        "description": "注入 SDLC 阶段上下文，根据 source 定制恢复信息",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "description": "每次用户提交时注入阶段提醒，防止长对话漂移",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/user-prompt-submit.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "description": "P2 前拦截代码文件写入",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check-phase-write.sh",
+            "timeout": 3,
+            "statusMessage": "检查写入权限..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "description": "P3 前拦截测试命令，P5 前拦截 git 提交",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/check-phase-test.sh",
+            "timeout": 3,
+            "statusMessage": "检查命令权限..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "description": "文件修改后提醒更新 project-state.md",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"SDLC 提醒：文件已修改。请用 Edit 更新 .claude/project-state.md：将修改的文件路径追加到 modified_files（如未列出），并更新 last_updated。这是强制要求，不可跳过。\"}}'",
+            "timeout": 3,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "description": "回复后轻量自检，注入阶段提醒",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/stop-check.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "description": "压缩前检查状态完整性，注入紧急保存提醒",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-compact.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "description": "子 Agent 启动时注入 SDLC 阶段+PRD+工具限制",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/subagent-start.sh",
+            "timeout": 5,
+            "statusMessage": "注入 SDLC 上下文..."
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "description": "子任务完成时提醒验证合规性",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/task-completed.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "description": "子 Agent 完成时验证输出质量",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/subagent-stop.sh",
+            "timeout": 5,
+            "statusMessage": "验证子 Agent 输出..."
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "description": "工具失败后注入恢复建议",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-tool-failure.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "description": "按 SDLC 阶段自动决策权限请求",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/permission-request.sh",
+            "timeout": 5,
+            "statusMessage": "SDLC 权限决策..."
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "description": "会话结束时归档状态摘要",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-end.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Edit(./.env)",
+      "Edit(./.env.*)",
+      "Write(./.env)",
+      "Write(./.env.*)"
+    ],
+    "allow": [
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git branch)",
+      "Bash(git branch --list *)",
+      "Bash(git stash *)",
+      "Bash(npm run lint *)",
+      "Bash(npm run lint)",
+      "Bash(npm run build *)",
+      "Bash(npm run build)",
+      "Bash(npx eslint *)",
+      "Bash(npx tsc *)",
+      "Bash(npm test *)",
+      "Bash(npm test)",
+      "Bash(npx vitest *)",
+      "Bash(npx jest *)",
+      "Bash(npx mocha *)",
+      "Bash(pytest *)",
+      "Bash(go test *)",
+      "Bash(cargo test *)",
+      "Read(*)",
+      "Glob(*)",
+      "Grep(*)"
+    ],
+    "ask": [
+      "Bash(rm -rf *)",
+      "Bash(git push --force *)",
+      "Bash(git reset --hard *)",
+      "Bash(git branch -D *)"
+    ],
+    "defaultMode": "default"
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/statusline.sh",
+    "padding": 1
+  },
+  "sandbox": {
+    "enabled": true,
+    "network": {
+      "allowedDomains": ["github.com", "*.npmjs.org", "registry.npmmirror.com", "pypi.org"]
+    }
+  },
+  "env": {
+    "SDLC_PROJECT": "true",
+    "SDLC_VERSION": "1.8.0"
+  },
+  "attribution": {
+    "commit": "Co-Authored-By: Claude (SDLC Enforced) <noreply@anthropic.com>"
+  },
+  "fileSuggestion": {
+    "type": "command",
+    "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/file-suggestion.sh"
+  },
+  "spinnerVerbs": {
+    "mode": "append",
+    "verbs": ["审查中", "编码中", "测试中", "分析需求", "设计方案", "检查合规"]
+  },
+  "language": "zh-CN"
+}

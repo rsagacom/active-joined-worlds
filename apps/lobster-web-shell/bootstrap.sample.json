@@ -1,0 +1,28 @@
+{
+  "host": {
+    "client_profile": {
+      "class": "MobileWeb",
+      "display_name": "移动网页端",
+      "max_memory_kib": 8192,
+      "supports_graphics": true,
+      "supports_voice": true,
+      "supports_camera": false,
+      "supports_background_sync": false
+    },
+    "preferred_surface": "CompactTerminal",
+    "max_inline_chars": 512,
+    "supports_push_notifications": true,
+    "supports_voice_input": true,
+    "supports_camera_ingest": false,
+    "supports_background_sync": false
+  },
+  "shell": {
+    "route_prefix": "/app",
+    "supports_offline_shell": true,
+    "storage_mode": "IndexedDbPreferred",
+    "stream_incremental_updates": true
+  },
+  "initial_surface": "RoomList",
+  "offline_cache_budget_mb": 64,
+  "supports_background_resync": false
+}
