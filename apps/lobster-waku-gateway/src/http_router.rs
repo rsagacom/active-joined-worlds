@@ -39,7 +39,7 @@ use crate::{
         handle_post_admin_unban_resident,
         handle_post_admin_unfreeze_room,
         handle_post_admin_create_invite, handle_post_admin_revoke_invite,
-        handle_post_admin_manage_room_member, handle_post_admin_handle_log,
+        handle_post_admin_manage_room_member, handle_post_admin_handle_log, handle_post_admin_clear_processed_logs,
         handle_post_cli_send, handle_post_direct_open,
         handle_post_provider_connect, handle_post_provider_disconnect, handle_post_scene_validate,
         handle_post_shell_message, handle_post_shell_message_edit,
@@ -102,6 +102,9 @@ pub(crate) fn dispatch_http_request(
         }
         (Method::Post, "/v1/admin/logs/handle") => {
             handle_post_admin_handle_log(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/admin/logs/clear") => {
+            handle_post_admin_clear_processed_logs(runtime, notifier, request)
         }
         (Method::Post, "/v1/shell/scene/validate") => {
             handle_post_scene_validate(runtime, notifier, request)

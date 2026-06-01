@@ -848,6 +848,18 @@ pub(crate) fn handle_post_admin_handle_log(
 }
 
 
+
+pub(crate) fn handle_post_admin_clear_processed_logs(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    _notifier: &Arc<GatewayStateNotifier>,
+    _request: &mut Request,
+) -> HttpResponse {
+    let mut rt = runtime.lock().expect("gateway runtime mutex");
+    let count = rt.admin_clear_processed_logs();
+    let body = serde_json::json!({"ok": true, "cleared": count}).to_string();
+    Response::from_string(body).with_status_code(StatusCode(200)).with_header(json_header())
+}
+
 pub(crate) fn handle_post_scene_validate(
     runtime: &Arc<Mutex<GatewayRuntime>>,
     _notifier: &Arc<GatewayStateNotifier>,

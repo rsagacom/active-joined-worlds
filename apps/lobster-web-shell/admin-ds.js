@@ -1438,10 +1438,8 @@
 
     var unavailableActions = [
       ['create-resident', '新建居民需要 Gateway 居民写接口接入后才能执行'],
-      ['batch-approve-messages', '批量审核需要 Gateway 审核写接口接入后才能执行'],
-      ['create-permission-group', '新建权限组需要 Gateway 权限写接口接入后才能执行'],
-        ['clear-processed-logs', '清空已处理日志需要 Gateway 日志写接口接入后才能执行']
-    ];
+        ['create-permission-group', '新建权限组需要 Gateway 权限写接口接入后才能执行'],
+        ];
     for (var i = 0; i < unavailableActions.length; i++) {
       var button = document.querySelector('[data-admin-action="' + unavailableActions[i][0] + '"]');
       markUnavailableButton(button, unavailableActions[i][1]);
@@ -1459,6 +1457,47 @@
           else { showAdminNotice('邀请码已生成: ' + r.data.code, 'success'); loadInviteCodes(); }
         }).catch(function() {
           genInviteBtn.disabled = false; genInviteBtn.textContent = '+ 生成邀请码';
+        });
+      });
+    }
+
+    // Wire batch-approve button
+    var batchApproveBtn = document.querySelector('[data-admin-action="batch-approve-messages"]');
+    if (batchApproveBtn) {
+      batchApproveBtn.addEventListener('click', function () {
+        var rows = document.querySelectorAll('[data-message-id]');
+        if (!rows.length) { showAdminNotice('没有可审核的消息', 'info'); return; }
+        if (!confirm('确定要批量通过当前可见的 ' + rows.length + ' 条消息？')) return;
+        batchApproveBtn.disabled = true; batchApproveBtn.textContent = '批量通过中...';
+        var promises = [];
+        rows.forEach(function (row) {
+          var msgId = row.dataset.messageId;
+          var convId = row.dataset.conversationId || '';
+          if (msgId) promises.push(fetchGatewayJsonPost('/v1/admin/messages/moderate', {message_id: msgId, conversation_id: convId, action: 'approved'}));
+        });
+        Promise.all(promises).then(function () {
+          batchApproveBtn.disabled = false; batchApproveBtn.textContent = '批量通过';
+          showAdminNotice('已批量通过 ' + rows.length + ' 条消息', 'success');
+          refreshCurrentMessageView();
+        }).catch(function () {
+          batchApproveBtn.disabled = false; batchApproveBtn.textContent = '批量通过';
+          showAdminNotice('批量通过部分失败', 'error');
+        });
+      });
+    }
+
+    // Wire clear-processed-logs button
+    var clearLogsBtn = document.querySelector('[data-admin-action="clear-processed-logs"]');
+    if (clearLogsBtn) {
+      clearLogsBtn.addEventListener('click', function () {
+        if (!confirm('确定要清空所有已处理的日志？')) return;
+        clearLogsBtn.disabled = true; clearLogsBtn.textContent = '清空中...';
+        fetchGatewayJsonPost('/v1/admin/logs/clear', {}).then(function (r) {
+          clearLogsBtn.disabled = false; clearLogsBtn.textContent = '清空已处理';
+          if (r.error) { showAdminNotice('清空失败: ' + r.error, 'error'); }
+          else { showAdminNotice('已清空 ' + (r.data && r.data.cleared || '') + ' 条已处理日志', 'success'); loadLogs(); }
+        }).catch(function () {
+          clearLogsBtn.disabled = false; clearLogsBtn.textContent = '清空已处理';
         });
       });
     }
