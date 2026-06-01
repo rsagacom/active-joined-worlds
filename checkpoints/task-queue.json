@@ -1,7 +1,7 @@
 {
   "version": "1",
-  "session_start": "2026-05-29",
-  "round": 17,
+  "session_start": "2026-05-31",
+  "round": 18,
   "max_rounds": 8,
   "tasks": [],
   "completed": [
@@ -84,11 +84,21 @@
       "task_id": "T017-3",
       "completed_at": "2026-05-29",
       "title": "Gateway 测试 — read 端点边界补充"
+    },
+    {
+      "task_id": "T018-1",
+      "completed_at": "2026-06-01",
+      "title": "admin-ds 消息审核写操作闭环 — POST /v1/admin/messages/moderate 前端接入"
+    },
+    {
+      "task_id": "T018-4",
+      "completed_at": "2026-06-01",
+      "title": "app.js 安全拆分 — shell-state-normalize.js 提取 (3 函数, 9 测试, -99 行)"
     }
   ],
   "test_baseline": {
-    "gateway": "173 passed / 0 failed",
-    "frontend": "526 passed / 0 failed",
+    "gateway": "176 passed / 0 failed",
+    "frontend": "538 passed / 0 failed",
     "tui": "195 passed / 0 failed"
   }
 }

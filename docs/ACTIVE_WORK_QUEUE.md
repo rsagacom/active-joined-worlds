@@ -163,6 +163,70 @@ Last updated: 2026-05-27
 4. **shell-room-rail.js 魔数整治** — roomGroupBlueprints 权重值注释 + joinOrFallback 统一
 5. **多页面 left-rail 一致性** — creative/index/unified/world-square 统一宽度/框架
 
+## 2026-05-31 / 06-01 DS v4 Pro 执行摘要
+
+### 本轮完成
+
+| 阶段 | 目标 | 状态 |
+| --- | --- | --- |
+| P0-1 | 建立 git 安全快照和备份 | 完成 |
+| P0-2 | 修正本地预览 gateway 启动 (restart-gateway.sh) | 完成 |
+| P0-3 | 修复 H5 Enter 发送策略 (统一 PC/Mobile: Enter=发送, Shift+Enter=换行) | 完成 |
+| P1-1 | admin-ds 消息审核写操作闭环 — POST /v1/admin/messages/moderate | **完成** |
+
+### P1-1 详情: 消息审核写操作闭环
+
+**后端 (上一轮已完成):**
+- `gateway_models.rs`: 新增 `AdminModerateMessageRequest` struct
+- `core_runtime.rs`: 新增 `admin_moderate_message()` 方法 + `message_moderation: HashMap<String, String>`
+- `http_write_routes.rs`: 新增 `handle_post_admin_moderate_message()` handler
+- `http_router.rs`: 注册 `POST /v1/admin/messages/moderate` 路由
+- `gateway_tests.rs`: 3 个测试 (roundtrip / invalid action / nonexistent message)
+
+**前端 (本轮完成):**
+- `admin-ds.js` `normalizeGatewayMessages()`: 保留 `message_id` 和 `conversation_id` 字段
+- `admin-ds.js`: 新增 `moderateMessage()` helper 和 `refreshCurrentMessageView()` helper
+- `admin-ds.js`: "通过"/"屏蔽" 按钮接入真实 POST (含 loading 态、失败反馈、成功后刷新)
+- `admin-ds.js`: 两处 "标记已处理" 按钮接入真实 POST
+- `admin-ds-data.js`: 新增 `approved`/`handled` 状态标签和样式
+
+### 改动文件
+
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `admin-ds.js` | 修改 | normalizeGatewayMessages 保留 ID 字段 + moderateMessage helper + 6 个按钮 wiring |
+| `admin-ds-data.js` | 修改 | msgStatusTag/msgStatusText 增加 approved/handled 条目 |
+| `restart-gateway.sh` | **新增** | Gateway 一键构建+重启+健康检查脚本 |
+
+### 测试基线
+
+- `cargo test -p lobster-waku-gateway`: **176 passed / 0 failed**
+- `npm test` (前端): **538 passed / 0 failed**
+- JS 语法检查: admin-ds.js, admin-ds-data.js 全部通过
+- E2E 验证: `POST /v1/admin/messages/moderate` 三种 action + 两种错误情况全部通过
+
+### P1-2: app.js 安全拆分 (2026-06-01)
+
+从 app.js (9119行) 提取 3 个纯数据变换函数 → `shell-state-normalize.js` (107行):
+
+| 函数 | 说明 |
+|------|------|
+| `contractConversationMap(payload)` | gateway payload → Map<conversation_id, room> |
+| `mergeRoomWithContract(room, contract)` | room 原始数据 + contract 默认值合并 |
+| `synthesizeRoomsFromContracts(payload)` | 组合上述两函数，生成完整 room 数组 |
+
+- app.js: 9119 → 9020 (-99)
+- 新增 `test/shell-state-normalize.test.mjs`: 9 个测试
+- 累计 app.js 缩减: 9847 → 9020 (-827)
+- 新增独立模块: `shell-state-normalize.js` (107行, 3 函数, 9 测试)
+
+### 仍未完成
+
+1. admin-ds 居民封禁/解禁、房间冻结/解冻仍 disabled（后端接口已有，前端未接入）
+2. admin-ds 邀请码/日志模块数据仍来自 Mock（无对应 Gateway 端点）
+3. app.js 仍有 ~9020 行，`roomMatchesSearch` (64行) 可提取但需先提取依赖函数
+4. 消息审核状态仅存于 GatewayRuntime 内存（HashMap），不持久化，重启后丢失
+
 ## 前端审计结果 (2026-05-25)
 
 - H5 `app.js` 的 `state` 变量初始化为 `structuredClone(SAMPLE_STATE)` 兜底，gateway 连接后全部来自 `normalizeShellState()`。

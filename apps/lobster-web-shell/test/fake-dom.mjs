@@ -1885,6 +1885,7 @@ async function loadShellApp(shellPage, options = {}) {
   const shellRoomRailUrl = new URL("../shell-room-rail.js", import.meta.url).href;
   const shellRoomRenderUrl = new URL("../shell-room-render.js", import.meta.url).href;
   const shellComposerUrl = new URL("../shell-composer.js", import.meta.url).href;
+  const shellStateNormalizeUrl = new URL("../shell-state-normalize.js", import.meta.url).href;
   const appSource = await fs.readFile(appPath, "utf8");
   const transformedSource = [
     "const window = globalThis.window;",
@@ -2099,6 +2100,18 @@ async function loadShellApp(shellPage, options = {}) {
   joinOrFallback,
   normalizeShellMessages,
 } from "${shellPayloadUrl}";`,
+      )
+      .replace(
+        `import {
+  contractConversationMap,
+  mergeRoomWithContract,
+  synthesizeRoomsFromContracts,
+} from "./shell-state-normalize.js";`,
+        `import {
+  contractConversationMap,
+  mergeRoomWithContract,
+  synthesizeRoomsFromContracts,
+} from "${shellStateNormalizeUrl}";`,
       )
       .replace(
         `import {

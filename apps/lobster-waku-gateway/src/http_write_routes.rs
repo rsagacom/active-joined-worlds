@@ -8,7 +8,8 @@ use transport_waku::{WakuGatewayRequest, WakuGatewayResponse};
 
 use crate::{
     AddWorldMirrorSourceRequest, AdminBanResidentRequest, AdminConfigPayload,
-    AdminFreezeRoomRequest, AdminUnbanResidentRequest, AdminUnfreezeRoomRequest,
+    AdminFreezeRoomRequest, AdminModerateMessageRequest,
+    AdminUnbanResidentRequest, AdminUnfreezeRoomRequest,
     CliSendRequest, ConnectProviderRequest, ConversationId,
     EditShellMessageRequest, GatewayRuntime, GatewayStateNotifier, IdentityId,
     OpenDirectSessionRequest, RecallShellMessageRequest, SceneHotspotLayer, SceneImageLayer,
@@ -707,6 +708,42 @@ pub(crate) fn handle_post_admin_config(
                 .with_status_code(StatusCode(200))
                 .with_header(json_header())
         }
+        Err(e) => Response::from_string(format!("{{\"error\":\"decode failed: {e}\"}}"))
+            .with_status_code(StatusCode(400))
+            .with_header(json_header()),
+    }
+}
+
+pub(crate) fn handle_post_admin_moderate_message(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    _notifier: &Arc<GatewayStateNotifier>,
+    request: &mut Request,
+) -> HttpResponse {
+    let mut body = String::new();
+    if request.as_reader().read_to_string(&mut body).is_err() {
+        return Response::from_string("{\"error\":\"read body failed\"}")
+            .with_status_code(StatusCode(400))
+            .with_header(json_header());
+    }
+    match serde_json::from_str::<AdminModerateMessageRequest>(&body) {
+        Ok(req) => match runtime
+            .lock()
+            .expect("gateway runtime mutex poisoned")
+            .admin_moderate_message(
+                &req.message_id,
+                &req.conversation_id,
+                &req.action,
+            ) {
+            Ok(()) => Response::from_string(
+                serde_json::to_string(&serde_json::json!({"ok": true, "message_id": req.message_id, "action": req.action}))
+                    .unwrap_or_else(|_| "{}".into()),
+            )
+            .with_status_code(StatusCode(200))
+            .with_header(json_header()),
+            Err(e) => Response::from_string(format!("{{\"error\":\"{e}\"}}"))
+                .with_status_code(StatusCode(400))
+                .with_header(json_header()),
+        },
         Err(e) => Response::from_string(format!("{{\"error\":\"decode failed: {e}\"}}"))
             .with_status_code(StatusCode(400))
             .with_header(json_header()),

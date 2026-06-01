@@ -133,10 +133,29 @@
     }
   }
 
+  async function moderateMessage(messageId, conversationId, action) {
+    if (!messageId || !conversationId) {
+      return { error: '缺少 message_id 或 conversation_id' };
+    }
+    return fetchGatewayJsonPost('/v1/admin/messages/moderate', {
+      message_id: messageId,
+      conversation_id: conversationId,
+      action: action
+    });
+  }
+
   function setGatewayStatus(text, className) {
     if (!gatewayStatus) return;
     gatewayStatus.textContent = text;
     gatewayStatus.className = 'ds-status-dot ' + className;
+  }
+
+  function refreshCurrentMessageView() {
+    renderMessages(
+      document.getElementById('msgRoomFilter').value,
+      document.getElementById('msgStatusFilter').value,
+      document.getElementById('msgSearch').value
+    );
   }
 
   function formatNumber(value) {
@@ -330,11 +349,14 @@
     var out = [];
     for (var i = 0; i < source.length; i++) {
       var room = source[i];
+      var roomId = String(room.conversation_id || room.id || '');
       var roomTitle = room.title || room.thread_headline || room.conversation_id || room.id || '网关会话';
       var msgs = Array.isArray(room.messages) ? room.messages : [];
       for (var j = 0; j < msgs.length; j++) {
         var msg = msgs[j];
         out.push({
+          message_id: msg.message_id || '',
+          conversation_id: roomId,
           time: msg.timestamp_label || '网关同步',
           sender: msg.sender || 'unknown',
           room: '#' + roomTitle,
@@ -1032,7 +1054,32 @@
               container.appendChild(field2);
             },
             function (actions) {
-              actions.appendChild(markUnavailableButton(makeBtn('标记已处理', 'ds-btn-primary ds-btn-sm'), '消息审核写入需要 Gateway 写接口接入后才能执行'));
+              var handleBtn = makeBtn('标记已处理', 'ds-btn-primary ds-btn-sm');
+              handleBtn.addEventListener('click', function (e2) {
+                e2.stopPropagation();
+                if (handleBtn.disabled) return;
+                handleBtn.disabled = true;
+                handleBtn.textContent = '...';
+                moderateMessage(msg.message_id, msg.conversation_id, 'handled').then(function (result) {
+                  if (result.error) {
+                    showAdminNotice('操作失败: ' + result.error, 'error');
+                    handleBtn.disabled = false;
+                    handleBtn.textContent = '标记已处理';
+                    return;
+                  }
+                  if (!result.ok) {
+                    var errMsg2 = (result.data && result.data.error) || '请求失败';
+                    showAdminNotice('操作失败: ' + errMsg2, 'error');
+                    handleBtn.disabled = false;
+                    handleBtn.textContent = '标记已处理';
+                    return;
+                  }
+                  msg.status = 'handled';
+                  showAdminNotice('消息已标记为已处理', 'success');
+                  refreshCurrentMessageView();
+                });
+              });
+              actions.appendChild(handleBtn);
             }
           );
         });
@@ -1040,11 +1087,57 @@
 
         if (msg.status === 'pending' || msg.status === 'flagged') {
           var passBtn = makeBtn('通过', 'ds-btn-primary ds-btn-xs');
-          markUnavailableButton(passBtn, '通过消息需要 Gateway 审核写接口接入后才能执行');
+          passBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (passBtn.disabled) return;
+            passBtn.disabled = true;
+            passBtn.textContent = '...';
+            moderateMessage(msg.message_id, msg.conversation_id, 'approved').then(function (result) {
+              if (result.error) {
+                showAdminNotice('审核失败: ' + result.error, 'error');
+                passBtn.disabled = false;
+                passBtn.textContent = '通过';
+                return;
+              }
+              if (!result.ok) {
+                var errMsg = (result.data && result.data.error) || '请求失败';
+                showAdminNotice('审核失败: ' + errMsg, 'error');
+                passBtn.disabled = false;
+                passBtn.textContent = '通过';
+                return;
+              }
+              msg.status = 'approved';
+              showAdminNotice('消息已通过', 'success');
+              refreshCurrentMessageView();
+            });
+          });
           btnGroup.appendChild(passBtn);
 
           var blockBtn = makeBtn('屏蔽', 'ds-btn-danger-text ds-btn-xs');
-          markUnavailableButton(blockBtn, '屏蔽消息需要 Gateway 审核写接口接入后才能执行');
+          blockBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (blockBtn.disabled) return;
+            blockBtn.disabled = true;
+            blockBtn.textContent = '...';
+            moderateMessage(msg.message_id, msg.conversation_id, 'blocked').then(function (result) {
+              if (result.error) {
+                showAdminNotice('操作失败: ' + result.error, 'error');
+                blockBtn.disabled = false;
+                blockBtn.textContent = '屏蔽';
+                return;
+              }
+              if (!result.ok) {
+                var errMsg = (result.data && result.data.error) || '请求失败';
+                showAdminNotice('操作失败: ' + errMsg, 'error');
+                blockBtn.disabled = false;
+                blockBtn.textContent = '屏蔽';
+                return;
+              }
+              msg.status = 'blocked';
+              showAdminNotice('消息已屏蔽', 'success');
+              refreshCurrentMessageView();
+            });
+          });
           btnGroup.appendChild(blockBtn);
         }
 
@@ -1081,7 +1174,32 @@
               });
               actions.appendChild(copyMsgBtn);
               if (msg.status === 'pending' || msg.status === 'flagged') {
-                actions.appendChild(markUnavailableButton(makeBtn('标记已处理', 'ds-btn-primary ds-btn-sm'), '消息审核写入需要 Gateway 写接口接入后才能执行'));
+                var handleBtn = makeBtn('标记已处理', 'ds-btn-primary ds-btn-sm');
+              handleBtn.addEventListener('click', function (e2) {
+                e2.stopPropagation();
+                if (handleBtn.disabled) return;
+                handleBtn.disabled = true;
+                handleBtn.textContent = '...';
+                moderateMessage(msg.message_id, msg.conversation_id, 'handled').then(function (result) {
+                  if (result.error) {
+                    showAdminNotice('操作失败: ' + result.error, 'error');
+                    handleBtn.disabled = false;
+                    handleBtn.textContent = '标记已处理';
+                    return;
+                  }
+                  if (!result.ok) {
+                    var errMsg2 = (result.data && result.data.error) || '请求失败';
+                    showAdminNotice('操作失败: ' + errMsg2, 'error');
+                    handleBtn.disabled = false;
+                    handleBtn.textContent = '标记已处理';
+                    return;
+                  }
+                  msg.status = 'handled';
+                  showAdminNotice('消息已标记为已处理', 'success');
+                  refreshCurrentMessageView();
+                });
+              });
+              actions.appendChild(handleBtn);
               }
             }
           );

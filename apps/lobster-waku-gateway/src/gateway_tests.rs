@@ -7615,3 +7615,104 @@ fn shell_message_edit_does_not_increment_unread() {
         "edit should not increment unread, got {unread_after_edit}"
     );
 }
+
+#[test]
+fn admin_moderate_message_approve_block_handled_roundtrip() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+
+    // First send a message to have a real message_id
+    let convo_id = "room:world:lobby";
+    let send_body = serde_json::json!({
+        "room_id": convo_id,
+        "sender": "qa-a",
+        "text": "审核测试消息",
+        "device_id": "test",
+        "language_tag": "zh"
+    });
+    let (send_status, send_payload) =
+        http_json("POST", &server.base_url, "/v1/shell/message", Some(&send_body));
+    assert_eq!(send_status, 200);
+    let message_id = send_payload["message_id"]
+        .as_str()
+        .expect("should have message_id");
+
+    // Moderate: approve
+    let approve_body = serde_json::json!({
+        "message_id": message_id,
+        "conversation_id": convo_id,
+        "action": "approved"
+    });
+    let (status, payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/messages/moderate",
+        Some(&approve_body),
+    );
+    assert_eq!(status, 200);
+    assert_eq!(payload["ok"].as_bool(), Some(true));
+    assert_eq!(payload["action"].as_str(), Some("approved"));
+
+    // Moderate: block
+    let block_body = serde_json::json!({
+        "message_id": message_id,
+        "conversation_id": convo_id,
+        "action": "blocked"
+    });
+    let (status, payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/messages/moderate",
+        Some(&block_body),
+    );
+    assert_eq!(status, 200);
+    assert_eq!(payload["action"].as_str(), Some("blocked"));
+
+    // Moderate: handled
+    let handled_body = serde_json::json!({
+        "message_id": message_id,
+        "conversation_id": convo_id,
+        "action": "handled"
+    });
+    let (status, payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/messages/moderate",
+        Some(&handled_body),
+    );
+    assert_eq!(status, 200);
+    assert_eq!(payload["action"].as_str(), Some("handled"));
+}
+
+#[test]
+fn admin_moderate_message_rejects_invalid_action() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+
+    let body = serde_json::json!({
+        "message_id": "msg:nonexistent",
+        "conversation_id": "room:world:lobby",
+        "action": "invalid_action"
+    });
+    let (status, _payload) =
+        http_json("POST", &server.base_url, "/v1/admin/messages/moderate", Some(&body));
+    assert_eq!(status, 400);
+}
+
+#[test]
+fn admin_moderate_message_rejects_nonexistent_message() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+
+    let body = serde_json::json!({
+        "message_id": "msg:nonexistent-99999",
+        "conversation_id": "room:world:lobby",
+        "action": "approved"
+    });
+    let (status, _payload) =
+        http_json("POST", &server.base_url, "/v1/admin/messages/moderate", Some(&body));
+    assert_eq!(status, 400);
+}

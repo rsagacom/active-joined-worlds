@@ -1446,12 +1446,25 @@ pub(crate) struct GatewayRuntime {
     pub(crate) rate_limits: HashMap<String, RateLimitWindow>,
     pub(crate) started_at_ms: i64,
     pub(crate) app_config: HashMap<String, String>,
+    pub(crate) message_moderation: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct RateLimitWindow {
     pub(crate) window_start_ms: i64,
     pub(crate) count: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct AdminModerateMessageRequest {
+    pub(crate) message_id: String,
+    pub(crate) conversation_id: String,
+    /// "approved" | "blocked" | "handled"
+    pub(crate) action: String,
+    #[serde(default)]
+    pub(crate) reason: Option<String>,
+    #[serde(default)]
+    pub(crate) actor_id: Option<String>,
 }
 
 #[derive(Clone)]

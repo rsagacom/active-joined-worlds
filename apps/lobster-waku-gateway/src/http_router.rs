@@ -35,7 +35,8 @@ use crate::{
     http_support::{split_path_and_query, text_header},
     http_write_routes::{
         handle_post_admin_ban_resident, handle_post_admin_config,
-        handle_post_admin_freeze_room, handle_post_admin_unban_resident,
+        handle_post_admin_freeze_room, handle_post_admin_moderate_message,
+        handle_post_admin_unban_resident,
         handle_post_admin_unfreeze_room, handle_post_cli_send, handle_post_direct_open,
         handle_post_provider_connect, handle_post_provider_disconnect, handle_post_scene_validate,
         handle_post_shell_message, handle_post_shell_message_edit,
@@ -83,6 +84,9 @@ pub(crate) fn dispatch_http_request(
         }
         (Method::Post, "/v1/admin/config") => {
             handle_post_admin_config(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/admin/messages/moderate") => {
+            handle_post_admin_moderate_message(runtime, notifier, request)
         }
         (Method::Post, "/v1/shell/scene/validate") => {
             handle_post_scene_validate(runtime, notifier, request)

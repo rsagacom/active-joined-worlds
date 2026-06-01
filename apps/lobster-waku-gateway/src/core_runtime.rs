@@ -57,6 +57,7 @@ impl GatewayRuntime {
             presence: HashMap::new(),
             unread: HashMap::new(),
             rate_limits: HashMap::new(),
+            message_moderation: HashMap::new(),
             started_at_ms: Self::now_ms(),
             app_config: HashMap::new(),
         };
@@ -510,6 +511,36 @@ impl GatewayRuntime {
         for (key, value) in updates {
             self.app_config.insert(key, value);
         }
+    }
+
+    pub(crate) fn admin_moderate_message(
+        &mut self,
+        message_id: &str,
+        conversation_id: &str,
+        action: &str,
+    ) -> Result<(), String> {
+        if !matches!(action, "approved" | "blocked" | "handled") {
+            return Err(format!("invalid action: {action}"));
+        }
+        let messages = self
+            .timeline_store
+            .recent_messages(&ConversationId(conversation_id.to_string()), 500);
+        let found = messages
+            .iter()
+            .any(|m| m.envelope.message_id.0 == message_id);
+        if !found {
+            return Err("message not found".into());
+        }
+        self.message_moderation
+            .insert(message_id.to_string(), action.to_string());
+        Ok(())
+    }
+
+    pub(crate) fn admin_message_moderation_status(
+        &self,
+        message_id: &str,
+    ) -> Option<&str> {
+        self.message_moderation.get(message_id).map(|s| s.as_str())
     }
 
     pub(crate) fn validate_scene_config(
