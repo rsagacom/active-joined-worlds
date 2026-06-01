@@ -7771,3 +7771,119 @@ fn admin_rooms_members_add_and_remove_endpoints_roundtrip() {
     let (status3, _) = http_json("POST", &server.base_url, "/v1/admin/rooms/members", Some(&bad_body));
     assert_eq!(status3, 404);
 }
+
+#[test]
+fn admin_logs_clear_returns_ok() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    let body = serde_json::json!({"log_id": "log-test-1", "actor_id": "qa-a"});
+    http_json("POST", &server.base_url, "/v1/admin/logs/handle", Some(&body));
+    let clear_body = serde_json::json!({});
+    let (status, payload) = http_json("POST", &server.base_url, "/v1/admin/logs/clear", Some(&clear_body));
+    assert_eq!(status, 200);
+    assert_eq!(payload.get("ok").and_then(|v| v.as_bool()), Some(true));
+}
+
+#[test]
+fn admin_create_resident_endpoint_succeeds() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    let body = serde_json::json!({"resident_id": "new-resident-test", "email": "test@example.com"});
+    let (status, payload) = http_json("POST", &server.base_url, "/v1/admin/residents", Some(&body));
+    assert_eq!(status, 200);
+    assert_eq!(payload.get("ok").and_then(|v| v.as_bool()), Some(true));
+}
+
+#[test]
+fn admin_create_resident_duplicate_returns_409() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    let body = serde_json::json!({"resident_id": "dup-test", "email": "dup@example.com"});
+    let (status1, _) = http_json("POST", &server.base_url, "/v1/admin/residents", Some(&body));
+    assert_eq!(status1, 200);
+    let (status2, payload2) = http_json("POST", &server.base_url, "/v1/admin/residents", Some(&body));
+    assert_eq!(status2, 409);
+    assert_eq!(payload2.get("ok").and_then(|v| v.as_bool()), Some(false));
+}
+
+#[test]
+fn world_directory_returns_ok() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    let (status, payload) = http_json("GET", &server.base_url, "/v1/world-directory", None);
+    assert_eq!(status, 200);
+    assert!(payload.is_object());
+}
+
+#[test]
+fn world_safety_returns_ok() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    let (status, payload) = http_json("GET", &server.base_url, "/v1/world-safety", None);
+    assert_eq!(status, 200);
+    assert!(payload.is_object());
+}
+
+
+#[test]
+fn shell_bootstrap_returns_ok() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    let (status, _payload) = http_json("GET", &server.base_url, "/v1/shell/bootstrap", None);
+    assert_eq!(status, 200);
+}
+
+
+#[test]
+fn admin_config_get_returns_ok() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    let (status, payload) = http_json("GET", &server.base_url, "/v1/admin/config", None);
+    assert_eq!(status, 200);
+    assert!(payload.is_object());
+}
+
+
+#[test]
+fn world_entry_returns_ok() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    let (status, payload) = http_json("GET", &server.base_url, "/v1/world-entry", None);
+    assert_eq!(status, 200);
+    assert!(payload.is_object());
+}
+
+#[test]
+fn world_entry_endpoint_smoke() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    let (status, _) = http_json("GET", &server.base_url, "/v1/world-entry", None);
+    assert_eq!(status, 200);
+}
+
+#[test]
+fn residents_endpoint_returns_ok() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    let (status, _) = http_json("GET", &server.base_url, "/v1/residents", None);
+    assert_eq!(status, 200);
+}
+
+#[test]
+fn world_snapshot_returns_ok() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    let (status, _) = http_json("GET", &server.base_url, "/v1/world-snapshot", None);
+    assert_eq!(status, 200);
+}
