@@ -14,6 +14,7 @@ node_modules/
 
 # Build output
 /output/
+__pycache__/
 
 # Local OS/editor noise
 .DS_Store
@@ -31,6 +32,7 @@ node_modules/
 /Gemini-md/
 /checkpoints/
 /docs/superpowers/
+/.superpowers/
 /.claude/
 /docs/CC_*
 /docs/DS_*
