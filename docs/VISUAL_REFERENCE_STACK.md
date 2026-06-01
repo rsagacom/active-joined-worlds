@@ -12,7 +12,7 @@
 
 ### 1. 城市公共界面
 
-- 参考图：[/Users/rsaga/Desktop/01.jpg](/Users/rsaga/Desktop/01.jpg)
+- 参考图：`01.jpg`（城邦·公共频道·居民区·城主府）
 - 语义：
   - 城邦
   - 公共频道
@@ -29,7 +29,7 @@
 
 ### 2. 住宅私聊界面
 
-- 参考图：[/Users/rsaga/Desktop/02.jpg](/Users/rsaga/Desktop/02.jpg)
+- 参考图：`02.jpg`（住宅场景·左侧功能栏·底部消息流·输入框）
 - 语义：
   - 住宅场景
   - 左侧极简功能栏
@@ -42,7 +42,7 @@
 
 ### 3. 重复图
 
-- [/Users/rsaga/Desktop/03.png](/Users/rsaga/Desktop/03.png) 与房间内界面方向重复
+- `03.png` 与房间内界面方向重复
 - 可忽略，不作为独立基线
 
 ## 二、参考资源分层

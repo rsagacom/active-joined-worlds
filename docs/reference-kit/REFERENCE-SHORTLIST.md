@@ -10,7 +10,7 @@
 ## 1. WorkAdventure
 
 - 项目地址：<https://github.com/thecodingmachine/workadventure>
-- 本地快照：[/Users/rsaga/Documents/Playground/lobster-chat/docs/reference-kit/readmes/workadventure.README.md](/Users/rsaga/Documents/Playground/lobster-chat/docs/reference-kit/readmes/workadventure.README.md)
+- 本地快照：`docs/reference-kit/readmes/workadventure.README.md`
 - 适合参考：
   - 世界/城邦/房间的空间组织方式
   - 多用户同步和房间进入逻辑
@@ -22,7 +22,7 @@
 ## 2. RPGUI
 
 - 项目地址：<https://github.com/RonenNess/RPGUI>
-- 本地快照：[/Users/rsaga/Documents/Playground/lobster-chat/docs/reference-kit/readmes/rpgui.README.md](/Users/rsaga/Documents/Playground/lobster-chat/docs/reference-kit/readmes/rpgui.README.md)
+- 本地快照：`docs/reference-kit/readmes/rpgui.README.md`
 - 适合参考：
   - SFC / 16-bit JRPG 视觉语言
   - 边框、面板、状态区、滚动条、菜单气质
@@ -34,7 +34,7 @@
 ## 3. Phaser
 
 - 项目地址：<https://github.com/phaserjs/phaser>
-- 本地快照：[/Users/rsaga/Documents/Playground/lobster-chat/docs/reference-kit/readmes/phaser.README.md](/Users/rsaga/Documents/Playground/lobster-chat/docs/reference-kit/readmes/phaser.README.md)
+- 本地快照：`docs/reference-kit/readmes/phaser.README.md`
 - 适合参考：
   - Web 像素场景层
   - Tilemap/房间/城市地图渲染思路
@@ -46,7 +46,7 @@
 ## 4. Lazygit
 
 - 项目地址：<https://github.com/jesseduffield/lazygit>
-- 本地快照：[/Users/rsaga/Documents/Playground/lobster-chat/docs/reference-kit/readmes/lazygit.README.md](/Users/rsaga/Documents/Playground/lobster-chat/docs/reference-kit/readmes/lazygit.README.md)
+- 本地快照：`docs/reference-kit/readmes/lazygit.README.md`
 - 适合参考：
   - 终端产品交互质量
   - 列表切换、焦点管理、状态条、快捷键组织
@@ -58,7 +58,7 @@
 ## 5. ratatui
 
 - 项目地址：<https://github.com/ratatui/ratatui>
-- 本地快照：[/Users/rsaga/Documents/Playground/lobster-chat/docs/reference-kit/readmes/ratatui.README.md](/Users/rsaga/Documents/Playground/lobster-chat/docs/reference-kit/readmes/ratatui.README.md)
+- 本地快照：`docs/reference-kit/readmes/ratatui.README.md`
 - 适合参考：
   - Rust 终端 UI 的正统实现方式
   - 稳定边框、布局、滚动、焦点和组件化

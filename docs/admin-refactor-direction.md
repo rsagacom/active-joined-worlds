@@ -50,10 +50,10 @@
 
 ## 当前代码问题点
 
-- `/Users/rsaga/Documents/Playground/lobster-chat/apps/lobster-web-shell/admin.html:199` 的 `admin-tools-summary` 被设计成工具摘要，导致后台核心区域不是会话处理。
-- `/Users/rsaga/Documents/Playground/lobster-chat/apps/lobster-web-shell/admin.html:202` 后面隐藏了大量工具表单，虽然默认隐藏，但结构仍在诱导继续堆功能。
-- `/Users/rsaga/Documents/Playground/lobster-chat/apps/lobster-web-shell/admin.html:590` 的 `ACTION_CATALOG` 让页面变成“工具目录生成器”。这适合开发文档，不适合管理后台首屏。
-- `/Users/rsaga/Documents/Playground/lobster-chat/apps/lobster-web-shell/test/shell-pages-static.test.mjs:134` 这类测试还在保护“每个工具入口都标注 API”的旧方向，需要同步改掉。
+- `./apps/lobster-web-shell/admin.html:199` 的 `admin-tools-summary` 被设计成工具摘要，导致后台核心区域不是会话处理。
+- `./apps/lobster-web-shell/admin.html:202` 后面隐藏了大量工具表单，虽然默认隐藏，但结构仍在诱导继续堆功能。
+- `./apps/lobster-web-shell/admin.html:590` 的 `ACTION_CATALOG` 让页面变成“工具目录生成器”。这适合开发文档，不适合管理后台首屏。
+- `./apps/lobster-web-shell/test/shell-pages-static.test.mjs:134` 这类测试还在保护“每个工具入口都标注 API”的旧方向，需要同步改掉。
 
 ## 重构执行顺序
 

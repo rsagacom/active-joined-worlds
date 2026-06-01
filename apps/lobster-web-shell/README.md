@@ -6,7 +6,7 @@ Thin H5 shell for `lobster-chat`.
 
 这个壳层用于让手机浏览器或类 PWA 包装先行接入，方便移动端在原生应用完成前尽早加入。
 当前收口目标是把 `creative`、`admin` 和 `unified` 都尽量表现成正常聊天窗口，尤其 `creative.html` 要贴近“房间内聊天主界面”；`user.html` 只保留 query-preserving 兼容跳转，不再承载独立住宅 UI。`admin` / `unified` 要像线性的城主治理页和世界外壳；治理与扩展能力保留，但不抢首屏。
-其中 `creative.html` 侧优先走 [02.jpg](/Users/rsaga/Desktop/02.jpg) 那种房间内聊天视角，`admin` / `unified` 侧优先走 [01.jpg](/Users/rsaga/Desktop/01.jpg) 那种城市外 / 治理线性壳视角。
+其中 `creative.html` 侧优先走 `02.jpg` 那种房间内聊天视角，`admin` / `unified` 侧优先走 `01.jpg` 那种城市外 / 治理线性壳视角。
 
 It is intentionally:
 
@@ -70,7 +70,7 @@ See also:
 
 - [../../docs/WEB_SHELL_ACCEPTANCE.md](../../docs/WEB_SHELL_ACCEPTANCE.md)
 - [../../docs/VISUAL_REFERENCE_STACK.md](../../docs/VISUAL_REFERENCE_STACK.md)
-- [01.jpg](/Users/rsaga/Desktop/01.jpg) / [02.jpg](/Users/rsaga/Desktop/02.jpg)
+- `01.jpg` / `02.jpg` (参考图)
 
 ## How to preview
 

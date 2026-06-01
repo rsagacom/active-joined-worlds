@@ -26,3 +26,11 @@ node_modules/
 
 # Tooling
 /.playwright-cli/
+
+# Internal dev tracking (contain local paths, personal notes)
+/Gemini-md/
+/checkpoints/
+/docs/superpowers/
+/.claude/
+/docs/CC_*
+/docs/DS_*

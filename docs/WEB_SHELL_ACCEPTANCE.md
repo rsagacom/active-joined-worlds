@@ -165,5 +165,5 @@ If you are using the current local preview, the same pages are also available at
 - 视觉与产品基线继续参考 [docs/VISUAL_REFERENCE_STACK.md](docs/VISUAL_REFERENCE_STACK.md)。
 - CI 现在会直接跑 [scripts/smoke-web-shell.sh](../scripts/smoke-web-shell.sh) 和 `apps/lobster-web-shell` 的 Node 测试；这份文档仍然保留给人工视觉验收。
 
-- 居民端优先参考 [02.jpg](/Users/rsaga/Desktop/02.jpg) 的聚落内视角。
-- 世界共建页和城主端优先参考 [01.jpg](/Users/rsaga/Desktop/01.jpg) 的城市外视角。
+- 居民端优先参考 `02.jpg` 的聚落内视角。
+- 世界共建页和城主端优先参考 `01.jpg` 的城市外视角。

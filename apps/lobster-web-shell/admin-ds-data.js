@@ -59,12 +59,12 @@
     ],
 
     logs: [
-      { time: '14:35:10', level: 'error', type: 'connection', desc: 'Gateway WebSocket 连接中断 · 客户端 IP 58.22.14.7 · 重连中', source: 'Gateway' },
-      { time: '14:32:45', level: 'warn', type: 'login', desc: '居民 test_user_03 连续 3 次登录失败 · IP 114.25.18.9', source: 'Auth' },
+      { time: '14:35:10', level: 'error', type: 'connection', desc: 'Gateway WebSocket 连接中断 · 客户端 IP 192.0.2.2 · 重连中', source: 'Gateway' },
+      { time: '14:32:45', level: 'warn', type: 'login', desc: '居民 test_user_03 连续 3 次登录失败 · IP 192.0.2.1', source: 'Auth' },
       { time: '14:30:22', level: 'error', type: 'message', desc: '消息发送失败: 房间 #主城大厅 · 发送者 qianliming · 内容过长 (5124 chars)', source: 'Message' },
       { time: '14:28:01', level: 'warn', type: 'ai', desc: 'AI 助手主通道响应超时 30s · 自动切换至备用通道 Claude Sonnet', source: 'AI' },
       { time: '14:15:37', level: 'error', type: 'connection', desc: '客户端频繁断开连接 · 居民 zhoujie · 30 分钟内重连 12 次', source: 'Gateway' },
-      { time: '14:10:55', level: 'warn', type: 'login', desc: '未注册邮箱尝试登录: unknown@spam.com · IP 203.0.113.45', source: 'Auth' },
+      { time: '14:10:55', level: 'warn', type: 'login', desc: '未注册邮箱尝试登录: unknown@spam.com · IP 192.0.2.3', source: 'Auth' },
       { time: '13:58:12', level: 'info', type: 'connection', desc: 'Gateway 连接数达到预警阈值 450/500', source: 'Gateway' },
       { time: '13:42:33', level: 'error', type: 'ai', desc: '备用 AI 通道不可用 · api.anthropic.com 返回 503', source: 'AI' },
       { time: '13:30:18', level: 'warn', type: 'message', desc: '消息发送频率异常 · 居民 test_user_03 · 60秒内发送 45 条', source: 'Message' },

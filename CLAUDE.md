@@ -6,11 +6,10 @@
 
 ## 项目记忆入口
 
-本机统一记忆入口：`/Users/rsaga/.claude/CLAUDE.md`
+本机统一记忆入口：`~/.claude/CLAUDE.md`
 
-开始任何任务前必须先读取：
-- `/Users/rsaga/.codex/memories/PROFILE.md`
-- `/Users/rsaga/.codex/memories/ACTIVE.md`
+开始任何任务前必须先读取项目根目录下的：
+- 项目记忆文件 (PROFILE.md / ACTIVE.md)
 
 ## 项目接手顺序
 
