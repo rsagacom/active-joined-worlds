@@ -318,6 +318,7 @@ pub(crate) struct ShellMarkReadRequest {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)]
 pub(crate) struct ShellUnreadSummary {
     pub(crate) conversation_id: String,
     pub(crate) unread_count: usize,
@@ -1060,6 +1061,7 @@ pub(crate) struct AdminRoomDetail {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub(crate) struct AdminBanResidentRequest {
     pub(crate) resident_id: String,
     pub(crate) reason: String,
@@ -1068,6 +1070,7 @@ pub(crate) struct AdminBanResidentRequest {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub(crate) struct AdminUnbanResidentRequest {
     pub(crate) resident_id: String,
     #[serde(default)]
@@ -1423,6 +1426,7 @@ pub(crate) struct GatewayRuntime {
     pub(crate) secure_sessions_path: PathBuf,
     pub(crate) provider_config_path: PathBuf,
     pub(crate) auth_state_path: PathBuf,
+    pub(crate) invites_path: PathBuf,
     pub(crate) timeline_store: FileTimelineStore,
     pub(crate) secure_sessions: SkeletonSecureSessionManager,
     pub(crate) world: WorldProfile,
@@ -1447,6 +1451,7 @@ pub(crate) struct GatewayRuntime {
     pub(crate) started_at_ms: i64,
     pub(crate) app_config: HashMap<String, String>,
     pub(crate) message_moderation: HashMap<String, String>,
+    pub(crate) invites: HashMap<String, InviteCode>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1456,6 +1461,7 @@ pub(crate) struct RateLimitWindow {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub(crate) struct AdminModerateMessageRequest {
     pub(crate) message_id: String,
     pub(crate) conversation_id: String,
@@ -1465,6 +1471,63 @@ pub(crate) struct AdminModerateMessageRequest {
     pub(crate) reason: Option<String>,
     #[serde(default)]
     pub(crate) actor_id: Option<String>,
+}
+
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct InviteCode {
+    pub(crate) code: String,
+    pub(crate) created_at_ms: i64,
+    pub(crate) max_uses: u32,
+    pub(crate) used_count: u32,
+    pub(crate) revoked: bool,
+    pub(crate) created_by: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
+pub(crate) struct AdminCreateInviteRequest {
+    pub(crate) actor_id: String,
+    #[serde(default)]
+    pub(crate) max_uses: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct AdminCreateInviteResponse {
+    pub(crate) ok: bool,
+    pub(crate) code: String,
+    pub(crate) created_at_ms: i64,
+    pub(crate) max_uses: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
+pub(crate) struct AdminRevokeInviteRequest {
+    pub(crate) code: String,
+    pub(crate) actor_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
+pub(crate) struct AdminManageRoomMemberRequest {
+    pub(crate) room_id: String,
+    pub(crate) resident_id: String,
+    pub(crate) actor_id: String,
+    /// "add" | "remove"
+    pub(crate) action: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
+pub(crate) struct AdminHandleLogRequest {
+    pub(crate) log_id: String,
+    pub(crate) actor_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)]
+pub(crate) struct AdminActionResponse {
+    pub(crate) ok: bool,
 }
 
 #[derive(Clone)]

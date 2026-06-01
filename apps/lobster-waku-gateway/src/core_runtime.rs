@@ -36,6 +36,7 @@ impl GatewayRuntime {
             secure_sessions_path: storage_root.join("secure-sessions.json"),
             provider_config_path: storage_root.join("provider-config.json"),
             auth_state_path: storage_root.join("auth-state.json"),
+            invites_path: storage_root.join("invites.json"),
             timeline_store,
             secure_sessions: SkeletonSecureSessionManager::new(),
             world: Self::default_world(),
@@ -58,6 +59,7 @@ impl GatewayRuntime {
             unread: HashMap::new(),
             rate_limits: HashMap::new(),
             message_moderation: HashMap::new(),
+            invites: HashMap::new(),
             started_at_ms: Self::now_ms(),
             app_config: HashMap::new(),
         };
@@ -65,6 +67,7 @@ impl GatewayRuntime {
         runtime.load_secure_sessions()?;
         runtime.load_provider_config()?;
         runtime.load_auth_state()?;
+        runtime.load_invites()?;
         runtime.load_presence_state()?;
         runtime.load_unread_state()?;
         runtime.ensure_default_world_safety()?;
@@ -142,6 +145,79 @@ impl GatewayRuntime {
         self.unread.insert(key, 0);
         let _ = self.persist_unread_state();
     }
+
+    // --- Admin invite / member / log methods ---
+
+    pub(crate) fn admin_create_invite(&mut self, actor_id: &str, max_uses: u32) -> AdminCreateInviteResponse {
+        let code = format!("AJW-{:06}", (Self::now_ms() % 1_000_000) as u32);
+        let now = Self::now_ms();
+        self.invites.insert(code.clone(), InviteCode {
+            code: code.clone(),
+            created_at_ms: now,
+            max_uses,
+            used_count: 0,
+            revoked: false,
+            created_by: actor_id.to_string(),
+        });
+        let _ = self.persist_invites();
+        AdminCreateInviteResponse { ok: true, code, created_at_ms: now, max_uses }
+    }
+
+    pub(crate) fn admin_revoke_invite(&mut self, code: &str) -> bool {
+        if let Some(invite) = self.invites.get_mut(code) {
+            invite.revoked = true;
+            let _ = self.persist_invites();
+            true
+        } else {
+            false
+        }
+    }
+
+    pub(crate) fn persist_invites(&self) -> Result<(), String> {
+        let bytes = serde_json::to_vec_pretty(&self.invites)
+            .map_err(|e| format!("encode invites failed: {e}"))?;
+        atomic_write_file(&self.invites_path, &bytes)
+            .map_err(|e| format!("write invites failed: {e}"))
+    }
+
+    pub(crate) fn load_invites(&mut self) -> Result<(), String> {
+        if !self.invites_path.exists() { return Ok(()); }
+        let bytes = std::fs::read(&self.invites_path)
+            .map_err(|e| format!("read invites failed: {e}"))?;
+        if bytes.is_empty() { return Ok(()); }
+        self.invites = serde_json::from_slice(&bytes)
+            .map_err(|e| format!("decode invites failed: {e}"))?;
+        Ok(())
+    }
+
+    pub(crate) fn admin_manage_room_member(&mut self, room_id: &str, resident_id: &str, action: &str) -> bool {
+        let conversation_id = ConversationId(room_id.to_string());
+        let mut conversations = self.timeline_store.active_conversations();
+        if let Some(conv) = conversations.iter_mut().find(|c| c.conversation_id == conversation_id) {
+            match action {
+                "add" => {
+                    let rid = IdentityId(resident_id.to_string());
+                    if !conv.participants.contains(&rid) {
+                        conv.participants.push(rid);
+                    }
+                }
+                "remove" => {
+                    conv.participants.retain(|p| p.0 != resident_id);
+                }
+                _ => return false,
+            }
+            let _ = self.timeline_store.upsert_conversation(conv.clone());
+            return true;
+        }
+        false
+    }
+
+    pub(crate) fn admin_handle_log(&mut self, log_id: &str) -> bool {
+        let key = format!("log:{}", log_id);
+        self.message_moderation.insert(key, "handled".to_string());
+        true
+    }
+
 
     pub(crate) fn check_rate_limit(&mut self, sender_id: &str, max_per_minute: u32) -> Option<i64> {
         let now_ms = Self::now_ms();
@@ -536,6 +612,7 @@ impl GatewayRuntime {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub(crate) fn admin_message_moderation_status(
         &self,
         message_id: &str,

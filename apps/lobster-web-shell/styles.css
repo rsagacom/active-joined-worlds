@@ -17757,3 +17757,97 @@ body[data-shell-page="admin"] button[aria-disabled="true"] {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/* === 左边栏搜索 + 滚动 + 居民入口 === */
+
+.creative-rail-divider {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 4px;
+}
+
+.rail-search-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid rgba(24, 18, 14, 0.24);
+  background: rgba(255, 247, 224, 0.35);
+  color: #18120e;
+  font-size: 13px;
+  border-radius: 4px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.rail-search-input::placeholder {
+  color: rgba(24, 18, 14, 0.35);
+}
+
+.rail-search-input:focus {
+  border-color: #1890ff;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+/* 房间列表可滚动 */
+.rail-list {
+  overflow-y: auto;
+  max-height: calc(100vh - 260px);
+  scrollbar-width: thin;
+}
+
+/* 居民头像可点击指示 */
+.room-button .room-avatar {
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.room-button .room-avatar:hover {
+  transform: scale(1.1);
+}
+
+/* 切换确认对话框 */
+.room-switch-confirm {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(24, 18, 14, 0.95);
+  color: #fff4e0;
+  padding: 20px 24px;
+  border: 1px solid rgba(255, 247, 224, 0.3);
+  border-radius: 6px;
+  z-index: 9999;
+  min-width: 240px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+
+.room-switch-confirm p {
+  margin: 0 0 14px;
+  font-size: 15px;
+}
+
+.room-switch-confirm button {
+  margin: 0 6px;
+  padding: 6px 18px;
+  border: 1px solid rgba(255, 247, 224, 0.4);
+  background: rgba(255, 247, 224, 0.12);
+  color: #fff4e0;
+  font-size: 14px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.room-switch-confirm button.confirm-yes {
+  background: #1890ff;
+  border-color: #1890ff;
+  font-weight: 600;
+}
+
+.room-switch-confirm button:hover {
+  background: rgba(255, 247, 224, 0.22);
+}
+
+.room-switch-confirm button.confirm-yes:hover {
+  background: #1677cc;
+}

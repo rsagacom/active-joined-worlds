@@ -7716,3 +7716,58 @@ fn admin_moderate_message_rejects_nonexistent_message() {
         http_json("POST", &server.base_url, "/v1/admin/messages/moderate", Some(&body));
     assert_eq!(status, 400);
 }
+
+
+#[test]
+fn admin_invites_create_and_revoke_endpoints_roundtrip() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    // Create invite
+    let create_body = serde_json::json!({"actor_id": "qa-a"});
+    let (status, payload) = http_json("POST", &server.base_url, "/v1/admin/invites", Some(&create_body));
+    assert_eq!(status, 200);
+    let code = payload["code"].as_str().unwrap().to_string();
+    assert!(code.starts_with("AJW-"));
+    // Revoke it
+    let revoke_body = serde_json::json!({"code": code, "actor_id": "qa-a"});
+    let (status2, _) = http_json("POST", &server.base_url, "/v1/admin/invites/revoke", Some(&revoke_body));
+    assert_eq!(status2, 200);
+    // Revoke non-existent
+    let bad_body = serde_json::json!({"code": "AJW-000000", "actor_id": "qa-a"});
+    let (status3, _) = http_json("POST", &server.base_url, "/v1/admin/invites/revoke", Some(&bad_body));
+    assert_eq!(status3, 404);
+}
+
+#[test]
+fn admin_logs_handle_endpoint_returns_ok() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    let body = serde_json::json!({"log_id": "log-test-1", "actor_id": "qa-a"});
+    let (status, payload) = http_json("POST", &server.base_url, "/v1/admin/logs/handle", Some(&body));
+    assert_eq!(status, 200);
+    assert_eq!(payload.get("ok").and_then(|v| v.as_bool()), Some(true));
+}
+
+#[test]
+fn admin_rooms_members_add_and_remove_endpoints_roundtrip() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    let room_id = "room:city:core-harbor:lobby";
+    // Add
+    let add_body = serde_json::json!({"room_id": room_id, "resident_id": "qa-b", "actor_id": "qa-a", "action": "add"});
+    let (status, payload) = http_json("POST", &server.base_url, "/v1/admin/rooms/members", Some(&add_body));
+    assert_eq!(status, 200);
+    assert_eq!(payload.get("ok").and_then(|v| v.as_bool()), Some(true));
+    // Remove
+    let rm_body = serde_json::json!({"room_id": room_id, "resident_id": "qa-b", "actor_id": "qa-a", "action": "remove"});
+    let (status2, payload2) = http_json("POST", &server.base_url, "/v1/admin/rooms/members", Some(&rm_body));
+    assert_eq!(status2, 200);
+    assert_eq!(payload2.get("ok").and_then(|v| v.as_bool()), Some(true));
+    // Bad room
+    let bad_body = serde_json::json!({"room_id": "room:nonexistent", "resident_id": "qa-b", "actor_id": "qa-a", "action": "add"});
+    let (status3, _) = http_json("POST", &server.base_url, "/v1/admin/rooms/members", Some(&bad_body));
+    assert_eq!(status3, 404);
+}

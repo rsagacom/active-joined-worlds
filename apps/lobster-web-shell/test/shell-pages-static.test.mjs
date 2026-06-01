@@ -60,8 +60,10 @@ test("creative page is the residential pixel room entry", async () => {
   assert.match(html, /href="\.\/unified\.html"/);
   assert.match(html, /class="scene-hotspot scene-hotspot--stairs"/);
   assert.match(html, /href="\.\/index\.html"[\s\S]*楼梯/);
-  assert.match(html, /<div class="creative-rail-divider">居民<\/div>/);
+  assert.match(html, /<div class="creative-rail-divider">[\s\S]*?居民[\s\S]*?<\/div>/);
   assert.match(html, /头像是居民房间入口，点击后确认进入对方房间私聊。/);
+  assert.match(html, /id="room-search-input"/);
+  assert.match(html, /placeholder="搜索居民或房间..."/);
   assert.match(html, /styles\.creative\.css\?v=20260525-h5-shell-fix-v2/);
   assert.match(html, /styles\.pixel-map\.css\?v=20260525-h5-shell-fix-v2/);
   assert.match(html, /app\.js\?v=20260525-h5-shell-fix-v2/);

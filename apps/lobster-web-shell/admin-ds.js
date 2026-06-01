@@ -881,7 +881,20 @@
                 showAdminNotice('已跳转到消息审核，可继续按房间名检索', 'info');
               });
               actions.appendChild(viewMsgBtn);
-              actions.appendChild(markUnavailableButton(makeBtn('管理成员', 'ds-btn-outline ds-btn-sm'), '成员管理需要 Gateway 写接口接入后才能执行'));
+              var memberBtn = makeBtn('管理成员', 'ds-btn-outline ds-btn-sm');
+              memberBtn.addEventListener('click', function () {
+                if (!room) return;
+                var residentId = prompt('输入居民ID（添加/移除）:');
+                if (!residentId) return;
+                var action = confirm('确定要切换该居民在本房间的成员状态？\n按确定=添加, 取消=移除') ? 'add' : 'remove';
+                memberBtn.disabled = true; memberBtn.textContent = '处理中...';
+                fetchGatewayJsonPost('/v1/admin/rooms/members', {room_id: room.id, resident_id: residentId, actor_id: currentIdentity(), action: action}).then(function(r) {
+                  memberBtn.disabled = false; memberBtn.textContent = '管理成员';
+                  if (r.error) { showAdminNotice('成员操作失败: ' + r.error, 'error'); }
+                  else { showAdminNotice('成员 ' + residentId + ' 已' + (action==='add'?'添加至':'移出') + '房间 ' + room.id, 'success'); }
+                });
+              });
+              actions.appendChild(memberBtn);
 
               if (room.frozen) {
                 var unfreezeBtn = makeBtn('解冻房间', 'ds-btn-outline ds-btn-sm');
@@ -1260,7 +1273,15 @@
         btnGroup.appendChild(copyBtn);
         if (ic.status === 'active') {
           var revokeBtn = makeBtn('作废', 'ds-btn-danger-text ds-btn-xs');
-          markUnavailableButton(revokeBtn, '作废邀请码需要 Gateway 写接口接入后才能执行');
+          revokeBtn.addEventListener('click', function () {
+                if (!confirm('确定要作废邀请码 ' + ic.code + ' ?')) return;
+                revokeBtn.disabled = true; revokeBtn.textContent = '作废中...';
+                fetchGatewayJsonPost('/v1/admin/invites/revoke', {code: ic.code, actor_id: currentIdentity()}).then(function(r) {
+                  revokeBtn.disabled = false; revokeBtn.textContent = '已作废';
+                  if (r.error) { showAdminNotice('作废失败: ' + r.error, 'error'); revokeBtn.textContent = '作废'; }
+                  else { showAdminNotice('邀请码 ' + ic.code + ' 已作废', 'success'); revokeBtn.textContent = '已作废'; revokeBtn.style.color = 'var(--ds-text-muted)'; }
+                });
+              });
           btnGroup.appendChild(revokeBtn);
         }
         tdActions.appendChild(btnGroup);
@@ -1328,7 +1349,16 @@
               container.appendChild(detailField('来源模块', log.source));
             },
             function (actions) {
-              actions.appendChild(markUnavailableButton(makeBtn('标记已处理', 'ds-btn-outline ds-btn-sm'), '日志处理写入需要 Gateway 写接口接入后才能执行'));
+              var handleLogBtn = makeBtn('标记已处理', 'ds-btn-outline ds-btn-sm');
+              handleLogBtn.addEventListener('click', function () {
+                handleLogBtn.disabled = true; handleLogBtn.textContent = '处理中...';
+                fetchGatewayJsonPost('/v1/admin/logs/handle', {log_id: log.id, actor_id: currentIdentity()}).then(function(r) {
+                  handleLogBtn.disabled = false;
+                  if (r.error) { showAdminNotice('标记失败: ' + r.error, 'error'); handleLogBtn.textContent = '标记已处理'; }
+                  else { showAdminNotice('日志 ' + log.id + ' 已标记为已处理', 'success'); handleLogBtn.textContent = '已处理'; handleLogBtn.style.color = 'var(--ds-success)'; }
+                });
+              });
+              actions.appendChild(handleLogBtn);
               var relatedBtn = makeBtn('查看相关日志', 'ds-btn-outline ds-btn-sm');
               relatedBtn.addEventListener('click', function () {
                 var typeFilter = document.getElementById('logTypeFilter');
@@ -1410,8 +1440,7 @@
       ['create-resident', '新建居民需要 Gateway 居民写接口接入后才能执行'],
       ['batch-approve-messages', '批量审核需要 Gateway 审核写接口接入后才能执行'],
       ['create-permission-group', '新建权限组需要 Gateway 权限写接口接入后才能执行'],
-      ['generate-invite', '生成邀请码需要 Gateway 邀请码写接口接入后才能执行'],
-      ['clear-processed-logs', '清空已处理日志需要 Gateway 日志写接口接入后才能执行']
+        ['clear-processed-logs', '清空已处理日志需要 Gateway 日志写接口接入后才能执行']
     ];
     for (var i = 0; i < unavailableActions.length; i++) {
       var button = document.querySelector('[data-admin-action="' + unavailableActions[i][0] + '"]');
@@ -1419,6 +1448,21 @@
     }
 
     // sysconfig: refresh from gateway (real GET + POST)
+    // Wire generate-invite button
+    var genInviteBtn = document.querySelector('[data-admin-action="generate-invite"]');
+    if (genInviteBtn) {
+      genInviteBtn.addEventListener('click', function () {
+        genInviteBtn.disabled = true; genInviteBtn.textContent = '生成中...';
+        fetchGatewayJsonPost('/v1/admin/invites', {actor_id: currentIdentity(), max_uses: 10}).then(function(r) {
+          genInviteBtn.disabled = false; genInviteBtn.textContent = '+ 生成邀请码';
+          if (r.error) { showAdminNotice('生成失败: ' + r.error, 'error'); }
+          else { showAdminNotice('邀请码已生成: ' + r.data.code, 'success'); loadInviteCodes(); }
+        }).catch(function() {
+          genInviteBtn.disabled = false; genInviteBtn.textContent = '+ 生成邀请码';
+        });
+      });
+    }
+
     var refreshSysConfig = document.querySelector('[data-admin-action="refresh-sysconfig"]');
     if (refreshSysConfig) {
       refreshSysConfig.addEventListener('click', loadSysConfig);

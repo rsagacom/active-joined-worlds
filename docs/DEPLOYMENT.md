@@ -1,0 +1,46 @@
+# lobster-chat 部署指南
+
+## 环境
+Rust 1.80+ / Node.js 22+ / macOS, Linux, WSL
+
+## 本地启动
+```
+## 终端1
+cargo run -p lobster-waku-gateway -- --host 127.0.0.1 --port 8787
+
+## 终端2
+cd apps/lobster-web-shell && python3 -m http.server 8080
+
+## 浏览器
+open http://127.0.0.1:8080/creative.html?gateway=http://127.0.0.1:8787
+```
+
+## 页面
+creative.html(住宅私聊) | index.html(主城) | admin-ds.html(城主后台)
+unified.html(世界入口) | world-square.html(世界广场) | user.html(兼容跳转)
+
+## API 端点 (42 个)
+| 模块 | 端点 |
+|------|------|
+| Shell/IM | /v1/shell/state, /v1/shell/events, /v1/shell/message, /v1/shell/message/recall, /v1/shell/message/edit |
+| Admin | /v1/admin/summary, /v1/admin/messages/moderate, /v1/admin/invites, /v1/admin/rooms/members |
+| Auth | /v1/auth/preflight, /v1/auth/email-otp/request, /v1/auth/email-otp/verify |
+| World | /v1/world, /v1/cities, /v1/world-square, /v1/world-directory |
+
+## 测试
+cargo test -p lobster-waku-gateway  ## Gateway 179 tests
+cargo test -p lobster-tui           ## TUI 181 tests
+cd apps/lobster-web-shell && npm test  ## Web Shell 538 tests
+
+## 烟测
+scripts/smoke-release-gate.sh       ## 全量发布烟测
+scripts/smoke-web-shell.sh          ## H5 静态入口
+scripts/smoke-shell-dual-http.sh    ## 双端真实 IM
+
+## 打包部署
+scripts/package-release.sh          ## 打包
+scripts/install-server.sh           ## 安装到目标机
+
+## 生产建议
+Gateway: --host 0.0.0.0 + nginx 反代 + HTTPS
+数据: JSON 文件持久化 (presence/unread/auth/invites)
