@@ -10,7 +10,7 @@ use crate::{
     AddWorldMirrorSourceRequest, AdminBanResidentRequest, AdminConfigPayload,
     AdminFreezeRoomRequest, AdminModerateMessageRequest,
     AdminUnbanResidentRequest, AdminUnfreezeRoomRequest,
-    AdminCreateInviteRequest, AdminRevokeInviteRequest,
+    AdminCreateResidentRequest, AdminCreateInviteRequest, AdminRevokeInviteRequest,
     AdminManageRoomMemberRequest, AdminHandleLogRequest,
     CliSendRequest, ConnectProviderRequest, ConversationId,
     EditShellMessageRequest, GatewayRuntime, GatewayStateNotifier, IdentityId,
@@ -858,6 +858,32 @@ pub(crate) fn handle_post_admin_clear_processed_logs(
     let count = rt.admin_clear_processed_logs();
     let body = serde_json::json!({"ok": true, "cleared": count}).to_string();
     Response::from_string(body).with_status_code(StatusCode(200)).with_header(json_header())
+}
+
+pub(crate) fn handle_post_admin_create_resident(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    _notifier: &Arc<GatewayStateNotifier>,
+    request: &mut Request,
+) -> HttpResponse {
+    let mut body = String::new();
+    if request.as_reader().read_to_string(&mut body).is_err() {
+        return Response::from_string(r#"{"error":"read body failed"}"#)
+            .with_status_code(StatusCode(400)).with_header(json_header());
+    }
+    let req: AdminCreateResidentRequest = match serde_json::from_str(&body) {
+        Ok(r) => r,
+        Err(e) => return Response::from_string(serde_json::json!({"error": e.to_string()}).to_string())
+            .with_status_code(StatusCode(400)).with_header(json_header()),
+    };
+    let mut rt = runtime.lock().expect("gateway runtime mutex");
+    let ok = rt.admin_create_resident(&req.resident_id, &req.email);
+    let resp = if ok {
+        r#"{"ok":true}"#
+    } else {
+        r#"{"ok":false,"error":"resident already exists"}"#
+    };
+    let code = if ok { StatusCode(200) } else { StatusCode(409) };
+    Response::from_string(resp).with_status_code(code).with_header(json_header())
 }
 
 pub(crate) fn handle_post_scene_validate(

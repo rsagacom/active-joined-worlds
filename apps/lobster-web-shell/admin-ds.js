@@ -1437,8 +1437,7 @@
     }
 
     var unavailableActions = [
-      ['create-resident', '新建居民需要 Gateway 居民写接口接入后才能执行'],
-        ['create-permission-group', '新建权限组需要 Gateway 权限写接口接入后才能执行'],
+          ['create-permission-group', '新建权限组需要 Gateway 权限写接口接入后才能执行'],
         ];
     for (var i = 0; i < unavailableActions.length; i++) {
       var button = document.querySelector('[data-admin-action="' + unavailableActions[i][0] + '"]');
@@ -1487,6 +1486,25 @@
     }
 
     // Wire clear-processed-logs button
+    // Wire create-resident button
+    var createResidentBtn = document.querySelector('[data-admin-action="create-resident"]');
+    if (createResidentBtn) {
+      createResidentBtn.addEventListener('click', function () {
+        var residentId = prompt('居民ID:');
+        if (!residentId) return;
+        var email = prompt('邮箱:');
+        if (!email) return;
+        createResidentBtn.disabled = true; createResidentBtn.textContent = '创建中...';
+        fetchGatewayJsonPost('/v1/admin/residents', {resident_id: residentId, email: email}).then(function(r) {
+          createResidentBtn.disabled = false; createResidentBtn.textContent = '+ 新建居民';
+          if (r.error) { showAdminNotice('创建失败: ' + r.error, 'error'); }
+          else { showAdminNotice('居民 ' + residentId + ' 已创建', 'success'); loadResidents(); }
+        }).catch(function() {
+          createResidentBtn.disabled = false; createResidentBtn.textContent = '+ 新建居民';
+        });
+      });
+    }
+
     var clearLogsBtn = document.querySelector('[data-admin-action="clear-processed-logs"]');
     if (clearLogsBtn) {
       clearLogsBtn.addEventListener('click', function () {

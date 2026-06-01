@@ -1486,6 +1486,12 @@ pub(crate) struct InviteCode {
 
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
+pub(crate) struct AdminCreateResidentRequest {
+    pub(crate) resident_id: String,
+    pub(crate) email: String,
+}
+#[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub(crate) struct AdminCreateInviteRequest {
     pub(crate) actor_id: String,
     #[serde(default)]

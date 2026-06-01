@@ -201,7 +201,7 @@ async function verifyAdminDs(page, baseUrl) {
     const rows = Array.from(document.querySelectorAll("#residentTableBody tr"));
     return rows.length > 0 && rows.every((row) => /chen/i.test(row.textContent || ""));
   });
-  assert(await page.locator('[data-admin-action="create-resident"]').isDisabled(), "admin-ds write-only resident action should be disabled until Gateway write API exists");
+  assert(!(await page.locator('[data-admin-action="create-resident"]').isDisabled()), "admin-ds create-resident should be enabled now that Gateway write API exists");
   assert(/前端分页/.test(await page.locator("#mod-residents .ds-pagination-info").textContent()), "admin-ds pagination should be labeled as client-side pagination");
   var pageBtnCount = await page.locator("#mod-residents .ds-page-btn:not([disabled])").count();
   assert(pageBtnCount > 0, "admin-ds pagination should have at least one clickable page button");

@@ -212,6 +212,25 @@ impl GatewayRuntime {
         false
     }
 
+    pub(crate) fn admin_create_resident(&mut self, resident_id: &str, email: &str) -> bool {
+        let rid = IdentityId(resident_id.to_string());
+        if self.registrations.iter().any(|r| r.resident_id == rid) {
+            return false;
+        }
+        self.registrations.push(ResidentRegistration {
+            resident_id: rid,
+            email: email.to_string(),
+            email_hash_sha256: String::new(),
+            mobile_hash_sha256: None,
+            device_hashes_sha256: vec![],
+            state: ResidentRegistrationState::Active,
+            created_at_ms: Self::now_ms(),
+            verified_at_ms: 0,
+            last_login_at_ms: 0,
+        });
+        true
+    }
+
     pub(crate) fn admin_clear_processed_logs(&mut self) -> usize {
         let before = self.message_moderation.len();
         self.message_moderation.retain(|_k, v| v != "handled");

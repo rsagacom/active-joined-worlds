@@ -38,7 +38,7 @@ use crate::{
         handle_post_admin_freeze_room, handle_post_admin_moderate_message,
         handle_post_admin_unban_resident,
         handle_post_admin_unfreeze_room,
-        handle_post_admin_create_invite, handle_post_admin_revoke_invite,
+        handle_post_admin_create_resident, handle_post_admin_create_invite, handle_post_admin_revoke_invite,
         handle_post_admin_manage_room_member, handle_post_admin_handle_log, handle_post_admin_clear_processed_logs,
         handle_post_cli_send, handle_post_direct_open,
         handle_post_provider_connect, handle_post_provider_disconnect, handle_post_scene_validate,
@@ -90,6 +90,9 @@ pub(crate) fn dispatch_http_request(
         }
         (Method::Post, "/v1/admin/messages/moderate") => {
             handle_post_admin_moderate_message(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/admin/residents") => {
+            handle_post_admin_create_resident(runtime, notifier, request)
         }
         (Method::Post, "/v1/admin/invites") => {
             handle_post_admin_create_invite(runtime, notifier, request)
