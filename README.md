@@ -112,6 +112,31 @@ BASE_URL=https://<node>.<tailnet>.ts.net ./scripts/smoke-public-ingress.sh
 - 保持会话上下文可见：输入区下方会提示同步状态、共建记忆和访客提醒；网关慢时会先显示本地待同步消息。
 
 
+## 📊 当前开发进度 (2026-06-06)
+
+| 模块 | 测试数 | Clippy | 状态 |
+|------|--------|--------|------|
+| Gateway (Rust) | 232 | ✅ | 97 路由, 设备管理, 场景权限, 审核持久化 |
+| TUI (Rust/ratatui) | 218 | ✅ | 用户端/城主端/世界广场/私聊终端 |
+| CLI (Rust) | 42 | ✅ | 14 子命令, 集成测试 |
+| H5 Web Shell (JS) | 731 | — | 6 页面注册, 场景交互, admin-ds 10 模块 |
+| crypto-mls | 20 | ✅ | AES-256-GCM + HKDF 前向安全 |
+| ai-sidecar | 7 | ✅ | HTTP AI 助手 + 流式 |
+| chat-core | 20 | ✅ | 合同定义, SceneImageLayer day/night |
+| chat-storage | 17 | ✅ | 文件存储, 原子写 |
+| **总计** | **~1,290** | **零警告** | 全模块通过 |
+
+最近更新：
+- 🔐 crypto-mls: 骨架→AES-256-GCM 真加密 + 公钥交换
+- 🤖 ai-sidecar: trait→HTTP AI 助手实现
+- 🖥️ admin-ds: 审计日志 loading/error 状态, 设备管理 UI
+- 🎨 CSS: tokens 提取, admin 专属规则分离
+- 🧪 CLI: 31→42 测试, Gateway 集成覆盖
+- 🔧 工作区 clippy 零警告
+
+完整审计: [docs/TECH_AUDIT_REPORT_20260604.md](docs/TECH_AUDIT_REPORT_20260604.md)
+开发蓝图: [docs/DEVELOPMENT_BLUEPRINT.md](docs/DEVELOPMENT_BLUEPRINT.md)
+
 ## Product direction
 
 lobster-chat is intentionally built around three mutually reinforcing experiences:
