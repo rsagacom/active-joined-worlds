@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>龙虾聊天 · 主城群聊</title>
     <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.tokens.css?v=20260604-css-split" />
     <link rel="stylesheet" href="./styles.css?v=20260525-h5-shell-fix-v2" />
     <link rel="stylesheet" href="./styles.pixel-map.css?v=20260525-h5-shell-fix-v2" />
+    <link rel="stylesheet" href="./styles.creative.css?v=20260525-h5-shell-fix-v2" />
     <script>
       (function() {
         const applyTimeOfDay = function() {
@@ -20,6 +22,14 @@
         } else {
           document.addEventListener("DOMContentLoaded", applyTimeOfDay, { once: true });
         }
+        // 从 URL 读取 device_id（MAC地址），填入注册表单隐藏字段
+        document.addEventListener("DOMContentLoaded", function() {
+          var deviceId = new URLSearchParams(window.location.search).get("device_id");
+          if (deviceId) {
+            var input = document.getElementById("auth-device-input");
+            if (input) input.value = deviceId;
+          }
+        }, { once: true });
       })();
     </script>
   </head>
@@ -30,7 +40,41 @@
     data-default-room-id="room:world:lobby"
     data-workspace="chat"
     data-sfc-theme="city"
+    data-resident-login="enabled"
   >
+    <div id="resident-login-overlay" class="resident-login-overlay shell-hidden" aria-hidden="true">
+      <section id="resident-login-card" class="resident-login-card" aria-label="居民登录">
+        <button type="button" id="resident-login-close" class="resident-login-close" aria-label="关闭登录窗口">×</button>
+        <div class="resident-login-copy">
+          <span class="resident-login-kicker">居民身份</span>
+          <strong id="auth-status">登录状态：访客模式</strong>
+        </div>
+        <form id="auth-request-form" class="resident-login-form" data-auth-step="request">
+          <label for="auth-email-input" class="resident-login-field-label">邮箱地址（也是你的注册ID）</label>
+          <input id="auth-email-input" type="email" placeholder="输入邮箱地址" autocomplete="email" required />
+          <label for="auth-nickname-input" class="resident-login-field-label">用户昵称</label>
+          <input id="auth-nickname-input" type="text" placeholder="输入用户昵称" autocomplete="nickname" />
+          <input id="auth-resident-input" type="hidden" autocomplete="off" />
+          <input id="auth-device-input" type="hidden" autocomplete="off" />
+          <input id="auth-delivery-select" type="hidden" value="email" />
+          <button id="auth-request-button" type="submit">获取验证码</button>
+        </form>
+        <form id="auth-verify-form" class="resident-login-form resident-login-verify shell-hidden" data-auth-step="verify">
+          <input id="auth-challenge-input" type="hidden" autocomplete="off" />
+          <label for="auth-code-input" class="resident-login-field-label">邮箱验证码</label>
+          <input id="auth-code-input" type="text" placeholder="输入邮箱验证码" autocomplete="one-time-code" />
+          <button id="auth-verify-button" type="submit">完成登录</button>
+        </form>
+        <div id="auth-nickname-editor" class="resident-login-nickname shell-hidden">
+          <span class="resident-login-hint">显示名称</span>
+          <div class="resident-login-nickname-row">
+            <input id="auth-nickname-edit-input" type="text" placeholder="设置显示名称" autocomplete="off" maxlength="32" />
+            <button id="auth-nickname-save-btn" type="button">保存</button>
+          </div>
+        </div>
+      </section>
+    </div>
+
     <div class="app app-hub-shell sfc-shell sfc-city-shell city-hub-shell">
       <header class="sfc-hud public-square-hud">
         <div class="hud-left">
@@ -41,6 +85,7 @@
           </div>
         </div>
         <div class="hud-right">
+          <button type="button" id="hud-login-toggle" class="hud-login-toggle shell-hidden" aria-label="打开登录窗口">登录</button>
           <span class="hub-hud-chip">群聊</span>
           <span id="hud-status" class="hud-pill">连线中</span>
         </div>

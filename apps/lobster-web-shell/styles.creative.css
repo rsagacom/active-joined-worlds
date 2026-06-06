@@ -706,6 +706,59 @@ body::before {
   padding-right: 2px;
 }
 
+.creative-resident-list {
+  flex: 0 0 auto;
+  max-height: 180px;
+  overflow: auto;
+  list-style: none;
+  margin: 0 0 4px;
+  padding: 0;
+  border-bottom: 1px solid rgba(220, 185, 106, 0.14);
+}
+
+.creative-resident-list .room-button {
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 6px;
+  padding: 4px 6px;
+  font-size: 15px;
+  min-height: 32px;
+}
+
+.creative-resident-list .room-avatar {
+  width: 20px;
+  height: 20px;
+  font-size: 10px;
+}
+
+.creative-resident-list .room-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+}
+
+.creative-resident-list .room-content {
+  display: flex;
+  align-items: center;
+}
+
+.resident-status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.resident-status-dot.is-online {
+  background: #4ade80;
+  box-shadow: 0 0 4px rgba(74, 222, 128, 0.6);
+}
+
+.resident-status-dot.is-offline {
+  background: rgba(159, 133, 97, 0.4);
+}
+
 .creative-rail .room-section,
 .creative-rail .room-section-list {
   display: flex;
@@ -1328,6 +1381,19 @@ body::before {
   align-items: center;
 }
 
+.resident-login-field-label {
+  display: block;
+  padding: 0 4px;
+  color: var(--creative-gold);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  min-height: auto;
+  border: 0;
+  background: transparent;
+}
+
 .resident-login-form > * {
   min-height: 40px;
   padding: 0 12px;
@@ -1803,4 +1869,29 @@ body::before {
   .creative-composer.creative-composer textarea {
     min-height: 34px;
   }
+}
+
+/* ── Room ownership badge ── */
+.creative-hud-ownership-badge {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+body[data-room-ownership="own"] .creative-hud-ownership-badge--own {
+  display: inline-flex;
+  color: #2a1709;
+  background: linear-gradient(180deg, #7efdc7, #4ccb8e);
+}
+
+body[data-room-ownership="visitor"] .creative-hud-ownership-badge--visitor {
+  display: inline-flex;
+  color: #fff4c9;
+  background: rgba(241, 201, 120, 0.18);
+  border: 1px solid rgba(241, 201, 120, 0.3);
 }

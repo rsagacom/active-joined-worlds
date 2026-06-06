@@ -78,9 +78,11 @@ export function initSceneRuntime({
 
   function setClearMode(enabled) {
     if (enabled) {
+      closePopover();
+      setHotspotLabelsVisible(true, { autoHideMs: 0 });
+    } else {
       setHotspotLabelsVisible(false);
       setNearHotspot(null);
-      closePopover();
     }
     body?.classList?.toggle("scene-clear-mode", Boolean(enabled));
   }
@@ -99,7 +101,7 @@ export function initSceneRuntime({
     if (!stage) return;
     closePopover();
     const title = button.dataset?.hotspotTitle || button.textContent?.trim() || "热点";
-    const copy = button.dataset?.hotspotCopy || "这里会承载后续场景交互。";
+    const copy = button.dataset?.hotspotCopy || "";
     const buttonRect = button.getBoundingClientRect?.();
     const stageRect = stage.getBoundingClientRect?.();
     if (!buttonRect || !stageRect) return;
@@ -170,11 +172,11 @@ export function initSceneRuntime({
   }
 
   function updateNearHotspot(event) {
-    if (!hotspotEls.length || isClearMode()) {
+    if (!hotspotEls.length) {
       setNearHotspot(null);
       return;
     }
-    const padding = 12;
+    const padding = 48;
     const targetHotspot = hotspotEls.find((button) => {
       const rect = button.getBoundingClientRect?.();
       if (!rect) return false;
@@ -210,33 +212,32 @@ export function initSceneRuntime({
     if (!stageEl) return;
     stageEl.addEventListener("pointermove", updateNearHotspot);
     stageEl.addEventListener("pointerleave", () => setNearHotspot(null));
+    stageEl.addEventListener("touchstart", (event) => {
+      const touch = event.touches?.[0];
+      if (touch) updateNearHotspot({ clientX: touch.clientX, clientY: touch.clientY });
+    }, { passive: true });
+    stageEl.addEventListener("touchend", () => {
+      setTimeout(() => setNearHotspot(null), 600);
+    });
     stageEl.addEventListener("click", (event) => {
-      if (isClearMode()) {
-        setClearMode(false);
-        return;
-      }
       if (event.target.closest(".message, .message-avatar, .message-quick-action")) return;
       if (event.target.closest("a, button, input, textarea, select, [role='button']")) return;
       if (event.target.closest(".creative-composer, .public-square-composer, .user-composer")) return;
       if (event.target.closest(".creative-rail, .public-square-rail, .world-entry-rail, .user-rail")) return;
       if (event.target.closest(".creative-hud, .public-square-hud, .world-entry-hud, .user-hud")) return;
       if (event.target.closest(".scene-hotspot, .scene-hotspot-popover")) return;
-      if (hotspotEls.length && !hotspotLabelsVisible) {
-        setHotspotLabelsVisible(true, { autoHideMs: 2400 });
-        return;
-      }
-      setClearMode(true);
+      setClearMode(!isClearMode());
     });
   }
 
   function bindTimeline(timelineEl) {
     timelineEl?.addEventListener("click", (event) => {
-      if (isClearMode()) return;
       if (event.target.closest("a, button, input, textarea, select, [role='button'], .message, .message-avatar, .message-quick-action")) {
         return;
       }
       if (event.target === timelineEl || event.target.closest(".message-row, .message-stack")) {
-        setClearMode(true);
+        event.stopPropagation();
+        setClearMode(!isClearMode());
       }
     });
   }

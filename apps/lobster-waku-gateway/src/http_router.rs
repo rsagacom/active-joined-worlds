@@ -8,13 +8,18 @@ use tiny_http::{Method, Request, Response, StatusCode};
 use crate::{
     GatewayRuntime, GatewayStateNotifier,
     http_auth_routes::{
-        handle_get_auth_session, handle_post_auth_preflight, handle_post_request_email_otp,
-        handle_post_verify_email_otp,
+        handle_get_auth_session, handle_post_auth_logout, handle_post_auth_preflight,
+        handle_post_request_email_otp, handle_post_request_mobile_otp,
+        handle_post_verify_email_otp, handle_post_verify_mobile_otp,
     },
     http_city_write_routes::{
         handle_post_approve_city_join, handle_post_create_city, handle_post_create_public_room,
         handle_post_freeze_public_room, handle_post_join_city,
         handle_post_update_federation_policy, handle_post_update_steward,
+    },
+    http_device_routes::{
+        handle_get_admin_devices, handle_post_admin_add_device, handle_post_admin_block_device,
+        handle_post_admin_remove_device, handle_post_admin_unblock_device,
     },
     http_governance_write_routes::{
         handle_post_publish_safety_advisory, handle_post_publish_world_notice,
@@ -22,10 +27,12 @@ use crate::{
         handle_post_submit_safety_report, handle_post_update_city_trust,
     },
     http_read_routes::{
-        handle_get_admin_config, handle_get_admin_conversations, handle_get_admin_messages,
+        handle_get_admin_config, handle_get_admin_conversations, handle_get_admin_invites,
+        handle_get_admin_logs, handle_get_admin_messages, handle_get_admin_messages_moderation,
         handle_get_admin_residents, handle_get_admin_rooms, handle_get_admin_summary,
-        handle_get_cities, handle_get_cli_inbox, handle_get_cli_rooms,
-        handle_get_cli_tail, handle_get_export, handle_get_provider, handle_get_residents,
+        handle_get_audit_log, handle_get_capability_catalog, handle_get_cities, handle_get_cli_inbox, handle_get_cli_rooms,
+        handle_get_cli_tail, handle_get_export, handle_get_permission_groups, handle_get_provider,
+        handle_get_residents,
         handle_get_shell_bootstrap,
         handle_get_shell_events, handle_get_shell_state, handle_get_world,
         handle_get_world_directory, handle_get_world_entry, handle_get_world_mirror_sources,
@@ -36,14 +43,17 @@ use crate::{
     http_write_routes::{
         handle_post_admin_ban_resident, handle_post_admin_config,
         handle_post_admin_freeze_room, handle_post_admin_moderate_message,
-        handle_post_admin_unban_resident,
+        handle_post_admin_set_nickname, handle_post_admin_unban_resident,
         handle_post_admin_unfreeze_room,
         handle_post_admin_create_resident, handle_post_admin_create_invite, handle_post_admin_revoke_invite,
         handle_post_admin_manage_room_member, handle_post_admin_handle_log, handle_post_admin_clear_processed_logs,
-        handle_post_cli_send, handle_post_direct_open,
+        handle_post_admin_scene,
+        handle_post_assign_permission_group, handle_post_cli_send, handle_post_create_permission_group,
+        handle_post_direct_open,
         handle_post_provider_connect, handle_post_provider_disconnect, handle_post_scene_validate,
         handle_post_shell_message, handle_post_shell_message_edit,
         handle_post_shell_message_recall, handle_post_shell_mark_read, handle_post_shell_presence,
+        handle_post_shell_set_nickname,
         handle_post_shell_scene, handle_post_waku, handle_post_world_mirror_sources,
     },
 };
@@ -73,11 +83,22 @@ pub(crate) fn dispatch_http_request(
         (Method::Get, "/v1/admin/residents") => handle_get_admin_residents(runtime),
         (Method::Get, "/v1/admin/rooms") => handle_get_admin_rooms(runtime),
         (Method::Get, "/v1/admin/config") => handle_get_admin_config(runtime),
+        (Method::Get, "/v1/admin/logs") => handle_get_admin_logs(runtime),
+        (Method::Get, "/v1/admin/messages/moderation") => {
+            handle_get_admin_messages_moderation(runtime, &query_params)
+        }
+        (Method::Get, "/v1/admin/invites") => handle_get_admin_invites(runtime),
+        (Method::Get, "/v1/admin/permission-groups") => handle_get_permission_groups(runtime),
+        (Method::Get, "/v1/admin/capabilities") => handle_get_capability_catalog(),
+        (Method::Get, "/v1/admin/audit-log") => handle_get_audit_log(runtime, &query_params),
         (Method::Post, "/v1/admin/residents/ban") => {
             handle_post_admin_ban_resident(runtime, notifier, request)
         }
         (Method::Post, "/v1/admin/residents/unban") => {
             handle_post_admin_unban_resident(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/admin/residents/nickname") => {
+            handle_post_admin_set_nickname(runtime, notifier, request)
         }
         (Method::Post, "/v1/admin/rooms/freeze") => {
             handle_post_admin_freeze_room(runtime, notifier, request)
@@ -109,6 +130,30 @@ pub(crate) fn dispatch_http_request(
         (Method::Post, "/v1/admin/logs/clear") => {
             handle_post_admin_clear_processed_logs(runtime, notifier, request)
         }
+        (Method::Get, "/v1/admin/devices") => {
+            handle_get_admin_devices(runtime)
+        }
+        (Method::Post, "/v1/admin/devices/add") => {
+            handle_post_admin_add_device(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/admin/devices/remove") => {
+            handle_post_admin_remove_device(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/admin/devices/block") => {
+            handle_post_admin_block_device(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/admin/devices/unblock") => {
+            handle_post_admin_unblock_device(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/admin/permission-groups") => {
+            handle_post_create_permission_group(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/admin/permission-groups/assign") => {
+            handle_post_assign_permission_group(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/admin/scene") => {
+            handle_post_admin_scene(runtime, notifier, request)
+        }
         (Method::Post, "/v1/shell/scene/validate") => {
             handle_post_scene_validate(runtime, notifier, request)
         }
@@ -130,6 +175,15 @@ pub(crate) fn dispatch_http_request(
         }
         (Method::Post, "/v1/auth/email-otp/verify") => {
             handle_post_verify_email_otp(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/auth/mobile-otp/request") => {
+            handle_post_request_mobile_otp(runtime, request)
+        }
+        (Method::Post, "/v1/auth/mobile-otp/verify") => {
+            handle_post_verify_mobile_otp(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/auth/logout") => {
+            handle_post_auth_logout(runtime, request)
         }
         (Method::Get, "/v1/export") => handle_get_export(runtime, &query_params),
         (Method::Get, "/v1/world-square") => handle_get_world_square(runtime),
@@ -199,6 +253,9 @@ pub(crate) fn dispatch_http_request(
         }
         (Method::Post, "/v1/shell/read") => {
             handle_post_shell_mark_read(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/shell/nickname") => {
+            handle_post_shell_set_nickname(runtime, notifier, request)
         }
         (Method::Post, "/v1/waku") => handle_post_waku(runtime, request),
         _ => Response::from_string("not found")

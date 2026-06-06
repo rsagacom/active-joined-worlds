@@ -10,6 +10,7 @@ impl GatewayRuntime {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn cli_shell_room_projection(
         &self,
         conversation: &Conversation,

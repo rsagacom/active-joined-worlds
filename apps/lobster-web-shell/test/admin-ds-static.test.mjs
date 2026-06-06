@@ -46,14 +46,17 @@ test("admin-ds.html 引用正确的 CSS 和 JS", async () => {
 test("admin-ds.html 包含全部核心模块面板", async () => {
   const html = await readShellPage("admin-ds.html");
 
-  // 7个模块容器必须存在
+  // 9个模块容器必须存在
   const modules = [
     { id: "mod-dashboard", label: "仪表盘" },
     { id: "mod-residents", label: "居民管理" },
     { id: "mod-rooms", label: "会话与房间" },
     { id: "mod-messages", label: "消息审核" },
     { id: "mod-permissions", label: "权限与邀请" },
+    { id: "mod-world-notices", label: "世界公告" },
+    { id: "mod-safety-advisories", label: "安全通告" },
     { id: "mod-sysconfig", label: "系统配置" },
+    { id: "mod-scene", label: "场景编辑" },
     { id: "mod-logs", label: "日志与告警" },
   ];
 
@@ -63,7 +66,7 @@ test("admin-ds.html 包含全部核心模块面板", async () => {
   }
 
   // 侧栏导航项
-  const navModules = ["dashboard", "residents", "rooms", "messages", "permissions", "sysconfig", "logs"];
+  const navModules = ["dashboard", "residents", "rooms", "messages", "permissions", "world-notices", "safety-advisories", "sysconfig", "scene", "logs"];
   for (const nav of navModules) {
     assert.match(html, new RegExp(`data-module="${nav}"`), `导航项 data-module="${nav}" 应存在`);
   }
@@ -123,6 +126,10 @@ test("admin-ds.html 包含所有数据表格容器", async () => {
     "msgTableBody",
     "inviteTableBody",
     "logTableBody",
+    "worldNoticeTableBody",
+    "safetyAdvisoryTableBody",
+    "safetyReportTableBody",
+    "sanctionTableBody",
   ];
 
   for (const id of tableBodies) {
@@ -140,6 +147,9 @@ test("admin-ds.html 包含搜索和筛选 UI", async () => {
     "roomSearch", "roomTypeFilter",
     "msgSearch", "msgRoomFilter", "msgStatusFilter",
     "logSearch", "logLevelFilter", "logTypeFilter",
+    "worldNoticeTitle", "worldNoticeBody", "worldNoticeSeverity", "worldNoticeTags",
+    "safetyAdvisorySubjectKind", "safetyAdvisorySubjectRef", "safetyAdvisoryAction", "safetyAdvisoryReason",
+    "sceneRoomSelect", "sceneEditorContainer",
   ];
 
   for (const id of controls) {
@@ -208,6 +218,12 @@ test("admin-ds 明确区分可用只读动作与待接入写动作", async () =>
     "generate-invite",
     "export-logs",
     "clear-processed-logs",
+    "publish-world-notice",
+    "publish-safety-advisory",
+    "refresh-safety-advisories",
+    "refresh-safety-reports",
+    "refresh-resident-sanctions",
+    "refresh-scene",
   ]) {
     assert.match(html, new RegExp(`data-admin-action="${action}"`), `按钮应声明动作 ${action}`);
   }
@@ -422,6 +438,18 @@ test("admin-ds.js 各渲染函数包含空状态分支", async () => {
 
   // 日志表格空状态
   assert.match(js, /暂无日志数据/, "renderLogs 应有日志空状态");
+
+    // 世界公告空状态
+    assert.match(js, /暂无世界公告/, "renderWorldNotices 应有世界公告空状态");
+
+    // 安全通告空状态
+    assert.match(js, /暂无安全通告/, "renderSafetyAdvisories 应有安全通告空状态");
+
+    // 安全举报空状态
+    assert.match(js, /暂无安全举报/, "renderSafetyReports 应有安全举报空状态");
+
+    // 居民制裁空状态
+    assert.match(js, /暂无居民制裁/, "renderResidentSanctions 应有居民制裁空状态");
 });
 
 test("admin-ds.js loadGatewayAdminData 包含加载和错误状态处理", async () => {
@@ -450,4 +478,35 @@ test("admin-ds.js loadGatewayAdminData 使用 Promise.allSettled 容错", async 
   assert.match(js, /Promise\.allSettled/, "应使用 allSettled 而非 all");
   assert.match(js, /status\s*===\s*'fulfilled'/, "应检查每个 promise 状态");
   assert.match(js, /status\s*===\s*'rejected'/, "应处理 rejected promise");
+});
+
+// ====== 城邦治理模块 ======
+
+test("admin-ds.js 包含世界公告相关函数", async () => {
+  const js = await readShellModule("admin-ds.js");
+  assert.match(js, /async function loadWorldNotices/, "应定义 loadWorldNotices 函数");
+  assert.match(js, /function renderWorldNotices/, "应定义 renderWorldNotices 函数");
+  assert.match(js, /async function publishWorldNotice/, "应定义 publishWorldNotice 函数");
+  assert.match(js, /\/v1\/world-square/, "应调用 world-square 端点");
+  assert.match(js, /\/v1\/world-square\/notices/, "应调用 world-square/notices 端点");
+});
+
+test("admin-ds.js 包含安全通告相关函数", async () => {
+  const js = await readShellModule("admin-ds.js");
+  assert.match(js, /async function loadSafetyData/, "应定义 loadSafetyData 函数");
+  assert.match(js, /function renderSafetyAdvisories/, "应定义 renderSafetyAdvisories 函数");
+  assert.match(js, /function renderSafetyReports/, "应定义 renderSafetyReports 函数");
+  assert.match(js, /function renderResidentSanctions/, "应定义 renderResidentSanctions 函数");
+  assert.match(js, /async function reviewSafetyReport/, "应定义 reviewSafetyReport 函数");
+  assert.match(js, /async function publishSafetyAdvisory/, "应定义 publishSafetyAdvisory 函数");
+  assert.match(js, /\/v1\/world-safety/, "应调用 world-safety 端点");
+  assert.match(js, /\/v1\/world-safety\/advisories/, "应调用 world-safety/advisories 端点");
+  assert.match(js, /\/v1\/world-safety\/reports\/review/, "应调用 world-safety/reports/review 端点");
+});
+
+test("admin-ds.js 包含场景编辑相关函数", async () => {
+  const js = await readShellModule("admin-ds.js");
+  assert.match(js, /function loadSceneModule/, "应定义 loadSceneModule 函数");
+  assert.match(js, /function renderSceneEditor/, "应定义 renderSceneEditor 函数");
+  assert.match(js, /\/v1\/admin\/scene/, "应调用 admin/scene 端点");
 });

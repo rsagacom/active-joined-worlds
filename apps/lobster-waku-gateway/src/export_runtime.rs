@@ -1,6 +1,7 @@
 use super::*;
 
 impl GatewayRuntime {
+    #[allow(clippy::type_complexity)]
     fn export_shell_room_projection(
         &self,
         conversation: &Conversation,

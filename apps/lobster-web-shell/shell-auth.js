@@ -33,6 +33,7 @@ export function initAuth(elMap, cbs) {
     requestFormEl: elMap.requestFormEl || null,
     deliverySelectEl: elMap.deliverySelectEl || null,
     residentInputEl: elMap.residentInputEl || null,
+    nicknameInputEl: elMap.nicknameInputEl || null,
     emailInputEl: elMap.emailInputEl || null,
     mobileInputEl: elMap.mobileInputEl || null,
     deviceInputEl: elMap.deviceInputEl || null,
@@ -51,6 +52,28 @@ export function initAuth(elMap, cbs) {
     gatewayUrl: cbs.gatewayUrl || null,
     desiredResidentId: cbs.desiredResidentId || null,
   };
+  if (_els.deliverySelectEl) {
+    _els.deliverySelectEl.addEventListener("change", _onDeliveryModeChange);
+  }
+  _applyDeliveryInputVisibility();
+}
+
+function _onDeliveryModeChange() {
+  _applyDeliveryInputVisibility();
+  persistAuthDraft();
+}
+
+function _applyDeliveryInputVisibility() {
+  const mode = _els.deliverySelectEl?.value || "email";
+  const isMobile = mode === "mobile";
+  if (_els.emailInputEl) {
+    _els.emailInputEl.placeholder = isMobile ? "邮箱/可选反滥用" : "接收验证码的邮箱";
+    _els.emailInputEl.required = !isMobile;
+  }
+  if (_els.mobileInputEl) {
+    _els.mobileInputEl.placeholder = isMobile ? "手机号码（必填）" : "手机号/可选反滥用";
+    _els.mobileInputEl.required = isMobile;
+  }
 }
 
 // --- state accessors ---
@@ -116,6 +139,7 @@ export function updateAuthFormState() {
   const verifyStep = Boolean(_authSession.challengeId);
   for (const element of [
     _els.deliverySelectEl,
+    _els.nicknameInputEl,
     _els.emailInputEl,
     _els.mobileInputEl,
     _els.deviceInputEl,
@@ -145,6 +169,7 @@ export function updateAuthFormState() {
 export function loadAuthDraft() {
   const email = safeLocalStorageGet("lobster-auth-email");
   const mobile = safeLocalStorageGet("lobster-auth-mobile");
+  const nickname = safeLocalStorageGet("lobster-auth-nickname");
   const resident = safeLocalStorageGet("lobster-auth-resident-id");
   const challengeId = safeLocalStorageGet("lobster-auth-challenge-id");
   const maskedEmail = safeLocalStorageGet("lobster-auth-masked-email");
@@ -156,6 +181,7 @@ export function loadAuthDraft() {
   if (_els.emailInputEl && email) _els.emailInputEl.value = email;
   if (_els.mobileInputEl && mobile) _els.mobileInputEl.value = mobile;
   if (_els.residentInputEl && resident) _els.residentInputEl.value = resident;
+  if (_els.nicknameInputEl && nickname) _els.nicknameInputEl.value = nickname;
   if (_els.challengeInputEl && challengeId) _els.challengeInputEl.value = challengeId;
   _authSession = {
     challengeId: challengeId || null,
@@ -167,6 +193,7 @@ export function loadAuthDraft() {
 
 export function persistAuthDraft() {
   safeLocalStorageSet("lobster-auth-resident-id", _els.residentInputEl?.value?.trim() || "");
+  safeLocalStorageSet("lobster-auth-nickname", _els.nicknameInputEl?.value?.trim() || "");
   safeLocalStorageSet("lobster-auth-email", _els.emailInputEl?.value?.trim() || "");
   safeLocalStorageSet("lobster-auth-mobile", _els.mobileInputEl?.value?.trim() || "");
   safeLocalStorageSet("lobster-auth-challenge-id", _authSession.challengeId || "");
@@ -190,8 +217,11 @@ export function handleGatewayAuthFailure(status) {
 // --- OTP flow ---
 export async function requestEmailOtp() {
   const deliveryMode = _els.deliverySelectEl?.value || "email";
-  if (deliveryMode !== "email") {
-    setAuthStatus("当前只开通邮箱验证码，请选择邮箱验证码", true);
+  if (deliveryMode === "mobile") {
+    return requestMobileOtp();
+  }
+  if (deliveryMode === "device") {
+    setAuthStatus("设备验证将在后续版本支持", true);
     return;
   }
   const email = _els.emailInputEl.value.trim();
@@ -211,12 +241,14 @@ export async function requestEmailOtp() {
     setAuthStatus(preflight.blocked_reasons.join(" · ") || "认证预检未通过", true);
     return;
   }
+  const nickname = _els.nicknameInputEl?.value?.trim() || undefined;
   setAuthStatus(`正在为 ${preflight.normalized_email || email} 申请邮箱验证码`);
   const response = await _callbacks.postJson("/v1/auth/email-otp/request", {
     email,
     mobile: mobile || undefined,
     device_physical_address: devicePhysicalAddress || undefined,
     resident_id: _callbacks.desiredResidentId ? _callbacks.desiredResidentId() : undefined,
+    nickname,
   });
   _authSession = {
     challengeId: response.challenge_id,
@@ -236,19 +268,67 @@ export async function requestEmailOtp() {
   setAuthStatus(`邮箱验证码已发往 ${response.masked_email} · ${deliveryNote}`);
 }
 
+async function requestMobileOtp() {
+  const mobile = _els.mobileInputEl.value.trim();
+  const email = _els.emailInputEl.value.trim();
+  const devicePhysicalAddress = _els.deviceInputEl.value.trim();
+  if (!mobile) {
+    setAuthStatus("请填写手机号码", true);
+    return;
+  }
+  setAuthStatus("正在检查注册句柄");
+  const preflight = await _callbacks.postJson("/v1/auth/preflight", {
+    email: email || undefined,
+    mobile,
+    device_physical_address: devicePhysicalAddress || undefined,
+  });
+  if (!preflight.allowed) {
+    setAuthStatus(preflight.blocked_reasons.join(" · ") || "认证预检未通过", true);
+    return;
+  }
+  const nickname = _els.nicknameInputEl?.value?.trim() || undefined;
+  setAuthStatus(`正在为 ${preflight.normalized_mobile || mobile} 申请手机验证码`);
+  const response = await _callbacks.postJson("/v1/auth/mobile-otp/request", {
+    mobile,
+    email: email || undefined,
+    device_physical_address: devicePhysicalAddress || undefined,
+    resident_id: _callbacks.desiredResidentId ? _callbacks.desiredResidentId() : undefined,
+    nickname,
+  });
+  _authSession = {
+    challengeId: response.challenge_id,
+    maskedEmail: response.masked_mobile,
+    expiresAtMs: response.expires_at_ms,
+    deliveryMode: response.delivery_mode,
+  };
+  if (_els.challengeInputEl) _els.challengeInputEl.value = response.challenge_id;
+  if (response.dev_code && _els.codeInputEl) {
+    _els.codeInputEl.value = response.dev_code;
+  }
+  persistAuthDraft();
+  const expiresAt = new Date(response.expires_at_ms).toLocaleTimeString();
+  const deliveryNote = response.dev_code
+    ? `开发验证码已预填 · ${expiresAt} 前有效`
+    : `${translateDeliveryMode(response.delivery_mode)} · ${expiresAt} 前有效`;
+  setAuthStatus(`手机验证码已发往 ${response.masked_mobile} · ${deliveryNote}`);
+}
+
 export async function verifyEmailOtp() {
   const challengeId = (_authSession.challengeId || _els.challengeInputEl?.value || "").trim();
   const code = _els.codeInputEl?.value?.trim() || "";
   if (!challengeId) {
-    setAuthStatus("请先获取邮箱验证码", true);
+    setAuthStatus("请先获取验证码", true);
     return;
   }
   if (!code) {
-    setAuthStatus("请填写邮箱验证码", true);
+    setAuthStatus("请填写验证码", true);
     return;
   }
-  setAuthStatus("正在校验邮箱验证码");
-  const response = await _callbacks.postJson("/v1/auth/email-otp/verify", {
+  const isMobile = challengeId.startsWith("mobile-otp:");
+  const endpoint = isMobile ? "/v1/auth/mobile-otp/verify" : "/v1/auth/email-otp/verify";
+  const verifyLabel = isMobile ? "手机" : "邮箱";
+  setAuthStatus(`正在校验${verifyLabel}验证码`);
+  const response = await _callbacks.postJson(endpoint, {
     challenge_id: challengeId,
     code,
     resident_id: _callbacks.desiredResidentId ? _callbacks.desiredResidentId() : undefined,
@@ -259,15 +339,35 @@ export async function verifyEmailOtp() {
   if (_els.residentInputEl) _els.residentInputEl.value = response.resident_id;
   _sessionToken = response.session_token || null;
   safeLocalStorageSet("lobster-session-token", _sessionToken || "");
+  const masked = response.mobile_masked || response.email_masked || "";
   _authSession = {
     challengeId: null,
-    maskedEmail: response.email_masked,
+    maskedEmail: masked,
     expiresAtMs: null,
     deliveryMode: null,
   };
   if (_els.challengeInputEl) _els.challengeInputEl.value = "";
   if (_els.codeInputEl) _els.codeInputEl.value = "";
   persistAuthDraft();
+  const displayName = response.nickname || response.resident_id;
   await _callbacks.refreshFromGateway();
-  setAuthStatus(`已登录为 ${response.resident_id} · ${response.email_masked}`);
+  setAuthStatus(`已登录为 ${displayName} · ${masked}`);
+}
+
+export async function updateMyNickname(nickname) {
+  if (!_sessionToken) {
+    setAuthStatus("请先登录", true);
+    return null;
+  }
+  try {
+    const resp = await _callbacks.postJson("/v1/shell/nickname", { nickname: nickname || undefined });
+    if (resp.ok) {
+      setAuthStatus(nickname ? `显示名称已更新为 ${nickname}` : "显示名称已清除");
+      if (_callbacks.refreshFromGateway) await _callbacks.refreshFromGateway();
+      return resp.nickname;
+    }
+  } catch (e) {
+    setAuthStatus("更新昵称请求失败", true);
+  }
+  return null;
 }

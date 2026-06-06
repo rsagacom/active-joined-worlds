@@ -56,14 +56,25 @@ import {
   messageThreadKind,
 } from "./shell-message-render.js";
 import {
+  quickActionContextCopy,
+  quickActionDefaultSendLabel,
   quickActionDraftStatusCopy,
+  quickActionFollowUpCopy,
+  quickActionFollowUpLabel,
   quickActionIntensity,
   quickActionOverviewCtaLabel,
   quickActionOverviewSummary,
   quickActionStage,
+  buildWorkflowProgressDomSpec,
   quickActionStateStages,
   quickActionStatusCopy,
+  quickActionSummary,
   quickActionTone,
+  buildRoomQuickActionPillDomSpec,
+  buildRoomInlineActionDomSpec,
+  buildRoomInlineActionsRailDomSpec,
+  buildRoomInlineProgressRenderDomSpec,
+  nextQuickActionState,
 } from "./shell-quick-action-labels.js";
 import {
   QUICK_ACTION_BLUEPRINTS,
@@ -72,14 +83,22 @@ import {
   quickActionWorkflowTemplate as _quickActionWorkflowTemplate,
 } from "./shell-quick-action-templates.js";
 import {
+  buildQuickActionInlinePreviewPanelRenderDomModel,
+  quickActionPreviewClickableDomSpec,
+  quickActionPreviewKeyActivates,
+  buildQuickActionInlinePreviewPanelModel,
+  buildQuickActionPreviewSummaryLineDomSpec,
+  buildQuickActionPreviewCardModel,
+  buildQuickActionPreviewCardRenderDomSpec,
+  buildRoomQuickPreviewPillDomSpec,
+  buildQuickActionPreviewModel,
   normalizeQuickActionFieldLabel,
   normalizeQuickActionStructured,
   parseStructuredQuickActionMessage,
-  quickActionInlinePreviewActionHint,
-  quickActionInlinePreviewActionLabels,
-  quickActionInlinePreviewActionOrder,
-  quickActionInlinePreviewFieldSets,
+  quickActionSnapshotFromHistory,
+  quickActionSnapshotHistoryFromRecord,
   quickActionInlinePreviewFields,
+  quickActionPreviewDefaultFieldView,
   quickActionPreviewFieldViewLabel,
   quickActionPreviewHistoryDescription,
   quickActionPreviewHistoryLabel,
@@ -87,7 +106,10 @@ import {
   quickActionPreviewPrimaryField,
   quickActionPreviewPrimaryFieldText,
   quickActionPreviewRoundLabel,
-  quickActionPreviewStructuredViews,
+  resolveQuickActionPreviewView,
+  quickActionPreviewSelectedFieldView,
+  quickActionPreviewSelectedSnapshotIndex,
+  quickActionPreviewSelectedState,
   quickActionWorkflowStructured,
 } from "./shell-quick-action-preview.js";
 import {
@@ -104,6 +126,7 @@ import {
   quickActionAdvanceLabel,
   quickActionContract,
   quickActionContractStateTemplate,
+  quickActionStructuredDraft,
   quickActionTemplate,
   quickActionWorkflowTemplate,
   resetRoomQuickActions,
@@ -138,6 +161,7 @@ import {
   updateResidentLoginSurface as applyResidentLoginSurface,
   handleGatewayAuthFailure as handleGatewayAuthFailureMod,
   requestEmailOtp as requestEmailOtpMod,
+  updateMyNickname as updateMyNicknameMod,
   verifyEmailOtp as verifyEmailOtpMod,
 } from "./shell-auth.js";
 import {
@@ -151,6 +175,13 @@ import {
   stageProjection,
   workflowProfile,
 } from "./shell-room-profiles.js";
+import {
+  roleAllowsApproveJoin,
+  roleAllowsCreatePublicRoom,
+  roleAllowsFreezeRoom,
+  roleAllowsManageStewards,
+  roleAllowsUpdateFederation,
+} from "./shell-role-permissions.js";
 import {
   applyLocalTimeOfDayState,
   availableWorkspacesForShellMode,
@@ -677,6 +708,17 @@ function syncUserRoomProjection(room, visual) {
   const projection = userRoomProjection(room, visual);
   applyUserSceneImageLayer(room);
 
+  // 标记房间所有权：自己的私宅 vs 访客模式
+  const identity = currentIdentity();
+  if (identity && room && room.id && room.id.startsWith("dm:")) {
+    const isOwner = room.participants && room.participants.some(function(p) {
+      return (typeof p === "string" ? p : p.id || p.resident_id || "") === identity;
+    });
+    setDatasetFlag(document.body, "roomOwnership", isOwner ? "own" : "visitor");
+  } else {
+    setDatasetFlag(document.body, "roomOwnership", "");
+  }
+
   setDatasetFlag(document.body, "roomVariant", projection.variant);
   setDatasetFlag(document.body, "roomMotif", projection.motif);
   setDatasetFlag(appShellEl, "roomVariant", projection.variant);
@@ -1079,6 +1121,10 @@ const authStatusEl = document.querySelector("#auth-status");
 const authRequestFormEl = document.querySelector("#auth-request-form");
 const authDeliverySelectEl = document.querySelector("#auth-delivery-select");
 const authResidentInputEl = document.querySelector("#auth-resident-input");
+const authNicknameInputEl = document.querySelector("#auth-nickname-input");
+const authNicknameEditorEl = document.querySelector("#auth-nickname-editor");
+const authNicknameEditInputEl = document.querySelector("#auth-nickname-edit-input");
+const authNicknameSaveBtnEl = document.querySelector("#auth-nickname-save-btn");
 const authEmailInputEl = document.querySelector("#auth-email-input");
 const authMobileInputEl = document.querySelector("#auth-mobile-input");
 const authDeviceInputEl = document.querySelector("#auth-device-input");
@@ -1589,7 +1635,7 @@ function clearMessageEditTarget({ clearInput = false } = {}) {
 
 function beginMessageEdit(room, message) {
   const messageId = messageStableId(message);
-  if (!gatewayUrl || !room?.id || !messageId || message?.is_recalled) return;
+  if (!gatewayUrl || !room?.id || !messageId || message?.is_recalled || message?.moderation_status === 'blocked') return;
   editingMessageTarget = {
     roomId: room.id,
     messageId,
@@ -1644,7 +1690,7 @@ async function recallCommittedMessage(room, message, button = null) {
 
 function createMessageOwnerActions(room, message, { isSelf, messageKind } = {}) {
   const messageId = messageStableId(message);
-  if (!gatewayUrl || !isSelf || !messageId || message?.is_recalled || messageKind === "system") {
+  if (!gatewayUrl || !isSelf || !messageId || message?.is_recalled || message?.moderation_status === 'blocked' || messageKind === "system") {
     return null;
   }
   const actions = document.createElement("div");
@@ -1727,85 +1773,47 @@ function quickActionSendLabel(action) {
   if (typeof contractSendLabel === "string" && contractSendLabel.trim()) {
     return contractSendLabel;
   }
-  switch (action) {
-    case "整理":
-      return "提交整理";
-    case "留条":
-      return "留下便条";
-    case "委托":
-      return "发出委托";
-    case "交易":
-      return "记录交易";
-    case "续聊":
-      return "继续发送";
-    case "私聊":
-      return "发起私聊";
-    default:
-      return "发送";
-  }
-}
-
-function quickActionFollowUpLabel(action, state = "") {
-  return quickActionStage(action, state)?.label || "";
-}
-
-function quickActionFollowUpCopy(action, state = "") {
-  return quickActionStage(action, state)?.copy || "";
-}
-
-function workflowProgressStageState(index, currentIndex) {
-  if (index < currentIndex) return "done";
-  if (index === currentIndex) return "current";
-  return "upcoming";
+  return quickActionDefaultSendLabel(action);
 }
 
 function createWorkflowProgress(action, state = "", options = {}) {
-  const stages =
-    Array.isArray(options.stages) && options.stages.length
-      ? options.stages
-      : quickActionStateStages(action);
-  if (!stages.length) return null;
+  const progressDomSpec = buildWorkflowProgressDomSpec(action, state, options);
+  if (!progressDomSpec) return null;
 
-  const currentIndex = Math.max(
-    stages.findIndex((stage) => stage.label === state),
-    0,
-  );
   const progress = document.createElement("div");
-  progress.className = "workflow-progress";
-  if (options.className) {
-    progress.classList.add(...String(options.className).split(/\s+/).filter(Boolean));
-  }
-  setDatasetFlag(progress, "actionIntensity", quickActionIntensity(action));
-  setDatasetFlag(progress, "quickAction", action);
+  progress.className = progressDomSpec.classNames.join(" ");
+  Object.entries(progressDomSpec.dataset || {}).forEach(([key, value]) => {
+    setDatasetFlag(progress, key, value);
+  });
 
-  if (options.title) {
-    progress.appendChild(createLine("workflow-progress-title", options.title));
+  if (progressDomSpec.titleLine) {
+    progress.appendChild(createLine(progressDomSpec.titleLine.className, progressDomSpec.titleLine.text));
   }
 
   const steps = document.createElement("div");
-  steps.className = "workflow-progress-steps";
+  steps.className = progressDomSpec.stepsClassName;
 
-  for (let index = 0; index < stages.length; index += 1) {
-    const stage = stages[index];
+  for (const stepSpec of progressDomSpec.steps) {
     const step = document.createElement("div");
-    step.className = "workflow-progress-step";
-    setDatasetFlag(step, "stageState", workflowProgressStageState(index, currentIndex));
-    setDatasetFlag(step, "stageLabel", stage.label);
-    if (typeof options.onStageClick === "function") {
+    step.className = stepSpec.className;
+    Object.entries(stepSpec.dataset || {}).forEach(([key, value]) => {
+      setDatasetFlag(step, key, value);
+    });
+    if (stepSpec.clickable && typeof options.onStageClick === "function") {
       step.setAttribute("role", "button");
       step.tabIndex = 0;
       step.addEventListener("click", () => {
-        options.onStageClick(stage, index);
+        options.onStageClick(stepSpec.stage, stepSpec.index);
       });
     }
 
     const marker = document.createElement("span");
-    marker.className = "workflow-progress-marker";
-    marker.textContent = String(index + 1);
+    marker.className = stepSpec.markerClassName;
+    marker.textContent = stepSpec.markerText;
 
     const label = document.createElement("span");
-    label.className = "workflow-progress-label";
-    label.textContent = stage.label;
+    label.className = stepSpec.labelClassName;
+    label.textContent = stepSpec.labelText;
 
     step.append(marker, label);
     steps.appendChild(step);
@@ -1830,50 +1838,17 @@ function roomQuickPreviewRecord(roomId) {
 function roomQuickSnapshotHistory(roomId, action = "", state = "") {
   if (!roomId || !action || !state) return [];
   const roomRecord = roomQuickSnapshots?.[roomId];
-  if (!roomRecord || typeof roomRecord !== "object") return [];
-  const actionRecord = roomRecord?.[action];
-  if (!actionRecord || typeof actionRecord !== "object") return [];
-  const raw = actionRecord?.[state];
-  if (Array.isArray(raw)) {
-    return raw.filter((item) => item && typeof item === "object");
-  }
-  if (raw && typeof raw === "object") {
-    return [raw];
-  }
-  return [];
+  return quickActionSnapshotHistoryFromRecord(roomRecord, action, state);
 }
 
 function roomQuickSnapshot(roomId, action = "", state = "", snapshotIndex = null) {
   const history = roomQuickSnapshotHistory(roomId, action, state);
-  if (!history.length) return null;
-  if (Number.isInteger(snapshotIndex) && snapshotIndex >= 0 && snapshotIndex < history.length) {
-    return history[snapshotIndex];
-  }
-  return history[history.length - 1] || null;
+  return quickActionSnapshotFromHistory(history, snapshotIndex);
 }
 
 function latestRoomQuickSnapshotIndex(roomId, action = "", state = "") {
   const history = roomQuickSnapshotHistory(roomId, action, state);
   return history.length ? history.length - 1 : -1;
-}
-
-function quickActionStructuredDraft(structured, fallbackAction = "") {
-  const normalized = normalizeQuickActionStructured(structured, fallbackAction);
-  const action = normalized?.action || fallbackAction;
-  if (!normalized || !action) return quickActionTemplate(fallbackAction);
-  const lines = [`${action}：`];
-  for (const field of normalized.fields) {
-    const label = String(field.label || "")
-      .replace(/^[\-\u2022\s]+/u, "")
-      .replace(/[：:]\s*$/u, "")
-      .trim();
-    if (!label) continue;
-    lines.push(`- ${label}：${String(field.value || "").trim()}`);
-  }
-  if (normalized.notes.length) {
-    lines.push(...normalized.notes);
-  }
-  return lines.join("\n");
 }
 
 function setRoomQuickSnapshot(roomId, action = "", state = "", structured = null) {
@@ -1952,38 +1927,15 @@ function roomQuickStage(roomId, action) {
 function roomQuickPreviewState(roomId, action = roomQuickAction(roomId)) {
   if (!roomId || !action) return "";
   const stages = quickActionStateStages(action);
-  if (!stages.length) return "";
   const record = roomQuickPreviewRecord(roomId);
-  if (record?.action === action && stages.some((stage) => stage.label === record.state)) {
-    return record.state;
-  }
-  return "";
+  return quickActionPreviewSelectedState(record, action, stages);
 }
 
 function roomQuickPreviewSnapshotIndex(roomId, action = roomQuickAction(roomId), state = roomQuickPreviewState(roomId, action)) {
-  if (!roomId || !action || !state) return null;
+  if (!roomId) return null;
   const history = roomQuickSnapshotHistory(roomId, action, state);
-  if (!history.length) return null;
   const record = roomQuickPreviewRecord(roomId);
-  if (
-    record?.action === action &&
-    record?.state === state &&
-    Number.isInteger(record.snapshotIndex) &&
-    record.snapshotIndex >= 0 &&
-    record.snapshotIndex < history.length
-  ) {
-    return record.snapshotIndex;
-  }
-  return history.length - 1;
-}
-
-function defaultRoomQuickPreviewFieldView(roomId, action = "", state = "", snapshotIndex = null) {
-  const history = roomQuickSnapshotHistory(roomId, action, state);
-  if (!history.length) return "stage";
-  if (Number.isInteger(snapshotIndex) && snapshotIndex >= 0 && snapshotIndex < history.length) {
-    return snapshotIndex === history.length - 1 ? "stage" : "snapshot";
-  }
-  return "stage";
+  return quickActionPreviewSelectedSnapshotIndex(record, action, state, history.length);
 }
 
 function roomQuickPreviewFieldView(
@@ -1994,28 +1946,8 @@ function roomQuickPreviewFieldView(
 ) {
   if (!roomId || !action || !state) return "stage";
   const history = roomQuickSnapshotHistory(roomId, action, state);
-  const resolvedSnapshotIndex =
-    Number.isInteger(snapshotIndex) && snapshotIndex >= 0 && snapshotIndex < history.length
-      ? snapshotIndex
-      : history.length
-      ? history.length - 1
-      : null;
   const record = roomQuickPreviewRecord(roomId);
-  const recordSnapshotIndex =
-    Number.isInteger(record?.snapshotIndex) && record.snapshotIndex >= 0
-      ? record.snapshotIndex
-      : history.length
-      ? history.length - 1
-      : null;
-  if (
-    record?.action === action &&
-    record?.state === state &&
-    recordSnapshotIndex === resolvedSnapshotIndex &&
-    (record?.fieldView === "stage" || record?.fieldView === "snapshot")
-  ) {
-    return record.fieldView;
-  }
-  return defaultRoomQuickPreviewFieldView(roomId, action, state, resolvedSnapshotIndex);
+  return quickActionPreviewSelectedFieldView(record, action, state, history.length, snapshotIndex);
 }
 
 function setRoomQuickPreview(roomId, action = "", state = "", snapshotIndex = null, fieldView = "") {
@@ -2051,28 +1983,11 @@ function roomQuickPreviewCardFieldView(
 ) {
   if (!roomId || !action || !state) return "snapshot";
   const history = roomQuickSnapshotHistory(roomId, action, state);
-  const resolvedSnapshotIndex =
-    Number.isInteger(snapshotIndex) && snapshotIndex >= 0 && snapshotIndex < history.length
-      ? snapshotIndex
-      : history.length
-        ? history.length - 1
-        : null;
   const record = roomQuickPreviewRecord(roomId);
-  const recordSnapshotIndex =
-    Number.isInteger(record?.snapshotIndex) && record.snapshotIndex >= 0
-      ? record.snapshotIndex
-      : history.length
-        ? history.length - 1
-        : null;
-  if (
-    record?.action === action &&
-    record?.state === state &&
-    recordSnapshotIndex === resolvedSnapshotIndex &&
-    (record?.cardFieldView === "stage" || record?.cardFieldView === "snapshot")
-  ) {
-    return record.cardFieldView;
-  }
-  return "snapshot";
+  return quickActionPreviewSelectedFieldView(record, action, state, history.length, snapshotIndex, {
+    fieldKey: "cardFieldView",
+    fallback: "snapshot",
+  });
 }
 
 function setRoomQuickPreviewCardFieldView(
@@ -2114,14 +2029,6 @@ function previewRoomQuickStage(roomId, action = "", previewState = "", snapshotI
   }
 }
 
-function nextQuickActionState(action, state = "") {
-  const stages = quickActionStateStages(action);
-  const index = stages.findIndex((stage) => stage.label === state);
-  if (index < 0 || index >= stages.length - 1) return "";
-  return stages[index + 1].label;
-}
-
-
 function roomQuickPreviewSummary(room) {
   const preview = resolveRoomQuickPreview(room);
   if (!preview) return "";
@@ -2139,16 +2046,6 @@ function roomQuickPreviewHistoryLabel(room, action = latestRoomQuickAction(room)
   return quickActionPreviewHistoryLabel(history[snapshotIndex], snapshotIndex, history.length);
 }
 
-function roomQuickPreviewHistoryToneClass(room, action = latestRoomQuickAction(room), previewState = roomQuickPreviewState(room?.id, action)) {
-  if (!room?.id || !action || !previewState) return "";
-  const history = roomQuickSnapshotHistory(room.id, action, previewState);
-  const snapshotIndex = roomQuickPreviewSnapshotIndex(room.id, action, previewState);
-  if (!history.length || history.length <= 1 || snapshotIndex == null || snapshotIndex < 0 || snapshotIndex >= history.length) {
-    return "";
-  }
-  return snapshotIndex === history.length - 1 ? "summary-round" : "summary-history";
-}
-
 function resolveRoomQuickPreview(room, action = latestRoomQuickAction(room)) {
   if (!room?.id || !action) return null;
   const state = roomQuickPreviewState(room.id, action);
@@ -2158,127 +2055,68 @@ function resolveRoomQuickPreview(room, action = latestRoomQuickAction(room)) {
   const structured = latestStructuredQuickActionPreview(room, action, state, snapshotIndex);
   const historyLabel = roomQuickPreviewHistoryLabel(room, action, state);
   const followUpCopy = quickActionFollowUpCopy(action, state);
-  const detailParts = [state, historyLabel, followUpCopy].filter(Boolean);
-  return {
+  return buildQuickActionPreviewModel({
     action,
     state,
     history,
     snapshotIndex,
     structured,
     historyLabel,
-    historyToneClass: roomQuickPreviewHistoryToneClass(room, action, state),
     followUpCopy,
-    detailText: detailParts.join(" · "),
-    summaryText: `阶段预览：${detailParts.join(" · ")}`,
-  };
-}
-
-function resolveQuickActionPreviewView(preview, fieldView = "snapshot") {
-  if (!preview?.action || !preview?.state || !preview?.structured) return null;
-  const resolvedFieldView = fieldView === "stage" ? "stage" : "snapshot";
-  const structuredViews = quickActionPreviewStructuredViews(
-    preview.action,
-    preview.state,
-    preview.structured,
-  );
-  const activeStructured =
-    resolvedFieldView === "stage" ? structuredViews.stageStructured : structuredViews.snapshotStructured;
-  const primaryField = quickActionPreviewPrimaryField(activeStructured);
-  const primaryFieldText = quickActionPreviewPrimaryFieldText(activeStructured);
-  const summaryCopy =
-    resolvedFieldView === "stage"
-      ? preview.followUpCopy || primaryFieldText
-      : primaryFieldText || preview.followUpCopy;
-  const detailParts = [preview.state, preview.historyLabel, summaryCopy].filter(Boolean);
-  return {
-    ...preview,
-    fieldView: resolvedFieldView,
-    fieldViewLabel: quickActionPreviewFieldViewLabel(resolvedFieldView),
-    activeStructured,
-    primaryField,
-    primaryFieldText,
-    summaryCopy,
-    detailText: detailParts.join(" · "),
-    summaryText: `${quickActionPreviewFieldViewLabel(resolvedFieldView)}：${detailParts.join(" · ")}`,
-  };
+  });
 }
 
 function createQuickActionPreviewSummaryLine(preview, options = {}) {
-  if (!preview?.state) return null;
-  const resolvedPreview =
-    resolveQuickActionPreviewView(preview, options.fieldView) ||
-    resolveQuickActionPreviewView(preview, "snapshot");
-  if (!resolvedPreview) return null;
-  const line = document.createElement(options.tagName || "div");
-  line.className = options.className || "quick-action-preview-summary";
-
-  const lead = document.createElement("span");
-  lead.className = "quick-action-preview-summary-copy";
-  lead.textContent = `${options.includePrefix ? `${resolvedPreview.fieldViewLabel}：` : ""}${resolvedPreview.state}`;
-  line.appendChild(lead);
-
-  if (resolvedPreview.historyLabel) {
-    const separator = document.createElement("span");
-    separator.className = "quick-action-preview-summary-copy";
-    separator.textContent = " · ";
-    line.appendChild(separator);
-
-    const chip = document.createElement("span");
-    chip.className = resolvedPreview.historyToneClass || "summary-round";
-    chip.textContent = resolvedPreview.historyLabel;
-    line.appendChild(chip);
-  }
-
-  if (resolvedPreview.summaryCopy) {
-    const copy = document.createElement("span");
-    copy.className = "quick-action-preview-summary-copy";
-    copy.textContent = ` · ${resolvedPreview.summaryCopy}`;
-    line.appendChild(copy);
-  }
-
+  const summaryLineDomSpec = buildQuickActionPreviewSummaryLineDomSpec(preview, options);
+  if (!summaryLineDomSpec) return null;
+  const line = document.createElement(summaryLineDomSpec.tagName);
+  line.className = summaryLineDomSpec.className;
+  summaryLineDomSpec.parts.forEach((partSpec) => {
+    const part = document.createElement("span");
+    part.className = partSpec.className;
+    part.textContent = partSpec.text;
+    line.appendChild(part);
+  });
   return line;
 }
 
 function createQuickActionPreviewCard(action, previewState = "", structured = null, options = {}) {
   if (!action || !previewState || !structured) return null;
-  const history = Array.isArray(options.history) ? options.history.filter(Boolean) : [];
-  const selectedHistoryIndex =
-    Number.isInteger(options.selectedHistoryIndex) && options.selectedHistoryIndex >= 0
-      ? options.selectedHistoryIndex
-      : history.length
-        ? history.length - 1
-        : -1;
-  const structuredViews = quickActionPreviewStructuredViews(action, previewState, structured);
-  const selectedFieldView =
-    options.fieldView === "stage" || options.fieldView === "snapshot" ? options.fieldView : "snapshot";
-  const resolvedPreviewView = resolveQuickActionPreviewView(
-    {
-      action,
-      state: previewState,
-      structured,
-      historyLabel: options.historyLabel || "",
-      historyToneClass: "",
-      followUpCopy: quickActionFollowUpCopy(action, previewState),
-    },
-    selectedFieldView,
-  );
-  const activeStructured =
-    selectedFieldView === "stage" ? structuredViews.stageStructured : structuredViews.snapshotStructured;
+  const previewCardModel = buildQuickActionPreviewCardModel(action, previewState, structured, {
+    ...options,
+    followUpCopy: quickActionFollowUpCopy(action, previewState),
+  });
+  if (!previewCardModel) return null;
+  const { history, activeStructured } = previewCardModel;
   if (!activeStructured) return null;
+  const previewRenderDomSpec = buildQuickActionPreviewCardRenderDomSpec({
+    action,
+    previewState,
+    previewCardModel,
+    className: options.className || "",
+    title: options.title || "",
+    historyLabel: options.historyLabel || "",
+    historyTitle: options.historyTitle || "",
+    followUpCopy: quickActionFollowUpCopy(action, previewState),
+    maxFields: options.maxFields,
+  });
+  if (!previewRenderDomSpec) return null;
   const attachPreviewMetaPillAction = (pill, title, onActivate) => {
     if (!pill || typeof onActivate !== "function") return;
-    pill.classList.add("is-clickable");
-    pill.tabIndex = 0;
-    pill.setAttribute("role", "button");
-    if (title) {
-      pill.title = title;
-      pill.setAttribute("aria-label", title);
-    }
+    const clickableDomSpec = quickActionPreviewClickableDomSpec(title);
+    clickableDomSpec.classNames.forEach((className) => pill.classList.add(className));
+    pill.tabIndex = clickableDomSpec.tabIndex;
+    Object.entries(clickableDomSpec.attributes || {}).forEach(([key, value]) => {
+      if (key === "title") {
+        pill.title = value;
+      }
+      pill.setAttribute(key, value);
+    });
     pill.addEventListener("click", () => {
       onActivate();
     });
     pill.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
+      if (quickActionPreviewKeyActivates(event.key)) {
         event.preventDefault();
         onActivate();
       }
@@ -2286,254 +2124,159 @@ function createQuickActionPreviewCard(action, previewState = "", structured = nu
   };
 
   const card = document.createElement("section");
-  card.className = "quick-action-preview-card";
-  if (options.className) {
-    card.classList.add(...String(options.className).split(/\s+/).filter(Boolean));
-  }
-  setDatasetFlag(card, "actionIntensity", quickActionIntensity(action));
-  setDatasetFlag(card, "quickAction", action);
-  setDatasetFlag(card, "previewState", previewState);
+  card.className = previewRenderDomSpec.card.classNames.join(" ");
+  Object.entries(previewRenderDomSpec.card.dataset || {}).forEach(([key, value]) => {
+    setDatasetFlag(card, key, value);
+  });
 
   const header = document.createElement("div");
-  header.className = "quick-action-preview-card-header";
+  header.className = previewRenderDomSpec.header.headerClassName;
 
   const heading = document.createElement("div");
-  heading.className = "quick-action-preview-card-heading";
-  heading.appendChild(
-    createLine(
-      "quick-action-preview-card-kicker",
-      options.title || resolvedPreviewView?.fieldViewLabel || "阶段快照",
-    ),
-  );
-  heading.appendChild(createLine("quick-action-preview-card-title", `${action} · ${previewState}`));
+  heading.className = previewRenderDomSpec.header.headingClassName;
+  heading.appendChild(createLine(previewRenderDomSpec.header.kickerLine.className, previewRenderDomSpec.header.kickerLine.text));
+  heading.appendChild(createLine(previewRenderDomSpec.header.titleLine.className, previewRenderDomSpec.header.titleLine.text));
   header.appendChild(heading);
 
   const pills = document.createElement("div");
-  pills.className = "quick-action-preview-card-pills";
-  const currentPills = document.createElement("div");
-  currentPills.className = "quick-action-preview-card-pills-current";
-  const historyOptionPills = document.createElement("div");
-  historyOptionPills.className = "quick-action-preview-card-pills-options";
-  historyOptionPills.dataset.optionKind = "history";
-  const fieldViewOptionPills = document.createElement("div");
-  fieldViewOptionPills.className = "quick-action-preview-card-pills-options";
-  fieldViewOptionPills.dataset.optionKind = "field-view";
-  const createPillGroupLabel = (section, text) => {
-    const label = document.createElement("span");
-    label.className = "quick-action-preview-card-pills-label";
-    label.dataset.pillSection = section;
-    label.textContent = text;
-    return label;
-  };
-
-  const actionPill = createPill(action, quickActionTone(action));
-  actionPill.dataset.actionIntensity = quickActionIntensity(action);
-  actionPill.dataset.quickAction = action;
-  actionPill.dataset.currentMetaRole = "action";
-  currentPills.appendChild(actionPill);
-
-  const currentStrip = document.createElement("span");
-  currentStrip.className = "quick-action-preview-card-current-strip";
-  currentStrip.dataset.currentMetaRole = "summary";
-  currentStrip.textContent = [previewState, options.historyLabel, resolvedPreviewView?.fieldViewLabel]
-    .filter(Boolean)
-    .join(" · ");
-  currentPills.appendChild(currentStrip);
-
-  const statePill = createPill(previewState, quickActionTone(action));
-  statePill.dataset.actionIntensity = quickActionIntensity(action);
-  statePill.dataset.quickAction = action;
-  statePill.dataset.currentMetaRole = "state";
-  currentPills.appendChild(statePill);
-
-  if (options.historyLabel) {
-    const historyPill = createPill(options.historyLabel, selectedHistoryIndex === history.length - 1 ? "warm" : "muted");
-    historyPill.dataset.previewMeta = "history";
-    historyPill.dataset.snapshotRole = selectedHistoryIndex === history.length - 1 ? "latest" : "history";
-    historyPill.dataset.currentMetaRole = "history";
-    attachPreviewMetaPillAction(
-      historyPill,
-      history.length > 1 ? "切到下一轮历史快照" : "",
-      history.length > 1 && typeof options.onHistoryClick === "function"
-        ? () => {
-            const nextIndex = (selectedHistoryIndex + 1 + history.length) % history.length;
-            options.onHistoryClick(history[nextIndex], nextIndex);
-          }
-        : null,
-    );
-    currentPills.appendChild(historyPill);
-  }
-
-  if (history.length > 1) {
-    history.forEach((snapshot, index) => {
-      const optionPill = createPill(
-        quickActionPreviewHistoryLabel(snapshot, index, history.length),
-        index === selectedHistoryIndex ? "warm" : "muted",
-      );
-      optionPill.dataset.previewMetaOption = "history";
-      optionPill.dataset.snapshotIndex = String(index);
-      optionPill.dataset.snapshotRole = index === history.length - 1 ? "latest" : "history";
-      optionPill.dataset.selected = String(index === selectedHistoryIndex);
+  pills.className = previewRenderDomSpec.pillsWrapperClassName;
+  const renderPillSpec = (pillSpec) => {
+    const pill = pillSpec.className ? document.createElement("span") : createPill(pillSpec.text, pillSpec.tone);
+    if (pillSpec.className) pill.className = pillSpec.className;
+    Object.entries(pillSpec.dataset || {}).forEach(([key, value]) => {
+      setDatasetFlag(pill, key, value);
+    });
+    pill.textContent = pillSpec.text;
+    const pillActionTarget = pillSpec.actionTarget;
+    if (pillActionTarget?.kind === "history") {
       attachPreviewMetaPillAction(
-        optionPill,
-        quickActionPreviewHistoryDescription(snapshot, index, history.length),
+        pill,
+        pillActionTarget.title,
         typeof options.onHistoryClick === "function"
           ? () => {
-              options.onHistoryClick(snapshot, index);
+              options.onHistoryClick(history[pillActionTarget.snapshotIndex], pillActionTarget.snapshotIndex);
             }
           : null,
       );
-      historyOptionPills.appendChild(optionPill);
-    });
-  }
-
-  if (resolvedPreviewView?.fieldViewLabel) {
-    const fieldViewPill = createPill(resolvedPreviewView.fieldViewLabel, "muted");
-    fieldViewPill.dataset.previewMeta = "field-view";
-    fieldViewPill.dataset.previewFieldView = selectedFieldView;
-    fieldViewPill.dataset.currentMetaRole = "field-view";
-    attachPreviewMetaPillAction(
-      fieldViewPill,
-      selectedFieldView === "stage" ? "切到原始快照字段" : "切到阶段字段",
-      typeof options.onFieldViewChange === "function"
-        ? () => {
-            options.onFieldViewChange(selectedFieldView === "stage" ? "snapshot" : "stage");
-          }
-        : null,
-    );
-    currentPills.appendChild(fieldViewPill);
-  }
-
-  if (structuredViews.hasViewToggle) {
-    [
-      ["stage", "阶段字段"],
-      ["snapshot", "原始快照"],
-    ].forEach(([viewId, label]) => {
-      const optionPill = createPill(label, selectedFieldView === viewId ? "warm" : "muted");
-      optionPill.dataset.previewMetaOption = "field-view";
-      optionPill.dataset.previewFieldView = viewId;
-      optionPill.dataset.selected = String(selectedFieldView === viewId);
+    }
+    if (pillActionTarget?.kind === "field-view") {
       attachPreviewMetaPillAction(
-        optionPill,
-        viewId === "stage" ? `切到${previewState}阶段字段` : `切到${options.historyLabel || "当前轮次"}的原始快照字段`,
+        pill,
+        pillActionTarget.title,
         typeof options.onFieldViewChange === "function"
           ? () => {
-              options.onFieldViewChange(viewId);
+              options.onFieldViewChange(pillActionTarget.fieldView);
             }
           : null,
       );
-      fieldViewOptionPills.appendChild(optionPill);
+    }
+    return pill;
+  };
+  const renderPillGroupLabel = (labelSpec) => {
+    const label = document.createElement("span");
+    label.className = labelSpec.className;
+    Object.entries(labelSpec.dataset || {}).forEach(([key, value]) => {
+      setDatasetFlag(label, key, value);
     });
-  }
-
-  if ((currentPills.children?.length || 0) > 0) {
-    pills.appendChild(createPillGroupLabel("current", "当前"));
-    pills.appendChild(currentPills);
-  }
-  if ((historyOptionPills.children?.length || 0) > 0) {
-    pills.appendChild(createPillGroupLabel("history", "轮次"));
-    pills.appendChild(historyOptionPills);
-  }
-  if ((fieldViewOptionPills.children?.length || 0) > 0) {
-    pills.appendChild(createPillGroupLabel("field-view", "视图"));
-    pills.appendChild(fieldViewOptionPills);
-  }
-
-  setDatasetFlag(card, "previewHistoryControlsCollapsed", history.length > 1 ? "true" : "false");
-  setDatasetFlag(card, "previewFieldViewControlsCollapsed", structuredViews.hasViewToggle ? "true" : "false");
+    label.textContent = labelSpec.text;
+    return label;
+  };
+  const renderPillGroup = (groupSpec) => {
+    const group = document.createElement("div");
+    group.className = groupSpec.className;
+    Object.entries(groupSpec.dataset || {}).forEach(([key, value]) => {
+      setDatasetFlag(group, key, value);
+    });
+    groupSpec.pills.forEach((pillSpec) => {
+      group.appendChild(renderPillSpec(pillSpec));
+    });
+    return group;
+  };
+  previewRenderDomSpec.pillSections.forEach((sectionSpec) => {
+    pills.appendChild(renderPillGroupLabel(sectionSpec.label));
+    pills.appendChild(renderPillGroup(sectionSpec.group));
+  });
 
   header.appendChild(pills);
   card.appendChild(header);
 
-  const followUpCopy = resolvedPreviewView?.summaryCopy || quickActionFollowUpCopy(action, previewState);
-  if (followUpCopy) {
-    card.appendChild(createLine("quick-action-preview-card-copy", followUpCopy));
+  const copyDomSpec = previewRenderDomSpec.copy;
+  if (copyDomSpec) {
+    card.appendChild(createLine(copyDomSpec.className, copyDomSpec.text));
   }
 
-  if (history.length > 1) {
-    const historyWrap = document.createElement("div");
-    historyWrap.className = "quick-action-preview-history";
-    historyWrap.hidden = card.dataset.previewHistoryControlsCollapsed === "true";
-    historyWrap.setAttribute("aria-hidden", historyWrap.hidden ? "true" : "false");
-    historyWrap.appendChild(
-      createLine(
-        "quick-action-preview-history-label",
-        options.historyTitle || `历史快照 · ${history.length} 轮`,
-      ),
-    );
-    const historyButtons = document.createElement("div");
-    historyButtons.className = "quick-action-preview-history-buttons";
-    history.forEach((snapshot, index) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "quick-action-preview-history-button";
-      setDatasetFlag(button, "selected", index === selectedHistoryIndex ? "true" : "false");
-      setDatasetFlag(button, "snapshotIndex", index);
-      setDatasetFlag(button, "snapshotRole", index === history.length - 1 ? "latest" : "history");
-      button.textContent = quickActionPreviewHistoryLabel(snapshot, index, history.length);
-      button.title = quickActionPreviewHistoryDescription(snapshot, index, history.length);
-      if (typeof options.onHistoryClick === "function") {
-        button.addEventListener("click", () => {
-          options.onHistoryClick(snapshot, index);
-        });
-      }
-      historyButtons.appendChild(button);
+  const renderControlButton = (buttonDomSpec) => {
+    const button = document.createElement("button");
+    button.type = buttonDomSpec.type;
+    button.className = buttonDomSpec.className;
+    Object.entries(buttonDomSpec.dataset || {}).forEach(([key, value]) => {
+      setDatasetFlag(button, key, value);
     });
-    historyWrap.appendChild(historyButtons);
-    card.appendChild(historyWrap);
-  }
-
-  if (structuredViews.hasViewToggle) {
-    const viewWrap = document.createElement("div");
-    viewWrap.className = "quick-action-preview-card-view";
-    viewWrap.hidden = card.dataset.previewFieldViewControlsCollapsed === "true";
-    viewWrap.setAttribute("aria-hidden", viewWrap.hidden ? "true" : "false");
-    const appendViewButton = (viewId, label) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.previewFieldView = viewId;
-      button.dataset.selected = String(selectedFieldView === viewId);
-      button.textContent = label;
-      button.title =
-        viewId === "stage"
-          ? `切到${previewState}阶段字段`
-          : `切到${options.historyLabel || "当前轮次"}的原始快照字段`;
+    button.textContent = buttonDomSpec.text;
+    button.title = buttonDomSpec.title;
+    const target = buttonDomSpec.actionTarget;
+    if (target?.kind === "history" && typeof options.onHistoryClick === "function") {
+      button.addEventListener("click", () => {
+        options.onHistoryClick(history[target.snapshotIndex], target.snapshotIndex);
+      });
+    }
+    if (target?.kind === "field-view") {
       button.addEventListener("click", () => {
         if (typeof options.onFieldViewChange === "function") {
-          options.onFieldViewChange(viewId);
+          options.onFieldViewChange(target.fieldView);
         }
       });
-      viewWrap.appendChild(button);
-    };
-    appendViewButton("stage", "阶段字段");
-    appendViewButton("snapshot", "原始快照");
-    card.appendChild(viewWrap);
-  }
+    }
+    return button;
+  };
+  previewRenderDomSpec.controlPanels.forEach((panelSpec) => {
+    const panel = document.createElement("div");
+    panel.className = panelSpec.wrapper.className;
+    panel.hidden = panelSpec.wrapper.hidden;
+    Object.entries(panelSpec.wrapper.attributes || {}).forEach(([key, value]) => {
+      panel.setAttribute(key, value);
+    });
+    if (panelSpec.labelLine) {
+      panel.appendChild(createLine(panelSpec.labelLine.className, panelSpec.labelLine.text));
+    }
+    const buttonNodes = panelSpec.buttons.map((buttonDomSpec) => renderControlButton(buttonDomSpec));
+    if (panelSpec.buttonsClassName) {
+      const buttons = document.createElement("div");
+      buttons.className = panelSpec.buttonsClassName;
+      buttonNodes.forEach((button) => buttons.appendChild(button));
+      panel.appendChild(buttons);
+    } else {
+      buttonNodes.forEach((button) => panel.appendChild(button));
+    }
+    card.appendChild(panel);
+  });
 
+  const sheetRenderDomSpec = previewRenderDomSpec.sheet;
+  if (!sheetRenderDomSpec) return card;
   const sheet = document.createElement("div");
-  sheet.className = "message-quick-sheet quick-action-preview-card-sheet";
-  const maxFields = Math.max(1, Number(options.maxFields) || activeStructured.fields.length);
-  for (const field of activeStructured.fields.slice(0, maxFields)) {
-    const row = document.createElement("div");
-    row.className = "message-quick-sheet-row quick-action-preview-card-row";
+  sheet.className = sheetRenderDomSpec.wrapperClassName;
+  for (const childSpec of sheetRenderDomSpec.children) {
+    if (childSpec.kind === "row") {
+      const row = document.createElement("div");
+      row.className = childSpec.className;
 
-    const label = document.createElement("span");
-    label.className = "message-quick-sheet-label quick-action-preview-card-label";
-    label.textContent = field.label;
+      const label = document.createElement("span");
+      label.className = childSpec.label.className;
+      label.textContent = childSpec.label.text;
 
-    const value = document.createElement("span");
-    value.className = "message-quick-sheet-value quick-action-preview-card-value";
-    value.textContent = field.value;
+      const value = document.createElement("span");
+      value.className = childSpec.value.className;
+      value.textContent = childSpec.value.text;
 
-    row.append(label, value);
-    sheet.appendChild(row);
-  }
-
-  if (activeStructured.notes.length) {
-    const notes = document.createElement("div");
-    notes.className = "message-quick-sheet-notes quick-action-preview-card-notes";
-    notes.textContent = activeStructured.notes.join("\n");
-    sheet.appendChild(notes);
+      row.append(label, value);
+      sheet.appendChild(row);
+    }
+    if (childSpec.kind === "notes") {
+      const notes = document.createElement("div");
+      notes.className = childSpec.className;
+      notes.textContent = childSpec.text;
+      sheet.appendChild(notes);
+    }
   }
 
   card.appendChild(sheet);
@@ -2569,38 +2312,23 @@ function advanceRoomQuickState(roomId) {
 }
 
 function roomQuickActionSummary(room) {
-  const action = latestRoomQuickAction(room);
-  return action ? `最近动作：${action}` : "";
+  return quickActionSummary(latestRoomQuickAction(room));
 }
 
 function roomQuickActionContextCopy(room) {
-  const action = latestRoomQuickAction(room);
-  if (!action) return "";
-  return `最近动作：${action} · ${quickActionStatusCopy(action)}`;
-}
-
-function roomQuickActionBadgeLabel(room) {
-  const action = latestRoomQuickAction(room);
-  return action ? `动作 ${action}` : "";
-}
-
-function roomQuickActionBadgeTone(room) {
-  return quickActionTone(latestRoomQuickAction(room));
-}
-
-function roomQuickActionBadgeIntensity(room) {
-  return quickActionIntensity(latestRoomQuickAction(room));
+  return quickActionContextCopy(latestRoomQuickAction(room));
 }
 
 function createRoomQuickActionPill(room) {
-  const label = roomQuickActionBadgeLabel(room);
-  if (!label) return null;
   const action = latestRoomQuickAction(room);
-  const pill = createPill(label, roomQuickActionBadgeTone(room));
-  pill.dataset.actionIntensity = roomQuickActionBadgeIntensity(room);
-  pill.dataset.quickAction = action;
-  pill.classList.add("pill-room-action", "is-clickable");
-  pill.title = "点击继续当前动作";
+  const pillDomSpec = buildRoomQuickActionPillDomSpec(action);
+  if (!pillDomSpec) return null;
+  const pill = createPill(pillDomSpec.text, pillDomSpec.tone);
+  Object.entries(pillDomSpec.dataset || {}).forEach(([key, value]) => {
+    setDatasetFlag(pill, key, value);
+  });
+  pillDomSpec.classNames.forEach((className) => pill.classList.add(className));
+  pill.title = pillDomSpec.title;
   pill.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -2624,16 +2352,14 @@ function createRoomQuickPreviewPill(room) {
     preview.state,
     preview.snapshotIndex,
   );
-  const tone = preview.historyToneClass === "summary-history" ? "muted" : "warm";
-  const pill = createPill(
-    `预览 ${preview.historyLabel} · ${quickActionPreviewFieldViewLabel(previewFieldView)}`,
-    tone,
-  );
-  pill.classList.add("pill-room-preview", "is-clickable");
-  pill.dataset.previewState = preview.state;
-  pill.dataset.previewRound = preview.historyLabel;
-  pill.dataset.previewFieldView = previewFieldView;
-  pill.title = "点击回到当前预览快照";
+  const pillDomSpec = buildRoomQuickPreviewPillDomSpec(preview, previewFieldView);
+  if (!pillDomSpec) return null;
+  const pill = createPill(pillDomSpec.text, pillDomSpec.tone);
+  pillDomSpec.classNames.forEach((className) => pill.classList.add(className));
+  Object.entries(pillDomSpec.dataset || {}).forEach(([key, value]) => {
+    setDatasetFlag(pill, key, value);
+  });
+  pill.title = pillDomSpec.title;
   pill.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -2662,32 +2388,30 @@ function createRoomInlineActions(room) {
   const secondaryLabel = secondarySpec?.label || quickActionAdvanceLabel(action, state);
   if (!primaryLabel && !secondaryLabel) return null;
 
+  const railDomSpec = buildRoomInlineActionsRailDomSpec(action);
   const rail = document.createElement("div");
-  rail.className = "room-inline-actions";
-  rail.dataset.quickAction = action;
-  rail.dataset.actionIntensity = quickActionIntensity(action);
+  rail.className = railDomSpec.className;
+  Object.entries(railDomSpec.dataset || {}).forEach(([key, value]) => {
+    setDatasetFlag(rail, key, value);
+  });
 
-  const stages = quickActionStateStages(action);
-  const stageIndex = Math.max(
-    stages.findIndex((stage) => stage.label === state),
-    0,
-  );
-  const progress = document.createElement("div");
-  progress.className = "room-inline-progress";
-  progress.dataset.actionIntensity = quickActionIntensity(action);
-  progress.title = quickActionStage(action, state)?.copy || "";
-  progress.tabIndex = 0;
-  progress.setAttribute("role", "button");
-
-  const progressCount = document.createElement("span");
-  progressCount.className = "room-inline-progress-count";
-  progressCount.textContent = `${stageIndex + 1} / ${Math.max(stages.length, 1)}`;
-
-  const progressLabel = document.createElement("span");
-  progressLabel.className = "room-inline-progress-label";
-  progressLabel.textContent = state;
-
-  progress.append(progressCount, progressLabel);
+  const progressDomSpec = buildRoomInlineProgressRenderDomSpec(action, state);
+  const progress = document.createElement(progressDomSpec.type || "div");
+  progress.className = progressDomSpec.className;
+  Object.entries(progressDomSpec.dataset || {}).forEach(([key, value]) => {
+    setDatasetFlag(progress, key, value);
+  });
+  progress.title = progressDomSpec.title;
+  progress.tabIndex = progressDomSpec.tabIndex;
+  Object.entries(progressDomSpec.attributes || {}).forEach(([key, value]) => {
+    progress.setAttribute(key, value);
+  });
+  (progressDomSpec.children || []).forEach((childSpec) => {
+    const child = document.createElement(childSpec.type || "span");
+    child.className = childSpec.className;
+    child.textContent = childSpec.text;
+    progress.appendChild(child);
+  });
   progress.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -2708,8 +2432,15 @@ function createRoomInlineActions(room) {
         roomQuickPreviewFieldView(room.id, preview.action, preview.state, preview.snapshotIndex),
       )
     : null;
-  const previewField = previewView?.primaryFieldText;
-  if (preview?.state && previewField) {
+  const inlinePanelModel = buildQuickActionInlinePreviewPanelModel({
+    preview,
+    resolvedPreviewView: previewView,
+    selectedFieldView: preview
+      ? roomQuickPreviewFieldView(room.id, preview.action, preview.state, preview.snapshotIndex)
+      : "",
+    maxFields: 2,
+  });
+  if (inlinePanelModel) {
     const activatePreviewSnapshot = (event) => {
       event?.preventDefault?.();
       event?.stopPropagation?.();
@@ -2729,390 +2460,270 @@ function createRoomInlineActions(room) {
         { force: true },
       );
     };
-    const hint = document.createElement("div");
-    hint.className = "room-inline-preview-hint";
-    hint.dataset.actionIntensity = quickActionIntensity(action);
-
-    const stage = document.createElement("span");
-    stage.className = "room-inline-preview-stage";
-    stage.textContent = preview.state;
-    stage.classList.add("is-clickable");
-    stage.tabIndex = 0;
-    stage.setAttribute("role", "button");
-    stage.title = "点击继续当前阶段";
-    stage.addEventListener("click", activatePreviewWorkflow);
-    hint.appendChild(stage);
-
-    const field = document.createElement("span");
-    field.className = "room-inline-preview-field";
-    field.textContent = previewField;
-    field.classList.add("is-clickable");
-    field.tabIndex = 0;
-    field.setAttribute("role", "button");
-    field.title = "点击回到当前预览快照";
-    field.addEventListener("click", activatePreviewSnapshot);
-    hint.append(" · ", field);
-
-    if (preview.historyLabel) {
-      const round = document.createElement("span");
-      round.className = `room-inline-preview-round ${preview.historyToneClass || ""}`.trim();
-      round.textContent = preview.historyLabel;
-      if (Array.isArray(preview.history) && preview.history.length > 1) {
-        const nextSnapshotIndex =
-          Number.isInteger(preview.snapshotIndex) && preview.snapshotIndex >= 0
-            ? (preview.snapshotIndex + 1) % preview.history.length
-            : Math.max(preview.history.length - 1, 0);
-        round.classList.add("is-clickable");
-        round.tabIndex = 0;
-        round.setAttribute("role", "button");
-        round.title = quickActionPreviewHistoryDescription(
-          preview.history[nextSnapshotIndex],
-          nextSnapshotIndex,
-          preview.history.length,
-        );
-        const cyclePreviewRound = (event) => {
+    const inlinePanelRenderDomModel =
+      buildQuickActionInlinePreviewPanelRenderDomModel(inlinePanelModel, quickActionIntensity(action));
+    if (!inlinePanelRenderDomModel) return rail;
+    const inlineHintDomModel = inlinePanelRenderDomModel.hint;
+    const bindInlineHintAction = (node, target) => {
+      if (target?.type === "workflow") {
+        node.addEventListener("click", activatePreviewWorkflow);
+      }
+      if (target?.type === "snapshot") {
+        node.addEventListener("click", activatePreviewSnapshot);
+      }
+      if (target?.type === "history") {
+        node.addEventListener("click", (event) => {
           event.preventDefault();
           event.stopPropagation();
-          previewRoomQuickStage(room.id, preview.action, preview.state, nextSnapshotIndex);
-        };
-        round.addEventListener("click", cyclePreviewRound);
+          previewRoomQuickStage(room.id, preview.action, preview.state, target.snapshotIndex);
+        });
       }
-      hint.append(" · ", round);
+    };
+    const applyInlineClickableDomSpec = (node, clickableSpec) => {
+      if (!node || !clickableSpec) return;
+      (clickableSpec.classNames || []).forEach((className) => {
+        if (className) node.classList.add(className);
+      });
+      if (Number.isInteger(clickableSpec.tabIndex)) {
+        node.tabIndex = clickableSpec.tabIndex;
+      }
+      Object.entries(clickableSpec.attributes || {}).forEach(([key, value]) => {
+        if (value) node.setAttribute(key, String(value));
+      });
+    };
+    const applyInlineHintClickable = (node, part) => {
+      if (!part?.actionTarget) return;
+      applyInlineClickableDomSpec(node, part.clickable);
+      bindInlineHintAction(node, part.actionTarget);
+    };
+
+    if (inlineHintDomModel) {
+      const hint = document.createElement("div");
+      hint.className = inlineHintDomModel.className;
+      for (const [key, value] of Object.entries(inlineHintDomModel.dataset)) {
+        hint.dataset[key] = value;
+      }
+      for (const part of inlineHintDomModel.parts) {
+        if (part.kind === "separator") {
+          hint.append(part.label);
+          continue;
+        }
+        const node = document.createElement("span");
+        node.className = part.className;
+        node.textContent = part.label;
+        if (part.title) {
+          node.title = part.title;
+        }
+        applyInlineHintClickable(node, part);
+        hint.appendChild(node);
+      }
+
+      rail.appendChild(hint);
     }
 
-    rail.appendChild(hint);
-
-    const preferCurrentStageInlineCard =
-      Array.isArray(preview.history) &&
-      preview.history.length > 0 &&
-      preview.snapshotIndex === preview.history.length - 1;
-    const inlineCardFieldSets = quickActionInlinePreviewFieldSets(preview.action, preview.structured, {
-      maxFields: 2,
-      state: preview.state,
-    });
-    const previewHistory = Array.isArray(preview.history) ? preview.history : [];
-    const inlineCardResolvedFieldView =
-      previewView?.fieldView === "stage" || previewView?.fieldView === "snapshot"
-        ? previewView.fieldView
-        : "";
-    const inlineCardFieldView =
-      inlineCardResolvedFieldView ||
-      (inlineCardFieldSets.hasViewToggle
-        ? roomQuickPreviewFieldView(room.id, preview.action, preview.state, preview.snapshotIndex)
-        : preferCurrentStageInlineCard
-          ? "stage"
-          : "snapshot");
-    const inlineCardFields =
-      inlineCardFieldView === "snapshot"
-        ? inlineCardFieldSets.snapshotFields
-        : inlineCardFieldSets.stageFields;
-    const inlineCardSummary =
-      inlineCardFieldView === "stage" && preview.followUpCopy
-        ? preview.followUpCopy
-        : inlineCardFields[0]?.label && inlineCardFields[0]?.value
-        ? `${inlineCardFields[0].label}：${inlineCardFields[0].value}`
-        : previewField;
+    const {
+      card: inlineCardDomModel,
+      children: inlineCardChildren,
+    } = inlinePanelRenderDomModel.card;
     const inlineCard = document.createElement("div");
-    inlineCard.className = "room-inline-preview-card";
-    inlineCard.dataset.actionIntensity = quickActionIntensity(action);
-    inlineCard.appendChild(createLine("room-inline-preview-card-stage", preview.state));
-    const inlineMeta = document.createElement("div");
-    inlineMeta.className = "room-inline-preview-card-meta";
-    const inlineMetaCurrent = document.createElement("div");
-    inlineMetaCurrent.className = "room-inline-preview-card-meta-current";
-    const inlineCurrentStrip = document.createElement("span");
-    inlineCurrentStrip.className = "room-inline-preview-card-current-strip";
-    inlineCurrentStrip.dataset.currentMetaRole = "summary";
-    inlineCurrentStrip.textContent = [preview.state, preview.historyLabel, quickActionPreviewFieldViewLabel(inlineCardFieldView)]
-      .filter(Boolean)
-      .join(" · ");
-    inlineMetaCurrent.appendChild(inlineCurrentStrip);
-    const inlineHistoryMetaOptions = document.createElement("div");
-    inlineHistoryMetaOptions.className = "room-inline-preview-card-meta-options";
-    inlineHistoryMetaOptions.dataset.optionKind = "history";
-    const inlineFieldViewMetaOptions = document.createElement("div");
-    inlineFieldViewMetaOptions.className = "room-inline-preview-card-meta-options";
-    inlineFieldViewMetaOptions.dataset.optionKind = "field-view";
-    const createInlineMetaLabel = (section, text) => {
-      const label = document.createElement("span");
-      label.className = "room-inline-preview-card-meta-label";
-      label.dataset.metaSection = section;
-      label.textContent = text;
-      return label;
-    };
-    const attachInlineMetaPillAction = (pill, title, onActivate) => {
+    inlineCard.className = inlineCardDomModel.className;
+    Object.entries(inlineCardDomModel.dataset || {}).forEach(([key, value]) => {
+      inlineCard.dataset[key] = String(value);
+    });
+    const attachInlineMetaPillAction = (pill, clickableSpec, onActivate) => {
       if (!pill || typeof onActivate !== "function") return;
-      pill.classList.add("is-clickable");
-      pill.tabIndex = 0;
-      pill.setAttribute("role", "button");
-      if (title) {
-        pill.title = title;
-        pill.setAttribute("aria-label", title);
-      }
+      applyInlineClickableDomSpec(pill, clickableSpec);
       pill.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
         onActivate();
       });
       pill.addEventListener("keydown", (event) => {
-        if (event.key === "Enter" || event.key === " ") {
+        if (quickActionPreviewKeyActivates(event.key)) {
           event.preventDefault();
           event.stopPropagation();
           onActivate();
         }
       });
     };
-    const appendInlineMetaPill = (label, kind, selected = "", options = {}) => {
-      if (!label) return;
-      const pill = document.createElement("span");
-      pill.className = "room-inline-preview-card-meta-pill";
-      pill.dataset.metaKind = kind;
-      if (options.previewMeta) {
-        pill.dataset.previewMeta = options.previewMeta;
-        pill.dataset.currentMetaRole = options.previewMeta;
+    const attachInlineMetaModelAction = (pill, target) => {
+      if (target?.type === "history") {
+        attachInlineMetaPillAction(pill, target.clickable, () => {
+          previewRoomQuickStage(room.id, preview.action, preview.state, target.snapshotIndex);
+        });
       }
-      if (options.previewMetaOption) {
-        pill.dataset.previewMetaOption = options.previewMetaOption;
+      if (target?.type === "field-view") {
+        attachInlineMetaPillAction(pill, target.clickable, () => {
+          setRoomQuickPreviewFieldView(
+            room.id,
+            preview.action,
+            preview.state,
+            preview.snapshotIndex,
+            target.fieldView,
+          );
+        });
       }
-      if (options.snapshotIndex !== undefined) {
-        pill.dataset.snapshotIndex = String(options.snapshotIndex);
-      }
-      if (options.snapshotRole) {
-        pill.dataset.snapshotRole = options.snapshotRole;
-      }
-      if (options.previewFieldView) {
-        pill.dataset.previewFieldView = options.previewFieldView;
-      }
-      if (selected === "true" || selected === "false") {
-        pill.dataset.selected = selected;
-      }
-      pill.textContent = label;
-      if (kind === "history" && previewHistory.length > 1) {
-        const nextSnapshotIndex =
-          Number.isInteger(preview.snapshotIndex) && preview.snapshotIndex >= 0
-            ? (preview.snapshotIndex + 1) % previewHistory.length
-            : Math.max(previewHistory.length - 1, 0);
-        attachInlineMetaPillAction(
-          pill,
-          quickActionPreviewHistoryDescription(
-            previewHistory[nextSnapshotIndex],
-            nextSnapshotIndex,
-            previewHistory.length,
-          ),
-          () => {
-            previewRoomQuickStage(room.id, preview.action, preview.state, nextSnapshotIndex);
-          },
-        );
-      }
-      if (kind === "field-view" && inlineCardFieldSets.hasViewToggle) {
-        const nextFieldView = inlineCardFieldView === "stage" ? "snapshot" : "stage";
-        attachInlineMetaPillAction(
-          pill,
-          nextFieldView === "stage"
-            ? `切到${preview.state}阶段字段`
-            : `切到${preview.historyLabel || "当前轮次"}的原始快照字段`,
-          () => {
-            setRoomQuickPreviewFieldView(
-              room.id,
-              preview.action,
-              preview.state,
-              preview.snapshotIndex,
-              nextFieldView,
-            );
-          },
-        );
-      }
-      const target = options.container || inlineMetaCurrent;
-      target.appendChild(pill);
-      return pill;
     };
-    appendInlineMetaPill(preview.state, "state", "", { previewMeta: "state", container: inlineMetaCurrent });
-    appendInlineMetaPill(preview.historyLabel, "history", "true", {
-      previewMeta: "history",
-      snapshotIndex: preview.snapshotIndex,
-      snapshotRole:
-        Number.isInteger(preview.snapshotIndex) && preview.snapshotIndex === previewHistory.length - 1
-          ? "latest"
-          : "history",
-      container: inlineMetaCurrent,
-    });
-    if (previewHistory.length > 1) {
-      previewHistory.forEach((snapshot, index) => {
-        appendInlineMetaPill(
-          quickActionPreviewHistoryLabel(snapshot, index, previewHistory.length),
-          "history",
-          String(index === preview.snapshotIndex),
-          {
-            previewMetaOption: "history",
-            snapshotIndex: index,
-            snapshotRole: index === previewHistory.length - 1 ? "latest" : "history",
-            container: inlineHistoryMetaOptions,
-          },
-        );
+    const createInlineMetaChildNode = (childSpec) => {
+      const node = document.createElement(childSpec.type || "span");
+      node.className = childSpec.className;
+      Object.entries(childSpec.dataset || {}).forEach(([key, value]) => {
+        node.dataset[key] = String(value);
       });
-    }
-    appendInlineMetaPill(quickActionPreviewFieldViewLabel(inlineCardFieldView), "field-view", "true", {
-      previewMeta: "field-view",
-      previewFieldView: inlineCardFieldView,
-      container: inlineMetaCurrent,
-    });
-    if (inlineCardFieldSets.hasViewToggle) {
-      [
-        ["stage", "阶段字段"],
-        ["snapshot", "原始快照"],
-      ].forEach(([viewId, label]) => {
-        const pill = appendInlineMetaPill(label, "field-view", String(inlineCardFieldView === viewId), {
-          previewMetaOption: "field-view",
-          previewFieldView: viewId,
-          container: inlineFieldViewMetaOptions,
+      node.textContent = childSpec.text || "";
+      if (childSpec.actionTarget) {
+        attachInlineMetaModelAction(node, {
+          ...childSpec.actionTarget,
+          clickable: childSpec.clickable,
         });
-        attachInlineMetaPillAction(
-          pill,
-          viewId === "stage"
-            ? `切到${preview.state}阶段字段`
-            : `切到${preview.historyLabel || "当前轮次"}的原始快照字段`,
-          () => {
-            setRoomQuickPreviewFieldView(room.id, preview.action, preview.state, preview.snapshotIndex, viewId);
-          },
-        );
+      }
+      (childSpec.children || []).forEach((nestedSpec) => {
+        node.appendChild(createInlineMetaChildNode(nestedSpec));
       });
-    }
-    if ((inlineMetaCurrent.children?.length || 0) > 0) {
-      inlineMeta.appendChild(createInlineMetaLabel("current", "当前"));
-      inlineMeta.appendChild(inlineMetaCurrent);
-    }
-    if ((inlineHistoryMetaOptions.children?.length || 0) > 0) {
-      inlineMeta.appendChild(createInlineMetaLabel("history", "轮次"));
-      inlineMeta.appendChild(inlineHistoryMetaOptions);
-    }
-    if ((inlineFieldViewMetaOptions.children?.length || 0) > 0) {
-      inlineMeta.appendChild(createInlineMetaLabel("field-view", "视图"));
-      inlineMeta.appendChild(inlineFieldViewMetaOptions);
-    }
-    setDatasetFlag(
-      inlineCard,
-      "inlineHistoryControlsCollapsed",
-      (inlineHistoryMetaOptions.children?.length || 0) > 0 ? "true" : "false",
-    );
-    setDatasetFlag(
-      inlineCard,
-      "inlineFieldViewControlsCollapsed",
-      (inlineFieldViewMetaOptions.children?.length || 0) > 0 ? "true" : "false",
-    );
-    if ((inlineMeta.children?.length || 0) > 0) {
+      return node;
+    };
+    const createInlineCardContainerNode = (containerSpec) => {
+      const container = document.createElement("div");
+      container.className = containerSpec.className;
+      if (containerSpec.hidden !== undefined) {
+        container.hidden = containerSpec.hidden;
+      }
+      if (containerSpec.ariaHidden !== undefined) {
+        container.setAttribute("aria-hidden", containerSpec.ariaHidden);
+      }
+      return container;
+    };
+    const createInlineCardSimpleChildNode = (childSpec) => {
+      const child = document.createElement(childSpec.type || "div");
+      child.className = childSpec.className;
+      child.textContent = childSpec.text || "";
+      return child;
+    };
+    const createInlineCardButtonNode = (buttonSpec) => {
+      const button = document.createElement(buttonSpec.type || "button");
+      button.type = buttonSpec.buttonType || "button";
+      Object.entries(buttonSpec.dataset || {}).forEach(([key, value]) => {
+        button.dataset[key] = String(value);
+      });
+      button.textContent = buttonSpec.text;
+      if (buttonSpec.title) {
+        button.title = buttonSpec.title;
+      }
+      if (buttonSpec.ariaLabel) {
+        button.setAttribute("aria-label", buttonSpec.ariaLabel);
+      }
+      applyInlineClickableDomSpec(button, buttonSpec.clickable);
+      return button;
+    };
+    const renderInlineCardHeader = (childModel) => {
+      (childModel.children || []).forEach((childSpec) => {
+        inlineCard.appendChild(createInlineCardSimpleChildNode(childSpec));
+      });
+    };
+    const renderInlineCardMeta = (childModel) => {
+      const inlineMetaDomModel = childModel.model;
+      if (!inlineMetaDomModel) return;
+      const inlineMeta = createInlineCardContainerNode(inlineMetaDomModel);
+      inlineMetaDomModel.sections.forEach((section) => {
+        (section.children || []).forEach((childSpec) => {
+          inlineMeta.appendChild(createInlineMetaChildNode(childSpec));
+        });
+      });
       inlineCard.appendChild(inlineMeta);
-    }
-    inlineCard.appendChild(createLine("room-inline-preview-card-summary", inlineCardSummary));
-    if (previewHistory.length > 1) {
-      const historyWrap = document.createElement("div");
-      historyWrap.className = "room-inline-preview-card-history";
-      historyWrap.hidden = inlineCard.dataset.inlineHistoryControlsCollapsed === "true";
-      historyWrap.setAttribute("aria-hidden", historyWrap.hidden ? "true" : "false");
-      previewHistory.forEach((snapshot, index) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.dataset.selected = String(index === preview.snapshotIndex);
-        button.dataset.snapshotIndex = String(index);
-        button.dataset.snapshotRole = index === previewHistory.length - 1 ? "latest" : "history";
-        button.textContent = quickActionPreviewHistoryLabel(snapshot, index, previewHistory.length);
-        button.title = quickActionPreviewHistoryDescription(snapshot, index, previewHistory.length);
-        button.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          previewRoomQuickStage(room.id, preview.action, preview.state, index);
+    };
+    const renderInlineCardControls = (childModel) => {
+      const inlineControlsDomModel = childModel.model;
+      if (!inlineControlsDomModel) return;
+      inlineControlsDomModel.groups.forEach((group) => {
+        const container = createInlineCardContainerNode(group);
+        (group.children || []).forEach((buttonSpec) => {
+          const button = createInlineCardButtonNode(buttonSpec);
+          button.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const target = buttonSpec.actionTarget;
+            if (target?.type === "history") {
+              previewRoomQuickStage(room.id, preview.action, preview.state, target.snapshotIndex);
+            }
+            if (target?.type === "field-view") {
+              setRoomQuickPreviewFieldView(
+                room.id,
+                preview.action,
+                preview.state,
+                preview.snapshotIndex,
+                target.fieldView,
+              );
+            }
+          });
+          container.appendChild(button);
         });
-        historyWrap.appendChild(button);
+        inlineCard.appendChild(container);
       });
-      inlineCard.appendChild(historyWrap);
-    }
-    if (inlineCardFieldSets.hasViewToggle) {
-      const viewSwitcher = document.createElement("div");
-      viewSwitcher.className = "room-inline-preview-card-view";
-      viewSwitcher.hidden = inlineCard.dataset.inlineFieldViewControlsCollapsed === "true";
-      viewSwitcher.setAttribute("aria-hidden", viewSwitcher.hidden ? "true" : "false");
-      const appendViewButton = (viewId, label) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.dataset.roomInlinePreviewView = viewId;
-        button.dataset.selected = String(inlineCardFieldView === viewId);
-        button.textContent = label;
-        button.title =
-          viewId === "stage"
-            ? `切到${preview.state}阶段字段`
-            : `切到${preview.historyLabel || "当前轮次"}的原始快照字段`;
-        button.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          setRoomQuickPreviewFieldView(room.id, preview.action, preview.state, preview.snapshotIndex, viewId);
+    };
+    const renderInlineCardFieldRows = (childModel) => {
+      const inlineFieldRowsDomModel = childModel.model;
+      if (!inlineFieldRowsDomModel) return;
+      const fieldList = createInlineCardContainerNode(inlineFieldRowsDomModel);
+      for (const rowSpec of inlineFieldRowsDomModel.rows) {
+        const row = createInlineCardContainerNode(rowSpec);
+        (rowSpec.children || []).forEach((childSpec) => {
+          row.appendChild(createInlineCardSimpleChildNode(childSpec));
         });
-        viewSwitcher.appendChild(button);
-      };
-      appendViewButton("stage", "阶段字段");
-      appendViewButton("snapshot", "原始快照");
-      inlineCard.appendChild(viewSwitcher);
-    }
-    if (inlineCardFields.length) {
-      const fieldList = document.createElement("div");
-      fieldList.className = "room-inline-preview-card-fields";
-      for (const inlineField of inlineCardFields) {
-        const row = document.createElement("div");
-        row.className = "room-inline-preview-card-row";
-        row.appendChild(createLine("room-inline-preview-card-row-label", inlineField.label));
-        row.appendChild(createLine("room-inline-preview-card-row-value", inlineField.value || "待补充"));
         fieldList.appendChild(row);
       }
       inlineCard.appendChild(fieldList);
-    }
-    const inlineActions = document.createElement("div");
-    inlineActions.className = "room-inline-preview-card-actions";
-    const inlineActionLabels = quickActionInlinePreviewActionLabels(preview.action, preview.state);
-    const inlineActionHandlers = {
-      snapshot: {
-        label: inlineActionLabels.snapshot,
-        onClick: activatePreviewSnapshot,
-      },
-      workflow: {
-        label: inlineActionLabels.workflow,
-        onClick: activatePreviewWorkflow,
-      },
     };
-    const orderedInlineActionIds = quickActionInlinePreviewActionOrder(preview.action, preview.state, {
-      viewingLatest: preferCurrentStageInlineCard,
-    });
-    orderedInlineActionIds.forEach((actionId, index) => {
-      const definition = inlineActionHandlers[actionId];
-      if (!definition?.label) return;
-      const button = document.createElement("button");
-      button.type = "button";
-      button.dataset.roomInlinePreviewAction = actionId;
-      button.dataset.roomInlinePreviewPriority = index === 0 ? "primary" : "secondary";
-      button.dataset.roomInlinePreviewDefault = index === 0 ? "true" : "false";
-      button.textContent = definition.label;
-      const actionHint = quickActionInlinePreviewActionHint(preview.action, preview.state, actionId, {
-        viewingLatest: preferCurrentStageInlineCard,
-        historyLabel: preview.historyLabel,
+    const renderInlineCardActions = (childModel) => {
+      const inlineActionDomModel = childModel.model;
+      if (!inlineActionDomModel) return;
+      const inlineActions = createInlineCardContainerNode(inlineActionDomModel);
+      const inlineActionHandlers = {
+        snapshot: activatePreviewSnapshot,
+        workflow: activatePreviewWorkflow,
+      };
+      (inlineActionDomModel.children || []).forEach((buttonSpec) => {
+        const target = buttonSpec.actionTarget;
+        const handler = inlineActionHandlers[target?.type];
+        if (typeof handler !== "function") return;
+        const button = createInlineCardButtonNode(buttonSpec);
+        button.addEventListener("click", handler);
+        inlineActions.appendChild(button);
       });
-      if (actionHint) {
-        button.title = actionHint;
-        button.setAttribute("aria-label", actionHint);
-      }
-      button.addEventListener("click", definition.onClick);
-      inlineActions.appendChild(button);
+      inlineCard.appendChild(inlineActions);
+    };
+    const inlineCardChildRenderers = {
+      header: renderInlineCardHeader,
+      meta: renderInlineCardMeta,
+      controls: renderInlineCardControls,
+      fieldRows: renderInlineCardFieldRows,
+      actions: renderInlineCardActions,
+    };
+    Object.entries(inlineCardDomModel.datasetFlags || {}).forEach(([key, value]) => {
+      setDatasetFlag(inlineCard, key, value);
     });
-    inlineCard.appendChild(inlineActions);
+    (inlineCardChildren || []).forEach((childModel) => {
+      const renderChild = inlineCardChildRenderers[childModel.kind];
+      if (typeof renderChild === "function") renderChild(childModel);
+    });
     rail.appendChild(inlineCard);
   }
 
 
   const appendAction = (label, role, onClick) => {
-    if (!label) return;
-    const actionNode = document.createElement("span");
-    actionNode.className = `room-inline-action room-inline-action-${role}`;
-    actionNode.dataset.roomInlineRole = role;
-    actionNode.dataset.actionIntensity = quickActionIntensity(action);
-    actionNode.textContent = label;
-    actionNode.tabIndex = 0;
-    actionNode.setAttribute("role", "button");
+    const actionDomSpec = buildRoomInlineActionDomSpec(action, label, role);
+    if (!actionDomSpec) return;
+    const actionNode = document.createElement(actionDomSpec.type || "span");
+    actionNode.className = actionDomSpec.className;
+    Object.entries(actionDomSpec.dataset || {}).forEach(([key, value]) => {
+      setDatasetFlag(actionNode, key, value);
+    });
+    actionNode.textContent = actionDomSpec.text;
+    if (Number.isInteger(actionDomSpec.tabIndex)) {
+      actionNode.tabIndex = actionDomSpec.tabIndex;
+    }
+    Object.entries(actionDomSpec.attributes || {}).forEach(([key, value]) => {
+      if (value) actionNode.setAttribute(key, String(value));
+    });
     actionNode.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -4405,6 +4016,11 @@ function createMessageBodyNode(message, options = {}) {
     body.textContent = "消息已撤回";
     return body;
   }
+  if (message?.moderation_status === 'blocked') {
+    body.classList.add("message-body-recalled");
+    body.textContent = "消息已屏蔽";
+    return body;
+  }
   if (!structured) {
     body.textContent = message.text;
     return body;
@@ -4898,26 +4514,6 @@ function renderComposerMeta(room) {
   }
 }
 
-function roleAllowsCreatePublicRoom(role) {
-  return role === "Lord";
-}
-
-function roleAllowsApproveJoin(role) {
-  return role === "Lord";
-}
-
-function roleAllowsFreezeRoom(role) {
-  return role === "Lord" || role === "Steward";
-}
-
-function roleAllowsManageStewards(role) {
-  return role === "Lord";
-}
-
-function roleAllowsUpdateFederation(role) {
-  return role === "Lord";
-}
-
 function gatewayConnectionStatus() {
   if (!gatewayUrl) return "offline";
   const explicitGatewayUrl = Boolean(queryGatewayUrl());
@@ -4967,72 +4563,6 @@ function roomSyncLabel() {
   return `最近同步 ${new Date(lastRefreshAtMs).toLocaleTimeString()}`;
 }
 
-
-function roomMatchesSearch(room, query) {
-  if (!query) return true;
-  const detailMeta = Array.isArray(room?.detail_card?.meta)
-    ? room.detail_card.meta.flatMap((item) => [item?.label, item?.value])
-    : [];
-  const workflowSteps = Array.isArray(room?.workflow?.steps)
-    ? room.workflow.steps.flatMap((step) => [step?.label, step?.copy])
-    : [];
-  const inlineActions = Array.isArray(room?.inline_actions)
-    ? room.inline_actions.flatMap((action) => [action?.label, action?.action, action?.next_state])
-    : [];
-  const haystack = [
-    room.id,
-    room.title,
-    room.subtitle,
-    room.meta,
-    room.kind_hint,
-    room.participant_label,
-    room.route_label,
-    room.list_summary,
-    room.status_line,
-    room.thread_headline,
-    room.chat_status_summary,
-    room.queue_summary,
-    room.preview_text,
-    room.last_activity_label,
-    room.activity_time_label,
-    room.overview_summary,
-    room.context_summary,
-    room.scene_banner,
-    room.scene_summary,
-    room.detail_card?.summary_title,
-    room.detail_card?.summary_copy,
-    room.detail_card?.kicker,
-    room.detail_card?.title,
-    room.workflow?.action,
-    room.workflow?.state,
-    room.workflow?.title,
-    room.workflow?.summary,
-    room.stage_projection?.title,
-    room.stage_projection?.summary,
-    room.stage_projection?.badge,
-    room.portrait_projection?.title,
-    room.portrait_projection?.summary,
-    room.portrait_projection?.badge,
-    room.portrait_projection?.status,
-    roomAudienceLabel(room),
-    roomRouteLabel(room),
-    roomSummaryLine(room),
-    roomStatusLine(room),
-    roomThreadHeadline(room),
-    roomChatStatusSummary(room),
-    roomQueueSummary(room),
-    roomOverviewSummary(room),
-    roomContextSummary(room),
-    ...detailMeta,
-    ...workflowSteps,
-    ...inlineActions,
-    roomPreview(room),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  return haystack.includes(query);
-}
 
 function filteredRooms() { return _filteredRooms(state.rooms, roomFilter, roomSearch); }
 
@@ -7237,6 +6767,11 @@ function renderWorldSafety() {
 
 function renderResidents() {
   if (!residentListEl) return;
+  // creative.html user page uses its own resident list rendering
+  if (currentShellPage() === "user") {
+    renderResidentList();
+    return;
+  }
   clearChildren(residentListEl);
   if (!governance.residents?.length) {
     const empty = document.createElement("li");
@@ -7252,15 +6787,22 @@ function renderResidents() {
     const li = document.createElement("li");
     li.className = "city-card";
 
+    const displayName = resident.nickname || resident.resident_id;
     const titleRow = document.createElement("div");
     titleRow.className = "city-card-title";
-    titleRow.appendChild(createLine("city-name", resident.resident_id));
-    titleRow.appendChild(
-      createLine(
-        "city-slug",
-        translateResidentLabel(resident.resident_id),
-      ),
-    );
+    titleRow.appendChild(createLine("city-name", displayName));
+    if (resident.nickname) {
+      titleRow.appendChild(
+        createLine("city-slug", resident.resident_id),
+      );
+    } else {
+      titleRow.appendChild(
+        createLine(
+          "city-slug",
+          translateResidentLabel(resident.resident_id),
+        ),
+      );
+    }
     li.appendChild(titleRow);
     li.appendChild(
       createLine(
@@ -7297,6 +6839,83 @@ function renderResidents() {
       li.appendChild(actions);
     }
 
+    residentListEl.appendChild(li);
+  }
+}
+/** Render compact resident directory in creative.html sidebar */
+function renderResidentList() {
+  if (!residentListEl) return;
+  clearChildren(residentListEl);
+  const residents = governance.residents;
+  const identity = currentIdentity();
+  const query = roomSearch.toLowerCase().trim();
+  if (!Array.isArray(residents) || !residents.length) {
+    const empty = document.createElement("li");
+    empty.className = "empty-note";
+    empty.textContent = residents
+      ? "暂无其他居民"
+      : gatewayUrl
+        ? "居民目录暂不可用"
+        : "请先连接网关以加载居民目录";
+    residentListEl.appendChild(empty);
+    return;
+  }
+  const filtered = residents
+    .filter((r) => r.resident_id !== identity)
+    .filter((r) => !query || r.resident_id.toLowerCase().includes(query));
+  if (!filtered.length) {
+    const empty = document.createElement("li");
+    empty.className = "empty-note";
+    empty.textContent = query ? `没有匹配「${roomSearch}」的居民` : "暂无其他居民";
+    residentListEl.appendChild(empty);
+    return;
+  }
+  const sorted = [...filtered].sort((a, b) => {
+    if (a.online !== b.online) return a.online ? -1 : 1;
+    return a.resident_id.localeCompare(b.resident_id);
+  });
+  for (const resident of sorted) {
+    const li = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "room-button";
+    const displayName = resident.nickname || resident.resident_id;
+    const avatar = document.createElement("div");
+    avatar.className = "room-avatar";
+    avatar.textContent = displayName.charAt(0).toUpperCase();
+    const content = document.createElement("div");
+    content.className = "room-content";
+    const top = document.createElement("div");
+    top.className = "room-topline";
+    const titleStack = document.createElement("div");
+    titleStack.className = "room-title-stack";
+    const nameLine = document.createElement("span");
+    nameLine.className = "room-name";
+    nameLine.textContent = displayName;
+    if (resident.nickname) {
+      const idLine = document.createElement("span");
+      idLine.className = "room-subtitle";
+      idLine.textContent = resident.resident_id;
+      titleStack.appendChild(idLine);
+    }
+    const statusDot = document.createElement("span");
+    statusDot.className = "resident-status-dot" + (resident.online ? " is-online" : " is-offline");
+    statusDot.setAttribute("aria-label", resident.online ? "在线" : "离线");
+    nameLine.appendChild(statusDot);
+    titleStack.appendChild(nameLine);
+    top.appendChild(titleStack);
+    content.appendChild(top);
+    button.appendChild(avatar);
+    button.appendChild(content);
+    button.addEventListener("click", () => {
+      const name = displayName;
+      const message = "进入「" + name + "」的房间私聊？";
+      if (typeof window.confirm === "function" && !window.confirm(message)) return;
+      openDirectSession(name).catch((err) => {
+        setGovernanceStatus(localizedRuntimeError(err, "打开私聊失败"), true);
+      });
+    });
+    li.appendChild(button);
     residentListEl.appendChild(li);
   }
 }
@@ -7765,8 +7384,10 @@ async function refreshFromGateway({ requireShell = false } = {}) {
     }
   } finally {
     refreshInProgress = false;
-    if (worldChanged && !userShellProjection()) {
-      renderGovernance();
+    if (worldChanged) {
+      if (!userShellProjection()) {
+        renderGovernance();
+      }
       renderResidents();
     }
     renderRooms();
@@ -8349,6 +7970,10 @@ async function verifyEmailOtp() {
   return verifyEmailOtpMod();
 }
 
+async function updateMyNickname(nickname) {
+  return updateMyNicknameMod(nickname);
+}
+
 
 function exportFileExtension(format) {
   if (format === "jsonl") return "jsonl";
@@ -8452,8 +8077,8 @@ async function main() {
   refreshGatewayBadge();
   if (!userShellProjection()) {
     renderGovernance();
-    renderResidents();
   }
+  renderResidents();
   renderRooms();
   renderTimeline();
   updateComposerState();
@@ -8589,6 +8214,10 @@ initAuth({
   requestFormEl: authRequestFormEl,
   deliverySelectEl: authDeliverySelectEl,
   residentInputEl: authResidentInputEl,
+  nicknameInputEl: authNicknameInputEl,
+  nicknameEditorEl: authNicknameEditorEl,
+  nicknameEditInputEl: authNicknameEditInputEl,
+  nicknameSaveBtnEl: authNicknameSaveBtnEl,
   emailInputEl: authEmailInputEl,
   mobileInputEl: authMobileInputEl,
   deviceInputEl: authDeviceInputEl,
@@ -8632,11 +8261,19 @@ authVerifyFormEl?.addEventListener("submit", async (event) => {
   try {
     await verifyEmailOtp();
     residentLoginDismissed = false;
+    if (authNicknameEditorEl) authNicknameEditorEl.classList.remove("shell-hidden");
   } catch (error) {
     setAuthStatus(localizedRuntimeError(error, "验证码校验失败"), true);
   } finally {
     updateAuthFormState();
   }
+});
+
+authNicknameSaveBtnEl?.addEventListener("click", async () => {
+  const nickname = authNicknameEditInputEl?.value?.trim() || null;
+  authNicknameSaveBtnEl.disabled = true;
+  await updateMyNickname(nickname);
+  authNicknameSaveBtnEl.disabled = false;
 });
 
 residentLoginCloseEl?.addEventListener("click", () => {

@@ -36,6 +36,7 @@ mod governance_mutation_runtime;
 mod governance_runtime;
 mod http_auth_routes;
 mod http_city_write_routes;
+mod http_device_routes;
 mod http_governance_write_routes;
 mod http_read_routes;
 mod http_router;

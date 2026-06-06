@@ -5,15 +5,44 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>AJW聊天 · 管理后台</title>
   <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="./styles.tokens.css?v=20260604-css-split" />
   <link rel="stylesheet" href="./styles.admin-ds.css?v=20260518-input-rail-v1" />
+  <link rel="stylesheet" href="./styles.creative.css?v=20260525-h5-shell-fix-v2" />
 </head>
-<body class="admin-ds">
+<body class="admin-ds" data-resident-login="enabled">
+
+  <div id="resident-login-overlay" class="resident-login-overlay shell-hidden" aria-hidden="true">
+    <section id="resident-login-card" class="resident-login-card" aria-label="居民登录">
+      <button type="button" id="resident-login-close" class="resident-login-close" aria-label="关闭登录窗口">×</button>
+      <div class="resident-login-copy">
+        <span class="resident-login-kicker">居民身份</span>
+        <strong id="auth-status">登录状态：访客模式</strong>
+      </div>
+      <form id="auth-request-form" class="resident-login-form" data-auth-step="request">
+        <label for="auth-email-input" class="resident-login-field-label">邮箱地址（也是你的注册ID）</label>
+        <input id="auth-email-input" type="email" placeholder="输入邮箱地址" autocomplete="email" required />
+        <label for="auth-nickname-input" class="resident-login-field-label">用户昵称</label>
+        <input id="auth-nickname-input" type="text" placeholder="输入用户昵称" autocomplete="nickname" />
+        <input id="auth-resident-input" type="hidden" autocomplete="off" />
+        <input id="auth-device-input" type="hidden" autocomplete="off" />
+        <input id="auth-delivery-select" type="hidden" value="email" />
+        <button id="auth-request-button" type="submit">获取验证码</button>
+      </form>
+      <form id="auth-verify-form" class="resident-login-form resident-login-verify shell-hidden" data-auth-step="verify">
+        <input id="auth-challenge-input" type="hidden" autocomplete="off" />
+        <label for="auth-code-input" class="resident-login-field-label">邮箱验证码</label>
+        <input id="auth-code-input" type="text" placeholder="输入邮箱验证码" autocomplete="one-time-code" />
+        <button id="auth-verify-button" type="submit">完成登录</button>
+      </form>
+    </section>
+  </div>
 
   <!-- ============ SIDEBAR ============ -->
   <aside class="ds-sidebar" id="dsSidebar">
     <div class="ds-sidebar-logo">
       <div class="ds-sidebar-logo-icon">🦞</div>
       <span class="ds-sidebar-logo-text">AJW管理后台</span>
+      <button type="button" id="hud-login-toggle" class="hud-login-toggle shell-hidden" aria-label="打开登录窗口" style="margin-left:auto;font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(241,201,120,0.15);color:#f1c978;border:1px solid rgba(241,201,120,0.3);cursor:pointer;">登录</button>
     </div>
 
     <nav class="ds-sidebar-nav">
@@ -58,12 +87,33 @@
         </button>
       </div>
 
+      <!-- 城邦治理 -->
+      <div class="ds-nav-section">
+        <div class="ds-nav-section-title">城邦治理</div>
+        <button class="ds-nav-item" data-module="world-notices">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+          <span class="ds-nav-item-text">世界公告</span>
+        </button>
+        <button class="ds-nav-item" data-module="safety-advisories">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span class="ds-nav-item-text">安全通告</span>
+        </button>
+      </div>
+
       <!-- 系统管理 -->
       <div class="ds-nav-section">
         <div class="ds-nav-section-title">系统管理</div>
         <button class="ds-nav-item" data-module="sysconfig">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           <span class="ds-nav-item-text">系统配置</span>
+        </button>
+        <button class="ds-nav-item" data-module="devices">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <span class="ds-nav-item-text">设备管理</span>
+        </button>
+        <button class="ds-nav-item" data-module="scene">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+          <span class="ds-nav-item-text">场景编辑</span>
         </button>
         <button class="ds-nav-item" data-module="logs">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -188,6 +238,8 @@
               <div style="display:flex;justify-content:space-between;"><span>可见会话</span><span id="dsGatewayRoomCount" style="color:var(--ds-text);">--</span></div>
               <div style="display:flex;justify-content:space-between;"><span>可见消息</span><span id="dsGatewayMessageCount" style="color:var(--ds-text);">--</span></div>
               <div style="display:flex;justify-content:space-between;"><span>上次同步</span><span id="dsGatewayLastSync" style="color:var(--ds-text);">--</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>运行时长</span><span id="dsGatewayUptime" style="color:var(--ds-text);">--</span></div>
+              <div style="display:flex;justify-content:space-between;"><span>状态版本</span><span id="dsGatewayStateVersion" style="color:var(--ds-text);font-family:var(--ds-font-mono);font-size:11px;">--</span></div>
             </div>
           </div>
         </div>
@@ -376,36 +428,7 @@
               <span class="ds-card-title">居民权限组</span>
               <button class="ds-btn ds-btn-outline ds-btn-xs" type="button" data-admin-action="create-permission-group">+ 新建权限组</button>
             </div>
-            <div style="font-size:13px;">
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--ds-border-light);">
-                <div>
-                  <strong>管理员</strong>
-                  <div style="color:var(--ds-text-muted);font-size:12px;">全部权限 · 可管理居民、房间、消息审核</div>
-                </div>
-                <span class="ds-tag info">3 人</span>
-              </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--ds-border-light);">
-                <div>
-                  <strong>正式居民</strong>
-                  <div style="color:var(--ds-text-muted);font-size:12px;">可创建房间、发送消息、邀请他人</div>
-                </div>
-                <span class="ds-tag default">18 人</span>
-              </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--ds-border-light);">
-                <div>
-                  <strong>受限居民</strong>
-                  <div style="color:var(--ds-text-muted);font-size:12px;">仅可加入已有房间、发送消息需审核</div>
-                </div>
-                <span class="ds-tag warning">2 人</span>
-              </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">
-                <div>
-                  <strong>访客</strong>
-                  <div style="color:var(--ds-text-muted);font-size:12px;">仅可浏览世界广场、不可私聊</div>
-                </div>
-                <span class="ds-tag default">1 人</span>
-              </div>
-            </div>
+            <div id="permissionGroupList" style="font-size:13px;"></div>
           </div>
 
           <!-- 房间加入权限 -->
@@ -471,6 +494,146 @@
             <div class="ds-pagination">
               <span class="ds-pagination-info"></span>
               <div class="ds-pagination-btns"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ======== MODULE: 世界公告 ======== -->
+      <div class="ds-module" id="mod-world-notices">
+        <div class="ds-page-header">
+          <h2>世界公告</h2>
+          <p>管理城邦世界广场公告，发布系统通知与维护信息</p>
+        </div>
+
+        <div class="ds-card" style="margin-bottom:20px;">
+          <div class="ds-card-header">
+            <span class="ds-card-title">发布新公告</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:flex-end;padding:0.75rem 0;">
+            <input type="text" id="worldNoticeTitle" class="ds-input" placeholder="公告标题" style="width:200px;" />
+            <input type="text" id="worldNoticeBody" class="ds-input" placeholder="公告正文" style="flex:1;min-width:240px;" />
+            <select id="worldNoticeSeverity" class="ds-select" style="width:120px;">
+              <option value="info">信息</option>
+              <option value="warning">警告</option>
+              <option value="critical">严重</option>
+            </select>
+            <input type="text" id="worldNoticeTags" class="ds-input" placeholder="标签 (逗号分隔)" style="width:180px;" />
+            <button class="ds-btn ds-btn-primary ds-btn-sm" type="button" data-admin-action="publish-world-notice">发布</button>
+          </div>
+        </div>
+
+        <div class="ds-table-wrap">
+          <table class="ds-table" id="worldNoticeTable">
+            <thead>
+              <tr>
+                <th style="width:150px;">发布时间</th>
+                <th>标题</th>
+                <th>正文</th>
+                <th style="width:80px;">严重度</th>
+                <th>发布者</th>
+                <th>标签</th>
+              </tr>
+            </thead>
+            <tbody id="worldNoticeTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ======== MODULE: 安全通告 ======== -->
+      <div class="ds-module" id="mod-safety-advisories">
+        <div class="ds-page-header">
+          <h2>安全通告</h2>
+          <p>管理城邦安全通告、举报审核与居民制裁</p>
+        </div>
+
+        <!-- 发布安全通告 -->
+        <div class="ds-card" style="margin-bottom:20px;">
+          <div class="ds-card-header">
+            <span class="ds-card-title">发布安全通告</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:flex-end;padding:0.75rem 0;">
+            <select id="safetyAdvisorySubjectKind" class="ds-select" style="width:130px;">
+              <option value="resident">居民</option>
+              <option value="room">房间</option>
+              <option value="city">城邦</option>
+              <option value="message">消息</option>
+            </select>
+            <input type="text" id="safetyAdvisorySubjectRef" class="ds-input" placeholder="目标 ID" style="width:200px;" />
+            <select id="safetyAdvisoryAction" class="ds-select" style="width:130px;">
+              <option value="warn">警告</option>
+              <option value="restrict">限制</option>
+              <option value="block">封禁</option>
+              <option value="monitor">监控</option>
+            </select>
+            <input type="text" id="safetyAdvisoryReason" class="ds-input" placeholder="原因说明" style="flex:1;min-width:240px;" />
+            <button class="ds-btn ds-btn-primary ds-btn-sm" type="button" data-admin-action="publish-safety-advisory">发布</button>
+          </div>
+        </div>
+
+        <!-- 安全通告列表 -->
+        <div class="ds-table-wrap" style="margin-bottom:20px;">
+          <div class="ds-card-header" style="padding:0.75rem 1rem;">
+            <span class="ds-card-title">安全通告列表</span>
+            <button class="ds-btn ds-btn-outline ds-btn-xs" type="button" data-admin-action="refresh-safety-advisories">刷新</button>
+          </div>
+          <table class="ds-table" id="safetyAdvisoryTable">
+            <thead>
+              <tr>
+                <th style="width:150px;">发布时间</th>
+                <th>目标类型</th>
+                <th>目标 ID</th>
+                <th>措施</th>
+                <th>原因</th>
+                <th>发布者</th>
+              </tr>
+            </thead>
+            <tbody id="safetyAdvisoryTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- 举报审核 -->
+        <div class="ds-split" style="margin-bottom:20px;">
+          <div class="ds-card">
+            <div class="ds-card-header">
+              <span class="ds-card-title">安全举报列表</span>
+              <button class="ds-btn ds-btn-outline ds-btn-xs" type="button" data-admin-action="refresh-safety-reports">刷新</button>
+            </div>
+            <div class="ds-table-wrap" style="border:none;box-shadow:none;">
+              <table class="ds-table" id="safetyReportTable">
+                <thead>
+                  <tr>
+                    <th>举报 ID</th>
+                    <th>目标</th>
+                    <th>举报人</th>
+                    <th>摘要</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="safetyReportTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 居民制裁 -->
+          <div class="ds-card">
+            <div class="ds-card-header">
+              <span class="ds-card-title">居民制裁列表</span>
+              <button class="ds-btn ds-btn-outline ds-btn-xs" type="button" data-admin-action="refresh-resident-sanctions">刷新</button>
+            </div>
+            <div class="ds-table-wrap" style="border:none;box-shadow:none;">
+              <table class="ds-table" id="sanctionTable">
+                <thead>
+                  <tr>
+                    <th>居民 ID</th>
+                    <th>原因</th>
+                    <th>状态</th>
+                    <th>发布者</th>
+                  </tr>
+                </thead>
+                <tbody id="sanctionTableBody"></tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -584,6 +747,30 @@
         </div>
       </div>
 
+      <!-- ======== MODULE: 场景编辑 ======== -->
+      <div class="ds-module" id="mod-scene">
+        <div class="ds-page-header">
+          <h2>场景编辑</h2>
+          <p>为房间配置像素场景：选择预设图像层、编辑交互热点区域</p>
+        </div>
+
+        <div class="ds-toolbar">
+          <div class="ds-toolbar-left">
+            <label style="margin-right:0.5rem;font-size:13px;">选择房间:</label>
+            <select class="ds-select" id="sceneRoomSelect" style="min-width:240px;">
+              <option value="">-- 请选择房间 --</option>
+            </select>
+          </div>
+          <div class="ds-toolbar-right">
+            <button class="ds-btn-outline ds-btn-sm" data-admin-action="refresh-scene">刷新</button>
+          </div>
+        </div>
+
+        <div id="sceneEditorContainer" style="margin-top:1rem;">
+          <p style="color:var(--ds-text-muted);font-size:13px;">请先选择一个房间以编辑其场景配置。</p>
+        </div>
+      </div>
+
       <!-- ======== MODULE: 日志与告警 ======== -->
       <div class="ds-module" id="mod-logs">
         <div class="ds-page-header">
@@ -657,8 +844,90 @@
     <div class="ds-detail-actions" id="dsDetailActions" style="display:none;"></div>
   </aside>
 
+  <!-- ======== MODULE: 设备管理 ======== -->
+  <div class="ds-module" id="mod-devices">
+    <div class="ds-module-header">
+      <h2>设备管理</h2>
+      <p>管理城主设备白名单，封禁/解封设备控制城邦访问</p>
+    </div>
+    <div class="ds-card">
+      <div class="ds-card-header">
+        <span class="ds-card-title">添加设备</span>
+      </div>
+      <div class="ds-card-body" style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input id="deviceAddressInput" type="text" class="ds-input" placeholder="MAC 地址 (如 1c:f6:4c:5f:3d:08)" style="flex:1;min-width:200px;" />
+        <input id="deviceLabelInput" type="text" class="ds-input" placeholder="设备标签 (如 我的MacBook)" style="flex:1;min-width:150px;" />
+        <button id="deviceAddBtn" class="ds-btn-primary ds-btn-sm">添加设备</button>
+      </div>
+    </div>
+    <div class="ds-card" style="margin-top:12px;">
+      <div class="ds-card-header">
+        <span class="ds-card-title">设备列表</span>
+        <span id="deviceCount" style="font-size:12px;color:var(--ds-text-secondary);"></span>
+      </div>
+      <div class="ds-card-body">
+        <table class="ds-table">
+          <thead>
+            <tr>
+              <th>MAC 地址</th>
+              <th>标签</th>
+              <th>状态</th>
+              <th>绑定居民</th>
+              <th>添加时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="deviceTableBody">
+            <tr><td colspan="6" class="ds-empty">加载中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ SCRIPTS ============ -->
   <script src="./admin-ds-data.js"></script>
   <script src="./admin-ds.js"></script>
+
+  <!-- 注册登录模块 -->
+  <script type="module">
+    import { initAuth } from "./shell-auth.js";
+    const gatewayUrl = new URLSearchParams(window.location.search).get("gateway") || "";
+    initAuth({
+      statusEl: document.getElementById("auth-status"),
+      requestFormEl: document.getElementById("auth-request-form"),
+      deliverySelectEl: document.getElementById("auth-delivery-select"),
+      residentInputEl: document.getElementById("auth-resident-input"),
+      nicknameInputEl: document.getElementById("auth-nickname-input"),
+      emailInputEl: document.getElementById("auth-email-input"),
+      mobileInputEl: document.getElementById("auth-mobile-input"),
+      deviceInputEl: document.getElementById("auth-device-input"),
+      verifyFormEl: document.getElementById("auth-verify-form"),
+      challengeInputEl: document.getElementById("auth-challenge-input"),
+      codeInputEl: document.getElementById("auth-code-input"),
+      loginCardEl: document.getElementById("resident-login-card"),
+      loginOverlayEl: document.getElementById("resident-login-overlay"),
+      hudLoginToggleEl: document.getElementById("hud-login-toggle"),
+    }, {
+      gatewayUrl: () => gatewayUrl,
+      postJson: async (path, body) => {
+        if (!gatewayUrl) throw new Error("gateway not connected");
+        const res = await fetch(gatewayUrl.replace(/\/+$/, "") + path, {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+        });
+        return res.json();
+      },
+      refreshFromGateway: () => {},
+      persistIdentity: (id) => { try { localStorage.setItem("lobster-identity", id); } catch(e) {} },
+      userProjection: () => null,
+      desiredResidentId: () => undefined,
+    });
+    const toggle = document.getElementById("hud-login-toggle");
+    const overlay = document.getElementById("resident-login-overlay");
+    const closeBtn = document.getElementById("resident-login-close");
+    toggle?.addEventListener("click", () => { overlay?.classList.remove("shell-hidden"); overlay?.removeAttribute("aria-hidden"); });
+    closeBtn?.addEventListener("click", () => { overlay?.classList.add("shell-hidden"); overlay?.setAttribute("aria-hidden", "true"); });
+    if (gatewayUrl && !localStorage.getItem("lobster-identity")) { setTimeout(() => toggle?.classList.remove("shell-hidden"), 800); }
+  </script>
 </body>
 </html>

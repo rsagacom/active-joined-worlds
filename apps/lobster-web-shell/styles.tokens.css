@@ -1,0 +1,45 @@
+/* ============================================================
+   styles.tokens.css — Shared design tokens
+   Used by all pages. Single source of truth for CSS custom
+   properties (colors, spacing, typography, shadows, radii).
+   ============================================================ */
+
+:root {
+  color-scheme: dark;
+  --im-scene-rail-width: 220px;
+  --bg-deep: #05030d;
+  --bg: #07050f;
+  --bg-elevated: #0a0a0c;
+  --panel-outer: #111325;
+  --panel: #1b1f33;
+  --panel-soft: #20233b;
+  --panel-inner: #2a2d48;
+  --ink: #f5f8ff;
+  --ink-soft: #e8ecf6;
+  --muted: #a9b0d2;
+  --muted-soft: #8a92b8;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.12);
+  --accent: #7efdc7;
+  --accent-strong: #64e4bf;
+  --accent-soft: rgba(126, 253, 199, 0.12);
+  --accent-muted: rgba(126, 253, 199, 0.06);
+  --accent-warm: #ffa45c;
+  --accent-warm-soft: rgba(255, 164, 92, 0.12);
+  --danger: #ff6b6b;
+  --danger-soft: rgba(255, 107, 107, 0.12);
+  --shadow-soft: 0 16px 32px rgba(1, 5, 16, 0.6);
+  --shadow-strong: 0 24px 48px rgba(1, 5, 16, 0.75);
+  --shadow-glow: 0 0 40px rgba(126, 253, 199, 0.08);
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --font-ui: "Space Grotesk", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", "SFMono-Regular", monospace;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-lg: 16px;
+  --spacing-xl: 24px;
+}

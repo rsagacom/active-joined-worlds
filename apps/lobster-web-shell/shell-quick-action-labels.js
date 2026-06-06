@@ -159,3 +159,211 @@ export function quickActionStage(action, state) {
   }
   return stages[0] || null;
 }
+
+export function quickActionFollowUpLabel(action, state = "") {
+  return quickActionStage(action, state)?.label || "";
+}
+
+export function quickActionFollowUpCopy(action, state = "") {
+  return quickActionStage(action, state)?.copy || "";
+}
+
+export function quickActionBadgeLabel(action) {
+  return action ? `动作 ${action}` : "";
+}
+
+export function quickActionBadgeTone(action) {
+  return quickActionTone(action);
+}
+
+export function quickActionBadgeIntensity(action) {
+  return quickActionIntensity(action);
+}
+
+export function buildRoomQuickActionPillDomSpec(action = "") {
+  const label = quickActionBadgeLabel(action);
+  if (!label) return null;
+  const dataset = {};
+  const intensity = quickActionBadgeIntensity(action);
+  if (intensity) dataset.actionIntensity = intensity;
+  if (action) dataset.quickAction = action;
+  return {
+    text: label,
+    tone: quickActionBadgeTone(action),
+    classNames: ["pill-room-action", "is-clickable"],
+    dataset,
+    title: "点击继续当前动作",
+  };
+}
+
+export function buildRoomInlineActionsRailDomSpec(action = "") {
+  if (!action) return null;
+  const dataset = { quickAction: action };
+  const actionIntensity = quickActionIntensity(action);
+  if (actionIntensity) dataset.actionIntensity = actionIntensity;
+  return {
+    className: "room-inline-actions",
+    dataset,
+  };
+}
+
+export function buildRoomInlineActionDomSpec(action = "", label = "", role = "") {
+  const cleanLabel = typeof label === "string" ? label.trim() : "";
+  const cleanRole = typeof role === "string" ? role.trim() : "";
+  if (!cleanLabel || !cleanRole) return null;
+  const dataset = { roomInlineRole: cleanRole };
+  const actionIntensity = quickActionIntensity(action);
+  if (actionIntensity) dataset.actionIntensity = actionIntensity;
+  return {
+    type: "span",
+    className: `room-inline-action room-inline-action-${cleanRole}`,
+    text: cleanLabel,
+    dataset,
+    tabIndex: 0,
+    attributes: {
+      role: "button",
+    },
+  };
+}
+
+export function buildRoomInlineProgressDomSpec(action = "", state = "") {
+  const stages = quickActionStateStages(action);
+  if (!stages.length) return null;
+  const stageIndex = Math.max(
+    stages.findIndex((stage) => stage.label === state),
+    0,
+  );
+  const dataset = {};
+  const actionIntensity = quickActionIntensity(action);
+  if (actionIntensity) dataset.actionIntensity = actionIntensity;
+  return {
+    className: "room-inline-progress",
+    dataset,
+    title: quickActionStage(action, state)?.copy || "",
+    tabIndex: 0,
+    attributes: {
+      role: "button",
+    },
+    count: {
+      className: "room-inline-progress-count",
+      text: `${stageIndex + 1} / ${Math.max(stages.length, 1)}`,
+    },
+    label: {
+      className: "room-inline-progress-label",
+      text: state,
+    },
+    stageIndex,
+    stageCount: stages.length,
+  };
+}
+
+export function buildRoomInlineProgressRenderDomSpec(action = "", state = "") {
+  const progress = buildRoomInlineProgressDomSpec(action, state);
+  if (!progress) return null;
+  return {
+    type: "div",
+    className: progress.className,
+    dataset: progress.dataset,
+    title: progress.title,
+    tabIndex: progress.tabIndex,
+    attributes: progress.attributes,
+    children: [
+      {
+        type: "span",
+        className: progress.count.className,
+        text: progress.count.text,
+      },
+      {
+        type: "span",
+        className: progress.label.className,
+        text: progress.label.text,
+      },
+    ],
+    stageIndex: progress.stageIndex,
+    stageCount: progress.stageCount,
+  };
+}
+
+export function quickActionSummary(action) {
+  return action ? `最近动作：${action}` : "";
+}
+
+export function quickActionContextCopy(action) {
+  if (!action) return "";
+  return `最近动作：${action} · ${quickActionStatusCopy(action)}`;
+}
+
+export function nextQuickActionState(action, state = "") {
+  const stages = quickActionStateStages(action);
+  const index = stages.findIndex((stage) => stage.label === state);
+  if (index < 0 || index >= stages.length - 1) return "";
+  return stages[index + 1].label;
+}
+
+export function quickActionDefaultSendLabel(action) {
+  switch (action) {
+    case "整理":
+      return "提交整理";
+    case "留条":
+      return "留下便条";
+    case "委托":
+      return "发出委托";
+    case "交易":
+      return "记录交易";
+    case "续聊":
+      return "继续发送";
+    case "私聊":
+      return "发起私聊";
+    default:
+      return "发送";
+  }
+}
+
+export function workflowProgressStageState(index, currentIndex) {
+  if (index < currentIndex) return "done";
+  if (index === currentIndex) return "current";
+  return "upcoming";
+}
+
+export function buildWorkflowProgressDomSpec(action, state = "", options = {}) {
+  const stages =
+    Array.isArray(options.stages) && options.stages.length
+      ? options.stages
+      : quickActionStateStages(action);
+  if (!stages.length) return null;
+
+  const currentIndex = Math.max(
+    stages.findIndex((stage) => stage?.label === state),
+    0,
+  );
+  const classNames = ["workflow-progress"];
+  if (typeof options.className === "string") {
+    classNames.push(...options.className.split(/\s+/).map((item) => item.trim()).filter(Boolean));
+  }
+  const dataset = {};
+  const actionIntensity = quickActionIntensity(action);
+  if (actionIntensity) dataset.actionIntensity = actionIntensity;
+  if (action) dataset.quickAction = action;
+  const title = typeof options.title === "string" ? options.title.trim() : "";
+
+  return {
+    classNames,
+    dataset,
+    titleLine: title ? { className: "workflow-progress-title", text: title } : null,
+    stepsClassName: "workflow-progress-steps",
+    steps: stages.map((stage, index) => ({
+      className: "workflow-progress-step",
+      dataset: {
+        stageState: workflowProgressStageState(index, currentIndex),
+        stageLabel: stage?.label || "",
+      },
+      clickable: Boolean(options.onStageClick),
+      markerClassName: "workflow-progress-marker",
+      markerText: String(index + 1),
+      labelClassName: "workflow-progress-label",
+      labelText: stage?.label || "",
+      stage,
+      index,
+    })),
+  };
+}

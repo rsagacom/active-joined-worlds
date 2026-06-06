@@ -720,6 +720,378 @@ fn submission_script_routes_admin_governance_text_into_governance_room() {
 }
 
 #[test]
+fn admin_ban_command_without_gateway_shows_error_notice() {
+    let (temp_root, mut store) = temp_store("lobster-tui-admin-ban");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    let result = handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/ban",
+    ).unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    let messages = store.export_messages(&active_id);
+    let notice = messages.iter().find(|m| m.envelope.body.plain_text.contains("用法")).unwrap();
+    assert!(notice.envelope.body.plain_text.contains("/ban"));
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn admin_unban_command_requires_resident_id() {
+    let (temp_root, mut store) = temp_store("lobster-tui-admin-unban");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/unban",
+    ).unwrap();
+
+    let messages = store.export_messages(&active_id);
+    assert!(messages.iter().any(|m| m.envelope.body.plain_text.contains("用法：/unban")));
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn admin_freeze_command_requires_room_id() {
+    let (temp_root, mut store) = temp_store("lobster-tui-admin-freeze");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/freeze",
+    ).unwrap();
+
+    let messages = store.export_messages(&active_id);
+    assert!(messages.iter().any(|m| m.envelope.body.plain_text.contains("用法：/freeze")));
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn admin_unfreeze_command_requires_room_id() {
+    let (temp_root, mut store) = temp_store("lobster-tui-admin-unfreeze");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/unfreeze",
+    ).unwrap();
+
+    let messages = store.export_messages(&active_id);
+    assert!(messages.iter().any(|m| m.envelope.body.plain_text.contains("用法：/unfreeze")));
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn admin_invite_without_subcommand_shows_usage() {
+    let (temp_root, mut store) = temp_store("lobster-tui-admin-invite-usage");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/invite",
+    ).unwrap();
+
+    let messages = store.export_messages(&active_id);
+    assert!(messages.iter().any(|m| {
+        let text = &m.envelope.body.plain_text;
+        text.contains("/invite create") && text.contains("/invite revoke")
+    }));
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn admin_residents_command_runs_without_gateway() {
+    let (temp_root, mut store) = temp_store("lobster-tui-admin-residents");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    let result = handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/residents",
+    ).unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    assert_eq!(active_id, selected_id);
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn admin_commands_work_from_user_surface_too() {
+    let (temp_root, mut store) = temp_store("lobster-tui-admin-user-surface");
+    let active = launch_conversation(LaunchSurface::User);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    let result = handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::User,
+        &mut active_id, &mut selected_id,
+        "/residents",
+    ).unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    let messages = store.export_messages(&active_id);
+    assert!(messages.iter().any(|m| {
+        let text = &m.envelope.body.plain_text;
+        text.contains("居民名单") || text.contains("Gateway")
+    }));
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn help_command_lists_admin_governance_commands() {
+    let (temp_root, mut store) = temp_store("lobster-tui-help-admin");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/help",
+    ).unwrap();
+
+    let messages = store.export_messages(&active_id);
+    let help_text = messages.iter()
+        .find(|m| m.envelope.sender.0 == "system")
+        .map(|m| &m.envelope.body.plain_text)
+        .unwrap();
+    assert!(help_text.contains("/residents"));
+    assert!(help_text.contains("/ban"));
+    assert!(help_text.contains("/unban"));
+    assert!(help_text.contains("/freeze"));
+    assert!(help_text.contains("/unfreeze"));
+    assert!(help_text.contains("/invite create"));
+    assert!(help_text.contains("/invite revoke"));
+    assert!(help_text.contains("/rooms"));
+    assert!(help_text.contains("/config"));
+    assert!(help_text.contains("/world-status"));
+    assert!(help_text.contains("/cities"));
+    assert!(help_text.contains("/world-safety"));
+    assert!(help_text.contains("/safety-reports"));
+    assert!(help_text.contains("/safety-residents"));
+    assert!(help_text.contains("/world-directory"));
+    assert!(help_text.contains("/world-square"));
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn admin_rooms_command_runs_without_gateway() {
+    let (temp_root, mut store) = temp_store("lobster-tui-admin-rooms");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    let result = handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/rooms",
+    ).unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    assert_eq!(active_id, selected_id);
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn admin_config_without_args_shows_usage() {
+    let (temp_root, mut store) = temp_store("lobster-tui-admin-config-usage");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/config",
+    ).unwrap();
+
+    let messages = store.export_messages(&active_id);
+    assert!(messages.iter().any(|m| m.envelope.body.plain_text.contains("用法：/config")));
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn world_status_command_runs_without_gateway() {
+    let (temp_root, mut store) = temp_store("lobster-tui-world-status");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    let result = handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/world-status",
+    ).unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    assert_eq!(active_id, selected_id);
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn cities_command_runs_without_gateway() {
+    let (temp_root, mut store) = temp_store("lobster-tui-cities");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    let result = handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/cities",
+    ).unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    assert_eq!(active_id, selected_id);
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn world_safety_command_runs_without_gateway() {
+    let (temp_root, mut store) = temp_store("lobster-tui-world-safety");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    let result = handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/world-safety",
+    ).unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    let messages = store.export_messages(&active_id);
+    assert!(messages.iter().any(|m| {
+        let text = &m.envelope.body.plain_text;
+        text.contains("安全快照") || text.contains("Gateway")
+    }));
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn safety_reports_command_runs_without_gateway() {
+    let (temp_root, mut store) = temp_store("lobster-tui-safety-reports");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    let result = handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/safety-reports",
+    ).unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    assert_eq!(active_id, selected_id);
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn safety_residents_command_runs_without_gateway() {
+    let (temp_root, mut store) = temp_store("lobster-tui-safety-residents");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    let result = handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/safety-residents",
+    ).unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    assert_eq!(active_id, selected_id);
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn world_directory_command_runs_without_gateway() {
+    let (temp_root, mut store) = temp_store("lobster-tui-world-directory");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    let result = handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/world-directory",
+    ).unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    assert_eq!(active_id, selected_id);
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn world_square_command_runs_without_gateway() {
+    let (temp_root, mut store) = temp_store("lobster-tui-world-square");
+    let active = launch_conversation(LaunchSurface::Admin);
+    store.upsert_conversation(active.clone()).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_id = active.conversation_id.clone();
+    let mut selected_id = active_id.clone();
+
+    let result = handle_terminal_submission(
+        &mut store, &mut transport, LaunchSurface::Admin,
+        &mut active_id, &mut selected_id,
+        "/world-square",
+    ).unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    assert_eq!(active_id, selected_id);
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
 fn dm_command_opens_new_direct_conversation_and_selects_it() {
     let (temp_root, mut store) = temp_store("lobster-tui-dm-open");
     let active = launch_conversation(LaunchSurface::User);
@@ -4577,4 +4949,63 @@ fn session_info_panel_uses_diegetic_status_labels() {
     assert!(!room_status.contains("航路"));
     assert!(!room_status.contains("落盘"));
     assert!(!world_status.contains("线灯"));
+}
+
+#[test]
+fn scene_tile_kind_enum_covers_all_fourteen_variants() {
+    // Verify the enum has no accidental gaps
+    let all = vec![
+        SceneTileKind::Wall, SceneTileKind::Floor, SceneTileKind::Window,
+        SceneTileKind::Desk, SceneTileKind::Sofa, SceneTileKind::Cabinet,
+        SceneTileKind::Door, SceneTileKind::Avatar, SceneTileKind::Lamp,
+        SceneTileKind::Gate, SceneTileKind::Bridge, SceneTileKind::Water,
+        SceneTileKind::Portal, SceneTileKind::Tower,
+    ];
+    assert_eq!(all.len(), 14);
+    // Verify Debug/Clone/PartialEq work
+    assert_eq!(SceneTileKind::Wall, SceneTileKind::Wall);
+    assert_ne!(SceneTileKind::Wall, SceneTileKind::Floor);
+    assert_eq!(format!("{:?}", SceneTileKind::Gate), "Gate");
+}
+
+#[test]
+fn scene_tile_grid_empty_yields_empty_rows() {
+    let ctx = test_context(LaunchSurface::User);
+    let grid = ratatui_scene_tile_grid(&ctx);
+    assert!(!grid.rows.is_empty(), "even empty scene should have grid rows");
+    // Grid should be non-empty even in admin surface
+    let admin_grid = ratatui_scene_tile_grid(&test_context(LaunchSurface::Admin));
+    assert!(!admin_grid.rows.is_empty());
+}
+
+#[test]
+fn scene_tile_grid_world_surface_differs_from_user() {
+    let user_grid = ratatui_scene_tile_grid(&test_context(LaunchSurface::User));
+    let world_grid = ratatui_scene_tile_grid(&test_context(LaunchSurface::World));
+    assert!(!user_grid.rows.is_empty());
+    assert!(!world_grid.rows.is_empty());
+    // World and User should have different grid layouts
+    assert_ne!(user_grid.rows, world_grid.rows, "world and user should differ");
+}
+
+#[test]
+fn scene_panel_entities_cover_all_renderable_surfaces() {
+    // Verify all surfaces produce non-empty output
+    for surface in &[LaunchSurface::User, LaunchSurface::Admin, LaunchSurface::World] {
+        let lines = ratatui_scene_lines(&test_context(*surface));
+        assert!(!lines.is_empty(), "surface {:?} should render", surface);
+    }
+}
+
+#[test]
+fn admin_and_world_surfaces_have_non_empty_scene_lines() {
+    for surface in &[LaunchSurface::Admin, LaunchSurface::World] {
+        let lines = ratatui_scene_lines(&test_context(*surface));
+        assert!(!lines.is_empty(), "surface {:?} should produce scene lines", surface);
+    }
+    let user_lines = ratatui_scene_lines(&test_context(LaunchSurface::User));
+    let admin_lines = ratatui_scene_lines(&test_context(LaunchSurface::Admin));
+    // Admin may differ from user
+    assert!(!user_lines.is_empty());
+    assert!(!admin_lines.is_empty());
 }

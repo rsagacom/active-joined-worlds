@@ -33,10 +33,14 @@ impl GatewayRuntime {
             governance_path: storage_root.join("governance-state.json"),
             presence_path: storage_root.join("presence-state.json"),
             unread_path: storage_root.join("unread-state.json"),
+            moderation_state_path: storage_root.join("moderation-state.json"),
             secure_sessions_path: storage_root.join("secure-sessions.json"),
             provider_config_path: storage_root.join("provider-config.json"),
             auth_state_path: storage_root.join("auth-state.json"),
             invites_path: storage_root.join("invites.json"),
+            permission_groups_path: storage_root.join("permission-groups.json"),
+            audit_log_path: storage_root.join("audit-log.json"),
+            device_state_path: storage_root.join("device-state.json"),
             timeline_store,
             secure_sessions: SkeletonSecureSessionManager::new(),
             world: Self::default_world(),
@@ -59,7 +63,12 @@ impl GatewayRuntime {
             unread: HashMap::new(),
             rate_limits: HashMap::new(),
             message_moderation: HashMap::new(),
+            allowed_devices: HashMap::new(),
+            device_bindings: HashMap::new(),
             invites: HashMap::new(),
+            permission_groups: HashMap::new(),
+            resident_permission_groups: HashMap::new(),
+            audit_events: Vec::new(),
             started_at_ms: Self::now_ms(),
             app_config: HashMap::new(),
         };
@@ -70,6 +79,10 @@ impl GatewayRuntime {
         runtime.load_invites()?;
         runtime.load_presence_state()?;
         runtime.load_unread_state()?;
+        runtime.load_moderation_state()?;
+        runtime.load_device_state()?;
+        runtime.load_permission_groups()?;
+        runtime.load_audit_log()?;
         runtime.ensure_default_world_safety()?;
         if cli_provider_url.is_some() {
             runtime.set_upstream_provider_url(cli_provider_url)?;
@@ -227,6 +240,7 @@ impl GatewayRuntime {
             created_at_ms: Self::now_ms(),
             verified_at_ms: 0,
             last_login_at_ms: 0,
+            nickname: None,
         });
         true
     }
@@ -243,6 +257,169 @@ impl GatewayRuntime {
         true
     }
 
+    pub(crate) fn admin_logs(&self) -> Vec<AdminLogEntry> {
+        self.message_moderation
+            .iter()
+            .filter_map(|(k, v)| {
+                k.strip_prefix("log:").map(|log_id| AdminLogEntry {
+                    log_id: log_id.to_string(),
+                    status: v.clone(),
+                })
+            })
+            .collect()
+    }
+
+    pub(crate) fn admin_list_invites(&self) -> Vec<InviteCode> {
+        self.invites.values().cloned().collect()
+    }
+
+    // ── Permission Groups ──
+
+    pub(crate) fn persist_permission_groups(&self) -> Result<(), String> {
+        #[derive(Serialize)]
+        struct PermissionGroupState {
+            groups: Vec<PermissionGroup>,
+            assignments: Vec<(String, String)>,
+        }
+        let state = PermissionGroupState {
+            groups: self.permission_groups.values().cloned().collect(),
+            assignments: self.resident_permission_groups.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+        };
+        let bytes = serde_json::to_vec_pretty(&state)
+            .map_err(|e| format!("encode permission groups: {e}"))?;
+        atomic_write_file(&self.permission_groups_path, &bytes)
+            .map_err(|e| format!("write permission groups: {e}"))
+    }
+
+    pub(crate) fn load_permission_groups(&mut self) -> Result<(), String> {
+        if !self.permission_groups_path.exists() {
+            return Ok(());
+        }
+        let bytes = std::fs::read(&self.permission_groups_path)
+            .map_err(|e| format!("read permission groups: {e}"))?;
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        #[derive(Deserialize)]
+        struct PermissionGroupState {
+            groups: Vec<PermissionGroup>,
+            assignments: Vec<(String, String)>,
+        }
+        let state: PermissionGroupState = serde_json::from_slice(&bytes)
+            .map_err(|e| format!("decode permission groups: {e}"))?;
+        self.permission_groups = state.groups.into_iter().map(|g| (g.id.clone(), g)).collect();
+        self.resident_permission_groups = state.assignments.into_iter().collect();
+        Ok(())
+    }
+
+    pub(crate) fn admin_create_permission_group(
+        &mut self,
+        actor_id: &str,
+        name: &str,
+        description: &str,
+        capabilities: Vec<String>,
+    ) -> CreatePermissionGroupResponse {
+        let id = format!("pg-{}", Self::now_ms());
+        let group = PermissionGroup {
+            id: id.clone(),
+            name: name.to_string(),
+            description: description.to_string(),
+            capabilities,
+            created_at_ms: Self::now_ms(),
+            created_by: actor_id.to_string(),
+        };
+        self.permission_groups.insert(id, group.clone());
+        let _ = self.persist_permission_groups();
+        CreatePermissionGroupResponse { ok: true, group }
+    }
+
+    pub(crate) fn admin_list_permission_groups(&self) -> Vec<PermissionGroup> {
+        self.permission_groups.values().cloned().collect()
+    }
+
+    pub(crate) fn admin_assign_permission_group(
+        &mut self,
+        resident_id: &str,
+        permission_group_id: &str,
+    ) -> AssignPermissionGroupResponse {
+        self.resident_permission_groups.insert(resident_id.to_string(), permission_group_id.to_string());
+        let _ = self.persist_permission_groups();
+        AssignPermissionGroupResponse {
+            ok: true,
+            resident_id: resident_id.to_string(),
+            permission_group_id: permission_group_id.to_string(),
+        }
+    }
+
+
+    pub(crate) fn resident_has_capability(&self, resident_id: &str, capability: &str) -> bool {
+        // Built-in special: admin_rsaga has all capabilities
+        if resident_id == "admin_rsaga" {
+            return true;
+        }
+        // Check resident's assigned permission group
+        if let Some(group_id) = self.resident_permission_groups.get(resident_id)
+            && let Some(group) = self.permission_groups.get(group_id) {
+                return group.capabilities.iter().any(|c| c == capability);
+            }
+        false
+    }
+
+    pub(crate) fn dev_auth_bypass_enabled() -> bool {
+        std::env::var("LOBSTER_DEV_AUTH_BYPASS").map(|v| v == "1").unwrap_or(false)
+    }
+
+    // ── Audit Log ──
+
+    pub(crate) fn log_audit_event(
+        &mut self,
+        actor_id: &str,
+        action: &str,
+        target: &str,
+        reason: Option<&str>,
+    ) {
+        let event = AuditEvent {
+            event_id: format!("audit-{}", Self::now_ms()),
+            actor_id: actor_id.to_string(),
+            action: action.to_string(),
+            target: target.to_string(),
+            reason: reason.map(|r| r.to_string()),
+            timestamp_ms: Self::now_ms(),
+        };
+        self.audit_events.push(event);
+        let _ = self.persist_audit_log();
+    }
+
+    pub(crate) fn admin_list_audit_events(&self, limit: usize) -> AuditLogResponse {
+        let total = self.audit_events.len();
+        let events = self.audit_events.iter().rev().take(limit).cloned().collect();
+        AuditLogResponse { events, total }
+    }
+
+    fn persist_audit_log(&self) -> Result<(), String> {
+        let lines: Vec<String> = self
+            .audit_events
+            .iter()
+            .map(|e| serde_json::to_string(e).unwrap_or_default())
+            .collect();
+        let bytes = lines.join("\n") + if lines.is_empty() { "" } else { "\n" };
+        std::fs::write(&self.audit_log_path, &bytes)
+            .map_err(|e| format!("write audit log: {e}"))
+    }
+
+    fn load_audit_log(&mut self) -> Result<(), String> {
+        if !self.audit_log_path.exists() {
+            return Ok(());
+        }
+        let raw = std::fs::read_to_string(&self.audit_log_path)
+            .map_err(|e| format!("read audit log: {e}"))?;
+        self.audit_events = raw
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .filter_map(|line| serde_json::from_str::<AuditEvent>(line).ok())
+            .collect();
+        Ok(())
+    }
 
     pub(crate) fn check_rate_limit(&mut self, sender_id: &str, max_per_minute: u32) -> Option<i64> {
         let now_ms = Self::now_ms();
@@ -308,6 +485,141 @@ impl GatewayRuntime {
         Ok(())
     }
 
+    pub(crate) fn persist_moderation_state(&self) -> Result<(), String> {
+        let bytes = serde_json::to_vec_pretty(&self.message_moderation)
+            .map_err(|error| format!("encode moderation state failed: {error}"))?;
+        atomic_write_file(&self.moderation_state_path, &bytes)
+            .map_err(|error| format!("write moderation state failed: {error}"))
+    }
+
+    pub(crate) fn load_device_state(&mut self) -> Result<(), String> {
+        if !self.device_state_path.exists() {
+            return Ok(());
+        }
+        let bytes = std::fs::read(&self.device_state_path)
+            .map_err(|error| format!("read device state failed: {error}"))?;
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        #[derive(Deserialize)]
+        struct DeviceStateFile {
+            #[serde(default)]
+            devices: Vec<DeviceRecord>,
+            #[serde(default)]
+            bindings: HashMap<String, String>,
+        }
+        let state: DeviceStateFile = serde_json::from_slice(&bytes)
+            .map_err(|error| format!("decode device state failed: {error}"))?;
+        for device in state.devices {
+            self.allowed_devices
+                .insert(device.address.clone(), device);
+        }
+        self.device_bindings = state.bindings;
+        Ok(())
+    }
+
+    pub(crate) fn persist_device_state(&self) -> Result<(), String> {
+        #[derive(Serialize)]
+        struct DeviceStateFile {
+            devices: Vec<DeviceRecord>,
+            bindings: HashMap<String, String>,
+        }
+        let devices: Vec<DeviceRecord> = self.allowed_devices.values().cloned().collect();
+        let state = DeviceStateFile {
+            devices,
+            bindings: self.device_bindings.clone(),
+        };
+        let bytes = serde_json::to_vec_pretty(&state)
+            .map_err(|error| format!("encode device state failed: {error}"))?;
+        atomic_write_file(&self.device_state_path, &bytes)
+            .map_err(|error| format!("write device state failed: {error}"))
+    }
+
+    pub(crate) fn admin_add_device(
+        &mut self,
+        address: String,
+        label: String,
+        actor_id: String,
+    ) -> Result<DeviceRecord, String> {
+        let normalized = Self::normalize_device_physical_address(&address)
+            .ok_or_else(|| "invalid device address format".to_string())?;
+        let now = Self::now_ms();
+        let record = DeviceRecord {
+            address: normalized.clone(),
+            label: if label.is_empty() {
+                "未命名设备".to_string()
+            } else {
+                label
+            },
+            added_at_ms: now,
+            added_by: actor_id,
+            blocked: false,
+            bound_resident_id: self.device_bindings.get(&normalized).cloned(),
+        };
+        self.allowed_devices.insert(normalized, record.clone());
+        let _ = self.persist_device_state();
+        Ok(record)
+    }
+
+    pub(crate) fn admin_remove_device(&mut self, address: &str) -> Result<(), String> {
+        let normalized = Self::normalize_device_physical_address(address)
+            .ok_or_else(|| "invalid device address format".to_string())?;
+        self.allowed_devices.remove(&normalized);
+        self.device_bindings.remove(&normalized);
+        let _ = self.persist_device_state();
+        Ok(())
+    }
+
+    pub(crate) fn admin_block_device(&mut self, address: &str) -> Result<(), String> {
+        let normalized = Self::normalize_device_physical_address(address)
+            .ok_or_else(|| "invalid device address format".to_string())?;
+        if let Some(record) = self.allowed_devices.get_mut(&normalized) {
+            record.blocked = true;
+        }
+        let _ = self.persist_device_state();
+        Ok(())
+    }
+
+    pub(crate) fn admin_unblock_device(&mut self, address: &str) -> Result<(), String> {
+        let normalized = Self::normalize_device_physical_address(address)
+            .ok_or_else(|| "invalid device address format".to_string())?;
+        if let Some(record) = self.allowed_devices.get_mut(&normalized) {
+            record.blocked = false;
+        }
+        let _ = self.persist_device_state();
+        Ok(())
+    }
+
+    pub(crate) fn admin_list_devices(&self) -> Vec<DeviceRecord> {
+        self.allowed_devices.values().cloned().collect()
+    }
+
+    pub(crate) fn bind_device_to_resident(
+        &mut self,
+        device_address: &str,
+        resident_id: &str,
+    ) {
+        self.device_bindings
+            .insert(device_address.to_string(), resident_id.to_string());
+        if let Some(record) = self.allowed_devices.get_mut(device_address) {
+            record.bound_resident_id = Some(resident_id.to_string());
+        }
+    }
+
+    pub(crate) fn load_moderation_state(&mut self) -> Result<(), String> {
+        if !self.moderation_state_path.exists() {
+            return Ok(());
+        }
+        let bytes = std::fs::read(&self.moderation_state_path)
+            .map_err(|error| format!("read moderation state failed: {error}"))?;
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        self.message_moderation = serde_json::from_slice(&bytes)
+            .map_err(|error| format!("decode moderation state failed: {error}"))?;
+        Ok(())
+    }
+
     pub(crate) fn unread_count(
         &self,
         resident_id: &IdentityId,
@@ -326,6 +638,11 @@ impl GatewayRuntime {
             entry.online = last_seen.map(|ts| Self::now_ms() - ts < online_threshold_ms);
             entry.last_seen_at_ms = last_seen;
             entry.avatar_id = Some(format!("avatar:{}", entry.resident_id));
+            entry.nickname = self
+                .registrations
+                .iter()
+                .find(|r| r.resident_id.0 == entry.resident_id)
+                .and_then(|r| r.nickname.clone());
             let personal_room = self
                 .timeline_store
                 .active_conversations()
@@ -406,24 +723,29 @@ impl GatewayRuntime {
         let total_count = self.timeline_store.archived_count(conversation_id);
         let shell_messages: Vec<ShellRoomMessage> = messages
             .into_iter()
-            .map(|entry| ShellRoomMessage {
-                message_id: entry.envelope.message_id.0,
-                reply_to_message_id: entry.envelope.reply_to_message_id.map(|m| m.0),
-                is_recalled: entry.recalled_at_ms.is_some(),
-                recalled_by: entry.recalled_by.map(|id| id.0),
-                recalled_at_ms: entry.recalled_at_ms,
-                is_edited: entry.edited_at_ms.is_some(),
-                edited_by: entry.edited_by.map(|id| id.0),
-                edited_at_ms: entry.edited_at_ms,
-                sender: entry.envelope.sender.0,
-                timestamp_ms: entry.envelope.timestamp_ms,
-                timestamp_label: Self::relative_label(now_ms, entry.envelope.timestamp_ms),
-                delivery_status: "delivered".to_string(),
-                text: if entry.recalled_at_ms.is_some() {
-                    "消息已撤回".into()
-                } else {
-                    entry.envelope.body.plain_text
-                },
+            .map(|entry| {
+                let mod_key = format!("{}:{}", entry.envelope.conversation_id.0, entry.envelope.message_id.0);
+                let moderation_status = self.message_moderation.get(&mod_key).cloned();
+                ShellRoomMessage {
+                    message_id: entry.envelope.message_id.0,
+                    reply_to_message_id: entry.envelope.reply_to_message_id.map(|m| m.0),
+                    is_recalled: entry.recalled_at_ms.is_some(),
+                    recalled_by: entry.recalled_by.map(|id| id.0),
+                    recalled_at_ms: entry.recalled_at_ms,
+                    is_edited: entry.edited_at_ms.is_some(),
+                    edited_by: entry.edited_by.map(|id| id.0),
+                    edited_at_ms: entry.edited_at_ms,
+                    sender: entry.envelope.sender.0,
+                    timestamp_ms: entry.envelope.timestamp_ms,
+                    timestamp_label: Self::relative_label(now_ms, entry.envelope.timestamp_ms),
+                    delivery_status: "delivered".to_string(),
+                    text: if entry.recalled_at_ms.is_some() {
+                        "消息已撤回".into()
+                    } else {
+                        entry.envelope.body.plain_text
+                    },
+                    moderation_status,
+                }
             })
             .collect();
         let returned_count = shell_messages.len();
@@ -472,8 +794,14 @@ impl GatewayRuntime {
                 let is_banned = resident_sanctions
                     .iter()
                     .any(|s| s.status == "active" && s.lifted_at_ms.is_none());
+                let nickname = self
+                    .registrations
+                    .iter()
+                    .find(|r| r.resident_id.0 == *rid)
+                    .and_then(|r| r.nickname.clone());
                 AdminResidentDetail {
                     resident_id: rid.clone(),
+                    nickname,
                     roles: Vec::new(),
                     active_cities: Vec::new(),
                     pending_cities: Vec::new(),
@@ -531,6 +859,45 @@ impl GatewayRuntime {
         };
         self.resident_sanctions.push(sanction);
         Ok(())
+    }
+
+    pub(crate) fn admin_set_nickname(
+        &mut self,
+        resident_id: &str,
+        nickname: Option<&str>,
+    ) -> Result<bool, String> {
+        let registration = self
+            .registrations
+            .iter_mut()
+            .find(|r| r.resident_id.0 == resident_id);
+        match registration {
+            Some(reg) => {
+                reg.nickname = nickname.map(|n| n.to_string());
+                self.persist_auth_state()?;
+                Ok(true)
+            }
+            None => Ok(false),
+        }
+    }
+
+    pub(crate) fn shell_set_nickname(
+        &mut self,
+        resident_id: &str,
+        nickname: Option<&str>,
+    ) -> Result<(bool, Option<String>), String> {
+        let idx = self
+            .registrations
+            .iter()
+            .position(|r| r.resident_id.0 == resident_id);
+        match idx {
+            Some(i) => {
+                self.registrations[i].nickname = nickname.map(|n| n.to_string());
+                let result = self.registrations[i].nickname.clone();
+                self.persist_auth_state()?;
+                Ok((true, result))
+            }
+            None => Ok((false, None)),
+        }
     }
 
     pub(crate) fn admin_unban_resident(&mut self, resident_id: &str) -> Result<usize, String> {
@@ -634,6 +1001,7 @@ impl GatewayRuntime {
         }
         self.message_moderation
             .insert(message_id.to_string(), action.to_string());
+        let _ = self.persist_moderation_state();
         Ok(())
     }
 
@@ -653,11 +1021,10 @@ impl GatewayRuntime {
     ) -> SceneValidateResponse {
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
-        if let Some(layer) = image_layer {
-            if layer.asset_hint.trim().is_empty() {
+        if let Some(layer) = image_layer
+            && layer.asset_hint.trim().is_empty() {
                 errors.push("image_layer.asset_hint must not be empty".into());
             }
-        }
         if let Some(layer) = hotspot_layer {
             if layer.hotspots.is_empty() {
                 warnings.push("hotspot_layer has no hotspots".into());
@@ -701,6 +1068,7 @@ impl GatewayRuntime {
                     last_seen_at_ms: None,
                     avatar_id: None,
                     personal_room_id: None,
+                    nickname: None,
                 });
             let city_label = city_labels
                 .get(&membership.city_id.0)
@@ -949,6 +1317,8 @@ impl GatewayRuntime {
             preset,
             aspect_ratio_permyriad: 16_000,
             owner_editable,
+            day_image_url: None,
+            night_image_url: None,
         }
     }
 

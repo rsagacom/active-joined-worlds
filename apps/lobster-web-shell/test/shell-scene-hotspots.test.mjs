@@ -75,3 +75,28 @@ test("createSceneHotspotElement maps gateway geometry to percentage styles", () 
   assert.equal(element.style.height, "6.5%");
   assert.equal(element.children[0].textContent, "工位");
 });
+
+test("createSceneHotspotElement creates link for href spec", () => {
+  const linkSpec = { href: "/rooms/1", className: "nav-link", title: "房间", label: "房间", copy: "进入" };
+  const el = createSceneHotspotElement(linkSpec, createMinimalDocument());
+  assert.equal(el.tagName, "A");
+  assert.equal(el.href, "/rooms/1");
+  assert.equal(el.dataset.hotspotTitle, "房间");
+});
+
+test("sceneHotspotSpecsForLayer handles empty and missing hotspots", () => {
+  assert.equal(sceneHotspotSpecsForLayer(null).length, 0);
+  assert.equal(sceneHotspotSpecsForLayer({}).length, 0);
+  assert.equal(sceneHotspotSpecsForLayer({ hotspots: [] }).length, 0);
+});
+
+test("sceneHotspotSignatureForRoom handles malformed layers", () => {
+  assert.equal(sceneHotspotSignatureForRoom(null), "static");
+  assert.equal(sceneHotspotSignatureForRoom({}), "static");
+  assert.equal(sceneHotspotSignatureForRoom({ hotspot_layer: {} }), "static");
+  assert.equal(sceneHotspotSignatureForRoom({ hotspot_layer: { hotspots: [] } }), "static");
+  // Different rooms with same layer data produce same signature
+  const a = sceneHotspotSignatureForRoom({ id: "a", hotspot_layer: layer });
+  const b = sceneHotspotSignatureForRoom({ id: "b", hotspot_layer: layer });
+  assert.notEqual(a, b, "different room IDs produce different signatures");
+});

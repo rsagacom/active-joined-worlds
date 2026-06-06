@@ -8,11 +8,17 @@ use transport_waku::WakuGatewayResponse;
 
 use crate::{
     AuthPreflightRequest, GatewayRuntime, GatewayStateNotifier, RequestEmailOtpRequest,
-    VerifyEmailOtpRequest,
+    RequestMobileOtpRequest, VerifyEmailOtpRequest, VerifyMobileOtpRequest,
     http_support::{authorization_bearer_token, json_header},
 };
 
 pub(crate) type HttpResponse = Response<Cursor<Vec<u8>>>;
+
+fn ok_json() -> HttpResponse {
+    Response::from_string("{\"ok\":true}")
+        .with_status_code(StatusCode(200))
+        .with_header(json_header())
+}
 
 fn unauthorized(message: String) -> HttpResponse {
     Response::from_string(
@@ -171,5 +177,110 @@ pub(crate) fn handle_post_verify_email_otp(
         )
         .with_status_code(StatusCode(400))
         .with_header(json_header()),
+    }
+}
+
+pub(crate) fn handle_post_request_mobile_otp(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    request: &mut Request,
+) -> HttpResponse {
+    let mut body = Vec::new();
+    if let Err(error) = request.as_reader().read_to_end(&mut body) {
+        return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
+            .with_status_code(StatusCode(400))
+            .with_header(json_header());
+    }
+
+    match serde_json::from_slice::<RequestMobileOtpRequest>(&body) {
+        Ok(payload) => {
+            let result = runtime
+                .lock()
+                .expect("gateway runtime mutex poisoned")
+                .request_mobile_otp(payload);
+            match result {
+                Ok(response_body) => Response::from_string(
+                    serde_json::to_string(&response_body).unwrap_or_else(|_| "{}".into()),
+                )
+                .with_status_code(StatusCode(200))
+                .with_header(json_header()),
+                Err(message) => Response::from_string(
+                    serde_json::to_string(&WakuGatewayResponse::Error { message })
+                        .unwrap_or_else(|_| "{\"error\":true}".into()),
+                )
+                .with_status_code(StatusCode(400))
+                .with_header(json_header()),
+            }
+        }
+        Err(error) => Response::from_string(
+            serde_json::to_string(&WakuGatewayResponse::Error {
+                message: format!("decode mobile otp request failed: {error}"),
+            })
+            .unwrap_or_else(|_| "{\"error\":true}".into()),
+        )
+        .with_status_code(StatusCode(400))
+        .with_header(json_header()),
+    }
+}
+
+pub(crate) fn handle_post_verify_mobile_otp(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    notifier: &Arc<GatewayStateNotifier>,
+    request: &mut Request,
+) -> HttpResponse {
+    let mut body = Vec::new();
+    if let Err(error) = request.as_reader().read_to_end(&mut body) {
+        return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
+            .with_status_code(StatusCode(400))
+            .with_header(json_header());
+    }
+
+    match serde_json::from_slice::<VerifyMobileOtpRequest>(&body) {
+        Ok(payload) => {
+            let result = runtime
+                .lock()
+                .expect("gateway runtime mutex poisoned")
+                .verify_mobile_otp(payload);
+            match result {
+                Ok(response_body) => {
+                    notifier.notify_changed();
+                    Response::from_string(
+                        serde_json::to_string(&response_body).unwrap_or_else(|_| "{}".into()),
+                    )
+                    .with_status_code(StatusCode(200))
+                    .with_header(json_header())
+                }
+                Err(message) => Response::from_string(
+                    serde_json::to_string(&WakuGatewayResponse::Error { message })
+                        .unwrap_or_else(|_| "{\"error\":true}".into()),
+                )
+                .with_status_code(StatusCode(400))
+                .with_header(json_header()),
+            }
+        }
+        Err(error) => Response::from_string(
+            serde_json::to_string(&WakuGatewayResponse::Error {
+                message: format!("decode mobile otp verify failed: {error}"),
+            })
+            .unwrap_or_else(|_| "{\"error\":true}".into()),
+        )
+        .with_status_code(StatusCode(400))
+        .with_header(json_header()),
+    }
+}
+
+pub(crate) fn handle_post_auth_logout(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    request: &Request,
+) -> HttpResponse {
+    let Some(token) = authorization_bearer_token(request) else {
+        return unauthorized("authorization bearer token required".into());
+    };
+    match runtime
+        .lock()
+        .expect("gateway runtime mutex poisoned")
+        .revoke_auth_session(&token)
+    {
+        Ok(()) => ok_json(),
+        Err(message) => unauthorized(message),
     }
 }

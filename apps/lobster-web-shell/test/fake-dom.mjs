@@ -5,6 +5,49 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const WEB_SHELL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+export const APP_LOCAL_IMPORT_PATHS = Object.freeze([
+  "./composer-state.js",
+  "./shell-composer.js",
+  "./shell-dom-helpers.js",
+  "./shell-errors.js",
+  "./shell-gateway.js",
+  "./shell-labels.js",
+  "./shell-message-state.js",
+  "./shell-message-render.js",
+  "./shell-quick-action-labels.js",
+  "./shell-quick-action-templates.js",
+  "./shell-quick-action-preview.js",
+  "./shell-room-render.js",
+  "./shell-quick-actions.js",
+  "./shell-payload.js",
+  "./shell-state-normalize.js",
+  "./shell-scene-runtime.js",
+  "./shell-auth.js",
+  "./shell-room-profiles.js",
+  "./shell-role-permissions.js",
+  "./shell-shared.js",
+  "./shell-storage-keys.js",
+  "./pretext-stage.js",
+  "./shell-room-rail.js",
+]);
+
+function appLocalImportUrlMap() {
+  return new Map(
+    APP_LOCAL_IMPORT_PATHS.map((relativePath) => [
+      relativePath,
+      new URL(`..${relativePath.slice(1)}`, import.meta.url).href,
+    ]),
+  );
+}
+
+export function rewriteAppLocalImports(source, moduleUrls = appLocalImportUrlMap()) {
+  if (typeof source !== "string" || !source) return "";
+  return source.replace(/from\s+(["'])(\.\/[^"']+\.js)\1/g, (match, quote, relativePath) => {
+    const moduleUrl = moduleUrls.get(relativePath);
+    return moduleUrl ? `from ${quote}${moduleUrl}${quote}` : match;
+  });
+}
+
 class FakeEvent {
   constructor(type, init = {}) {
     this.type = type;
@@ -760,7 +803,7 @@ function createCompactUserLoginCard(document) {
     createPageNode(document, "div", { className: "wechat-login-copy" }, [
       createPageNode(document, "span", { className: "wechat-login-kicker", textContent: "居民身份" }),
       createPageNode(document, "strong", { id: "auth-status", textContent: "登录状态：访客模式" }),
-      createPageNode(document, "span", { textContent: "连接网关后先用邮箱验证码登录；登录后只显示该居民可见会话。" }),
+      createPageNode(document, "span", { textContent: "连接网关后使用邮箱验证码登录；登录后可收发消息及使用完整功能。手机验证码与设备验证将在后续版本支持。" }),
     ]),
     createPageNode(document, "form", {
       id: "auth-request-form",
@@ -769,9 +812,9 @@ function createCompactUserLoginCard(document) {
     }, [
       makeInput(document, "auth-resident-input", "text", "居民名/可选，新注册时使用"),
       makeSelect(document, "auth-delivery-select", [
-        { value: "email", text: "邮箱验证码", selected: true },
-        { value: "mobile", text: "手机验证码（未开通）", disabled: true },
-        { value: "device", text: "设备验证（未开通）", disabled: true },
+        { value: "email", text: "邮箱验证码（已开通）", selected: true },
+        { value: "mobile", text: "手机验证码（规划中）", disabled: true },
+        { value: "device", text: "设备验证（规划中）", disabled: true },
       ], "email"),
       makeInput(document, "auth-email-input", "email", "接收验证码的邮箱"),
       makeInput(document, "auth-mobile-input", "tel", "手机号/可选反滥用"),
@@ -1863,29 +1906,6 @@ async function loadShellApp(shellPage, options = {}) {
   };
 
   const appPath = fileURLToPath(new URL("../app.js", import.meta.url));
-  const shellDomHelpersUrl = new URL("../shell-dom-helpers.js", import.meta.url).href;
-  const composerStateUrl = new URL("../composer-state.js", import.meta.url).href;
-  const shellErrorsUrl = new URL("../shell-errors.js", import.meta.url).href;
-  const shellGatewayUrl = new URL("../shell-gateway.js", import.meta.url).href;
-  const shellLabelsUrl = new URL("../shell-labels.js", import.meta.url).href;
-  const shellMessageStateUrl = new URL("../shell-message-state.js", import.meta.url).href;
-  const shellMessageRenderUrl = new URL("../shell-message-render.js", import.meta.url).href;
-  const shellPayloadUrl = new URL("../shell-payload.js", import.meta.url).href;
-  const shellQuickActionsUrl = new URL("../shell-quick-actions.js", import.meta.url).href;
-  const shellQuickActionLabelsUrl = new URL("../shell-quick-action-labels.js", import.meta.url).href;
-  const shellQuickActionPreviewUrl = new URL("../shell-quick-action-preview.js", import.meta.url).href;
-  const shellQuickActionTemplatesUrl = new URL("../shell-quick-action-templates.js", import.meta.url).href;
-  const shellStorageKeysUrl = new URL("../shell-storage-keys.js", import.meta.url).href;
-  const shellRoomProfilesUrl = new URL("../shell-room-profiles.js", import.meta.url).href;
-  const shellSceneHotspotsUrl = new URL("../shell-scene-hotspots.js", import.meta.url).href;
-  const shellSceneRuntimeUrl = new URL("../shell-scene-runtime.js", import.meta.url).href;
-  const shellSharedUrl = new URL("../shell-shared.js", import.meta.url).href;
-  const pretextStageUrl = new URL("../pretext-stage.js", import.meta.url).href;
-  const shellAuthUrl = new URL("../shell-auth.js", import.meta.url).href;
-  const shellRoomRailUrl = new URL("../shell-room-rail.js", import.meta.url).href;
-  const shellRoomRenderUrl = new URL("../shell-room-render.js", import.meta.url).href;
-  const shellComposerUrl = new URL("../shell-composer.js", import.meta.url).href;
-  const shellStateNormalizeUrl = new URL("../shell-state-normalize.js", import.meta.url).href;
   const appSource = await fs.readFile(appPath, "utf8");
   const transformedSource = [
     "const window = globalThis.window;",
@@ -1900,463 +1920,7 @@ async function loadShellApp(shellPage, options = {}) {
     "const requestAnimationFrame = globalThis.requestAnimationFrame;",
     "const cancelAnimationFrame = globalThis.cancelAnimationFrame;",
     "const fetch = globalThis.fetch;",
-    appSource
-      .replace(
-        'import { computeComposerAvailability } from "./composer-state.js";',
-        `import { computeComposerAvailability } from "${composerStateUrl}";`,
-      )
-      .replace(
-        'import { composerStatusState } from "./shell-composer.js";',
-        `import { composerStatusState } from "${shellComposerUrl}";`,
-      )
-      .replace(
-        `import {
-  createChatDetailCardMetaRow,
-  createDetailRow,
-  createDetailSection,
-  createLine,
-  createMetaChip,
-  createOverviewMetric,
-  createPill,
-  createStageChip,
-  setDatasetFlag,
-  setInlineStyle,
-} from "./shell-dom-helpers.js";`,
-        `import {
-  createChatDetailCardMetaRow,
-  createDetailRow,
-  createDetailSection,
-  createLine,
-  createMetaChip,
-  createOverviewMetric,
-  createPill,
-  createStageChip,
-  setDatasetFlag,
-  setInlineStyle,
-} from "${shellDomHelpersUrl}";`,
-      )
-      .replace(
-        `import {
-  gatewayErrorMessage,
-  localizedRuntimeError,
-} from "./shell-errors.js";`,
-        `import {
-  gatewayErrorMessage,
-  localizedRuntimeError,
-} from "${shellErrorsUrl}";`,
-      )
-      .replace(
-        `import {
-  gatewayJsonHeaders,
-  gatewayQueryParam,
-  gatewayShellEventsUrl as buildGatewayShellEventsUrl,
-  gatewayShellStateUrl as buildGatewayShellStateUrl,
-  resolveGatewayUrlCandidate,
-} from "./shell-gateway.js";`,
-        `import {
-  gatewayJsonHeaders,
-  gatewayQueryParam,
-  gatewayShellEventsUrl as buildGatewayShellEventsUrl,
-  gatewayShellStateUrl as buildGatewayShellStateUrl,
-  resolveGatewayUrlCandidate,
-} from "${shellGatewayUrl}";`,
-      )
-      .replace(
-        `import {
-  displayCityDescription,
-  displayCityTitle,
-  displayWorldTitle,
-  translateAdvisoryAction,
-  translateFederationPolicy,
-  translateMembershipState,
-  translatePortability,
-  translateProviderHealth,
-  translateProviderMode,
-  translateReportStatus,
-  translateRole,
-  translateRoomKind,
-  translateRoomKindForShellPage,
-  translateSeverity,
-  translateSourceKind,
-  translateSubjectKind,
-  translateTargetKind,
-  translateTrustState,
-} from "./shell-labels.js";`,
-        `import {
-  displayCityDescription,
-  displayCityTitle,
-  displayWorldTitle,
-  translateAdvisoryAction,
-  translateFederationPolicy,
-  translateMembershipState,
-  translatePortability,
-  translateProviderHealth,
-  translateProviderMode,
-  translateReportStatus,
-  translateRole,
-  translateRoomKind,
-  translateRoomKindForShellPage,
-  translateSeverity,
-  translateSourceKind,
-  translateSubjectKind,
-  translateTargetKind,
-  translateTrustState,
-} from "${shellLabelsUrl}";`,
-      )
-      .replace(
-        `import {
-  getAuthSession,
-  getSessionToken,
-  initAuth,
-  loadAuthDraft as loadAuthDraftMod,
-  persistAuthDraft as persistAuthDraftMod,
-  residentGatewayLoginRequired as _residentGatewayLoginRequired,
-  setAuthStatus as setAuthStatusMod,
-  updateAuthFormState as updateAuthFormStateMod,
-  updateResidentLoginSurface as applyResidentLoginSurface,
-  handleGatewayAuthFailure as handleGatewayAuthFailureMod,
-  requestEmailOtp as requestEmailOtpMod,
-  verifyEmailOtp as verifyEmailOtpMod,
-} from "./shell-auth.js";`,
-        `import {
-  getAuthSession,
-  getSessionToken,
-  initAuth,
-  loadAuthDraft as loadAuthDraftMod,
-  persistAuthDraft as persistAuthDraftMod,
-  residentGatewayLoginRequired as _residentGatewayLoginRequired,
-  setAuthStatus as setAuthStatusMod,
-  updateAuthFormState as updateAuthFormStateMod,
-  updateResidentLoginSurface as applyResidentLoginSurface,
-  handleGatewayAuthFailure as handleGatewayAuthFailureMod,
-  requestEmailOtp as requestEmailOtpMod,
-  verifyEmailOtp as verifyEmailOtpMod,
-} from "${shellAuthUrl}";`,
-      )
-      .replace(
-        `import {
-  visiblePendingEchoesForRoomData,
-} from "./shell-message-state.js";`,
-        `import {
-  visiblePendingEchoesForRoomData,
-} from "${shellMessageStateUrl}";`,
-      )
-      .replace(
-        `import {
-  escapeHtml,
-  formatDateTime,
-  isSystemSender,
-  messageAvatarTone,
-  messageRoleLabel,
-  messageStableId,
-  messageThreadKind,
-} from "./shell-message-render.js";`,
-        `import {
-  escapeHtml,
-  formatDateTime,
-  isSystemSender,
-  messageAvatarTone,
-  messageRoleLabel,
-  messageStableId,
-  messageThreadKind,
-} from "${shellMessageRenderUrl}";`,
-      )
-      .replace(
-        `import {
-  quickActionAdvanceLabel,
-  quickActionContract,
-  quickActionContractStateTemplate,
-  quickActionTemplate,
-  quickActionWorkflowTemplate,
-  resetRoomQuickActions,
-  roomQuickAction,
-  setRoomQuickAction,
-  setStateGetter,
-} from "./shell-quick-actions.js";`,
-        `import {
-  quickActionAdvanceLabel,
-  quickActionContract,
-  quickActionContractStateTemplate,
-  quickActionTemplate,
-  quickActionWorkflowTemplate,
-  resetRoomQuickActions,
-  roomQuickAction,
-  setRoomQuickAction,
-  setStateGetter,
-} from "${shellQuickActionsUrl}";`,
-      )
-      .replace(
-        `import {
-  hasAnyShellPayload,
-  hasConversationShellPayload,
-  humanMembership,
-  joinOrFallback,
-  normalizeShellMessages,
-} from "./shell-payload.js";`,
-        `import {
-  hasAnyShellPayload,
-  hasConversationShellPayload,
-  humanMembership,
-  joinOrFallback,
-  normalizeShellMessages,
-} from "${shellPayloadUrl}";`,
-      )
-      .replace(
-        `import {
-  contractConversationMap,
-  mergeRoomWithContract,
-  synthesizeRoomsFromContracts,
-} from "./shell-state-normalize.js";`,
-        `import {
-  contractConversationMap,
-  mergeRoomWithContract,
-  synthesizeRoomsFromContracts,
-} from "${shellStateNormalizeUrl}";`,
-      )
-      .replace(
-        `import {
-  quickActionDraftStatusCopy,
-  quickActionIntensity,
-  quickActionOverviewCtaLabel,
-  quickActionOverviewSummary,
-  quickActionStage,
-  quickActionStateStages,
-  quickActionStatusCopy,
-  quickActionTone,
-} from "./shell-quick-action-labels.js";`,
-        `import {
-  quickActionDraftStatusCopy,
-  quickActionIntensity,
-  quickActionOverviewCtaLabel,
-  quickActionOverviewSummary,
-  quickActionStage,
-  quickActionStateStages,
-  quickActionStatusCopy,
-  quickActionTone,
-} from "${shellQuickActionLabelsUrl}";`,
-      )
-      .replace(
-        `import {
-  QUICK_ACTION_BLUEPRINTS,
-  QUICK_ACTION_INLINE_FIELD_PRIORITY,
-  QUICK_ACTION_INLINE_STATE_FIELD_PRIORITY,
-  quickActionWorkflowTemplate as _quickActionWorkflowTemplate,
-} from "./shell-quick-action-templates.js";`,
-        `import {
-  QUICK_ACTION_BLUEPRINTS,
-  QUICK_ACTION_INLINE_FIELD_PRIORITY,
-  QUICK_ACTION_INLINE_STATE_FIELD_PRIORITY,
-  quickActionWorkflowTemplate as _quickActionWorkflowTemplate,
-} from "${shellQuickActionTemplatesUrl}";`,
-      )
-      .replace(
-        `import {
-  normalizeQuickActionFieldLabel,
-  normalizeQuickActionStructured,
-  parseStructuredQuickActionMessage,
-  quickActionInlinePreviewActionHint,
-  quickActionInlinePreviewActionLabels,
-  quickActionInlinePreviewActionOrder,
-  quickActionInlinePreviewFieldSets,
-  quickActionInlinePreviewFields,
-  quickActionPreviewFieldViewLabel,
-  quickActionPreviewHistoryDescription,
-  quickActionPreviewHistoryLabel,
-  quickActionPreviewHistorySummary,
-  quickActionPreviewPrimaryField,
-  quickActionPreviewPrimaryFieldText,
-  quickActionPreviewRoundLabel,
-  quickActionPreviewStructuredViews,
-  quickActionWorkflowStructured,
-} from "./shell-quick-action-preview.js";`,
-        `import {
-  normalizeQuickActionFieldLabel,
-  normalizeQuickActionStructured,
-  parseStructuredQuickActionMessage,
-  quickActionInlinePreviewActionHint,
-  quickActionInlinePreviewActionLabels,
-  quickActionInlinePreviewActionOrder,
-  quickActionInlinePreviewFieldSets,
-  quickActionInlinePreviewFields,
-  quickActionPreviewFieldViewLabel,
-  quickActionPreviewHistoryDescription,
-  quickActionPreviewHistoryLabel,
-  quickActionPreviewHistorySummary,
-  quickActionPreviewPrimaryField,
-  quickActionPreviewPrimaryFieldText,
-  quickActionPreviewRoundLabel,
-  quickActionPreviewStructuredViews,
-  quickActionWorkflowStructured,
-} from "${shellQuickActionPreviewUrl}";`,
-      )
-      .replace(
-        `import {
-  composerHeroChipsData,
-  composerHeroKicker,
-  composerHeroNote,
-  composerHeroTitle,
-  composerMetaBaseStatus,
-  composerMetaQuickHint,
-  roomLastActivity as _roomLastActivity,
-  roomPreview as _roomPreview,
-} from "./shell-room-render.js";`,
-        `import {
-  composerHeroChipsData,
-  composerHeroKicker,
-  composerHeroNote,
-  composerHeroTitle,
-  composerMetaBaseStatus,
-  composerMetaQuickHint,
-  roomLastActivity as _roomLastActivity,
-  roomPreview as _roomPreview,
-} from "${shellRoomRenderUrl}";`,
-      )
-      .replace(
-        `import {
-  workspaceStorageKey as _workspaceStorageKey,
-  chatPaneStorageKey as _chatPaneStorageKey,
-  roomReadMarkersStorageKey as _roomReadMarkersStorageKey,
-  roomDraftsStorageKey as _roomDraftsStorageKey,
-  roomQuickStatesStorageKey as _roomQuickStatesStorageKey,
-  roomQuickSnapshotsStorageKey as _roomQuickSnapshotsStorageKey,
-} from "./shell-storage-keys.js";`,
-        `import {
-  workspaceStorageKey as _workspaceStorageKey,
-  chatPaneStorageKey as _chatPaneStorageKey,
-  roomReadMarkersStorageKey as _roomReadMarkersStorageKey,
-  roomDraftsStorageKey as _roomDraftsStorageKey,
-  roomQuickStatesStorageKey as _roomQuickStatesStorageKey,
-  roomQuickSnapshotsStorageKey as _roomQuickSnapshotsStorageKey,
-} from "${shellStorageKeysUrl}";`,
-      )
-      .replace(
-        `import {
-  initSceneRuntime,
-} from "./shell-scene-runtime.js";`,
-        `import {
-  initSceneRuntime,
-} from "${shellSceneRuntimeUrl}";`,
-      )
-      .replace(
-        `import {
-  caretakerNotificationCount,
-  caretakerPendingCount,
-  caretakerProfile,
-  caretakerStatusLine,
-  detailCardProfile,
-  inlineActionProfile,
-  portraitProjection,
-  stageProjection,
-  workflowProfile,
-} from "./shell-room-profiles.js";`,
-        `import {
-  caretakerNotificationCount,
-  caretakerPendingCount,
-  caretakerProfile,
-  caretakerStatusLine,
-  detailCardProfile,
-  inlineActionProfile,
-  portraitProjection,
-  stageProjection,
-  workflowProfile,
-} from "${shellRoomProfilesUrl}";`,
-      )
-      .replace(
-        `import {
-  applyLocalTimeOfDayState,
-  availableWorkspacesForShellMode,
-  currentShellPage,
-  defaultIdentityForShellMode,
-  defaultWorkspaceForShellMode,
-  normalizeProviderConnectionState,
-  parseStoredObject,
-  providerIndicatesGatewayOffline,
-  resolveShellMode,
-  safeLocalStorageGet,
-  safeLocalStorageSet,
-  scopedShellStorageKey,
-  setNodeText,
-  shellModeConfig,
-  translateDeliveryMode,
-  translateProviderConnectionState,
-  translateWorkspace,
-  translateShellMode,
-} from "./shell-shared.js";`,
-        `import {
-  applyLocalTimeOfDayState,
-  availableWorkspacesForShellMode,
-  currentShellPage,
-  defaultIdentityForShellMode,
-  defaultWorkspaceForShellMode,
-  normalizeProviderConnectionState,
-  parseStoredObject,
-  providerIndicatesGatewayOffline,
-  resolveShellMode,
-  safeLocalStorageGet,
-  safeLocalStorageSet,
-  scopedShellStorageKey,
-  setNodeText,
-  shellModeConfig,
-  translateDeliveryMode,
-  translateProviderConnectionState,
-  translateWorkspace,
-  translateShellMode,
-} from "${shellSharedUrl}";`,
-      )
-      .replace(
-        `import {
-  buildRoomVisualModel,
-  renderPortraitCanvas,
-  renderStageCanvas,
-} from "./pretext-stage.js";`,
-        `import {
-  buildRoomVisualModel,
-  renderPortraitCanvas,
-  renderStageCanvas,
-} from "${pretextStageUrl}";`,
-      )
-      .replace(
-        `import {
-  badgeToken as _badgeToken,
-  createRoomUnreadBadgeNode,
-  defaultActiveRoomId as _defaultActiveRoomId,
-  filteredRooms as _filteredRooms,
-  initRail,
-  latestRoomMessageLike as _latestRoomMessageLike,
-  roomActivityTime as _roomActivityTime,
-  roomAvatarSpec,
-  roomButtonClassSpec,
-  roomEmptyStateSpec,
-  roomStatsSpec,
-  roomToolbarNoteSpec,
-  roomTitleStackSpec,
-  roomTopMetaSpec,
-  roomDisplayPeer as _roomDisplayPeer,
-  roomGroupBlueprints as _roomGroupBlueprints,
-  roomKind as _roomKind,
-  roomThreadHeadline as _roomThreadHeadline,
-} from "./shell-room-rail.js";`,
-        `import {
-  badgeToken as _badgeToken,
-  createRoomUnreadBadgeNode,
-  defaultActiveRoomId as _defaultActiveRoomId,
-  filteredRooms as _filteredRooms,
-  initRail,
-  latestRoomMessageLike as _latestRoomMessageLike,
-  roomActivityTime as _roomActivityTime,
-  roomAvatarSpec,
-  roomButtonClassSpec,
-  roomEmptyStateSpec,
-  roomStatsSpec,
-  roomToolbarNoteSpec,
-  roomTitleStackSpec,
-  roomTopMetaSpec,
-  roomDisplayPeer as _roomDisplayPeer,
-  roomGroupBlueprints as _roomGroupBlueprints,
-  roomKind as _roomKind,
-  roomThreadHeadline as _roomThreadHeadline,
-} from "${shellRoomRailUrl}";`,
-      ),
+    rewriteAppLocalImports(appSource),
   ].join("\n");
 
   const tempPath = path.join(

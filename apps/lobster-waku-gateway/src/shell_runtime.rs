@@ -917,27 +917,32 @@ impl GatewayRuntime {
         self.timeline_store
             .recent_messages(conversation_id, limit)
             .into_iter()
-            .map(|entry| ShellRoomMessage {
-                message_id: entry.envelope.message_id.0,
-                reply_to_message_id: entry
-                    .envelope
-                    .reply_to_message_id
-                    .map(|message_id| message_id.0),
-                is_recalled: entry.recalled_at_ms.is_some(),
-                recalled_by: entry.recalled_by.map(|identity| identity.0),
-                recalled_at_ms: entry.recalled_at_ms,
-                is_edited: entry.edited_at_ms.is_some(),
-                edited_by: entry.edited_by.map(|identity| identity.0),
-                edited_at_ms: entry.edited_at_ms,
-                sender: entry.envelope.sender.0,
-                timestamp_ms: entry.envelope.timestamp_ms,
-                timestamp_label: Self::relative_label(now_ms, entry.envelope.timestamp_ms),
-                delivery_status: "delivered".into(),
-                text: if entry.recalled_at_ms.is_some() {
-                    "消息已撤回".into()
-                } else {
-                    entry.envelope.body.plain_text
-                },
+            .map(|entry| {
+                let mod_key = format!("{}:{}", entry.envelope.conversation_id.0, entry.envelope.message_id.0);
+                let moderation_status = self.message_moderation.get(&mod_key).cloned();
+                ShellRoomMessage {
+                    message_id: entry.envelope.message_id.0,
+                    reply_to_message_id: entry
+                        .envelope
+                        .reply_to_message_id
+                        .map(|message_id| message_id.0),
+                    is_recalled: entry.recalled_at_ms.is_some(),
+                    recalled_by: entry.recalled_by.map(|identity| identity.0),
+                    recalled_at_ms: entry.recalled_at_ms,
+                    is_edited: entry.edited_at_ms.is_some(),
+                    edited_by: entry.edited_by.map(|identity| identity.0),
+                    edited_at_ms: entry.edited_at_ms,
+                    sender: entry.envelope.sender.0,
+                    timestamp_ms: entry.envelope.timestamp_ms,
+                    timestamp_label: Self::relative_label(now_ms, entry.envelope.timestamp_ms),
+                    delivery_status: "delivered".into(),
+                    text: if entry.recalled_at_ms.is_some() {
+                        "消息已撤回".into()
+                    } else {
+                        entry.envelope.body.plain_text
+                    },
+                    moderation_status,
+                }
             })
             .collect()
     }

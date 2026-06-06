@@ -12,6 +12,7 @@ pub(crate) enum LoopAction {
     Quit,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_input_focus_key(
     key: &KeyEvent,
     focus_area: &mut FocusArea,

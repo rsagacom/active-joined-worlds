@@ -224,6 +224,12 @@ pub struct SceneImageLayer {
     pub asset_hint: String,
     pub aspect_ratio_permyriad: u16,
     pub owner_editable: bool,
+    /// 自定义白天背景图（与 night 必须同时提供或同时为空）
+    #[serde(default)]
+    pub day_image_url: Option<String>,
+    /// 自定义夜晚背景图（与 day 必须同时提供或同时为空）
+    #[serde(default)]
+    pub night_image_url: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -861,5 +867,46 @@ mod tests {
             canonical_direct_conversation_id(&builder, &rsaga),
             ConversationId("dm:builder:rsaga".into())
         );
+    }
+
+    #[test] fn identity_id_equality() { assert_eq!(IdentityId("a".into()), IdentityId("a".into())); assert_ne!(IdentityId("a".into()), IdentityId("b".into())); }
+    #[test] fn conversation_id_format() { let c = ConversationId("dm:a:b".into()); assert_eq!(c.0, "dm:a:b"); }
+    #[test] fn identity_id_clone_eq() {
+        let a = IdentityId("test".into());
+        let b = a.clone();
+        assert_eq!(a, b);
+        assert_eq!(format!("{a:?}"), "IdentityId(\"test\")");
+    }
+    #[test] fn client_profiles_are_distinct() {
+        assert_ne!(ClientProfile::desktop_terminal().class, ClientProfile::mobile_web().class);
+        assert!(ClientProfile::lobster_embedded().supports_background_sync);
+    }
+    #[test] fn scene_image_layer_defaults() {
+        let layer = SceneImageLayer { layer_id: "l1".into(), preset: "p1".into(), asset_hint: "a1".into(), aspect_ratio_permyriad: 16000, owner_editable: true, day_image_url: None, night_image_url: None };
+        assert_eq!(layer.preset, "p1");
+        assert!(layer.day_image_url.is_none());
+    }
+    #[test] fn conversation_scope_default_is_private() {
+        assert_eq!(default_conversation_scope(), ConversationScope::Private);
+    }
+    #[test] fn scene_hotspot_defaults() {
+        let h = SceneHotspot { hotspot_id: "h1".into(), label: "test".into(), sprite_hint: "def".into(), interaction_hint: "click".into(), x_permyriad: 100, y_permyriad: 200, width_permyriad: 300, height_permyriad: 400 };
+        assert_eq!(h.label, "test");
+        assert_eq!(h.x_permyriad, 100);
+        assert_eq!(h.height_permyriad, 400);
+    }
+    #[test] fn scene_hotspot_layer_defaults() {
+        let layer = SceneHotspotLayer { layer_id: "l1".into(), coordinate_system: "scene-permyriad".into(), owner_editable: false, hotspots: vec![] };
+        assert!(!layer.owner_editable);
+        assert!(layer.hotspots.is_empty());
+    }
+    #[test] fn all_client_classes_distinct() {
+        let all = [ClientClass::Embedded, ClientClass::Desktop, ClientClass::MobileWeb, ClientClass::Wearable, ClientClass::Service];
+        let mut unique = std::collections::BTreeSet::new();
+        for c in all { unique.insert(format!("{c:?}")); }
+        assert_eq!(unique.len(), 5, "all 5 client classes should be distinct");
+    }
+    #[test] fn conversation_id_default_invalid() {
+        assert_eq!(ConversationId(String::new()).0, "");
     }
 }

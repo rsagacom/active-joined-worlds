@@ -193,6 +193,10 @@ export function translateDeliveryMode(mode) {
       return "邮件通道待接入";
     case "email":
       return "邮箱投递";
+    case "inline-dev":
+      return "开发环境直出验证码(手机)";
+    case "sms-provider-pending":
+      return "短信通道待接入";
     default:
       return "未知投递方式";
   }

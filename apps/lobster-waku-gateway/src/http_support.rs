@@ -29,7 +29,10 @@ pub(crate) fn cli_missing_for_body() -> String {
 }
 
 pub(crate) fn cors_origin_header() -> Header {
-    Header::from_bytes("Access-Control-Allow-Origin", "*")
+    let origin = std::env::var("LOBSTER_CORS_ORIGIN").unwrap_or_else(|_| "*".into());
+    let origin = origin.trim();
+    let value = if origin.is_empty() { "*" } else { origin };
+    Header::from_bytes("Access-Control-Allow-Origin", value)
         .expect("static cors header should be valid")
 }
 

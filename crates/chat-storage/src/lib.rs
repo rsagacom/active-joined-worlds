@@ -622,8 +622,9 @@ impl ArchiveStore for FileTimelineStore {
 #[cfg(test)]
 mod tests {
     use chat_core::{
-        ClientProfile, ConversationKind, ConversationScope, DeviceId, IdentityId, MessageBody,
-        MessageId, PayloadType,
+        AgentSceneSlot, AgentScope, AgentUseCase, ClientProfile, ConversationKind,
+        ConversationScope, DeviceId, IdentityId, MessageBody, MessageId, PayloadType,
+        SceneImageLayer, SceneLandmark, SceneMetadata, SceneRenderStyle, SceneScope,
     };
     use tempfile::tempdir;
 
@@ -639,6 +640,45 @@ mod tests {
             participants: vec![IdentityId("alice".into()), IdentityId("bob".into())],
             created_at_ms: 1_000,
             last_active_at_ms: 1_000,
+        }
+    }
+
+    fn sample_scene() -> SceneMetadata {
+        SceneMetadata {
+            scope: SceneScope::DirectRoom,
+            render_style: SceneRenderStyle::SfcPixel,
+            title_banner: Some("Alice and Bob".into()),
+            background_preset: "residence-night".into(),
+            ambiance: "quiet".into(),
+            owner_editable: true,
+            avatar_editable: true,
+            primary_avatar: None,
+            assistant_slots: vec![AgentSceneSlot {
+                slot_id: "caretaker".into(),
+                display_name: "Caretaker".into(),
+                scope: AgentScope::Room,
+                use_cases: vec![AgentUseCase::Caretaking],
+                appearance_hint: "warm light".into(),
+                can_leave_messages: true,
+                can_edit_scene: false,
+                can_trade_goods: false,
+            }],
+            image_layer: Some(SceneImageLayer {
+                layer_id: "image-layer".into(),
+                preset: "private-room-loft".into(),
+                asset_hint: "private-room-loft".into(),
+                aspect_ratio_permyriad: 16_000,
+                owner_editable: true,
+                day_image_url: None,
+                night_image_url: None,
+            }),
+            hotspot_layer: None,
+            landmarks: vec![SceneLandmark {
+                slot_id: "desk".into(),
+                label: "Desk".into(),
+                sprite_hint: "oak desk".into(),
+                interaction_hint: "Open notes".into(),
+            }],
         }
     }
 
@@ -710,6 +750,27 @@ mod tests {
                 .len(),
             2
         );
+    }
+
+    #[test]
+    fn file_store_restores_conversations_with_scene_metadata() {
+        let temp = tempdir().expect("temp dir");
+        let root = temp.path().join("storage");
+        let mut conversation = sample_conversation();
+        conversation.scene = Some(sample_scene());
+
+        {
+            let mut store = FileTimelineStore::open(&root, archive_policy()).expect("open store");
+            store.upsert_conversation(conversation.clone()).unwrap();
+        }
+
+        let restored = FileTimelineStore::open(&root, archive_policy()).expect("restore store");
+        let restored_conversation = restored
+            .active_conversations()
+            .into_iter()
+            .find(|item| item.conversation_id == conversation.conversation_id)
+            .expect("restored conversation");
+        assert_eq!(restored_conversation.scene, conversation.scene);
     }
 
     #[test]
@@ -943,5 +1004,35 @@ mod tests {
             !path.with_extension("postcard.tmp").exists(),
             "temp artifact should be removed after atomic replace"
         );
+    }
+
+    #[test] fn empty_timeline_returns_no_messages() {
+        let dir = tempdir().unwrap();
+        let store = FileTimelineStore::open(dir.path().join("store"), ArchivePolicy::default()).unwrap();
+        let msgs = store.recent_messages(&ConversationId("dm:a:b".into()), 10);
+        assert!(msgs.is_empty());
+    }
+
+    #[test] fn open_empty_store_yields_no_conversations() {
+        let dir = tempdir().unwrap();
+        let store = FileTimelineStore::open(dir.path().join("store"), ArchivePolicy::default()).unwrap();
+        assert!(store.active_conversations().is_empty());
+    }
+
+    #[test] fn append_and_read_single_message() {
+        let dir = tempdir().unwrap();
+        let mut store = FileTimelineStore::open(dir.path().join("store"), ArchivePolicy::default()).unwrap();
+        let msg = sample_message(1000);
+        store.append_message(msg).unwrap();
+        let loaded = store.recent_messages(&ConversationId("dm:alice:bob".into()), 10);
+        assert_eq!(loaded.len(), 1);
+    }
+    #[test] fn consecutive_opens_within_same_tempdir() {
+        // Verify store can be opened twice at different paths without conflict
+        let dir = tempdir().unwrap();
+        let s1 = FileTimelineStore::open(dir.path().join("s1"), ArchivePolicy::default()).unwrap();
+        let s2 = FileTimelineStore::open(dir.path().join("s2"), ArchivePolicy::default()).unwrap();
+        assert!(s1.active_conversations().is_empty());
+        assert!(s2.active_conversations().is_empty());
     }
 }

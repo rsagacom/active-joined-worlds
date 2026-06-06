@@ -123,6 +123,16 @@ impl GatewayRuntime {
             blocked_reasons.push("device physical address is world-blacklisted".into());
         }
 
+        // Device check: optional, for admin-controlled devices. User registration uses email.
+        if let Some(device) = normalized_device_physical_address.as_deref()
+            && let Some(record) = self.allowed_devices.get(device)
+                && record.blocked
+            {
+                blocked_reasons.push(
+                    "device blocked: this device has been blocked by the administrator".into(),
+                );
+            }
+
         Ok(AuthPreflightResponse {
             allowed: blocked_reasons.is_empty(),
             normalized_email: Some(normalized_email),
@@ -239,6 +249,28 @@ impl GatewayRuntime {
         Ok(session.clone())
     }
 
+    pub(crate) fn revoke_auth_session(&mut self, token: &str) -> Result<(), String> {
+        let token = token.trim();
+        if token.is_empty() {
+            return Err("authorization bearer token required".into());
+        }
+        let token_hash_sha256 = Self::hash_session_token(token);
+        let now_ms = Self::now_ms();
+        let Some(session) = self
+            .auth_sessions
+            .iter_mut()
+            .find(|session| session.token_hash_sha256 == token_hash_sha256)
+        else {
+            return Err("session not found".into());
+        };
+        if session.revoked_at_ms.is_some() {
+            return Err("session already revoked".into());
+        }
+        session.revoked_at_ms = Some(now_ms);
+        self.persist_auth_state()?;
+        Ok(())
+    }
+
     pub(crate) fn auth_session_projection(
         &self,
         token: &str,
@@ -339,6 +371,13 @@ impl GatewayRuntime {
             .ok_or_else(|| "valid email required".to_string())?;
         let normalized_mobile = preflight.normalized_mobile;
         let normalized_device_physical_address = preflight.normalized_device_physical_address;
+        // Bind device to resident ID when both are present
+        if let (Some(device), Some(resident_id)) = (
+            normalized_device_physical_address.as_deref(),
+            request.resident_id.as_deref(),
+        ) {
+            self.bind_device_to_resident(device, resident_id);
+        }
         let desired_resident_id = request
             .resident_id
             .as_deref()
@@ -358,6 +397,13 @@ impl GatewayRuntime {
             ));
         }
 
+        if let Some(retry_ms) = self.check_rate_limit(&format!("otp-req:{}", normalized_email), 1) {
+            return Err(format!(
+                "too many otp requests for this email, retry in {}s",
+                (retry_ms / 1000).max(1)
+            ));
+        }
+
         self.purge_expired_email_otp_challenges();
         self.email_otp_challenges.retain(|challenge| {
             challenge.email != normalized_email || challenge.consumed_at_ms.is_some()
@@ -374,6 +420,7 @@ impl GatewayRuntime {
                 .as_deref()
                 .map(|device| Self::hash_registration_handle("device", device)),
             desired_resident_id,
+            desired_nickname: request.nickname.clone(),
             code_hash_sha256: Self::hash_registration_handle("otp", &code),
             requested_at_ms: Self::now_ms(),
             expires_at_ms: Self::now_ms() + 10 * 60 * 1000,
@@ -407,6 +454,15 @@ impl GatewayRuntime {
         else {
             return Err("unknown otp challenge".into());
         };
+
+        if let Some(retry_ms) = self
+            .check_rate_limit(&format!("otp-verify:{}", request.challenge_id), 5)
+        {
+            return Err(format!(
+                "too many otp verification attempts, retry in {}s",
+                (retry_ms / 1000).max(1)
+            ));
+        }
 
         let now_ms = Self::now_ms();
         let challenge = self.email_otp_challenges[challenge_index].clone();
@@ -508,6 +564,9 @@ impl GatewayRuntime {
             existing.state = ResidentRegistrationState::Active;
             existing.verified_at_ms = now_ms;
             existing.last_login_at_ms = now_ms;
+            if challenge.desired_nickname.is_some() {
+                existing.nickname = challenge.desired_nickname.clone();
+            }
             existing.clone()
         } else {
             let registration = ResidentRegistration {
@@ -520,6 +579,7 @@ impl GatewayRuntime {
                 created_at_ms: now_ms,
                 verified_at_ms: now_ms,
                 last_login_at_ms: now_ms,
+                nickname: challenge.desired_nickname.clone(),
             };
             self.registrations.push(registration.clone());
             registration
@@ -535,6 +595,236 @@ impl GatewayRuntime {
             resident_id: registration.resident_id.0,
             email_masked: Self::mask_email(&registration.email),
             email: registration.email,
+            nickname: registration.nickname.clone(),
+            state: registration.state,
+            created_at_ms: registration.created_at_ms,
+            verified_at_ms: registration.verified_at_ms,
+            last_login_at_ms: registration.last_login_at_ms,
+            token_type: "Bearer".into(),
+            session_token,
+            session,
+        })
+    }
+
+    pub(crate) fn mask_mobile(mobile: &str) -> String {
+        if mobile.len() <= 4 {
+            return "***".into();
+        }
+        let head = mobile.chars().take(3).collect::<String>();
+        let tail = mobile.chars().rev().take(4).collect::<String>().chars().rev().collect::<String>();
+        format!("{head}****{tail}")
+    }
+
+    pub(crate) fn dev_mobile_otp_inline_enabled() -> bool {
+        cfg!(test)
+            || std::env::var("LOBSTER_DEV_MOBILE_OTP_INLINE")
+                .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+                .unwrap_or(false)
+    }
+
+    pub(crate) fn request_mobile_otp(
+        &mut self,
+        request: RequestMobileOtpRequest,
+    ) -> Result<RequestMobileOtpResponse, String> {
+        let normalized_mobile = Self::normalize_mobile(&request.mobile)
+            .ok_or_else(|| "valid mobile number required".to_string())?;
+
+        if let Some(retry_ms) = self.check_rate_limit(&format!("mobile-otp-req:{}", normalized_mobile), 1) {
+            return Err(format!(
+                "too many otp requests for this mobile, retry in {}s",
+                (retry_ms / 1000).max(1)
+            ));
+        }
+
+        if self
+            .registration_blacklist_hit("mobile", &normalized_mobile)
+            .is_some()
+        {
+            return Err("mobile is world-blacklisted".into());
+        }
+
+        let normalized_email = request.email.as_deref().and_then(Self::normalize_email);
+        let normalized_device = request
+            .device_physical_address
+            .as_deref()
+            .and_then(Self::normalize_device_physical_address);
+        let desired_resident_id = request
+            .resident_id
+            .as_deref()
+            .and_then(Self::normalize_resident_handle)
+            .map(IdentityId);
+
+        self.purge_expired_email_otp_challenges();
+        let code = self.generate_email_otp_code();
+        // Encode mobile into challenge email so verify can recover it for display
+        let email_for_challenge = if let Some(email) = normalized_email.as_ref() {
+            format!("m:{normalized_mobile}:{email}")
+        } else {
+            format!("m:{normalized_mobile}@device.local")
+        };
+        let challenge = EmailOtpChallenge {
+            challenge_id: format!("mobile-otp:{}", self.next_message_id()),
+            email: email_for_challenge,
+            mobile_hash_sha256: Some(Self::hash_registration_handle("mobile", &normalized_mobile)),
+            device_hash_sha256: normalized_device
+                .as_deref()
+                .map(|device| Self::hash_registration_handle("device", device)),
+            desired_resident_id,
+            desired_nickname: request.nickname.clone(),
+            code_hash_sha256: Self::hash_registration_handle("otp", &code),
+            requested_at_ms: Self::now_ms(),
+            expires_at_ms: Self::now_ms() + 10 * 60 * 1000,
+            consumed_at_ms: None,
+        };
+        let response = RequestMobileOtpResponse {
+            challenge_id: challenge.challenge_id.clone(),
+            masked_mobile: Self::mask_mobile(&normalized_mobile),
+            expires_at_ms: challenge.expires_at_ms,
+            delivery_mode: if Self::dev_mobile_otp_inline_enabled() {
+                "inline-dev".into()
+            } else {
+                "sms-provider-pending".into()
+            },
+            dev_code: Self::dev_mobile_otp_inline_enabled().then_some(code),
+        };
+        self.email_otp_challenges.push(challenge);
+        self.persist_auth_state()?;
+        Ok(response)
+    }
+
+    pub(crate) fn verify_mobile_otp(
+        &mut self,
+        request: VerifyMobileOtpRequest,
+    ) -> Result<VerifyMobileOtpResponse, String> {
+        self.purge_expired_email_otp_challenges();
+        let Some(challenge_index) = self
+            .email_otp_challenges
+            .iter()
+            .position(|challenge| challenge.challenge_id == request.challenge_id)
+        else {
+            return Err("unknown mobile otp challenge".into());
+        };
+
+        if let Some(retry_ms) = self
+            .check_rate_limit(&format!("mobile-otp-verify:{}", request.challenge_id), 5)
+        {
+            return Err(format!(
+                "too many otp verification attempts, retry in {}s",
+                (retry_ms / 1000).max(1)
+            ));
+        }
+
+        let now_ms = Self::now_ms();
+        let challenge = self.email_otp_challenges[challenge_index].clone();
+        if challenge.consumed_at_ms.is_some() {
+            return Err("otp challenge already consumed".into());
+        }
+        if challenge.expires_at_ms < now_ms {
+            return Err("otp challenge expired".into());
+        }
+
+        let provided_code = request.code.trim();
+        if provided_code.len() != 6
+            || Self::hash_registration_handle("otp", provided_code) != challenge.code_hash_sha256
+        {
+            return Err("invalid otp code".into());
+        }
+
+        let mobile_hash = challenge.mobile_hash_sha256.clone()
+            .ok_or_else(|| "mobile hash missing in challenge".to_string())?;
+
+        if self
+            .registration_blacklist
+            .iter()
+            .any(|entry| entry.handle_kind == "mobile" && entry.hash_sha256 == mobile_hash)
+        {
+            return Err("mobile is world-blacklisted".into());
+        }
+
+        let requested_resident_id = request
+            .resident_id
+            .as_deref()
+            .and_then(Self::normalize_resident_handle)
+            .map(IdentityId);
+        if let (Some(requested), Some(expected)) = (
+            requested_resident_id.as_ref(),
+            challenge.desired_resident_id.as_ref(),
+        ) && requested != expected
+        {
+            return Err("resident id does not match the issued otp challenge".into());
+        }
+
+        let existing_by_mobile = self
+            .registrations
+            .iter()
+            .position(|item| item.mobile_hash_sha256.as_ref() == Some(&mobile_hash));
+        let resident_id = if let Some(index) = existing_by_mobile {
+            self.registrations[index].resident_id.clone()
+        } else if let Some(expected) = challenge.desired_resident_id.clone() {
+            expected
+        } else if let Some(requested) = requested_resident_id {
+            requested
+        } else {
+            let suffix = Self::now_ms().rem_euclid(100_000);
+            IdentityId(format!("mobile-user-{suffix}"))
+        };
+
+        let registration = if let Some(existing) = self
+            .registrations
+            .iter_mut()
+            .find(|item| item.mobile_hash_sha256.as_ref() == Some(&mobile_hash) || item.resident_id == resident_id)
+        {
+            existing.resident_id = resident_id.clone();
+            existing.mobile_hash_sha256 = Some(mobile_hash.clone());
+            if let Some(device_hash) = challenge.device_hash_sha256.clone()
+                && !existing
+                    .device_hashes_sha256
+                    .iter()
+                    .any(|item| item == &device_hash)
+            {
+                existing.device_hashes_sha256.push(device_hash);
+            }
+            existing.state = ResidentRegistrationState::Active;
+            existing.verified_at_ms = now_ms;
+            existing.last_login_at_ms = now_ms;
+            if challenge.desired_nickname.is_some() {
+                existing.nickname = challenge.desired_nickname.clone();
+            }
+            existing.clone()
+        } else {
+            let registration = ResidentRegistration {
+                resident_id: resident_id.clone(),
+                email: challenge.email.clone(),
+                email_hash_sha256: Self::hash_registration_handle("email", &challenge.email),
+                mobile_hash_sha256: Some(mobile_hash.clone()),
+                device_hashes_sha256: challenge.device_hash_sha256.clone().into_iter().collect(),
+                state: ResidentRegistrationState::Active,
+                created_at_ms: now_ms,
+                verified_at_ms: now_ms,
+                last_login_at_ms: now_ms,
+                nickname: challenge.desired_nickname.clone(),
+            };
+            self.registrations.push(registration.clone());
+            registration
+        };
+
+        self.ensure_verified_resident_guide_conversation(&registration.resident_id)?;
+        self.email_otp_challenges[challenge_index].consumed_at_ms = Some(now_ms);
+        let (session_token, session) =
+            self.issue_auth_session(&registration.resident_id, &challenge.challenge_id, now_ms);
+        self.persist_auth_state()?;
+
+        let mobile_for_display = challenge
+            .email
+            .strip_prefix("m:")
+            .and_then(|rest| rest.split(':').next().or_else(|| rest.split('@').next()))
+            .unwrap_or("***");
+        let masked = Self::mask_mobile(mobile_for_display);
+        Ok(VerifyMobileOtpResponse {
+            resident_id: registration.resident_id.0,
+            mobile: mobile_for_display.into(),
+            mobile_masked: masked,
+            nickname: registration.nickname.clone(),
             state: registration.state,
             created_at_ms: registration.created_at_ms,
             verified_at_ms: registration.verified_at_ms,

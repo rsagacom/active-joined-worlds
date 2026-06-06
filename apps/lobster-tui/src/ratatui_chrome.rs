@@ -134,11 +134,10 @@ pub(crate) fn ratatui_block_frame_title(
     focused: bool,
     focus_badge: Option<&str>,
 ) -> String {
-    if focused {
-        if let Some(badge) = focus_badge {
+    if focused
+        && let Some(badge) = focus_badge {
             return format!("{title} · {}", ratatui_outline_badge(badge));
         }
-    }
     title.to_string()
 }
 

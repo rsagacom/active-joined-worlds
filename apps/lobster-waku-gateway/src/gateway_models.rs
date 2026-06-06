@@ -20,6 +20,8 @@ pub(crate) struct ShellRoomMessage {
     pub(crate) timestamp_label: String,
     pub(crate) delivery_status: String,
     pub(crate) text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) moderation_status: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -293,6 +295,8 @@ pub(crate) struct ShellState {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct ResidentDirectoryEntry {
     pub(crate) resident_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) nickname: Option<String>,
     pub(crate) active_cities: Vec<String>,
     pub(crate) pending_cities: Vec<String>,
     pub(crate) roles: Vec<String>,
@@ -778,6 +782,8 @@ pub(crate) struct ResidentRegistration {
     pub(crate) created_at_ms: i64,
     pub(crate) verified_at_ms: i64,
     pub(crate) last_login_at_ms: i64,
+    #[serde(default)]
+    pub(crate) nickname: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -787,6 +793,7 @@ pub(crate) struct EmailOtpChallenge {
     pub(crate) mobile_hash_sha256: Option<String>,
     pub(crate) device_hash_sha256: Option<String>,
     pub(crate) desired_resident_id: Option<IdentityId>,
+    pub(crate) desired_nickname: Option<String>,
     pub(crate) code_hash_sha256: String,
     pub(crate) requested_at_ms: i64,
     pub(crate) expires_at_ms: i64,
@@ -1025,6 +1032,8 @@ pub(crate) struct AdminMessageAudit {
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct AdminResidentDetail {
     pub(crate) resident_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) nickname: Option<String>,
     pub(crate) roles: Vec<String>,
     pub(crate) active_cities: Vec<String>,
     pub(crate) pending_cities: Vec<String>,
@@ -1060,6 +1069,18 @@ pub(crate) struct AdminRoomDetail {
     pub(crate) last_active_at_ms: i64,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct AdminLogEntry {
+    pub(crate) log_id: String,
+    pub(crate) status: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct AdminModerationStatusResponse {
+    pub(crate) message_id: String,
+    pub(crate) status: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct AdminBanResidentRequest {
@@ -1078,18 +1099,37 @@ pub(crate) struct AdminUnbanResidentRequest {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub(crate) struct AdminSetNicknameRequest {
+    pub(crate) resident_id: String,
+    #[serde(default)]
+    pub(crate) nickname: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ShellSetNicknameRequest {
+    #[serde(default)]
+    pub(crate) nickname: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub(crate) struct AdminFreezeRoomRequest {
     pub(crate) room_id: String,
+    #[serde(default)]
+    pub(crate) actor_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct AdminUnfreezeRoomRequest {
     pub(crate) room_id: String,
+    #[serde(default)]
+    pub(crate) actor_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct AdminConfigPayload {
     pub(crate) config: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    pub(crate) actor_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1257,6 +1297,8 @@ pub(crate) struct RequestEmailOtpRequest {
     pub(crate) mobile: Option<String>,
     pub(crate) device_physical_address: Option<String>,
     pub(crate) resident_id: Option<String>,
+    #[serde(default)]
+    pub(crate) nickname: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1280,6 +1322,48 @@ pub(crate) struct VerifyEmailOtpResponse {
     pub(crate) resident_id: String,
     pub(crate) email: String,
     pub(crate) email_masked: String,
+    pub(crate) nickname: Option<String>,
+    pub(crate) state: ResidentRegistrationState,
+    pub(crate) created_at_ms: i64,
+    pub(crate) verified_at_ms: i64,
+    pub(crate) last_login_at_ms: i64,
+    pub(crate) token_type: String,
+    pub(crate) session_token: String,
+    pub(crate) session: AuthSessionView,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct RequestMobileOtpRequest {
+    pub(crate) mobile: String,
+    pub(crate) email: Option<String>,
+    pub(crate) device_physical_address: Option<String>,
+    pub(crate) resident_id: Option<String>,
+    #[serde(default)]
+    pub(crate) nickname: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct RequestMobileOtpResponse {
+    pub(crate) challenge_id: String,
+    pub(crate) masked_mobile: String,
+    pub(crate) expires_at_ms: i64,
+    pub(crate) delivery_mode: String,
+    pub(crate) dev_code: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct VerifyMobileOtpRequest {
+    pub(crate) challenge_id: String,
+    pub(crate) code: String,
+    pub(crate) resident_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct VerifyMobileOtpResponse {
+    pub(crate) resident_id: String,
+    pub(crate) mobile: String,
+    pub(crate) mobile_masked: String,
+    pub(crate) nickname: Option<String>,
     pub(crate) state: ResidentRegistrationState,
     pub(crate) created_at_ms: i64,
     pub(crate) verified_at_ms: i64,
@@ -1423,10 +1507,13 @@ pub(crate) struct GatewayRuntime {
     pub(crate) governance_path: PathBuf,
     pub(crate) presence_path: PathBuf,
     pub(crate) unread_path: PathBuf,
+    pub(crate) moderation_state_path: PathBuf,
     pub(crate) secure_sessions_path: PathBuf,
     pub(crate) provider_config_path: PathBuf,
     pub(crate) auth_state_path: PathBuf,
     pub(crate) invites_path: PathBuf,
+    pub(crate) permission_groups_path: PathBuf,
+    pub(crate) audit_log_path: PathBuf,
     pub(crate) timeline_store: FileTimelineStore,
     pub(crate) secure_sessions: SkeletonSecureSessionManager,
     pub(crate) world: WorldProfile,
@@ -1451,7 +1538,13 @@ pub(crate) struct GatewayRuntime {
     pub(crate) started_at_ms: i64,
     pub(crate) app_config: HashMap<String, String>,
     pub(crate) message_moderation: HashMap<String, String>,
+    pub(crate) device_state_path: PathBuf,
+    pub(crate) allowed_devices: HashMap<String, DeviceRecord>,
+    pub(crate) device_bindings: HashMap<String, String>,
     pub(crate) invites: HashMap<String, InviteCode>,
+    pub(crate) permission_groups: HashMap<String, PermissionGroup>,
+    pub(crate) resident_permission_groups: HashMap<String, String>,
+    pub(crate) audit_events: Vec<AuditEvent>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1484,11 +1577,32 @@ pub(crate) struct InviteCode {
     pub(crate) created_by: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct DeviceRecord {
+    pub(crate) address: String,
+    pub(crate) label: String,
+    pub(crate) added_at_ms: i64,
+    pub(crate) added_by: String,
+    pub(crate) blocked: bool,
+    pub(crate) bound_resident_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct AdminDeviceRequest {
+    pub(crate) address: String,
+    #[serde(default)]
+    pub(crate) label: Option<String>,
+    #[serde(default)]
+    pub(crate) actor_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub(crate) struct AdminCreateResidentRequest {
     pub(crate) resident_id: String,
     pub(crate) email: String,
+    #[serde(default)]
+    pub(crate) actor_id: Option<String>,
 }
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
@@ -1543,4 +1657,128 @@ pub(crate) struct RemoteWorldSnapshotFetch {
     pub(crate) enabled: bool,
     pub(crate) reachable: bool,
     pub(crate) bundle: Option<WorldSnapshotBundle>,
+}
+
+// ── Permission Group ──
+
+pub(crate) const CAP_READ_PUBLIC: &str = "read:public";
+pub(crate) const CAP_READ_OWN_DIRECT: &str = "read:own_direct";
+pub(crate) const CAP_SEND_MESSAGE: &str = "send:message";
+pub(crate) const CAP_EDIT_OWN_MESSAGE: &str = "edit:own_message";
+pub(crate) const CAP_CREATE_ROOM: &str = "create:room";
+pub(crate) const CAP_INVITE_RESIDENT: &str = "invite:resident";
+pub(crate) const CAP_FREEZE_ROOM: &str = "freeze:room";
+pub(crate) const CAP_MANAGE_RESIDENT: &str = "manage:resident";
+pub(crate) const CAP_MODERATE_MESSAGE: &str = "moderate:message";
+pub(crate) const CAP_PUBLISH_NOTICE: &str = "publish:notice";
+pub(crate) const CAP_HANDLE_REPORT: &str = "handle:report";
+pub(crate) const CAP_BAN_RESIDENT: &str = "ban:resident";
+pub(crate) const CAP_ADMIN_CONFIG: &str = "admin:config";
+pub(crate) const CAP_ADMIN_DIAGNOSTICS: &str = "admin:diagnostics";
+pub(crate) const CAP_MANAGE_PERMISSIONS: &str = "manage:permissions";
+pub(crate) const CAP_ADMIN_SCENE: &str = "admin:scene";
+
+pub(crate) fn capability_catalog() -> Vec<CapabilityInfo> {
+    vec![
+        CapabilityInfo { key: CAP_READ_PUBLIC.to_string(), label: "读公开群聊".to_string(), description: "可浏览世界广场与公共房间".to_string() },
+        CapabilityInfo { key: CAP_READ_OWN_DIRECT.to_string(), label: "读本人私聊".to_string(), description: "可查看自己参与的私聊对话".to_string() },
+        CapabilityInfo { key: CAP_SEND_MESSAGE.to_string(), label: "发送消息".to_string(), description: "可在有权限的房间内发送消息".to_string() },
+        CapabilityInfo { key: CAP_EDIT_OWN_MESSAGE.to_string(), label: "编辑/撤回".to_string(), description: "可编辑或撤回本人已发送的消息".to_string() },
+        CapabilityInfo { key: CAP_CREATE_ROOM.to_string(), label: "创建房间".to_string(), description: "可创建新的公共或私密房间".to_string() },
+        CapabilityInfo { key: CAP_INVITE_RESIDENT.to_string(), label: "邀请居民".to_string(), description: "可生成邀请码邀请新居民".to_string() },
+        CapabilityInfo { key: CAP_FREEZE_ROOM.to_string(), label: "冻结房间".to_string(), description: "可冻结或解冻公共房间".to_string() },
+        CapabilityInfo { key: CAP_MANAGE_RESIDENT.to_string(), label: "管理居民".to_string(), description: "可审批加入、移除成员、分配权限".to_string() },
+        CapabilityInfo { key: CAP_MODERATE_MESSAGE.to_string(), label: "消息审核".to_string(), description: "可审核与处置待审消息".to_string() },
+        CapabilityInfo { key: CAP_PUBLISH_NOTICE.to_string(), label: "发布公告".to_string(), description: "可向世界广场或本城发布公告".to_string() },
+        CapabilityInfo { key: CAP_HANDLE_REPORT.to_string(), label: "处理举报".to_string(), description: "可查看与处理安全举报".to_string() },
+        CapabilityInfo { key: CAP_BAN_RESIDENT.to_string(), label: "封禁居民".to_string(), description: "可封禁或解除封禁居民".to_string() },
+        CapabilityInfo { key: CAP_ADMIN_CONFIG.to_string(), label: "系统配置".to_string(), description: "可修改网关运行配置".to_string() },
+        CapabilityInfo { key: CAP_ADMIN_DIAGNOSTICS.to_string(), label: "诊断信息".to_string(), description: "可查看系统诊断与运行状态".to_string() },
+        CapabilityInfo { key: CAP_MANAGE_PERMISSIONS.to_string(), label: "管理权限".to_string(), description: "可创建/编辑权限组并分配".to_string() },
+        CapabilityInfo { key: CAP_ADMIN_SCENE.to_string(), label: "场景管理".to_string(), description: "可编辑房间场景的图像层与热点层配置".to_string() },
+    ]
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct CapabilityInfo {
+    pub(crate) key: String,
+    pub(crate) label: String,
+    pub(crate) description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct PermissionGroup {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) capabilities: Vec<String>,
+    pub(crate) created_at_ms: i64,
+    pub(crate) created_by: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
+pub(crate) struct CreatePermissionGroupRequest {
+    pub(crate) actor_id: String,
+    pub(crate) name: String,
+    #[serde(default)]
+    pub(crate) description: String,
+    pub(crate) capabilities: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct CreatePermissionGroupResponse {
+    pub(crate) ok: bool,
+    pub(crate) group: PermissionGroup,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
+pub(crate) struct AssignPermissionGroupRequest {
+    pub(crate) actor_id: String,
+    pub(crate) resident_id: String,
+    pub(crate) permission_group_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct AssignPermissionGroupResponse {
+    pub(crate) ok: bool,
+    pub(crate) resident_id: String,
+    pub(crate) permission_group_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)]
+pub(crate) struct ListPermissionGroupsResponse {
+    pub(crate) groups: Vec<PermissionGroup>,
+}
+
+// ── Audit Log ──
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct AuditEvent {
+    pub(crate) event_id: String,
+    pub(crate) actor_id: String,
+    pub(crate) action: String,
+    pub(crate) target: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) reason: Option<String>,
+    pub(crate) timestamp_ms: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct AuditLogResponse {
+    pub(crate) events: Vec<AuditEvent>,
+    pub(crate) total: usize,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct AdminUpdateSceneRequest {
+    pub(crate) room_id: String,
+    #[serde(default)]
+    pub(crate) actor_id: Option<String>,
+    #[serde(default)]
+    pub(crate) image_layer: Option<SceneImageLayer>,
+    #[serde(default)]
+    pub(crate) hotspot_layer: Option<SceneHotspotLayer>,
 }

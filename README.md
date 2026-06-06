@@ -689,14 +689,48 @@ does not match the current host.
 
 If `WEB_ARTIFACT` is omitted, `install-server.sh` still copies the H5 shell from the checked-out workspace.
 
-Still pending:
+## 生产环境变量
 
-- live Waku gateway or relay adapter
-- real cryptographic MLS implementation behind the current lifecycle skeleton
-- chain anchoring path
-- richer H5 projection and IndexedDB/PWA sync path
-- world/city moderation actions beyond create/join/open-room
-- wearable-specific transport bridge
+Gateway 通过环境变量控制安全敏感行为，无需改代码或配置文件：
+
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `LOBSTER_CORS_ORIGIN` | `*` | CORS `Access-Control-Allow-Origin`。生产部署应设置为前端域名（如 `https://chat.example.com`），留空或 `*` 为通配。 |
+| `LOBSTER_DEV_AUTH_BYPASS` | (空) | 设为 `1` 后跳过所有 capability 校验。**仅限本地开发**，生产必须关闭。 |
+| `LOBSTER_DEV_EMAIL_OTP_INLINE` | (空) | 设为 `1` 后 OTP 验证码直接返回在 API 响应里（`dev_code` 字段），跳过邮件发送。**仅限本地开发**。 |
+| `LOBSTER_WAKU_PROVIDER_URL` | (空) | 上游 gateway / Waku provider URL。设置后 gateway 启动时自动连接上游。 |
+| `LOBSTER_WAKU_UPSTREAM_URL` | (空) | `LOBSTER_WAKU_PROVIDER_URL` 的旧名，仍受支持。 |
+
+**生产部署检查清单：**
+
+- [ ] `LOBSTER_CORS_ORIGIN` 设为实际前端域名，非 `*`
+- [ ] `LOBSTER_DEV_AUTH_BYPASS` 未设置（或显式设为 `0`）
+- [ ] `LOBSTER_DEV_EMAIL_OTP_INLINE` 未设置（生产邮件发送必须走 mailer adapter）
+- [ ] OTP 限流已生效：每邮箱 1次/分钟请求，每 challenge 5次/分钟验证
+- [ ] Session token 30 天过期，logout 立即撤销
+- [ ] 审计日志写入 `audit-log.json`，高风险操作全部可追溯
+- [ ] 若部署在反向代理后，代理须透传 `Authorization` header
+
+## 开发命令速查
+
+```bash
+make build          # release 构建
+make test           # 全部测试 (gateway + frontend)
+make test-gateway   # gateway 测试 (227+)
+make test-frontend  # web-shell 前端测试 (659+)
+make smoke          # 双端 HTTP smoke
+make release        # 发布打包
+make dev            # 构建 + 重启 gateway
+```
+
+Still pending / deferred (external dependencies):
+
+- live Waku relay adapter (multi-city federation — PRODUCT_CHARTER deferred)
+- real cryptographic MLS implementation (PRODUCT_CHARTER deferred)
+- chain anchoring path (not in MVP scope)
+- SMS OTP for mobile device auth (needs SMS provider infrastructure)
+- IndexedDB/PWA offline sync (post-MVP enhancement)
+- wearable-specific transport bridge (not in scope)
 
 ## Compatibility stance
 

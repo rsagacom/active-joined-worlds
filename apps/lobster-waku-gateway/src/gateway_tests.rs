@@ -134,11 +134,9 @@ fn waku_http_route_roundtrips_connect_subscribe_publish_and_poll_contract() {
         frame.content_topic
     );
     assert!(
-        poll["Frames"]["frames"][0]["payload"]
+        !poll["Frames"]["frames"][0]["payload"]
             .as_array()
-            .expect("encoded frame payload")
-            .len()
-            > 0
+            .expect("encoded frame payload").is_empty()
     );
 }
 
@@ -738,7 +736,7 @@ fn shell_state_contract_exposes_detail_workflow_and_caretaker() {
     assert_eq!(lobby["title"], "世界广场");
     assert_eq!(lobby["participant_label"], "跨城共响回廊");
     assert_eq!(lobby["route_label"], "跨城共响线");
-    assert_eq!(lobby["list_summary"], "世界广场 · 1 人 · 2 条消息");
+    assert_eq!(lobby["list_summary"], "世界广场 · 2 人 · 2 条消息");
     assert_eq!(lobby["status_line"], "跨城共响线 · 消息数：2");
     assert_eq!(lobby["thread_headline"], "跨城共响回廊 · 群聊");
     assert_eq!(lobby["chat_status_summary"], "群聊当前比较安静");
@@ -1174,6 +1172,40 @@ fn runtime_persists_shell_messages_across_restart() {
             .messages
             .iter()
             .any(|message| message.text == "persist me")
+    );
+}
+
+#[test]
+fn seeded_conversations_persist_across_restart() {
+    let temp = tempdir().expect("temp dir");
+    let root = temp.path().join("gateway");
+
+    {
+        let runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+        assert!(
+            runtime
+                .timeline_store
+                .active_conversations()
+                .iter()
+                .any(|conversation| conversation.conversation_id.0 == "room:world:lobby")
+        );
+    }
+
+    let runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+    assert!(
+        runtime
+            .timeline_store
+            .active_conversations()
+            .iter()
+            .any(|conversation| conversation.conversation_id.0 == "room:world:lobby")
+    );
+    assert!(
+        std::fs::read_dir(&root)
+            .expect("read gateway storage")
+            .filter_map(Result::ok)
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .all(|file_name| !file_name.starts_with("conversations.postcard.corrupt-")),
+        "seeded conversations snapshot should decode without quarantine"
     );
 }
 
@@ -1863,6 +1895,182 @@ fn auth_http_routes_roundtrip_email_otp_registration() {
             .iter()
             .any(|room| room["id"] == "dm:guide:novel-reader")
     );
+}
+
+#[test]
+fn auth_http_routes_roundtrip_mobile_otp_registration() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (request_status, challenge) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/mobile-otp/request",
+        Some(&serde_json::json!({
+            "mobile": "+86 13800138000",
+            "email": "mobile-user@example.com",
+            "device_physical_address": "AA:BB:CC:DD:EE:FF",
+            "resident_id": "mobile-reader",
+            "nickname": "手机用户"
+        })),
+    );
+    assert_eq!(request_status, 200);
+    assert!(
+        challenge["challenge_id"]
+            .as_str()
+            .unwrap_or_default()
+            .starts_with("mobile-otp:")
+    );
+    assert_eq!(challenge["delivery_mode"], "inline-dev");
+    let code = challenge["dev_code"]
+        .as_str()
+        .expect("test gateway should expose dev mobile otp");
+
+    let (verify_status, verified) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/mobile-otp/verify",
+        Some(&serde_json::json!({
+            "challenge_id": challenge["challenge_id"],
+            "code": code,
+            "resident_id": "mobile-reader"
+        })),
+    );
+    assert_eq!(verify_status, 200);
+    assert_eq!(verified["resident_id"], "mobile-reader");
+    assert_eq!(verified["mobile"], "8613800138000");
+    assert!(verified["mobile_masked"].as_str().unwrap_or_default().contains("****"));
+    assert_eq!(verified["nickname"], "手机用户");
+    assert_eq!(verified["token_type"], "Bearer");
+    assert_eq!(verified["session"]["resident_id"], "mobile-reader");
+    assert!(
+        verified["session_token"]
+            .as_str()
+            .expect("verify response should include session token")
+            .starts_with("lbst_")
+    );
+    // session token works for authenticated endpoint
+    let session_token = verified["session_token"].as_str().expect("session token");
+    let auth_header = format!("Bearer {session_token}");
+    let (session_status, session_resp) = http_json_with_headers(
+        "GET",
+        &server.base_url,
+        "/v1/auth/session",
+        &[("Authorization", auth_header.as_str())],
+        None,
+    );
+    assert_eq!(session_status, 200);
+    assert_eq!(session_resp["resident_id"], "mobile-reader");
+}
+
+#[test]
+fn auth_mobile_otp_rejects_invalid_code() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (request_status, challenge) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/mobile-otp/request",
+        Some(&serde_json::json!({
+            "mobile": "13900139000"
+        })),
+    );
+    assert_eq!(request_status, 200);
+
+    let (verify_status, verify_resp) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/mobile-otp/verify",
+        Some(&serde_json::json!({
+            "challenge_id": challenge["challenge_id"],
+            "code": "000000"
+        })),
+    );
+    assert_eq!(verify_status, 400);
+    assert!(
+        verify_resp["Error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("invalid otp code")
+    );
+}
+
+#[test]
+fn auth_mobile_otp_rejects_expired_challenge() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (request_status, challenge) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/mobile-otp/request",
+        Some(&serde_json::json!({
+            "mobile": "13700137000"
+        })),
+    );
+    assert_eq!(request_status, 200);
+    let code = challenge["dev_code"].as_str().expect("dev otp");
+
+    // Manually expire the challenge
+    {
+        let mut rt = server.runtime.lock().expect("lock");
+        for ch in rt.email_otp_challenges.iter_mut() {
+            if ch.challenge_id == challenge["challenge_id"].as_str().unwrap_or("") {
+                ch.expires_at_ms = 0;
+            }
+        }
+    }
+
+    let (verify_status, verify_resp) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/mobile-otp/verify",
+        Some(&serde_json::json!({
+            "challenge_id": challenge["challenge_id"],
+            "code": code
+        })),
+    );
+    assert_eq!(verify_status, 400);
+    // purge_expired runs first, so the challenge is already removed
+    assert!(
+        verify_resp["Error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("unknown")
+    );
+}
+
+#[test]
+fn auth_mobile_otp_blacklisted_mobile_rejected() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let blacklisted_mobile = "13800000001";
+    let mobile_hash = GatewayRuntime::hash_registration_handle("mobile", blacklisted_mobile);
+    runtime.registration_blacklist.push(RegistrationBlacklistEntry {
+        entry_id: "blacklist:test".into(),
+        resident_id: IdentityId("system".into()),
+        report_id: None,
+        handle_kind: "mobile".into(),
+        hash_sha256: mobile_hash,
+        reason: "test blacklisted mobile".into(),
+        added_by: IdentityId("system".into()),
+        added_at_ms: GatewayRuntime::now_ms(),
+    });
+    let server = start_local_gateway_http_server(runtime);
+
+    let (request_status, _resp) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/mobile-otp/request",
+        Some(&serde_json::json!({
+            "mobile": "13800000001"
+        })),
+    );
+    assert_eq!(request_status, 400);
 }
 
 #[test]
@@ -4016,7 +4224,7 @@ fn read_http_routes_return_stable_gateway_projection_contract() {
     let (world_status, world) = http_json("GET", &server.base_url, "/v1/world", None);
     assert_eq!(world_status, 200);
     assert_eq!(world["world"]["title"], "Lobster World");
-    assert!(world["cities"].as_array().expect("world cities").len() >= 1);
+    assert!(!world["cities"].as_array().expect("world cities").is_empty());
     assert!(
         world["public_rooms"]
             .as_array()
@@ -4074,7 +4282,7 @@ fn read_http_routes_return_stable_gateway_projection_contract() {
 
     let (mirrors_status, mirrors) = http_json("GET", &server.base_url, "/v1/world-mirrors", None);
     assert_eq!(mirrors_status, 200);
-    assert!(mirrors.as_array().expect("mirrors").len() >= 1);
+    assert!(!mirrors.as_array().expect("mirrors").is_empty());
 
     let (export_missing_status, export_missing) =
         http_json("GET", &server.base_url, "/v1/export", None);
@@ -4347,6 +4555,7 @@ fn provider_and_auth_state_roundtrip_across_restart() {
                     mobile: Some("+86 13800138009".into()),
                     device_physical_address: Some("AA:BB:CC:DD:EE:09".into()),
                     resident_id: Some("roundtrip-user".into()),
+                    nickname: None,
                 })
                 .expect("request email otp");
         }
@@ -4546,6 +4755,8 @@ fn shell_scene_update_persists_gateway_owned_room_layers() {
                 asset_hint: "resident-custom-loft-v1".into(),
                 aspect_ratio_permyriad: 16_000,
                 owner_editable: true,
+                day_image_url: None,
+                night_image_url: None,
             }),
             hotspot_layer: Some(SceneHotspotLayer {
                 layer_id: "resident-hotspots".into(),
@@ -4611,6 +4822,8 @@ fn shell_scene_update_rejects_non_participant_actor() {
             asset_hint: "stranger-room".into(),
             aspect_ratio_permyriad: 16_000,
             owner_editable: true,
+            day_image_url: None,
+            night_image_url: None,
         }),
         hotspot_layer: None,
     });
@@ -5869,6 +6082,7 @@ fn isolated_city_can_cascade_resident_ban_and_blacklist_handles() {
             mobile: Some("+86 13800138001".into()),
             device_physical_address: Some("AA:BB:CC:DD:EE:01".into()),
             resident_id: Some("tiyan".into()),
+            nickname: None,
         })
         .and_then(|response| {
             runtime.verify_email_otp(VerifyEmailOtpRequest {
@@ -6036,6 +6250,37 @@ fn world_banned_resident_is_blocked_from_cross_city_join_and_handles_are_hashed(
 }
 
 #[test]
+fn sanctioned_resident_cannot_send_messages() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    register_resident(&mut runtime, "bad-actor");
+
+    // Sanction the resident
+    runtime
+        .admin_ban_resident("bad-actor", "violation of world safety rules")
+        .expect("ban resident");
+
+    // Verify the sanction is active
+    let is_revoked = runtime.resident_portability_revoked(&IdentityId("bad-actor".into()));
+    assert!(is_revoked, "resident should have revoked portability");
+
+    // Sanctioned resident should be blocked from sending messages
+    let result = runtime.append_shell_message(ShellMessageRequest {
+        room_id: "room:world:lobby".into(),
+        sender: "bad-actor".into(),
+        text: "attempting to send after sanction".into(),
+        reply_to_message_id: None,
+        device_id: None,
+        language_tag: None,
+    });
+    assert!(result.is_err());
+    assert!(
+        result.unwrap_err().contains("sanctioned"),
+        "sanctioned resident must not be able to send messages"
+    );
+}
+
+#[test]
 fn email_otp_registration_roundtrip_creates_persisted_resident() {
     let temp = tempdir().expect("temp dir");
     let root = temp.path().join("gateway");
@@ -6048,6 +6293,7 @@ fn email_otp_registration_roundtrip_creates_persisted_resident() {
                 mobile: Some("+86 13800138000".into()),
                 device_physical_address: Some("66:55:44:33:22:11".into()),
                 resident_id: Some("novel-reader".into()),
+                nickname: None,
             })
             .expect("request email otp")
     };
@@ -6073,6 +6319,81 @@ fn email_otp_registration_roundtrip_creates_persisted_resident() {
 }
 
 #[test]
+fn nickname_flows_through_otp_registration_directory_and_admin() {
+    let temp = tempdir().expect("temp dir");
+    let root = temp.path().join("gateway");
+
+    let response = {
+        let mut runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+        runtime
+            .request_email_otp(RequestEmailOtpRequest {
+                email: "nickname.test@example.com".into(),
+                mobile: Some("+86 13800138005".into()),
+                device_physical_address: Some("AA:BB:CC:DD:EE:05".into()),
+                resident_id: Some("nickname-user".into()),
+                nickname: Some("昵称测试".into()),
+            })
+            .expect("request email otp")
+    };
+
+    let dev_code = response.dev_code.expect("test mode should expose dev otp");
+    {
+        let mut runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+        let verified = runtime
+            .verify_email_otp(VerifyEmailOtpRequest {
+                challenge_id: response.challenge_id,
+                code: dev_code,
+                resident_id: Some("nickname-user".into()),
+            })
+            .expect("verify email otp");
+        assert_eq!(verified.resident_id, "nickname-user");
+        assert_eq!(verified.nickname.as_deref(), Some("昵称测试"));
+    }
+
+    let runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+    let reg = runtime
+        .registrations
+        .iter()
+        .find(|r| r.resident_id.0 == "nickname-user")
+        .expect("registration should persist");
+    assert_eq!(reg.nickname.as_deref(), Some("昵称测试"));
+
+    // Also verify nickname flows through when no nickname is provided (None case)
+    let response2 = {
+        let mut runtime2 = GatewayRuntime::open(&root, 64, None).expect("runtime");
+        runtime2
+            .request_email_otp(RequestEmailOtpRequest {
+                email: "nonick@example.com".into(),
+                mobile: Some("+86 13800138006".into()),
+                device_physical_address: Some("AA:BB:CC:DD:EE:06".into()),
+                resident_id: Some("nonick-user".into()),
+                nickname: None,
+            })
+            .expect("request email otp")
+    };
+    let dev_code2 = response2.dev_code.expect("test mode should expose dev otp");
+    {
+        let mut runtime2 = GatewayRuntime::open(&root, 64, None).expect("runtime");
+        let verified = runtime2
+            .verify_email_otp(VerifyEmailOtpRequest {
+                challenge_id: response2.challenge_id,
+                code: dev_code2,
+                resident_id: Some("nonick-user".into()),
+            })
+            .expect("verify email otp");
+        assert_eq!(verified.resident_id, "nonick-user");
+        assert_eq!(verified.nickname, None);
+    }
+    let runtime2 = GatewayRuntime::open(&root, 64, None).expect("runtime");
+    let reg2 = runtime2
+        .registrations
+        .iter()
+        .find(|r| r.resident_id.0 == "nonick-user")
+        .expect("registration without nickname should persist");
+    assert_eq!(reg2.nickname, None);
+}
+
+#[test]
 fn request_email_otp_replaces_prior_active_challenge_for_same_email() {
     let temp = tempdir().expect("temp dir");
     let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
@@ -6083,14 +6404,22 @@ fn request_email_otp_replaces_prior_active_challenge_for_same_email() {
             mobile: Some("+86 13800138000".into()),
             device_physical_address: Some("66:55:44:33:22:11".into()),
             resident_id: Some("swap-reader".into()),
+            nickname: None,
         })
         .expect("first email otp request");
+
+    // Expire the rate limit window so the second request is not blocked
+    if let Some(window) = runtime.rate_limits.get_mut("otp-req:swap@example.com") {
+        window.window_start_ms -= 120_000;
+    }
+
     let second = runtime
         .request_email_otp(RequestEmailOtpRequest {
             email: "swap@example.com".into(),
             mobile: Some("+86 13800138000".into()),
             device_physical_address: Some("66:55:44:33:22:11".into()),
             resident_id: Some("swap-reader".into()),
+            nickname: None,
         })
         .expect("second email otp request");
 
@@ -6115,6 +6444,7 @@ fn email_otp_verification_seeds_canonical_guide_direct_conversation() {
                 mobile: Some("+86 13800138000".into()),
                 device_physical_address: Some("66:55:44:33:22:11".into()),
                 resident_id: Some("tiyan".into()),
+                nickname: None,
             })
             .expect("request email otp")
     };
@@ -6210,6 +6540,7 @@ fn blacklisted_handles_are_rejected_during_auth_preflight_and_otp_issue() {
             mobile: Some("+86 13900000000".into()),
             device_physical_address: Some("00:22:44:66:88:AA".into()),
             resident_id: Some("new-handle".into()),
+            nickname: None,
         })
         .expect_err("blacklisted handles should not receive otp");
     assert!(err.contains("blacklisted"));
@@ -6978,7 +7309,7 @@ fn admin_messages_endpoint_returns_audit_for_known_conversation() {
     let temp = tempdir().expect("temp dir");
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
     let server = start_local_gateway_http_server(runtime);
-    let url = format!("/v1/admin/messages?conversation_id=room:world:lobby&limit=10");
+    let url = "/v1/admin/messages?conversation_id=room:world:lobby&limit=10".to_string();
     let (status, payload) = http_json("GET", &server.base_url, &url, None);
     assert_eq!(status, 200);
     assert!(payload.get("conversation_id").and_then(|v| v.as_str()).is_some());
@@ -7046,6 +7377,62 @@ fn admin_ban_and_unban_resident_endpoints_roundtrip() {
     assert_eq!(unban_status, 200);
     assert_eq!(unban_payload.get("ok").and_then(|v| v.as_bool()), Some(true));
     assert!(unban_payload.get("lifted_count").and_then(|v| v.as_u64()).unwrap_or(0) > 0);
+}
+
+#[test]
+fn admin_set_nickname_endpoint_roundtrip() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+
+    // Ensure builder has a registration (seeded only as message sender)
+    let create_body = serde_json::json!({"resident_id": "builder", "email": "builder@localhost"});
+    let (create_status, _) =
+        http_json("POST", &server.base_url, "/v1/admin/residents", Some(&create_body));
+    assert_eq!(create_status, 200);
+
+    let set_body = serde_json::json!({"resident_id": "builder", "nickname": "建筑大师"});
+    let (set_status, set_payload) =
+        http_json("POST", &server.base_url, "/v1/admin/residents/nickname", Some(&set_body));
+    assert_eq!(set_status, 200);
+    assert_eq!(set_payload.get("ok").and_then(|v| v.as_bool()), Some(true));
+
+    // Verify nickname appears in admin residents list
+    let (list_status, list_payload) =
+        http_json("GET", &server.base_url, "/v1/admin/residents", None);
+    assert_eq!(list_status, 200);
+    let entry = list_payload
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r.get("resident_id").and_then(|v| v.as_str()) == Some("builder"))
+        .expect("should find builder");
+    assert_eq!(entry.get("nickname").and_then(|v| v.as_str()), Some("建筑大师"));
+
+    // Clear nickname
+    let clear_body = serde_json::json!({"resident_id": "builder", "nickname": null});
+    let (clear_status, clear_payload) =
+        http_json("POST", &server.base_url, "/v1/admin/residents/nickname", Some(&clear_body));
+    assert_eq!(clear_status, 200);
+    assert_eq!(clear_payload.get("ok").and_then(|v| v.as_bool()), Some(true));
+
+    // Verify nickname is now null
+    let (list2_status, list2_payload) =
+        http_json("GET", &server.base_url, "/v1/admin/residents", None);
+    assert_eq!(list2_status, 200);
+    let entry2 = list2_payload
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r.get("resident_id").and_then(|v| v.as_str()) == Some("builder"))
+        .expect("should find builder");
+    assert_eq!(entry2.get("nickname").and_then(|v| v.as_str()), None);
+
+    // Nonexistent resident
+    let bad_body = serde_json::json!({"resident_id": "no-such-resident", "nickname": "test"});
+    let (bad_status, _) =
+        http_json("POST", &server.base_url, "/v1/admin/residents/nickname", Some(&bad_body));
+    assert_eq!(bad_status, 404);
 }
 
 #[test]
@@ -7242,7 +7629,7 @@ fn admin_rooms_endpoint_returns_seeded_rooms_for_fresh_runtime() {
     let (status, payload) = http_json("GET", &server.base_url, "/v1/admin/rooms", None);
     assert_eq!(status, 200);
     let rooms = payload.as_array().expect("rooms array");
-    assert!(rooms.len() > 0, "fresh runtime should have seeded public rooms");
+    assert!(!rooms.is_empty(), "fresh runtime should have seeded public rooms");
 }
 
 #[test]
@@ -7414,6 +7801,113 @@ fn rate_limit_blocks_sender_via_http() {
         }
     }
     assert!(hit_429, "HTTP 429 rate limit expected after 30+ messages");
+}
+
+#[test]
+fn otp_request_rate_limited_per_email() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    // First request should succeed
+    let (status1, challenge1) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/email-otp/request",
+        Some(&serde_json::json!({
+            "email": "ratelimited@example.com",
+            "resident_id": "rl-user"
+        })),
+    );
+    assert_eq!(status1, 200);
+    assert!(challenge1["challenge_id"].is_string());
+
+    // Second request within the same minute should be rate-limited
+    let (status2, body2) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/email-otp/request",
+        Some(&serde_json::json!({
+            "email": "ratelimited@example.com",
+            "resident_id": "rl-user-2"
+        })),
+    );
+    assert_eq!(status2, 400);
+    let err = body2["Error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        err.contains("too many otp requests"),
+        "expected rate limit error, got: {err}"
+    );
+}
+
+#[test]
+fn otp_verify_rate_limited_per_challenge() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (_s, challenge) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/email-otp/request",
+        Some(&serde_json::json!({
+            "email": "verify-rl@example.com",
+            "resident_id": "verify-rl"
+        })),
+    );
+    let challenge_id = challenge["challenge_id"].as_str().expect("challenge_id");
+
+    // Attempt 6 verifications with wrong code — first 5 should be valid attempts, 6th rate-limited
+    let mut hit_rate_limit = false;
+    for i in 0..6 {
+        let (status, body) = http_json(
+            "POST",
+            &server.base_url,
+            "/v1/auth/email-otp/verify",
+            Some(&serde_json::json!({
+                "challenge_id": challenge_id,
+                "code": "000000",
+                "resident_id": "verify-rl"
+            })),
+        );
+        if status == 400 {
+            let err = body["Error"]["message"].as_str().unwrap_or_default();
+            if err.contains("too many otp verification") {
+                hit_rate_limit = true;
+                break;
+            }
+            // Otherwise it's "invalid otp code"
+            assert!(err.contains("invalid otp code"), "unexpected error at attempt {}: {err}", i + 1);
+        }
+    }
+    assert!(hit_rate_limit, "expected rate limit after 5 failed verify attempts");
+}
+
+#[test]
+fn cors_origin_reads_from_env() {
+    // Default is wildcard
+    let default = crate::http_support::cors_origin_header();
+    assert_eq!(
+        default.value.as_str(),
+        "*",
+        "default CORS origin should be wildcard"
+    );
+
+    // Set env var and verify
+    unsafe { std::env::set_var("LOBSTER_CORS_ORIGIN", "https://example.com"); }
+    let custom = crate::http_support::cors_origin_header();
+    assert_eq!(
+        custom.value.as_str(),
+        "https://example.com",
+        "CORS origin should match env var"
+    );
+
+    // Empty string should fall back to wildcard
+    unsafe { std::env::set_var("LOBSTER_CORS_ORIGIN", ""); }
+    let empty = crate::http_support::cors_origin_header();
+    assert_eq!(empty.value.as_str(), "*", "empty CORS origin should be wildcard");
+
+    unsafe { std::env::remove_var("LOBSTER_CORS_ORIGIN"); }
 }
 
 #[test]
@@ -7886,4 +8380,697 @@ fn world_snapshot_returns_ok() {
     let server = start_local_gateway_http_server(runtime);
     let (status, _) = http_json("GET", &server.base_url, "/v1/world-snapshot", None);
     assert_eq!(status, 200);
+}
+
+#[test]
+fn moderation_state_persists_across_restart() {
+    let temp = tempdir().expect("temp dir");
+    let root = temp.path().join("gateway");
+    let msg_id = "gw-test-msg-1";
+
+    {
+        let mut runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+        runtime
+            .message_moderation
+            .insert(msg_id.to_string(), "approved".to_string());
+        let _ = runtime.persist_moderation_state();
+    }
+
+    let runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+    let status = runtime.admin_message_moderation_status(msg_id);
+    assert_eq!(status, Some("approved"));
+}
+
+#[test]
+fn send_to_nonexistent_room_is_rejected() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    let send_body = serde_json::json!({
+        "room_id": "room:nonexistent:fake",
+        "sender": "qa-a",
+        "text": "should fail"
+    });
+    let (_status, body) = http_json("POST", &server.base_url, "/v1/shell/message", Some(&send_body));
+    let ok = body.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
+    assert!(!ok, "send to nonexistent room must not succeed");
+}
+
+#[test]
+fn admin_moderation_status_readback() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    runtime
+        .message_moderation
+        .insert("msg-001".to_string(), "blocked".to_string());
+    assert_eq!(
+        runtime.admin_message_moderation_status("msg-001"),
+        Some("blocked")
+    );
+    assert_eq!(runtime.admin_message_moderation_status("msg-099"), None);
+}
+
+#[test]
+fn concurrent_presence_heartbeats_via_http() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    // send presence for two residents
+    let a_body = serde_json::json!({"resident_id": "builder"});
+    let (s1, _) = http_json("POST", &server.base_url, "/v1/shell/presence", Some(&a_body));
+    assert_eq!(s1, 200);
+    let b_body = serde_json::json!({"resident_id": "rsaga"});
+    let (s2, _) = http_json("POST", &server.base_url, "/v1/shell/presence", Some(&b_body));
+    assert_eq!(s2, 200);
+    // verify residents endpoint returns them (enriched)
+    let (s3, residents) = http_json("GET", &server.base_url, "/v1/residents", None);
+    assert_eq!(s3, 200);
+    assert!(!residents.as_array().map(|a| a.is_empty()).unwrap_or(true),
+        "residents list should not be empty after heartbeats");
+}
+
+#[test]
+fn admin_logs_endpoint_returns_entries() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    runtime.admin_handle_log("audit-001");
+    runtime.admin_handle_log("audit-002");
+    let server = start_local_gateway_http_server(runtime);
+    let (status, body) = http_json("GET", &server.base_url, "/v1/admin/logs", None);
+    assert_eq!(status, 200);
+    let arr = body.as_array().expect("logs should be array");
+    assert_eq!(arr.len(), 2);
+}
+
+#[test]
+fn admin_invites_list_endpoint_returns_created_invites() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    runtime.admin_create_invite("qa-a", 0);
+    let server = start_local_gateway_http_server(runtime);
+    let (status, body) = http_json("GET", &server.base_url, "/v1/admin/invites", None);
+    assert_eq!(status, 200);
+    let arr = body.as_array().expect("invites should be array");
+    assert!(!arr.is_empty(), "should have at least one invite");
+}
+
+#[test]
+fn admin_messages_moderation_endpoint_returns_status() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    runtime.message_moderation.insert("msg-xyz".into(), "approved".into());
+    let server = start_local_gateway_http_server(runtime);
+    let (status, body) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/admin/messages/moderation?message_id=msg-xyz",
+        None,
+    );
+    assert_eq!(status, 200);
+    assert_eq!(body["status"].as_str(), Some("approved"));
+    assert_eq!(body["message_id"].as_str(), Some("msg-xyz"));
+}
+
+#[test]
+fn create_and_list_permission_groups_via_http() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let body = serde_json::json!({
+        "actor_id": "admin-1",
+        "name": "测试组",
+        "description": "测试用权限组",
+        "capabilities": ["send:message", "read:public"]
+    });
+    let (status, created) = http_json("POST", &server.base_url, "/v1/admin/permission-groups", Some(&body));
+    assert_eq!(status, 200);
+    assert_eq!(created["ok"], serde_json::Value::Bool(true));
+    assert!(created["group"]["id"].as_str().unwrap().starts_with("pg-"));
+    assert_eq!(created["group"]["name"].as_str(), Some("测试组"));
+    assert_eq!(created["group"]["capabilities"].as_array().unwrap().len(), 2);
+
+    let (status, list) = http_json("GET", &server.base_url, "/v1/admin/permission-groups", None);
+    assert_eq!(status, 200);
+    assert_eq!(list.as_array().unwrap().len(), 1);
+    assert_eq!(list[0]["name"].as_str(), Some("测试组"));
+}
+
+#[test]
+fn assign_permission_group_via_http() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    register_resident(&mut runtime, "alice");
+    let resp = runtime.admin_create_permission_group("admin-1", "协管", "steward-like", vec!["freeze:room".into(), "moderate:message".into()]);
+    let pg_id = resp.group.id;
+    let server = start_local_gateway_http_server(runtime);
+
+    let body = serde_json::json!({"actor_id": "admin-1", "resident_id": "alice", "permission_group_id": &pg_id});
+    let (status, assigned) = http_json("POST", &server.base_url, "/v1/admin/permission-groups/assign", Some(&body));
+    assert_eq!(status, 200);
+    assert_eq!(assigned["ok"], serde_json::Value::Bool(true));
+    assert_eq!(assigned["resident_id"].as_str(), Some("alice"));
+    assert_eq!(assigned["permission_group_id"].as_str(), Some(pg_id.as_str()));
+}
+
+#[test]
+fn permission_groups_persist_across_restart() {
+    let temp = tempdir().expect("temp dir");
+    let pg_id;
+    {
+        let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+        let resp = runtime.admin_create_permission_group("admin-1", "持久化组", "survive restart", vec!["admin:config".into()]);
+        pg_id = resp.group.id;
+    }
+    {
+        let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+        let groups = runtime.admin_list_permission_groups();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].id, pg_id);
+        assert_eq!(groups[0].name, "持久化组");
+        assert_eq!(groups[0].capabilities, vec!["admin:config"]);
+    }
+}
+
+#[test]
+fn capability_catalog_endpoint_returns_all_entries() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+    let (status, catalog) = http_json("GET", &server.base_url, "/v1/admin/capabilities", None);
+    assert_eq!(status, 200);
+    let arr = catalog.as_array().expect("catalog should be array");
+    assert!(arr.len() >= 14);
+    let keys: Vec<&str> = arr.iter().filter_map(|v| v["key"].as_str()).collect();
+    assert!(keys.contains(&"send:message"));
+    assert!(keys.contains(&"manage:permissions"));
+}
+
+#[test]
+fn create_permission_group_rejects_empty_name() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+    let body = serde_json::json!({"actor_id": "admin-1", "name": "", "capabilities": ["send:message"]});
+    let (status, resp) = http_json("POST", &server.base_url, "/v1/admin/permission-groups", Some(&body));
+    assert_eq!(status, 400);
+    assert!(resp["error"].as_str().unwrap().contains("name"));
+}
+
+#[test]
+fn create_permission_group_rejects_empty_capabilities() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+    let body = serde_json::json!({"actor_id": "admin-1", "name": "X", "capabilities": []});
+    let (status, resp) = http_json("POST", &server.base_url, "/v1/admin/permission-groups", Some(&body));
+    assert_eq!(status, 400);
+    assert!(resp["error"].as_str().unwrap().contains("capability"));
+}
+
+#[test]
+fn resident_without_capability_is_denied_admin_action() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    register_resident(&mut runtime, "bob");
+    // Bob has no permission group assigned - should be denied
+    let server = start_local_gateway_http_server(runtime);
+
+    let body = serde_json::json!({"actor_id": "bob", "room_id": "room-1"});
+    let (status, _resp) = http_json("POST", &server.base_url, "/v1/admin/rooms/freeze", Some(&body));
+    assert_eq!(status, 401);
+}
+
+#[test]
+fn resident_with_capability_can_perform_admin_action() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    register_resident(&mut runtime, "alice");
+    let created = runtime.create_public_room(CreatePublicRoomRequest {
+        city: "core-harbor".into(),
+        creator_id: "rsaga".into(),
+        slug: Some("test-room".into()),
+        title: "Test Room".into(),
+        description: "capability test".into(),
+    }).expect("create room");
+    let pg = runtime.admin_create_permission_group("admin-1", "RoomOps", "room operations", vec!["freeze:room".into()]);
+    runtime.admin_assign_permission_group("alice", &pg.group.id);
+
+    let server = start_local_gateway_http_server(runtime);
+
+    let body = serde_json::json!({"actor_id": "alice", "room_id": created.room_id.0});
+    let (status, _resp) = http_json("POST", &server.base_url, "/v1/admin/rooms/freeze", Some(&body));
+    assert_eq!(status, 200);
+}
+
+#[test]
+fn special_admin_has_all_capabilities() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+
+    assert!(runtime.resident_has_capability("admin_rsaga", "freeze:room"));
+    assert!(runtime.resident_has_capability("admin_rsaga", "ban:resident"));
+    assert!(runtime.resident_has_capability("admin_rsaga", "manage:permissions"));
+    assert!(runtime.resident_has_capability("admin_rsaga", "nonexistent:cap"));
+}
+
+#[test]
+fn unknown_resident_has_no_capabilities() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+
+    assert!(!runtime.resident_has_capability("stranger", "send:message"));
+    assert!(!runtime.resident_has_capability("stranger", "admin:config"));
+}
+
+#[test]
+fn capability_check_only_matches_exact_key() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let pg = runtime.admin_create_permission_group("admin-1", "Limited", "only freeze", vec!["freeze:room".into()]);
+    runtime.admin_assign_permission_group("bob", &pg.group.id);
+
+    assert!(runtime.resident_has_capability("bob", "freeze:room"));
+    assert!(!runtime.resident_has_capability("bob", "ban:resident"));
+    assert!(!runtime.resident_has_capability("bob", "freeze:room:extra"));
+}
+
+// ── Audit Log Tests ──
+
+#[test]
+fn audit_events_recorded_for_admin_actions() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    register_resident(&mut runtime, "alice");
+
+    runtime.log_audit_event("admin-1", "admin:freeze_room", "room:test:1", Some("spam"));
+    runtime.log_audit_event("admin-1", "admin:ban_resident", "bob", Some("harassment"));
+    runtime.log_audit_event("admin-2", "admin:config", "app-config", None);
+
+    let response = runtime.admin_list_audit_events(10);
+    assert_eq!(response.total, 3);
+    assert_eq!(response.events.len(), 3);
+
+    // Events are returned newest first
+    assert_eq!(response.events[0].action, "admin:config");
+    assert_eq!(response.events[1].action, "admin:ban_resident");
+    assert_eq!(response.events[2].action, "admin:freeze_room");
+}
+
+#[test]
+fn audit_events_persist_across_restart() {
+    let temp = tempdir().expect("temp dir");
+    let storage = temp.path().join("gateway");
+
+    {
+        let mut runtime = GatewayRuntime::open(&storage, 64, None).expect("runtime");
+        runtime.log_audit_event("admin-1", "admin:ban_resident", "eve", Some("bad behavior"));
+        runtime.log_audit_event("admin-2", "admin:config", "app-config", None);
+    }
+
+    {
+        let runtime = GatewayRuntime::open(&storage, 64, None).expect("runtime");
+        let response = runtime.admin_list_audit_events(10);
+        assert_eq!(response.total, 2);
+        assert_eq!(response.events.len(), 2);
+    }
+}
+
+#[test]
+fn audit_log_endpoint_returns_events() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    register_resident(&mut runtime, "alice");
+
+    runtime.log_audit_event("alice", "admin:freeze_room", "room:test:2", None);
+    let server = start_local_gateway_http_server(runtime);
+
+    let (status, _, body) = http_raw("GET", &server.base_url, "/v1/admin/audit-log", None);
+    assert_eq!(status, 200);
+
+    let parsed: serde_json::Value = serde_json::from_str(&body).expect("parse json");
+    assert_eq!(parsed["total"], 1);
+    assert_eq!(parsed["events"].as_array().unwrap().len(), 1);
+    assert_eq!(parsed["events"][0]["action"], "admin:freeze_room");
+}
+
+#[test]
+fn audit_log_endpoint_respects_limit() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+
+    for i in 0..5 {
+        runtime.log_audit_event("admin-1", "admin:config", &format!("item-{}", i), None);
+    }
+
+    let response = runtime.admin_list_audit_events(2);
+    assert_eq!(response.total, 5);
+    assert_eq!(response.events.len(), 2);
+}
+
+#[test]
+fn audit_event_has_required_fields() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+
+    runtime.log_audit_event("admin-1", "admin:freeze_room", "room:test:3", Some("inappropriate"));
+
+    let response = runtime.admin_list_audit_events(1);
+    let event = &response.events[0];
+
+    assert!(event.event_id.starts_with("audit-"));
+    assert_eq!(event.actor_id, "admin-1");
+    assert_eq!(event.action, "admin:freeze_room");
+    assert_eq!(event.target, "room:test:3");
+    assert_eq!(event.reason, Some("inappropriate".to_string()));
+    assert!(event.timestamp_ms > 0);
+}
+
+#[test]
+fn audit_log_http_endpoint_accepts_limit_param() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+
+    for i in 0..10 {
+        runtime.log_audit_event("admin-1", "admin:config", &format!("item-{}", i), None);
+    }
+    let server = start_local_gateway_http_server(runtime);
+
+    let (status, _, body) = http_raw("GET", &server.base_url, "/v1/admin/audit-log?limit=3", None);
+    assert_eq!(status, 200);
+
+    let parsed: serde_json::Value = serde_json::from_str(&body).expect("parse json");
+    assert_eq!(parsed["total"], 10);
+    assert_eq!(parsed["events"].as_array().unwrap().len(), 3);
+}
+
+// ── Auth Logout Tests ──
+
+#[test]
+fn session_logout_revokes_token() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    // Register and get session token
+    let (_s, challenge) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/email-otp/request",
+        Some(&serde_json::json!({
+            "email": "tester@example.com",
+            "resident_id": "tester"
+        })),
+    );
+    let code = challenge["dev_code"].as_str().expect("dev otp");
+    let (_s, verified) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/email-otp/verify",
+        Some(&serde_json::json!({
+            "challenge_id": challenge["challenge_id"],
+            "code": code,
+            "resident_id": "tester"
+        })),
+    );
+    let session_token = verified["session_token"].as_str().expect("session token");
+    let auth_header: &[(&str, &str)] = &[("Authorization", &format!("Bearer {session_token}"))];
+
+    // Verify session is valid before logout
+    let (status, _body) = http_json_with_headers("GET", &server.base_url, "/v1/auth/session", auth_header, None);
+    assert_eq!(status, 200);
+
+    // Logout
+    let (logout_status, logout_body) = http_json_with_headers("POST", &server.base_url, "/v1/auth/logout", auth_header, None);
+    assert_eq!(logout_status, 200);
+    assert_eq!(logout_body["ok"], true);
+
+    // Verify session is now invalid
+    let (status2, _body2) = http_json_with_headers("GET", &server.base_url, "/v1/auth/session", auth_header, None);
+    assert_eq!(status2, 401);
+}
+
+#[test]
+fn logout_requires_bearer_token() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (status, _body) = http_json("POST", &server.base_url, "/v1/auth/logout", None);
+    assert_eq!(status, 401);
+}
+
+#[test]
+fn double_logout_returns_error() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (_s, challenge) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/email-otp/request",
+        Some(&serde_json::json!({
+            "email": "double@example.com",
+            "resident_id": "double-tester"
+        })),
+    );
+    let code = challenge["dev_code"].as_str().expect("dev otp");
+    let (_s, verified) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/email-otp/verify",
+        Some(&serde_json::json!({
+            "challenge_id": challenge["challenge_id"],
+            "code": code,
+            "resident_id": "double-tester"
+        })),
+    );
+    let session_token = verified["session_token"].as_str().expect("session token");
+    let auth_header: &[(&str, &str)] = &[("Authorization", &format!("Bearer {session_token}"))];
+
+    // First logout
+    let (status1, _) = http_json_with_headers("POST", &server.base_url, "/v1/auth/logout", auth_header, None);
+    assert_eq!(status1, 200);
+
+    // Second logout with same token
+    let (status2, _) = http_json_with_headers("POST", &server.base_url, "/v1/auth/logout", auth_header, None);
+    assert_eq!(status2, 401);
+}
+
+#[test]
+fn admin_scene_endpoint_updates_any_room_regardless_of_participant() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    // Make admin a world steward so they can edit any room scene
+    runtime.world_stewards.push(IdentityId("admin".into()));
+    // Create a DM room where "admin" is NOT a participant
+    runtime
+        .open_direct_session(OpenDirectSessionRequest {
+            requester_id: "alice".into(),
+            requester_device_id: Some("desktop".into()),
+            peer_id: "bob".into(),
+            peer_device_id: Some("browser".into()),
+        })
+        .expect("direct session should open");
+
+    // admin actor is NOT a participant of dm:alice:bob
+    let result = runtime.admin_update_scene(AdminUpdateSceneRequest {
+        room_id: "dm:alice:bob".into(),
+        actor_id: Some("admin".into()),
+        image_layer: None,
+        hotspot_layer: Some(SceneHotspotLayer {
+            layer_id: "admin-hotspots".into(),
+            coordinate_system: "scene-permyriad".into(),
+            owner_editable: true,
+            hotspots: vec![SceneHotspot {
+                hotspot_id: "admin-desk".into(),
+                label: "管理台".into(),
+                sprite_hint: "default".into(),
+                interaction_hint: "管理员操作区".into(),
+                x_permyriad: 1000,
+                y_permyriad: 1000,
+                width_permyriad: 800,
+                height_permyriad: 600,
+            }],
+        }),
+    });
+    assert!(result.is_ok(), "admin should bypass participant check");
+    let response = result.unwrap();
+    assert!(response.ok);
+    assert_eq!(response.conversation_id, "dm:alice:bob");
+
+    let state = serde_json::to_value(runtime.shell_state()).expect("serialize shell state");
+    let scene = state["scene_render"]["scenes"]
+        .as_array()
+        .expect("scene render array")
+        .iter()
+        .find(|s| s["conversation_id"] == "dm:alice:bob")
+        .expect("scene should exist");
+    assert_eq!(scene["hotspot_layer"]["hotspots"][0]["label"], "管理台");
+}
+
+#[test]
+fn admin_scene_endpoint_http_route_works_without_participant_check() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime
+        .open_direct_session(OpenDirectSessionRequest {
+            requester_id: "alice".into(),
+            requester_device_id: Some("desktop".into()),
+            peer_id: "bob".into(),
+            peer_device_id: Some("browser".into()),
+        })
+        .expect("direct session should open");
+    let server = start_local_gateway_http_server(runtime);
+
+    // POST /v1/admin/scene with actor who is not a room participant
+    let (status, payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/scene",
+        Some(&serde_json::json!({
+            "room_id": "dm:alice:bob",
+            "hotspot_layer": {
+                "layer_id": "http-admin-hotspots",
+                "coordinate_system": "scene-permyriad",
+                "owner_editable": true,
+                "hotspots": [{
+                    "hotspot_id": "http-desk",
+                    "label": "HTTP管理台",
+                    "sprite_hint": "default",
+                    "interaction_hint": "HTTP端点测试",
+                    "x_permyriad": 2000,
+                    "y_permyriad": 2000,
+                    "width_permyriad": 800,
+                    "height_permyriad": 600
+                }]
+            }
+        })),
+    );
+
+    assert_eq!(status, 200);
+    assert_eq!(payload["ok"], true);
+    assert_eq!(payload["hotspot_layer"]["hotspots"][0]["label"], "HTTP管理台");
+}
+
+#[test]
+fn revoked_session_cannot_access_protected_endpoints() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (_s, challenge) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/email-otp/request",
+        Some(&serde_json::json!({
+            "email": "revoked@example.com",
+            "resident_id": "revoked-user"
+        })),
+    );
+    let code = challenge["dev_code"].as_str().expect("dev otp");
+    let (_s, verified) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/email-otp/verify",
+        Some(&serde_json::json!({
+            "challenge_id": challenge["challenge_id"],
+            "code": code,
+            "resident_id": "revoked-user"
+        })),
+    );
+    let session_token = verified["session_token"].as_str().expect("session token");
+    let auth: &[(&str, &str)] = &[("Authorization", &format!("Bearer {session_token}"))];
+
+    // Verify session is valid
+    let (status, _) = http_json_with_headers("GET", &server.base_url, "/v1/auth/session", auth, None);
+    assert_eq!(status, 200);
+
+    // Logout
+    let (lo_status, _) = http_json_with_headers("POST", &server.base_url, "/v1/auth/logout", auth, None);
+    assert_eq!(lo_status, 200);
+
+    // Session check should now be rejected
+    let (status2, _) = http_json_with_headers("GET", &server.base_url, "/v1/auth/session", auth, None);
+    assert_eq!(status2, 401);
+}
+
+#[test]
+fn shell_set_nickname_endpoint_roundtrip() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    // Register and login to get a session token
+    let (req_status, challenge) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/email-otp/request",
+        Some(&serde_json::json!({
+            "email": "nick-self@example.com",
+            "resident_id": "nick-self"
+        })),
+    );
+    assert_eq!(req_status, 200);
+    let code = challenge["dev_code"].as_str().expect("dev otp");
+
+    let (verify_status, verified) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/auth/email-otp/verify",
+        Some(&serde_json::json!({
+            "challenge_id": challenge["challenge_id"],
+            "code": code,
+            "resident_id": "nick-self"
+        })),
+    );
+    assert_eq!(verify_status, 200);
+    let session_token = verified["session_token"].as_str().expect("session token");
+    let auth_value = format!("Bearer {session_token}");
+    let auth = &[("Authorization", auth_value.as_str())];
+
+    // Set nickname via shell endpoint
+    let (set_status, set_payload) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/shell/nickname",
+        auth,
+        Some(&serde_json::json!({"nickname": "我的昵称"})),
+    );
+    assert_eq!(set_status, 200);
+    assert_eq!(set_payload.get("ok").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(set_payload.get("nickname").and_then(|v| v.as_str()), Some("我的昵称"));
+
+    // Clear nickname (omit field to set to None via serde(default))
+    let (clear_status, clear_payload) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/shell/nickname",
+        auth,
+        Some(&serde_json::json!({})),
+    );
+    assert_eq!(clear_status, 200);
+    assert_eq!(clear_payload.get("ok").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(clear_payload.get("nickname").and_then(|v| v.as_str()), None);
+
+    // Without auth should fail
+    let (noauth_status, _) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/nickname",
+        Some(&serde_json::json!({"nickname": "no-auth"})),
+    );
+    assert_eq!(noauth_status, 401);
+
+    // With invalid auth should fail
+    let invalid_auth = &[("Authorization", "Bearer invalid-token-12345")];
+    let (invalid_auth_status, _) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/shell/nickname",
+        invalid_auth,
+        Some(&serde_json::json!({"nickname": "bad-auth"})),
+    );
+    assert_eq!(invalid_auth_status, 401);
 }

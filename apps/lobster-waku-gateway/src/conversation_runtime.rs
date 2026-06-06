@@ -26,7 +26,12 @@ impl GatewayRuntime {
                 .map(|part| IdentityId(part.to_string()))
                 .collect::<Vec<_>>()
         } else {
-            vec![sender.clone()]
+            let mut parts = vec![sender.clone()];
+            let op = IdentityId("rsaga".into());
+            if sender != &op {
+                parts.push(op);
+            }
+            parts
         };
 
         Conversation {
@@ -87,7 +92,14 @@ impl GatewayRuntime {
             scope: ConversationScope::CityPublic,
             scene: room.scene.clone(),
             content_topic: transport_waku::WakuFrameCodec::content_topic_for(&room.room_id),
-            participants: vec![room.created_by.clone()],
+            participants: {
+                let mut parts = vec![room.created_by.clone()];
+                let op = IdentityId("rsaga".into());
+                if room.created_by != op {
+                    parts.push(op);
+                }
+                parts
+            },
             created_at_ms: room.created_at_ms,
             last_active_at_ms: room.created_at_ms,
         })
@@ -288,6 +300,102 @@ impl GatewayRuntime {
         })
     }
 
+    fn check_scene_edit_permission(
+        &self,
+        actor_id: &str,
+        conversation_id: &ConversationId,
+    ) -> Result<(), String> {
+        let actor = IdentityId(actor_id.to_string());
+        // 世界管家可以编辑任何场景
+        if self.actor_is_world_steward(&actor) {
+            return Ok(());
+        }
+        // 世界入口 / 世界广场 → 只有世界管家
+        if conversation_id.0 == "room:world:entry"
+            || conversation_id.0 == "room:world:square"
+        {
+            return Err("only world stewards can edit world entry/square scenes".into());
+        }
+        // 私宅 (dm:*) → 房主可以编辑
+        if conversation_id.0.starts_with("dm:") {
+            let conv = self
+                .timeline_store
+                .active_conversations()
+                .into_iter()
+                .find(|c| c.conversation_id == *conversation_id);
+            if let Some(conv) = conv
+                && !conv.participants.contains(&actor)
+            {
+                return Err("only the room owner can edit private room scenes".into());
+            }
+            return Ok(());
+        }
+        // 公共房间 → 世界管家（已在上面通过）
+        Err("only world stewards can edit public room scenes".into())
+    }
+
+    pub(crate) fn admin_update_scene(
+        &mut self,
+        request: AdminUpdateSceneRequest,
+    ) -> Result<UpdateShellSceneResponse, String> {
+        let conversation_id = ConversationId(request.room_id.trim().to_string());
+        if conversation_id.0.is_empty() {
+            return Err("scene update requires a room id".into());
+        }
+
+        // 权限校验
+        if let Some(ref actor) = request.actor_id {
+            self.check_scene_edit_permission(actor, &conversation_id)?;
+        }
+
+        let mut conversation = self
+            .timeline_store
+            .active_conversations()
+            .into_iter()
+            .find(|item| item.conversation_id == conversation_id)
+            .ok_or_else(|| "scene update target room not found".to_string())?;
+
+        if conversation.scene.is_none() {
+            conversation.scene = Some(Self::default_public_room_scene(
+                "admin",
+                "custom",
+                &Self::room_title(&conversation_id),
+            ));
+        }
+
+        let scene = conversation
+            .scene
+            .as_mut()
+            .ok_or_else(|| "scene update target has no scene metadata".to_string())?;
+        if !scene.owner_editable {
+            return Err("scene is not owner editable".into());
+        }
+
+        if let Some(image_layer) = request.image_layer {
+            Self::validate_scene_image_layer(&image_layer)?;
+            scene.image_layer = Some(image_layer);
+        }
+
+        if let Some(hotspot_layer) = request.hotspot_layer {
+            Self::validate_scene_hotspot_layer(&hotspot_layer)?;
+            scene.hotspot_layer = Some(hotspot_layer);
+        }
+
+        let updated_at_ms = Self::now_ms();
+        conversation.touch(updated_at_ms);
+        let image_layer = Self::shell_image_layer(&conversation);
+        let hotspot_layer = Self::shell_hotspot_layer(&conversation);
+        self.timeline_store.upsert_conversation(conversation)?;
+
+        Ok(UpdateShellSceneResponse {
+            ok: true,
+            conversation_id: conversation_id.0,
+            image_layer,
+            hotspot_layer,
+            updated_at_ms,
+        })
+    }
+
     fn validate_scene_image_layer(layer: &SceneImageLayer) -> Result<(), String> {
         if layer.layer_id.trim().is_empty() {
             return Err("image layer id is required".into());
@@ -300,6 +408,12 @@ impl GatewayRuntime {
         }
         if !(5_000..=30_000).contains(&layer.aspect_ratio_permyriad) {
             return Err("image layer aspect ratio is out of range".into());
+        }
+        // 自定义背景：白天/夜晚必须同时提供
+        let has_day = layer.day_image_url.as_ref().is_some_and(|s| !s.trim().is_empty());
+        let has_night = layer.night_image_url.as_ref().is_some_and(|s| !s.trim().is_empty());
+        if has_day != has_night {
+            return Err("custom images must include both day and night urls (or neither)".into());
         }
         Ok(())
     }

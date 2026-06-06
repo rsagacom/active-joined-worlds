@@ -1,6 +1,477 @@
 # lobster-chat Active Work Queue
 
-Last updated: 2026-05-27
+Last updated: 2026-06-06
+
+## 2026-06-06 Codex 技术债推进摘要
+
+### Web Shell room inline preview container renderer 复用收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-pages-static.test.mjs` 新增 `room inline preview containers share one DOM renderer`，切 `createRoomInlineActions()` 内部 meta/controls/fieldRows/actions renderer，确认缺少 `createInlineCardContainerNode()`、meta 未复用 helper、row 未复用 helper 时失败 |
+| container renderer 收口 | `createRoomInlineActions()` 新增局部 `createInlineCardContainerNode(containerSpec)`，统一消费 `className`、可选 `hidden` 与可选 `ariaHidden`；meta container、controls group、field rows list、field row、actions container 不再各自手写基础容器创建 |
+| 防回归测试 | 新增 1 条静态断言，要求 meta 使用 `createInlineCardContainerNode(inlineMetaDomModel)`，controls 使用 `createInlineCardContainerNode(group)`，fieldRows list 使用 `createInlineCardContainerNode(inlineFieldRowsDomModel)`，field row 使用 `createInlineCardContainerNode(rowSpec)`，actions 使用 `createInlineCardContainerNode(inlineActionDomModel)` |
+| 验证 | 红灯：缺少 `createInlineCardContainerNode()` 时报错，随后 meta 未复用 helper、row 未复用 helper 均时报错；绿灯：`shell-pages-static.test.mjs` 53 passed；相关 labels/preview/static/fake-dom 测试 304 passed；`node --check apps/lobster-web-shell/app.js`、`shell-quick-action-preview.js`、`shell-pages-static.test.mjs` 通过；`npm test` 736 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8654 → 8660 → 8659 → 8658；本轮净增 4 行，用一个支持 hidden/ariaHidden 的容器入口换掉 meta/controls/fieldRows/actions 五处基础容器创建重复 |
+
+### Web Shell room inline preview button renderer 复用收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-pages-static.test.mjs` 新增 `room inline preview buttons share one DOM renderer`，切 `createRoomInlineActions()` 内部 controls/actions renderer，确认缺少 `createInlineCardButtonNode()` 时失败 |
+| button renderer 收口 | `createRoomInlineActions()` 新增局部 `createInlineCardButtonNode(buttonSpec)`，统一消费 `type/buttonType/dataset/text/title/ariaLabel/clickable`；controls 和 actions 只保留各自点击语义，不再重复初始化 button DOM 属性 |
+| 防回归测试 | 新增 1 条静态断言，要求 controls/actions 都通过 `createInlineCardButtonNode(buttonSpec)` 创建按钮；同步调整 clickable 测试，让它约束共享 helper 消费 `applyInlineClickableDomSpec(button, buttonSpec.clickable)` |
+| 验证 | 红灯：缺少 `createInlineCardButtonNode()` 时报错；绿灯：`shell-pages-static.test.mjs` 52 passed；相关 labels/preview/static/fake-dom 测试 303 passed；`node --check apps/lobster-web-shell/app.js`、`shell-quick-action-preview.js`、`shell-pages-static.test.mjs` 通过；`npm test` 735 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8657 → 8654；本轮净减 3 行，把 inline preview controls/actions button 属性初始化收敛为单一路径 |
+
+### Web Shell room inline preview simple child renderer 复用收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-pages-static.test.mjs` 新增 `room inline preview simple children share one DOM renderer`，切 `createRoomInlineActions()` 内部 header / fieldRows renderer，确认缺少 `createInlineCardSimpleChildNode()` 时失败 |
+| simple child renderer 收口 | `createRoomInlineActions()` 新增局部 `createInlineCardSimpleChildNode(childSpec)`，统一消费 `childSpec.type || "div"`、`className` 与 `text || ""`；inline preview header 与 field row 子节点不再各自手写同一套 DOM 创建逻辑 |
+| 防回归测试 | 新增 1 条静态断言，要求 header 使用 `inlineCard.appendChild(createInlineCardSimpleChildNode(childSpec))`，field rows 使用 `row.appendChild(createInlineCardSimpleChildNode(childSpec))`；同步调整上一条 header generic child 测试，让它约束共享 helper 路径而非局部内联实现 |
+| 验证 | 红灯：缺少 `createInlineCardSimpleChildNode()` 时报错；绿灯：`shell-pages-static.test.mjs` 51 passed；相关 labels/preview/static/fake-dom 测试 302 passed；`node --check apps/lobster-web-shell/app.js`、`shell-quick-action-preview.js`、`shell-pages-static.test.mjs` 通过；`npm test` 734 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8657 → 8657；本轮行数持平，消掉 header / fieldRows 两处简单 child DOM 创建重复，为后续继续统一 inline card 子渲染器留下单一入口 |
+
+### Web Shell room inline preview header generic child render spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-pages-static.test.mjs` 新增 `room inline preview header consumes generic child render specs`，切 `createRoomInlineActions()` 内部 header renderer，确认仍用 `createLine(childSpec.className, childSpec.text)`、未消费 `childSpec.type` 时失败 |
+| header 消费收口 | `createRoomInlineActions()` 的 inline preview header renderer 现在按 `childSpec.type || "div"` 创建子节点，并使用 `childSpec.text || ""` 写入文案；render model 输出的通用 child DOM spec 不再只停留在 helper 层 |
+| 防回归测试 | 新增 1 条静态断言，锁住 header renderer 对 `type/text` 的通用消费路径，防止后续重新退回 `createLine(className, text)` 的局部协议 |
+| 验证 | 红灯：header renderer 未消费 `childSpec.type` 时报错；绿灯：`shell-pages-static.test.mjs` 50 passed；相关 labels/preview/static/fake-dom 测试 301 passed；`node --check apps/lobster-web-shell/app.js`、`shell-quick-action-preview.js`、`shell-pages-static.test.mjs` 通过；`npm test` 733 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8654 → 8657；本轮微增 3 行，把 header 子节点创建从局部 `createLine()` 迁到通用 child render spec 消费，为后续提取统一 child renderer 铺路 |
+
+### Web Shell room inline preview controls/actions clickable render spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-pages-static.test.mjs` 新增 `room inline preview controls and actions consume clickable render specs`，切 `createRoomInlineActions()` 内部 controls/actions renderer，确认缺少 `applyInlineClickableDomSpec(button, buttonSpec.clickable)` 时失败 |
+| clickable 消费收口 | `createRoomInlineActions()` 的 inline preview controls 与 CTA actions 现在都消费 render model 的 `buttonSpec.clickable`，统一套用 `is-clickable`、`tabIndex`、`role/title/aria-label` 等可访问性规格 |
+| 防回归测试 | 新增 1 条静态断言，防止后续 render model 已生成 clickable 但主入口漏消费；既有 preview helper 测试继续覆盖 clickable spec 内容 |
+| 验证 | 红灯：controls renderer 缺少 clickable 消费时报错；绿灯：`shell-pages-static.test.mjs` 49 passed；相关 labels/preview/static/fake-dom 测试 300 passed；`node --check apps/lobster-web-shell/app.js`、`shell-quick-action-preview.js`、`shell-pages-static.test.mjs` 通过；`npm test` 732 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8652 → 8654；本轮微增 2 行，换来 controls/actions button 的可访问性规格与 hint/meta 路径一致 |
+
+### Web Shell room inline preview field row children render DOM spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先增强 `shell-quick-action-preview.test.mjs` 的 `buildQuickActionInlinePreviewFieldRowsRenderDomModel` 测试，要求字段行 child 输出通用 `type/text` render spec，确认缺失 `type/text` 时失败 |
+| field row children 抽取 | `buildQuickActionInlinePreviewFieldRowsRenderDomModel()` 现在在保留 `labelNode/valueNode` 兼容字段的同时，将 row children 规范化为 `{ type, className, label, text }` |
+| `app.js` 收口 | `createRoomInlineActions()` 的 inline preview field rows 分支改为消费 `childSpec.type/text` 创建子节点，不再依赖字段行专属 `label` 读取路径 |
+| 防回归测试 | 增强 1 条 field rows render DOM spec 测试，覆盖 label/value 子节点的 `type/text` 和空 value 的 `待补充` fallback |
+| 验证 | 红灯：字段行 child 缺少 `type/text` 报错；绿灯：`shell-quick-action-preview.test.mjs` 181 passed；相关 labels/preview/static/fake-dom 测试 299 passed；`node --check apps/lobster-web-shell/app.js`、`shell-quick-action-preview.js`、`shell-quick-action-preview.test.mjs` 通过；`npm test` 731 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8649 → 8652；本轮微增 3 行，但字段行子节点渲染已改为通用 render spec 消费，为后续统一 inline card child renderer 铺路 |
+
+### Web Shell room inline preview card children render order 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先增强 `shell-quick-action-preview.test.mjs` 的 `buildQuickActionInlinePreviewCardRenderDomModel` 测试，要求 card render model 输出有序 `children`，确认 `children` 缺失时报错 |
+| card children 抽取 | `buildQuickActionInlinePreviewCardRenderDomModel()` 现在在保留 `header/meta/controls/fieldRows/actions` 兼容字段的同时，生成 `children`，明确 `header:before-meta → meta → header:after-meta → controls → fieldRows → actions` 顺序 |
+| `app.js` 收口 | `createRoomInlineActions()` 改为遍历 `inlineCardChildren` 并按 kind 分发渲染；事件绑定仍保留在主文件，但 inline card 子模块插入顺序由 render model 控制 |
+| CSS split 测试债 | `shell-pages-static.test.mjs` 新增 `readAdminShellCss()`，让 admin 静态断言读取 `styles.css + styles.admin.css`，修复 CSS 拆分后测试仍只看主 CSS 导致的 admin selector 假失败 |
+| 防回归测试 | 增强 1 条 card render DOM spec 测试，覆盖有序 children 与 header placement 文案；`shell-pages-static.test.mjs` 继续覆盖 admin nav collapse、workspace panel、action-status 高对比样式 |
+| 验证 | 红灯：`model.children` 缺失时报错；绿灯：`shell-quick-action-preview.test.mjs` 181 passed；`shell-pages-static.test.mjs` 48 passed；相关 labels/preview/static/fake-dom 测试 299 passed；`node --check apps/lobster-web-shell/app.js`、`shell-quick-action-preview.js`、`shell-pages-static.test.mjs` 通过；`npm test` 731 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8639 → 8649；本轮因主文件新增 kind 分发函数微增 10 行，但 inline card 子模块顺序规则已从主入口下沉到 render model |
+
+### Web Shell room inline preview header children render DOM spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先增强 `shell-quick-action-preview.test.mjs` 的 `buildQuickActionInlinePreviewHeaderDomModel` 测试，要求 header 生成带 placement 的 `children` line 节点规格，确认 `children/placement` 缺失时报错 |
+| header children 抽取 | `buildQuickActionInlinePreviewHeaderDomModel()` 现在在保留原 `lines` 兼容字段的同时，生成 `children`，明确 stage/summary line 的 type、key、placement、className 与 text |
+| `app.js` 收口 | `createRoomInlineActions()` 的 inline preview header 分支改为按 `before-meta` / `after-meta` placement 消费 children，保持原 stage → meta → summary DOM 顺序，不再直接按 `line.key` 分两段过滤 |
+| 防回归测试 | 增强 1 条 header DOM spec 测试，覆盖 stage/summary children 和 placement，避免后续重构改变 inline card 顺序 |
+| 验证 | 红灯：`children` 缺失、随后 `placement` 缺失均时报错；绿灯：`shell-quick-action-preview.test.mjs` 181 passed；相关 labels/preview/static/fake-dom 测试 299 passed；`node --check apps/lobster-web-shell/app.js` 与 `shell-quick-action-preview.js` 通过；`npm test` 731 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8643 → 8639；本轮减少 4 行，并把 inline preview header 子节点与插入位置规则下沉到 render model |
+
+### Web Shell room inline preview meta children render DOM spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先增强 `shell-quick-action-preview.test.mjs` 的 `buildQuickActionInlinePreviewMetaRenderDomModel` 测试，要求 meta section 生成 label/container/pill 的 `children` 节点规格，确认 `children` 缺失时报错 |
+| meta children 抽取 | `buildQuickActionInlinePreviewMetaRenderDomModel()` 现在在保留原 `labelNode/container/pills` 兼容字段的同时，生成 `children`，明确 label、container、currentStrip、pill 的 type、className、dataset、text、actionTarget 与 clickable |
+| `app.js` 收口 | `createRoomInlineActions()` 的 inline preview meta 分支改为消费 `section.children` 递归创建节点，不再本地手工拼 label/container/currentStrip/pill DOM 结构 |
+| 防回归测试 | 增强 1 条 meta render DOM spec 测试，覆盖 history section 的完整子节点结构、pill actionTarget 与 clickable 可访问性规格 |
+| 验证 | 红灯：`children` 缺失时报错；绿灯：`shell-quick-action-preview.test.mjs` 181 passed；相关 labels/preview/static/fake-dom 测试 299 passed；`node --check apps/lobster-web-shell/app.js` 与 `shell-quick-action-preview.js` 通过；`npm test` 731 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8661 → 8643；本轮减少 18 行，并把 inline preview meta 分区子节点结构规则下沉到 render model |
+
+### Web Shell room inline preview action children render DOM spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先增强 `shell-quick-action-preview.test.mjs` 的 `buildQuickActionInlinePreviewActionRenderDomModel` 测试，要求 CTA actions 生成明确的 `children` button 节点规格，确认 `children` 缺失时报错 |
+| action children 抽取 | `buildQuickActionInlinePreviewActionRenderDomModel()` 现在在保留原 `buttons` 兼容字段的同时，生成 `children`，明确 button 的 type、buttonType、dataset、text、title、ariaLabel、actionTarget 与 clickable |
+| `app.js` 收口 | `createRoomInlineActions()` 的 inline preview CTA 分支改为消费 `inlineActionDomModel.children` 创建按钮，不再把 `buttons` 同时当业务按钮模型和 DOM 节点规格解释 |
+| 防回归测试 | 增强 1 条 action render DOM spec 测试，覆盖 snapshot CTA child 的完整节点结构、actionTarget 与 clickable 可访问性规格 |
+| 验证 | 红灯：`children` 缺失时报错；绿灯：`shell-quick-action-preview.test.mjs` 181 passed；相关 labels/preview/static/fake-dom 测试 299 passed；`node --check apps/lobster-web-shell/app.js` 与 `shell-quick-action-preview.js` 通过；`npm test` 731 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8661 → 8661；本轮主入口行数持平，但 CTA button DOM 节点解释规则已从主入口下沉到 render model |
+
+### Web Shell room inline preview controls children render DOM spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先增强 `shell-quick-action-preview.test.mjs` 的 `buildQuickActionInlinePreviewControlsRenderDomModel` 测试，要求 controls group 生成明确的 `children` button 节点规格，确认字段缺失时报错 |
+| controls children 抽取 | `buildQuickActionInlinePreviewControlsRenderDomModel()` 现在在保留原 `buttons` 兼容字段的同时，生成 `children`，明确 button 的 type、buttonType、dataset、text、title、actionTarget 与 clickable |
+| `app.js` 收口 | `createRoomInlineActions()` 的 inline preview controls 分支改为消费 `group.children` 创建按钮，不再把 `group.buttons` 同时当业务按钮模型和 DOM 节点规格解释 |
+| 防回归测试 | 增强 1 条 controls render DOM spec 测试，覆盖 history button child 的完整节点结构、actionTarget 与 clickable 可访问性规格 |
+| 验证 | 红灯：`children` 缺失断言失败；绿灯：`shell-quick-action-preview.test.mjs` 181 passed；相关 labels/preview/static/fake-dom 测试 299 passed；`node --check apps/lobster-web-shell/app.js` 与 `shell-quick-action-preview.js` 通过；`npm test` 721 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8661 → 8661；本轮主入口行数持平，但 controls button DOM 节点解释规则已从主入口下沉到 render model |
+
+### Web Shell room inline progress render DOM spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-quick-action-labels.test.mjs` 新增 `buildRoomInlineProgressRenderDomSpec` 导入与组合规格测试，确认缺少导出时报错 |
+| progress render 抽取 | 新增 `buildRoomInlineProgressRenderDomSpec()`，在原 progress DOM spec 基础上组合容器、count 子节点和 label 子节点 |
+| `app.js` 收口 | `createRoomInlineActions()` 不再分别手工创建 progress count / label 两个 span，改为消费 `children` render spec |
+| 防回归测试 | 新增 2 条 progress render DOM spec 测试，覆盖委托中间阶段的完整子节点组合与空输入返回 null |
+| 验证 | 红灯：缺少导出时报错；绿灯：`shell-quick-action-labels.test.mjs` 67 passed；相关 labels/preview/static/fake-dom 测试 299 passed；`node --check apps/lobster-web-shell/app.js` 与 `shell-quick-action-labels.js` 通过；`npm test` 721 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8665 → 8661；本轮减少 4 行，并把 inline progress 子节点组合规则下沉到纯 helper |
+
+### Web Shell room inline primary/secondary action DOM spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-quick-action-labels.test.mjs` 新增 `buildRoomInlineActionDomSpec` 导入与 primary/secondary 节点规格测试，确认缺少导出时报错 |
+| action 节点抽取 | 新增 `buildRoomInlineActionDomSpec()`，统一房间内联 primary/secondary 动作节点的 tag、class、dataset、tabIndex、role 与文案规格 |
+| `app.js` 收口 | `createRoomInlineActions()` 的底部 `appendAction()` 不再本地写死 action span 结构，改为消费纯 DOM spec；点击事件与业务行为仍保留在主文件 |
+| 防回归测试 | 新增 2 条 action DOM spec 测试，覆盖 primary、secondary、空 label/role 返回 null，以及未知 action 不写 `actionIntensity` |
+| 验证 | 红灯：缺少导出时报错；绿灯：`shell-quick-action-labels.test.mjs` 65 passed；相关 labels/preview/static/fake-dom 测试 297 passed；`node --check apps/lobster-web-shell/app.js` 与 `shell-quick-action-labels.js` 通过；`npm test` 719 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8658 → 8665；本轮因通用 spec 消费和属性映射增加 7 行，但 primary/secondary action 节点结构规则已从主入口下沉到纯 helper |
+
+### Web Shell room inline preview panel render DOM model 组合收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-quick-action-preview.test.mjs` 新增 `buildQuickActionInlinePreviewPanelRenderDomModel` 导入与组合规格测试，确认缺少导出时报错 |
+| 组合 render 抽取 | 新增 `buildQuickActionInlinePreviewPanelRenderDomModel()`，统一组合 inline preview 的 hint render DOM model 与 card render DOM model |
+| `app.js` 收口 | `createRoomInlineActions()` 不再分别调用 hint render 与 card render helper，只消费一个 panel render model |
+| 防回归测试 | 新增 2 条 panel render DOM spec 测试，覆盖 hint dataset、card/header/meta/controls/fieldRows/actions 组合与空输入 |
+| 验证 | 红灯：缺少导出时报错；绿灯：`shell-quick-action-preview.test.mjs` 181 passed；相关 labels/preview/static/fake-dom 测试 295 passed；`node --check apps/lobster-web-shell/shell-quick-action-preview.js` 与 `app.js` 通过；`npm test` 717 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8663 → 8658；本轮减少 5 行，并把 inline preview panel 的 render 组合关系下沉到纯 helper |
+
+### Web Shell room inline preview card render DOM model 组合收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-quick-action-preview.test.mjs` 新增 `buildQuickActionInlinePreviewCardRenderDomModel` 导入与组合规格测试，确认缺少导出时报错 |
+| 组合 render 抽取 | 新增 `buildQuickActionInlinePreviewCardRenderDomModel()`，统一组合 inline card 的 card/header/meta/controls/fieldRows/actions render DOM model |
+| `app.js` 收口 | `createRoomInlineActions()` 不再分别调用 header/meta/controls/action/fieldRows 五个 DOM helper，只消费一个组合 card render model |
+| 防回归测试 | 新增 2 条组合 render DOM spec 测试，覆盖 card、header stage/summary、meta 分区、controls target、fieldRows children、actions target 与空输入 |
+| 验证 | 红灯：缺少导出时报错；绿灯：`shell-quick-action-preview.test.mjs` 179 passed；相关 labels/preview/static/fake-dom 测试 293 passed；`node --check apps/lobster-web-shell/shell-quick-action-preview.js` 与 `app.js` 通过；`npm test` 715 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8676 → 8663；本轮减少 13 行，并把 inline card DOM model 组合关系下沉到纯 helper |
+
+### Web Shell room inline preview controls render DOM spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-quick-action-preview.test.mjs` 新增 `buildQuickActionInlinePreviewControlsRenderDomModel` 导入与规格测试，确认缺少导出时报错 |
+| controls render 抽取 | 新增 `buildQuickActionInlinePreviewControlsRenderDomModel()`，在 controls DOM model 基础上预解析 history / field-view button 的 `actionTarget` 与 clickable 可访问性规格 |
+| 空输入修复 | `buildQuickActionInlinePreviewControlsDomModel(null)` 现在安全返回 `null`，避免无效输入直接抛错 |
+| `app.js` 收口 | `createRoomInlineActions()` 的 inline preview controls 分支不再本地调用 `quickActionInlinePreviewControlActionTarget()`，改为消费 `buttonSpec.actionTarget` |
+| 防回归测试 | 新增 2 条 controls render DOM spec 测试，覆盖 history target、field-view target、aria/title 规格、无效 target 与空输入 |
+| 验证 | 红灯：缺少导出时报错；绿灯：`shell-quick-action-preview.test.mjs` 177 passed；相关 labels/preview/static/fake-dom 测试 291 passed；`node --check apps/lobster-web-shell/shell-quick-action-preview.js` 与 `app.js` 通过；`npm test` 713 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8676 → 8676；本轮主入口行数持平，controls target 解释规则已从主文件下沉到纯 helper |
+
+### Web Shell room inline preview action / field rows render DOM spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-quick-action-preview.test.mjs` 新增 `buildQuickActionInlinePreviewActionRenderDomModel` / `buildQuickActionInlinePreviewFieldRowsRenderDomModel` 导入与规格测试，确认缺少导出时报错 |
+| action render 抽取 | 新增 `buildQuickActionInlinePreviewActionRenderDomModel()`，在 CTA DOM model 基础上预解析 snapshot/workflow 的 `actionTarget` 与 clickable 可访问性规格 |
+| field rows render 抽取 | 新增 `buildQuickActionInlinePreviewFieldRowsRenderDomModel()`，把字段行 label/value 子节点组合为稳定 `children` render 规格 |
+| `app.js` 收口 | `createRoomInlineActions()` 的 inline preview 底部 CTA 不再本地调用 `quickActionInlinePreviewActionTarget()`；字段行不再直接读取 `labelNode/valueNode`，改为消费 render model |
+| 防回归测试 | 新增 4 条 render DOM spec 测试，覆盖 CTA target、clickable aria/title 规格、无效 action 过滤、字段行子节点组合与空输入 |
+| 验证 | 红灯：缺少导出时报错；绿灯：`shell-quick-action-preview.test.mjs` 175 passed；相关 labels/preview/static/fake-dom 测试 289 passed；`node --check apps/lobster-web-shell/shell-quick-action-preview.js` 与 `app.js` 通过；`npm test` 711 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8675 → 8676；本轮因 helper 名称更长微增 1 行，但 CTA target 与字段行 render 组合规则已从主文件下沉到纯 helper |
+
+## 2026-06-05 Codex 技术债推进摘要
+
+### Web Shell room inline preview meta render DOM spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-quick-action-preview.test.mjs` 新增 `buildQuickActionInlinePreviewMetaRenderDomModel` 导入与组合规格测试，确认缺少导出时报错 |
+| meta render 抽取 | 新增 `buildQuickActionInlinePreviewMetaRenderDomModel()`，在 meta DOM model 基础上预解析 history / field-view pill 的 `actionTarget` 与 clickable 可访问性规格 |
+| `app.js` 收口 | `createRoomInlineActions()` 的 meta 分支不再本地调用 `quickActionInlinePreviewMetaActionTarget()` 或自行生成 clickable spec，只按 `pillSpec.actionTarget/clickable` 绑定 click/keydown 行为 |
+| 防回归测试 | 新增 2 条 meta render DOM spec 测试，覆盖 history target、field-view target、aria/title 规格与无效 action 过滤 |
+| 验证 | 红灯：缺少导出时报错；绿灯：`shell-quick-action-preview.test.mjs` 171 passed；相关 labels/preview/room-rail/static/fake-dom 测试 425 passed；`node --check apps/lobster-web-shell/app.js` 通过；`npm test` 707 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8675 → 8675；本轮主文件行数持平，但 meta action target 与 clickable 规则已从主文件下沉到纯 helper |
+
+### Web Shell room inline preview hint render DOM spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-quick-action-preview.test.mjs` 新增 `buildQuickActionInlinePreviewHintRenderDomModel` 导入与组合规格测试，确认缺少导出时报错 |
+| hint render 抽取 | 新增 `buildQuickActionInlinePreviewHintRenderDomModel()`，在 hint DOM model 基础上预解析 `actionTarget` 与 clickable 可访问性规格 |
+| `app.js` 收口 | `createRoomInlineActions()` 的 hint 分支不再本地调用 `quickActionInlinePreviewHintActionTarget()` 解释 action，只消费 render model 上的 `part.actionTarget/part.clickable`；事件绑定仍留在主文件 |
+| 防回归测试 | 新增 2 条 hint render DOM spec 测试，覆盖 workflow/snapshot/history target、clickable aria/title 规格与无效 action 过滤 |
+| 验证 | 红灯：缺少导出时报错；绿灯：`shell-quick-action-preview.test.mjs` 169 passed；相关 labels/preview/room-rail/static/fake-dom 测试 423 passed；`node --check apps/lobster-web-shell/app.js` 通过；`npm test` 705 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8677 → 8675；本轮减少 2 行，同时把 hint action target 解释从主文件下沉到纯 helper |
+
+### Web Shell room inline actions rail DOM spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-quick-action-labels.test.mjs` 新增 `buildRoomInlineActionsRailDomSpec` 导入与规格测试，确认缺少导出时报错 |
+| rail 容器抽取 | 新增 `buildRoomInlineActionsRailDomSpec()`，统一 `room-inline-actions` 容器 class 与 `quickAction/actionIntensity` dataset 规格 |
+| `app.js` 收口 | `createRoomInlineActions()` 不再本地写死 rail 容器 class 与 action dataset，改为消费纯 DOM spec；后续 hint/meta/action/fieldRows 渲染仍待继续拆 |
+| 防回归测试 | 新增 2 条 rail DOM spec 测试，覆盖已知 action、未知自定义 action、空 action 返回 null |
+| 验证 | 红灯：缺少导出时报错；绿灯：`shell-quick-action-labels.test.mjs` 63 passed；相关 labels/preview/room-rail/static/fake-dom 测试 421 passed；`node --check apps/lobster-web-shell/app.js` 通过；`npm test` 703 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8674 → 8677；本轮因通用 spec 消费微增 3 行，但 rail 容器 UI 规则已从主文件下沉到纯 helper |
+
+### Web Shell room inline progress DOM spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-quick-action-labels.test.mjs` 新增 `buildRoomInlineProgressDomSpec` 导入与规格测试，确认缺少导出时报错 |
+| inline progress 抽取 | 新增 `buildRoomInlineProgressDomSpec()`，统一房间 inline action 进度条的 class、dataset、title、tabIndex、role、计数和状态标签规格 |
+| `app.js` 收口 | `createRoomInlineActions()` 不再本地计算 progress 的 stageIndex、count 文案、label class 与 actionIntensity dataset；点击预览行为仍保留在 `app.js` |
+| 防回归测试 | 新增 2 条 inline progress DOM spec 测试，覆盖委托中间阶段、未知状态回退第一阶段、未知 action 返回 null |
+| 验证 | 红灯：缺少导出时报错；绿灯：`shell-quick-action-labels.test.mjs` 61 passed；相关 labels/preview/room-rail/static/fake-dom 测试 419 passed；`node --check apps/lobster-web-shell/app.js` 通过；`npm test` 701 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8673 → 8674；本轮因通用 spec 消费与 dataset 写入微增 1 行，但进度条 UI 规则已从主文件下沉到纯 helper |
+
+### Web Shell room quick action pill DOM spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-quick-action-labels.test.mjs` / `shell-quick-action-preview.test.mjs` 新增 `buildRoomQuickActionPillDomSpec` 与 `buildRoomQuickPreviewPillDomSpec` 导入和规格测试，确认缺少导出时报错 |
+| quick action pill 抽取 | 新增 `buildRoomQuickActionPillDomSpec()`，统一房间动作 pill 的 text/tone/class/dataset/title 规格 |
+| preview pill 抽取 | 新增 `buildRoomQuickPreviewPillDomSpec()`，统一房间预览 pill 的轮次文案、字段视图文案、tone、dataset 与 title 规格 |
+| `app.js` 收口 | `createRoomQuickActionPill()` / `createRoomQuickPreviewPill()` 改为消费纯 DOM spec；点击事件、房间聚焦与 composer seed 行为保留在 `app.js` |
+| 防回归测试 | 新增 4 条 pill DOM spec 测试，覆盖动作 pill、空 action、最新/历史预览轮次、缺失 historyLabel |
+| 验证 | 红灯：两个 helper 缺少导出时报错；绿灯：相关 labels/preview/room-rail/static/fake-dom 测试 417 passed；`node --check apps/lobster-web-shell/app.js` 通过；`npm test` 699 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8675 → 8673 |
+
+### Web Shell quick action preview card render spec 收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-quick-action-preview.test.mjs` 新增 `buildQuickActionPreviewCardRenderDomSpec` 导入与组合规格测试，确认缺少导出时报错 |
+| preview card 抽取 | 新增 `buildQuickActionPreviewCardRenderDomSpec()`，统一组合普通 preview card 的 card/header/pills/copy/controlPanels/sheet render spec |
+| `app.js` 收口 | `createQuickActionPreviewCard()` 不再直接串联 card/header/pills/copy/history/field-view/sheet 低层 helper，只消费组合 render spec；事件绑定与真实 DOM 创建仍留在 `app.js` |
+| 防回归测试 | 新增 2 条 render spec 测试，覆盖 dataset 折叠 flag、pill wrapper、三类 pill 分区、copy、history/field-view 控制面板与 notes sheet |
+| 验证 | 红灯：缺少导出时报错；绿灯：`node --test apps/lobster-web-shell/test/shell-quick-action-preview.test.mjs` 165 passed；相关静态/fake-dom 测试 216 passed；`node --check apps/lobster-web-shell/app.js` 通过；`npm test` 695 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8731 → 8675 |
+
+### Web Shell quick action preview 控制区收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-quick-action-preview.test.mjs` 新增 `buildQuickActionPreviewControlPanelsRenderDomSpec` 测试，确认缺少导出时失败 |
+| preview 控制区抽取 | 新增 `buildQuickActionPreviewControlPanelsRenderDomSpec()`，统一组合普通 preview card 的 history / field-view 控制面板 render spec |
+| `app.js` 收口 | `createQuickActionPreviewCard()` 删除 history / field-view 两段重复 wrapper/button DOM 翻译逻辑，改为消费统一 panel spec；事件绑定仍留在 `app.js` |
+| 防回归测试 | `shell-quick-action-preview.test.mjs` 新增复合控制面板测试，覆盖 wrapper、labelLine、buttonsClassName 与 actionTarget |
+| 验证 | 红灯：缺少导出时报错；绿灯：`node --test apps/lobster-web-shell/test/shell-quick-action-preview.test.mjs` 163 passed；`node --check apps/lobster-web-shell/app.js` 通过；相关静态/fake-dom 测试 214 passed；`npm test` 最终 693 unit passed / 0 failed，layout passed，realness passed |
+| 备注 | 第一次全量 `npm test` 出现一次 `hub shell keeps local-memory gateway composer online without upstream provider` 并跑抖动；该测试单跑 8/8 通过，随后全量复跑通过 |
+| `app.js` 行数 | 8749 → 8731 |
+
+### Web Shell quick action / admin-ds 安全债收口
+
+| 项目 | 结果 |
+|------|------|
+| TDD 红灯 | 先在 `shell-quick-action-labels.test.mjs` 新增 `buildWorkflowProgressDomSpec` 规格测试，确认缺少导出时失败 |
+| quick action 抽取 | 新增 `buildWorkflowProgressDomSpec()`，把 workflow progress 的 class/dataset/title/step 规格从 `app.js` 收到纯 helper；`createWorkflowProgress()` 只保留 DOM 创建与事件绑定 |
+| admin-ds 安全修复 | 修掉 `loadDevices()` 的 `tbody.innerHTML = ...` 加载/空/失败状态，改为 `clear()` + `el()` + `textContent` |
+| 防回归测试 | `shell-quick-action-labels.test.mjs` 追加 3 条 workflow progress DOM spec 边界测试；既有 `admin-ds` 静态测试继续禁止 `tbody.innerHTML` |
+| 验证 | `node --test apps/lobster-web-shell/test/shell-quick-action-labels.test.mjs`：57 passed / 0 failed；`node --test apps/lobster-web-shell/test/admin-ds-static.test.mjs apps/lobster-web-shell/test/admin-ds-runtime.test.mjs`：35 passed / 0 failed；`npm test`：692 unit passed / 0 failed，layout passed，realness passed |
+| `app.js` 行数 | 8758 → 8749 |
+
+### 本轮改动文件
+
+| 文件 | 说明 |
+|------|------|
+| `apps/lobster-web-shell/shell-quick-action-labels.js` | 新增 workflow progress DOM spec 纯 helper |
+| `apps/lobster-web-shell/test/shell-quick-action-labels.test.mjs` | 新增 helper 单测，覆盖默认 action、自定义 stages、无 stages |
+| `apps/lobster-web-shell/app.js` | `createWorkflowProgress()` 改为消费纯 spec，降低本地规则计算 |
+| `apps/lobster-web-shell/admin-ds.js` | 设备管理表格状态改用安全 DOM API，恢复静态安全测试 |
+
+### 下一轮建议
+
+1. 继续从 `createQuickActionPreviewCard()` 拆普通 preview card 的控制区 DOM renderer，优先抽无状态 DOM spec 到 `shell-quick-action-preview.js`。
+2. 若 DS/CC 正在改 H5 交互，Codex 可转向 Rust gateway/TUI 合同测试，避免并发碰 `app.js`。
+
+## 2026-06-04 Codex 技术债推进摘要
+
+### Gateway 持久化基线修复
+
+| 项目 | 结果 |
+|------|------|
+| 根因 | `SceneImageLayer.day_image_url/night_image_url` 在 durable postcard schema 上使用 `skip_serializing_if`，当默认 scene 的两个字段为 `None` 时会省略 Option discriminant，导致重启读取 `conversations.postcard` 时布局错位并被 quarantine |
+| 修复 | `chat-core` 保留 `#[serde(default)]`，移除两个 Option 字段的 `skip_serializing_if`，确保存储快照始终写出稳定二进制布局 |
+| 防回归测试 | `chat-storage` 的 scene metadata roundtrip 覆盖 `image_layer: Some(...)` 且 day/night 均为 `None`；Gateway 新增 `seeded_conversations_persist_across_restart`，验证种子会话重启后不产生 `conversations.postcard.corrupt-*` |
+| 验证 | `cargo test -p chat-storage`：13 passed / 0 failed；`cargo test -p lobster-waku-gateway`：232 passed / 0 failed；`cargo test -p lobster-tui`：212 passed / 0 failed；`cargo test -p lobster-cli`：28 passed / 0 failed |
+| 已恢复的红灯 | `runtime_persists_shell_messages_across_restart`、`edit_and_recall_state_persists_across_restart`、`email_otp_verification_seeds_canonical_guide_direct_conversation` |
+
+## 2026-06-02 DS v4 Pro 执行摘要
+
+### 本轮完成
+
+| 阶段 | 目标 | 状态 |
+| --- | --- | --- |
+| P0 | H5 IM 主路径真实验收 (双端消息闭环) | 完成 |
+| P1 | Gateway 合同加固 + 审核持久化 + 边界测试 | 完成 |
+| P3 | admin-ds 审核 (create-permission-group 需后端设计，已标注) | 完成 |
+| P4 | 多页面左栏一致性验证 (已统一 220px) | 完成 |
+| P5 | TUI/CLI parity 测试通过 | 完成 |
+
+### 核心交付
+
+| 交付 | 详情 |
+|------|------|
+| 审核持久化 | `message_moderation` HashMap → `moderation-state.json` 文件持久化，atomic write |
+| 新增 Gateway 测试 | 审核持久化、readback、不存在房间拒绝、并发 presence HTTP |
+| H5 双端验收 | qa-a ↔ qa-b 公共房间 + 直聊收发验证通过，未读标记正常 |
+| 测试基线 | Gateway 214, TUI 195, CLI 16, Web Shell 688 (总计 1113, 全部 0 fail) |
+
+### 改动文件
+
+| 文件 | 操作 | 说明 |
+|------|------|------|
+| `gateway_models.rs` | 修改 | 新增 `moderation_state_path: PathBuf` |
+| `core_runtime.rs` | 修改 | 新增 `persist_moderation_state()` / `load_moderation_state()`，审核后自动持久化 |
+| `gateway_tests.rs` | 新增 4 测试 | moderation_state_persists, send_to_nonexistent_room, admin_moderation_status_readback, concurrent_presence_http |
+| `ACTIVE_WORK_QUEUE.md` | 更新 | 本轮摘要
+
+### 技术债压降追加
+
+| 项目 | 结果 |
+|------|------|
+| `app.js` 房间搜索重复实现 | 已删除本地 `roomMatchesSearch()`，统一委托 `shell-room-rail.js` |
+| 防回归测试 | `shell-pages-static.test.mjs` 新增静态约束，禁止 `app.js` 重新保留搜索实现 |
+| 角色权限 helper | 新增 `shell-role-permissions.js`，抽出 `roleAllows*` 纯权限判断 |
+| 权限 helper 防回归测试 | 新增 `shell-role-permissions.test.mjs`，覆盖 Lord/Steward/Resident/空角色权限边界 |
+| quick action follow-up helper | `quickActionFollowUpLabel/Copy` 从 `app.js` 移入 `shell-quick-action-labels.js` |
+| quick action 标签测试 | `shell-quick-action-labels.test.mjs` 新增 3 条 follow-up helper 边界测试 |
+| quick action badge helper | `quickActionBadgeLabel/Tone/Intensity` 从 `app.js` 移入 `shell-quick-action-labels.js` |
+| quick action badge 测试 | `shell-quick-action-labels.test.mjs` 新增 3 条 badge helper 边界测试 |
+| quick action summary/context helper | `quickActionSummary/ContextCopy` 从 `app.js` 文案拼接移入 `shell-quick-action-labels.js` |
+| quick action summary/context 测试 | `shell-quick-action-labels.test.mjs` 新增 4 条 summary/context helper 边界测试 |
+| quick action 状态推进 helper | `nextQuickActionState` 从 `app.js` 移入 `shell-quick-action-labels.js` |
+| quick action 状态推进测试 | `shell-quick-action-labels.test.mjs` 新增 3 条 next-state 边界测试 |
+| quick action 默认发送文案 helper | `quickActionDefaultSendLabel` 从 `app.js` switch 移入 `shell-quick-action-labels.js` |
+| quick action 默认发送文案测试 | `shell-quick-action-labels.test.mjs` 新增 2 条 send-label 边界测试 |
+| workflow progress 阶段状态 helper | `workflowProgressStageState` 从 `app.js` 移入 `shell-quick-action-labels.js` |
+| workflow progress 阶段状态测试 | `shell-quick-action-labels.test.mjs` 新增 3 条 stage-state 边界测试 |
+| quick action 结构化草稿 helper | `quickActionStructuredDraft` 从 `app.js` 移入 `shell-quick-actions.js` |
+| quick action runtime 测试 | 新增 `shell-quick-actions.test.mjs`，覆盖结构字段草稿、默认模板、合同模板覆盖 |
+| quick action preview 视图规则 helper | `quickActionPreviewDefaultFieldView` / `quickActionPreviewHistoryToneClass` 从 `app.js` 移入 `shell-quick-action-preview.js` |
+| quick action preview 视图规则测试 | `shell-quick-action-preview.test.mjs` 新增 6 条默认视图 / 历史轮次 tone 边界测试 |
+| quick action preview 记录视图 helper | `quickActionPreviewResolvedSnapshotIndex` / `quickActionPreviewSelectedFieldView` 抽出 record 与 snapshot 选择规则 |
+| quick action preview 记录视图测试 | `shell-quick-action-preview.test.mjs` 新增 6 条 snapshot index / record fieldView 边界测试 |
+| quick action preview state/index helper | `quickActionPreviewSelectedState` / `quickActionPreviewSelectedSnapshotIndex` 抽出 preview 状态与快照索引选择规则 |
+| quick action preview state/index 测试 | `shell-quick-action-preview.test.mjs` 新增 5 条 state / snapshot index 边界测试 |
+| quick action snapshot history helper | `quickActionSnapshotHistoryFromRecord` / `quickActionSnapshotFromHistory` 抽出 snapshot history 记录读取与快照选择规则 |
+| quick action snapshot history 测试 | `shell-quick-action-preview.test.mjs` 新增 4 条 snapshot history / snapshot selection 边界测试 |
+| quick action preview view helper | `resolveQuickActionPreviewView` 抽出 snapshot/stage preview 展示模型组装规则 |
+| quick action preview view 测试 | `shell-quick-action-preview.test.mjs` 新增 3 条 snapshot/stage/null preview view 边界测试 |
+| quick action preview model helper | `buildQuickActionPreviewModel` 抽出 room preview model 组装规则 |
+| quick action preview model 测试 | `shell-quick-action-preview.test.mjs` 新增 3 条 preview model / history tone / null 边界测试 |
+| quick action preview card model helper | `buildQuickActionPreviewCardModel` 抽出 preview card 历史索引、字段视图与 active structured 选择规则 |
+| quick action preview card model 测试 | `shell-quick-action-preview.test.mjs` 新增 3 条 card model / fallback / null 边界测试 |
+| quick action preview card chrome helper | `buildQuickActionPreviewCardChromeModel` 抽出 preview card 顶部当前条、历史轮次、字段视图 toggle 与折叠状态规则 |
+| quick action preview card chrome 测试 | `shell-quick-action-preview.test.mjs` 新增 3 条 current strip / history toggle / safe fallback 边界测试 |
+| quick action inline preview card model helper | `buildQuickActionInlinePreviewCardModel` 抽出 inline preview card 字段集、字段视图与摘要选择规则 |
+| quick action inline preview card model 测试 | `shell-quick-action-preview.test.mjs` 新增 4 条 latest/history/resolved/null 边界测试 |
+| quick action inline preview meta model helper | `buildQuickActionInlinePreviewMetaModel` 抽出 inline preview meta pill 当前条、轮次选项、字段视图选项、切换标题与折叠状态规则 |
+| quick action inline preview meta model 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条多轮/单轮、history/field-view toggle 边界测试 |
+| quick action inline preview controls model helper | `buildQuickActionInlinePreviewControlsModel` 抽出 inline preview 历史按钮、字段视图按钮、hidden/aria-hidden 与 dataset 规则 |
+| quick action inline preview controls model 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条多轮按钮组/单轮空按钮组边界测试 |
+| quick action inline preview action model helper | `buildQuickActionInlinePreviewActionModel` 抽出 inline preview 底部 snapshot/workflow CTA 顺序、默认态、优先级与提示文案规则 |
+| quick action inline preview action model 测试 | `shell-quick-action-preview.test.mjs` 新增 3 条可推进阶段/不可推进阶段/历史轮 CTA 顺序边界测试 |
+| quick action inline preview hint model helper | `buildQuickActionInlinePreviewHintModel` 抽出 inline preview 顶部阶段、主字段、轮次 hint 与下一轮切换规则 |
+| quick action inline preview hint model 测试 | `shell-quick-action-preview.test.mjs` 新增 3 条多轮/单轮/缺失输入边界测试 |
+| quick action inline preview field rows model helper | `buildQuickActionInlinePreviewFieldRowsModel` 抽出 inline preview 字段行 label/value 规范化与空值“待补充”回退规则 |
+| quick action inline preview field rows model 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条字段行规范化/空输入边界测试 |
+| quick action inline preview meta sections model helper | `buildQuickActionInlinePreviewMetaSectionsModel` 抽出 inline preview meta 当前/轮次/视图分区顺序与空分区过滤规则 |
+| quick action inline preview meta sections model 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条分区顺序/空输入边界测试 |
+| quick action inline preview header model helper | `buildQuickActionInlinePreviewHeaderModel` 抽出 inline preview card 顶部阶段/摘要文本规范化与空文本过滤规则 |
+| quick action inline preview header model 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条顶部文案/空输入边界测试 |
+| quick action inline preview render model helper | `buildQuickActionInlinePreviewRenderModel` 组合 card/header/meta/controls/fieldRows/actions 纯模型，减少 `app.js` 手动串联 |
+| quick action inline preview render model 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条组合模型/缺失输入边界测试 |
+| quick action inline preview panel model helper | `buildQuickActionInlinePreviewPanelModel` 组合 hint 与 card render model，统一 inline preview 可渲染判定 |
+| quick action inline preview panel model 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 panel 组合/缺失输入边界测试 |
+| quick action inline preview primary field helper | `buildQuickActionInlinePreviewPanelModel` 支持从 `resolvedPreviewView.primaryFieldText` 推导主字段，收拢 `app.js` 的 `previewField` 前置判定 |
+| quick action inline preview latest-view helper | 新增 `quickActionPreviewViewingLatest`，`buildQuickActionInlinePreviewRenderModel` 可从历史快照自动推导最新/历史轮 CTA 语义 |
+| quick action inline preview panel model 追加测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 resolved preview 主字段推导 / 历史快照 latest-view 推导测试 |
+| quick action inline preview hint DOM model helper | 新增 `buildQuickActionInlinePreviewHintDomModel`，把 inline preview hint 容器、分隔符、stage/field/round 节点 class/title/action 规格从 `app.js` 收到纯模型 |
+| quick action inline preview hint DOM model 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 hint DOM 节点规格 / 无 round 规格测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action inline preview meta DOM model helper | 新增 `buildQuickActionInlinePreviewMetaDomModel`，把 inline preview meta 容器、label、current strip、pill class/dataset/action 规格从 `app.js` 收到纯模型 |
+| quick action inline preview meta DOM model 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 meta 分区 DOM 规格 / 空分区与空 pill 过滤测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action inline preview controls DOM model helper | 新增 `buildQuickActionInlinePreviewControlsDomModel`，把 inline preview history / field-view 控制按钮容器、button type/title/dataset/action 规格从 `app.js` 收到纯模型 |
+| quick action inline preview controls DOM model 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 controls DOM 分组规格 / 空按钮组与空标签过滤测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action inline preview action DOM model helper | 新增 `buildQuickActionInlinePreviewActionDomModel`，把 inline preview snapshot/workflow CTA 容器、button type/title/aria/dataset/action id 规格从 `app.js` 收到纯模型 |
+| quick action inline preview action DOM model 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 action DOM 按钮规格 / 空按钮组与空标签过滤测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action inline preview field rows DOM model helper | 新增 `buildQuickActionInlinePreviewFieldRowsDomModel`，把 inline preview 字段列表容器、行、label/value 节点 class 与空值回退规格从 `app.js` 收到纯模型 |
+| quick action inline preview field rows DOM model 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 field rows DOM 列表规格 / 空行与空标签过滤测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action inline preview header DOM model helper | 新增 `buildQuickActionInlinePreviewHeaderDomModel`，把 inline preview 顶部阶段/摘要 line 的 class 与文本过滤规则从 `app.js` 收到纯模型 |
+| quick action inline preview header DOM model 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 header DOM line 规格 / 空标题与空行过滤测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action inline preview card DOM model helper | 新增 `buildQuickActionInlinePreviewCardDomModel`，把 inline preview card 容器 class、`actionIntensity` dataset 与 history/field-view 折叠 dataset flag 键从 `app.js` 收到纯模型 |
+| quick action inline preview card DOM model 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 card DOM 容器/dataset flag 规格与空 intensity/default meta 测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action inline preview render model cardDom | `buildQuickActionInlinePreviewRenderModel` 现在直接输出 `cardDom`，把 `quickActionIntensity(action)` 与 card DOM 组合从 `app.js` 收回模型层 |
+| quick action inline preview render model cardDom 测试 | `shell-quick-action-preview.test.mjs` 扩展 render model 组合测试，覆盖 `cardDom.dataset.actionIntensity` 和折叠 dataset flag |
+| quick action inline preview meta action target helper | 新增 `quickActionInlinePreviewMetaActionTarget`，把 inline preview meta pill 的 history / field-view action target 校验与规范化从 `app.js` 收到纯模型 |
+| quick action inline preview meta action target 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 history/field-view target 解析与无效 action 过滤测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action inline preview hint action target helper | 新增 `quickActionInlinePreviewHintActionTarget`，把 inline preview 顶部 hint 的 workflow / snapshot / history action target 校验与规范化从 `app.js` 收到纯模型 |
+| quick action inline preview hint action target 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 workflow/snapshot/history target 解析与无效 action 过滤测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action inline preview control action target helper | 新增 `quickActionInlinePreviewControlActionTarget`，把 inline preview history / field-view 控制按钮的 action target 校验与规范化从 `app.js` 收到纯模型 |
+| quick action inline preview control action target 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 controls target 解析与无效 action 过滤测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action inline preview action target helper | 新增 `quickActionInlinePreviewActionTarget`，把 inline preview 底部 snapshot/workflow CTA button id 到 action target 的解释从 `app.js` 收到纯模型 |
+| quick action inline preview action target 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 snapshot/workflow CTA target 解析与无效 id 过滤测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action inline preview clickable DOM spec helper | 新增 `quickActionInlinePreviewClickableDomSpec`，把 inline preview hint/meta 可点击节点的 `is-clickable`、`tabIndex`、`role`、title/aria 规格从 `app.js` 收到纯模型 |
+| quick action inline preview clickable DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条带 title/空 title 可访问性规格测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview key activation helper | 新增 `quickActionPreviewKeyActivates`，把 preview card 与 inline preview meta pill 的 Enter/Space 键盘激活判断从 `app.js` 收到纯模型 |
+| quick action preview key activation 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 Enter/Space 激活与其他键过滤测试；同步 `fake-dom.mjs` import 替换映射并修复 import 顺序匹配 |
+| quick action preview card DOM spec helper | 新增 `buildQuickActionPreviewCardDomSpec`，把普通 preview card 容器 class 与 `actionIntensity/quickAction/previewState` dataset 规格从 `app.js` 收到纯模型 |
+| quick action preview card DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条容器 class/dataset 规格与空输入过滤测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview clickable DOM spec helper | 新增 `quickActionPreviewClickableDomSpec`，并让 inline clickable helper 复用通用规格；普通 preview card meta pill 可点击规格不再手写在 `app.js` |
+| quick action preview clickable DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条通用 preview 可点击规格测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview card header DOM spec helper | 新增 `buildQuickActionPreviewCardHeaderDomSpec`，把普通 preview card header/heading/kicker/title class 与标题 fallback 规则从 `app.js` 收到纯模型 |
+| quick action preview card header DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 header DOM 规格与 title fallback 测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview history controls DOM spec helper | 新增 `buildQuickActionPreviewHistoryControlsDomSpec`，把普通 preview card 历史快照按钮区 wrapper/label/button class、dataset、text/title 规格从 `app.js` 收到纯模型 |
+| quick action preview history controls DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条多轮历史按钮区/单轮空返回测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview field-view controls DOM spec helper | 新增 `buildQuickActionPreviewFieldViewControlsDomSpec`，把普通 preview card 字段视图切换区 wrapper/button dataset、title/text 与 stage/snapshot 选择规则从 `app.js` 收到纯模型 |
+| quick action preview field-view controls DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条字段视图按钮区/无切换返回 null 测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview card pills DOM spec helper | 新增 `buildQuickActionPreviewCardPillsDomSpec`，把普通 preview card 当前/轮次/视图 pill 分组、dataset、title 与 action target 规格从 `app.js` 收到纯模型 |
+| quick action preview card pills DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条完整 pill 分组/仅当前基础 pill 测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview card sheet DOM spec helper | 新增 `buildQuickActionPreviewCardSheetDomSpec`，把普通 preview card 字段 sheet、row/label/value class 与 notes 拼接规格从 `app.js` 收到纯模型 |
+| quick action preview card sheet DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条字段截断/notes 与无效字段过滤测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview card sheet render DOM spec helper | 新增 `buildQuickActionPreviewCardSheetRenderDomSpec`，把普通 preview card sheet wrapper、字段行子节点和 notes 子节点组合规格从 `app.js` 收到纯模型 |
+| quick action preview card sheet render DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 sheet render children / 空 sheet 安全返回测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview control wrapper state helper | 新增 `buildQuickActionPreviewControlWrapperDomState`，把普通 preview card history/view 控制区 wrapper class、hidden 与 `aria-hidden` 合同从 `app.js` 收到纯模型 |
+| quick action preview control wrapper state 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条折叠/展开 wrapper 状态测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview control panel DOM spec helper | 新增 `buildQuickActionPreviewControlPanelDomSpec`，把普通 preview card history/view 控制区 wrapper state、label、buttons 组合规格从 `app.js` 收到纯模型 |
+| quick action preview control panel DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 history panel / field-view panel 组合规格测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview card copy DOM spec helper | 新增 `buildQuickActionPreviewCardCopyDomSpec`，把普通 preview card summary/follow-up copy 优先级、class 与空值过滤从 `app.js` 收到纯模型 |
+| quick action preview card copy DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 summary 优先/fallback 与空输入测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview summary line DOM spec helper | 新增 `buildQuickActionPreviewSummaryLineDomSpec`，把 preview summary 行 tag/class、lead、history chip、分隔符与 summary copy 节点规格从 `app.js` 收到纯模型 |
+| quick action preview summary line DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条带前缀历史 chip/snapshot fallback 与空输入测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview card pill action target helper | 新增 `quickActionPreviewCardPillActionTarget`，把普通 preview card pill 的 history / field-view action target 校验与规范化从 `app.js` 收到纯模型 |
+| quick action preview card pill action target 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 history/field-view target 解析与无效 action 过滤测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview card control action target helper | 新增 `quickActionPreviewCardControlActionTarget`，把普通 preview card 历史/字段视图控制按钮 target 校验与规范化从 `app.js` 收到纯模型 |
+| quick action preview card control action target 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 history/field-view control target 解析与无效输入过滤测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview card pill sections DOM spec helper | 新增 `buildQuickActionPreviewCardPillSectionsDomSpec`，把普通 preview card pill 的 current/history/field-view 分区顺序与空分区过滤从 `app.js` 收到纯模型 |
+| quick action preview card pill sections DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条分区顺序/空分区过滤测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview card pill sections 残留清理 | 删除 `app.js` 中 `currentPills` 旧预渲染残留，避免 sections helper 接管后仍保留未定义/无效 DOM 路径 |
+| quick action preview card pill sections 静态防回归 | `shell-pages-static.test.mjs` 新增约束，要求 `createQuickActionPreviewCard()` 只通过 `buildQuickActionPreviewCardPillSectionsRenderDomSpec` 渲染分区，禁止 `currentPills` / `pillSection ===` / 直接 action target 解释回流 |
+| quick action preview card pill sections render DOM spec helper | 新增 `buildQuickActionPreviewCardPillSectionsRenderDomSpec`，把普通 preview card pill 分区和 history/field-view action target 规范化从 `app.js` 收到纯模型 |
+| quick action preview card pill sections render DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条分区 target 规范化 / 无效 target 过滤测试；同步 `fake-dom.mjs` import 替换映射 |
+| quick action preview control button DOM spec helper | 新增 `buildQuickActionPreviewControlButtonDomSpec`，把普通 preview card history/field-view 控制按钮 type/class/dataset/text/title/source 规格从 `app.js` 收到纯模型 |
+| quick action preview control button DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条 history button / field-view button 规格测试；`quickActionPreviewCardControlActionTarget` 支持规范化后 `source`，`app.js` 点击逻辑不再回读 raw button spec |
+| quick action preview control panel render DOM spec helper | 新增 `buildQuickActionPreviewControlPanelRenderDomSpec`，把普通 preview card history/view 控制区 wrapper/label/buttons 组合与按钮规范化从 `app.js` 收到纯模型 |
+| quick action preview control panel render DOM spec 测试 | `shell-quick-action-preview.test.mjs` 新增 2 条控制区 render spec / 空按钮过滤测试；同步 `fake-dom.mjs` import 替换映射，修复临时 app 拷贝的 preview 模块导入 |
+| Web Shell fake-dom import 基线修复 | `fake-dom.mjs` 对 `./shell-quick-action-preview.js` 增加模块级 URL 重写兜底，避免导入清单变化导致临时 app 从 `/tmp` 解析失败 |
+| Web Shell fake-dom import 统一映射 | 新增 `APP_LOCAL_IMPORT_PATHS` / `rewriteAppLocalImports()`，统一重写 `app.js` 所有 `./*.js` 本地导入，并删除旧多行 `.replace()` 链与冗余 URL 常量 |
+| fake-dom import 防回归测试 | 新增 `fake-dom-import-rewrite.test.mjs`，自动对比 `app.js` 当前本地 imports 与 fake-dom 映射表，并验证真实 app rewrite 后无相对本地导入残留 |
+| quick action preview 控制文案契约同步 | `shell-quick-action-preview.test.mjs` 对齐 `historyLabel` 驱动的 snapshot 切换 title，保留“字段”语义 |
+| pixel scene hotspot label CSS 合同修复 | 补齐 `styles.pixel-map.css` clear-mode 下 hotspot label 隐藏/hover/near-pointer/blank-click 可见规则，恢复 `shell-pages-static.test.mjs` 静态合同 |
+| creative scene hotspot 真实交互修复 | `styles.pixel-map.css` 末尾恢复具体 hotspot `pointer-events: auto`，容器保持不拦截空白区；`shell-pages-static.test.mjs` 增加防回归，`verify-frontend-realness.mjs` 通过 |
+| `app.js` 行数 | 9021 → 8955 → 8942 → 8936 → 8926 → 8925 → 8918 → 8904 → 8899 → 8881 → 8864 → 8828 → 8816 → 8804 → 8775 → 8771 → 8761 → 8759 → 8744 → 8672 → 8681 → 8671 → 8677 → 8679 → 8674 → 8684 → 8656 → 8651 → 8649 → 8648 → 8645 → 8632 → 8638 → 8641 → 8651 → 8651 → 8647 → 8649 → 8651 → 8730 → 8732 → 8737 → 8738 → 8739 → 8742 → 8743 → 8744 → 8791 → 8752 → 8755 → 8764 → 8768 → 8747 → 8749 → 8752 → 8743 → 8740 → 8742 → 8746 → 8752 → 8747 → 8746 |
+| Web Shell 测试 | 691 passed / 0 failed；layout / realness passed |
 
 ## Operating Rules
 

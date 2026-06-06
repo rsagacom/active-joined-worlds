@@ -9,6 +9,7 @@ import {
   QUICK_ACTION_BLUEPRINTS,
   quickActionWorkflowTemplate as _quickActionWorkflowTemplate,
 } from "./shell-quick-action-templates.js";
+import { normalizeQuickActionStructured } from "./shell-quick-action-preview.js";
 
 // ── 模块内部状态 ────────────────────────────────────────────
 let _getState = () => ({});
@@ -80,6 +81,25 @@ export function quickActionWorkflowTemplate(action, state = "") {
   const stateTemplate = quickActionContractStateTemplate(action, state)?.draft_template;
   if (typeof stateTemplate === "string" && stateTemplate.trim()) return stateTemplate;
   return _quickActionWorkflowTemplate(action, state, quickActionTemplate(action));
+}
+
+export function quickActionStructuredDraft(structured, fallbackAction = "") {
+  const normalized = normalizeQuickActionStructured(structured, fallbackAction);
+  const action = normalized?.action || fallbackAction;
+  if (!normalized || !action) return quickActionTemplate(fallbackAction);
+  const lines = [`${action}：`];
+  for (const field of normalized.fields) {
+    const label = String(field.label || "")
+      .replace(/^[\-\u2022\s]+/u, "")
+      .replace(/[：:]\s*$/u, "")
+      .trim();
+    if (!label) continue;
+    lines.push(`- ${label}：${String(field.value || "").trim()}`);
+  }
+  if (normalized.notes.length) {
+    lines.push(...normalized.notes);
+  }
+  return lines.join("\n");
 }
 
 // ── 标签工具 ─────────────────────────────────────────────────

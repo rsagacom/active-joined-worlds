@@ -37,6 +37,8 @@
   var gatewayRoomCount = document.getElementById('dsGatewayRoomCount');
   var gatewayMessageCount = document.getElementById('dsGatewayMessageCount');
   var gatewayLastSync = document.getElementById('dsGatewayLastSync');
+  var gatewayUptime = document.getElementById('dsGatewayUptime');
+  var gatewayStateVersion = document.getElementById('dsGatewayStateVersion');
 
   // ====== Data ======
   var DS = window.__ADMIN_DS_DATA__;
@@ -44,8 +46,22 @@
   var rooms = DS.rooms;
   var messages = DS.messages;
   var inviteCodes = DS.inviteCodes;
+  var permissionGroups = [];
   var logs = DS.logs;
+  var auditEvents = [];
+  var gatewayAuditLogs = [];
+  var worldNotices = [];
+  var safetyAdvisories = [];
+  var safetyReports = [];
+  var residentSanctions = [];
   var L = DS.labels;
+  // Extend labels for audit event types
+  L.logTypeText.audit_security = '安全操作';
+  L.logTypeText.audit_content = '内容审核';
+  L.logTypeText.audit_permission = '权限变更';
+  L.logTypeText.audit_config = '系统配置';
+  L.logLevelText.warn = '警告';
+  L.logLevelText.info = '信息';
   var gatewayUrl = resolveGatewayUrl();
   var gatewayStatus = document.getElementById('dsGatewayStatus');
 
@@ -254,31 +270,96 @@
     gatewayConnection.className = 'ds-tag ' + tagClass;
   }
 
-  function updateDashboardSummary(source) {
+  function updateDashboardSummary(source, summary) {
     var hasGateway = source === 'gateway';
-    var onlineResidents = residents.filter(function (resident) { return resident.status === 'online'; }).length;
-    var pendingMessages = countPendingMessages();
-    var warningLogs = countWarningLogs();
-    var alertTotal = pendingMessages + warningLogs;
     var currentIdentity = currentGatewayIdentity();
     var syncLabel = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
+    var residentCount, roomCount, messageCount, onlineCount, uptimeSec;
+    if (hasGateway && summary && typeof summary.resident_count === 'number') {
+      residentCount = summary.resident_count;
+      roomCount = summary.room_count;
+      messageCount = summary.message_count;
+      onlineCount = summary.online_count;
+      uptimeSec = summary.gateway_uptime_ms ? Math.floor(summary.gateway_uptime_ms / 1000) : 0;
+    } else {
+      residentCount = residents.length;
+      roomCount = rooms.length;
+      messageCount = messages.length;
+      onlineCount = residents.filter(function (r) { return r.status === 'online'; }).length;
+      uptimeSec = 0;
+    }
+
+    var pendingMessages = countPendingMessages();
+    var warningLogs = countWarningLogs();
+    var alertTotal = pendingMessages + warningLogs;
+
     if (statGateway) statGateway.textContent = hasGateway ? '在线' : '本地';
-    if (statGatewaySub) statGatewaySub.textContent = hasGateway ? gatewayUrl + ' · 当前居民 ' + currentIdentity : '本地预览数据 · 未连接 Gateway';
-    if (statOnlineResidents) statOnlineResidents.textContent = formatNumber(onlineResidents);
-    if (statOnlineSub) statOnlineSub.textContent = '居民总数 ' + formatNumber(residents.length);
-    if (statTodayMessages) statTodayMessages.textContent = formatNumber(messages.length);
-    if (statMessageSub) statMessageSub.textContent = '可见会话 ' + formatNumber(rooms.length);
+    if (statGatewaySub) {
+      statGatewaySub.textContent = hasGateway
+        ? gatewayUrl + ' · 当前居民 ' + currentIdentity + (uptimeSec ? ' · 运行 ' + Math.floor(uptimeSec / 3600) + 'h ' + Math.floor((uptimeSec % 3600) / 60) + 'm' : '')
+        : '本地预览数据 · 未连接 Gateway';
+    }
+    if (statOnlineResidents) statOnlineResidents.textContent = formatNumber(onlineCount);
+    if (statOnlineSub) statOnlineSub.textContent = '居民总数 ' + formatNumber(residentCount);
+    if (statTodayMessages) statTodayMessages.textContent = formatNumber(messageCount);
+    if (statMessageSub) statMessageSub.textContent = '可见会话 ' + formatNumber(roomCount);
     if (statPendingAlerts) statPendingAlerts.textContent = formatNumber(alertTotal);
     if (statAlertSub) statAlertSub.textContent = '消息审核 ' + formatNumber(pendingMessages) + ' · 日志告警 ' + formatNumber(warningLogs);
-    if (topbarOnlineCount) topbarOnlineCount.textContent = '在线 ' + formatNumber(onlineResidents) + ' 人';
+    if (topbarOnlineCount) topbarOnlineCount.textContent = '在线 ' + formatNumber(onlineCount) + ' 人';
     if (topbarAlertCount) topbarAlertCount.textContent = '告警 ' + formatNumber(alertTotal);
     if (gatewayEndpoint) gatewayEndpoint.textContent = gatewayUrl || '未连接';
     if (gatewayResident) gatewayResident.textContent = currentIdentity;
-    if (gatewayRoomCount) gatewayRoomCount.textContent = formatNumber(rooms.length);
-    if (gatewayMessageCount) gatewayMessageCount.textContent = formatNumber(messages.length);
+    if (gatewayRoomCount) gatewayRoomCount.textContent = formatNumber(roomCount);
+    if (gatewayMessageCount) gatewayMessageCount.textContent = formatNumber(messageCount);
     if (gatewayLastSync) gatewayLastSync.textContent = syncLabel + (hasGateway ? ' · Gateway' : ' · 本地');
+    if (gatewayUptime) {
+      gatewayUptime.textContent = (hasGateway && uptimeSec)
+        ? Math.floor(uptimeSec / 3600) + 'h ' + Math.floor((uptimeSec % 3600) / 60) + 'm ' + (uptimeSec % 60) + 's'
+        : '--';
+    }
+    if (gatewayStateVersion) {
+      gatewayStateVersion.textContent = (hasGateway && summary && summary.state_version)
+        ? summary.state_version
+        : '--';
+    }
     updateGatewayConnectionTag(hasGateway ? '已连接' : '本地预览', hasGateway ? 'success' : 'default');
+  }
+
+  function renderDashboardEvents(auditPayload) {
+    var eventList = document.querySelector('.ds-event-list');
+    if (!eventList) return;
+    var events = (auditPayload && Array.isArray(auditPayload.events)) ? auditPayload.events : [];
+    clear(eventList);
+    if (!events.length) {
+      eventList.appendChild(el('div', { class: 'ds-event-item' },
+        el('span', { class: 'ds-event-text', style: 'color:var(--ds-text-secondary);' }, '暂无系统事件')
+      ));
+      return;
+    }
+    var typeMap = {
+      'admin:ban_resident': { label: '封禁', cls: 'warn' },
+      'admin:unban_resident': { label: '解封', cls: 'info' },
+      'admin:freeze_room': { label: '冻结', cls: 'warn' },
+      'admin:unfreeze_room': { label: '解冻', cls: 'info' },
+      'admin:moderate_message': { label: '审核', cls: 'warn' },
+      'admin:config': { label: '配置', cls: 'info' },
+      'shell:message': { label: '消息', cls: 'info' },
+      'auth:login': { label: '登录', cls: 'info' },
+      'auth:logout': { label: '登出', cls: 'info' }
+    };
+    var recent = events.slice(0, 10);
+    for (var i = 0; i < recent.length; i++) {
+      var ev = recent[i];
+      var time = new Date(ev.timestamp_ms).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+      var meta = typeMap[ev.action] || { label: ev.action, cls: 'info' };
+      var desc = meta.label + ' · ' + (ev.target || '') + (ev.actor_id ? ' by ' + ev.actor_id : '');
+      eventList.appendChild(el('div', { class: 'ds-event-item' },
+        el('span', { class: 'ds-event-time' }, time),
+        el('span', { class: 'ds-event-text' }, desc),
+        el('span', { class: 'ds-event-type ' + meta.cls }, meta.label)
+      ));
+    }
   }
 
   function roleFromGatewayRoles(roles) {
@@ -307,7 +388,7 @@
       }
       return {
         id: id,
-        nick: id,
+        nick: item.nickname || id,
         email: (item.avatar_id || id) + '@resident.local',
         role: roleFromGatewayRoles(roles),
         status: banned ? 'banned' : (online ? 'online' : 'offline'),
@@ -338,7 +419,9 @@
         unread: Number(room.unread_count || 0),
         creator: room.participant_label || room.self_label || room.peer_label || 'gateway',
         created: room.activity_time_label || room.last_activity_label || '网关同步',
-        frozen: Boolean(room.frozen)
+        frozen: Boolean(room.frozen),
+        image_layer: room.image_layer || room.scene_image || null,
+        hotspot_layer: room.hotspot_layer || null
       };
     });
   }
@@ -354,6 +437,10 @@
       var msgs = Array.isArray(room.messages) ? room.messages : [];
       for (var j = 0; j < msgs.length; j++) {
         var msg = msgs[j];
+        var status = msg.delivery_status === 'failed' ? 'flagged' : 'passed';
+        if (msg.moderation_status === 'approved') status = 'approved';
+        else if (msg.moderation_status === 'blocked') status = 'blocked';
+        else if (msg.moderation_status === 'handled') status = 'handled';
         out.push({
           message_id: msg.message_id || '',
           conversation_id: roomId,
@@ -361,7 +448,7 @@
           sender: msg.sender || 'unknown',
           room: '#' + roomTitle,
           content: msg.is_recalled ? '消息已撤回' : (msg.text || ''),
-          status: msg.delivery_status === 'failed' ? 'flagged' : 'passed'
+          status: status
         });
       }
     }
@@ -383,10 +470,14 @@
       var identity = encodeURIComponent(currentGatewayIdentity());
       var results = await Promise.allSettled([
         fetchGatewayJson('/v1/residents'),
-        fetchGatewayJson('/v1/shell/state?resident_id=' + identity)
+        fetchGatewayJson('/v1/shell/state?resident_id=' + identity),
+        fetchGatewayJson('/v1/admin/summary'),
+        fetchGatewayJson('/v1/admin/audit-log')
       ]);
       var residentPayload = results[0].status === 'fulfilled' ? results[0].value : null;
       var shellPayload = results[1].status === 'fulfilled' ? results[1].value : null;
+      var summaryPayload = results[2].status === 'fulfilled' ? results[2].value : null;
+      var auditPayload = results[3].status === 'fulfilled' ? results[3].value : null;
       if (results[0].status === 'rejected' || results[1].status === 'rejected') fetchFailed = true;
       var nextResidents = normalizeGatewayResidents(residentPayload);
       var nextRooms = normalizeGatewayRooms(shellPayload || {});
@@ -397,8 +488,14 @@
       renderResidents('all', 'all', '');
       renderRooms('all', '');
       renderMessages('all', 'all', '');
-      updateDashboardSummary(fetchFailed ? 'local' : 'gateway');
+      updateDashboardSummary(fetchFailed ? 'local' : 'gateway', summaryPayload);
+      renderDashboardEvents(auditPayload);
       setGatewayStatus(fetchFailed ? 'Gateway 部分读取失败' : 'Gateway 在线', fetchFailed ? 'warning' : 'online');
+      // Preload secondary data types so modules render from Gateway data on first visit
+      loadInviteCodes().catch(function () {});
+      loadPermissionGroups().catch(function () {});
+      loadSysConfig().catch(function () {});
+      loadAuditLog().catch(function () {});
     } catch (error) {
       console.warn('admin-ds gateway sync failed', error);
       updateDashboardSummary('local');
@@ -407,6 +504,104 @@
       setSectionLoading('mod-residents', false);
       setSectionLoading('mod-rooms', false);
       setSectionLoading('mod-messages', false);
+    }
+  }
+
+  async function loadInviteCodes() {
+    if (!gatewayUrl) return;
+    try {
+      var result = await fetchGatewayJson('/v1/admin/invites');
+      if (Array.isArray(result)) {
+        inviteCodes = result.map(function(ic) {
+          var expired = ic.max_uses > 0 && ic.used_count >= ic.max_uses;
+          return {
+            code: ic.code,
+            room: '-',
+            maxUses: ic.max_uses,
+            used: ic.used_count,
+            expires: ic.revoked ? '已作废' : (expired ? '已用尽' : '有效'),
+            creator: ic.created_by,
+            status: ic.revoked ? 'revoked' : (expired ? 'expired' : 'active')
+          };
+        });
+      }
+    } catch (e) {
+      console.warn('admin-ds load invites failed', e);
+    }
+    renderInvites();
+  }
+
+  async function loadPermissionGroups() {
+    if (!gatewayUrl) return;
+    try {
+      var result = await fetchGatewayJson('/v1/admin/permission-groups');
+      if (Array.isArray(result)) {
+        permissionGroups = result;
+      }
+    } catch (e) {
+      console.warn('admin-ds load permission groups failed', e);
+    }
+    renderPermissionGroups();
+  }
+
+  async function loadCapabilities() {
+    if (!gatewayUrl) return [];
+    try {
+      var result = await fetchGatewayJson('/v1/admin/capabilities');
+      if (Array.isArray(result)) { return result; }
+    } catch (e) { console.warn('admin-ds load capabilities failed', e); }
+    return [];
+  }
+
+  function renderPermissionGroups() {
+    var container = document.getElementById('permissionGroupList');
+    if (!container) return;
+    clear(container);
+
+    var groups = permissionGroups.length ? permissionGroups : [
+      { id: 'builtin-admin', name: '管理员', description: '全部权限 · 可管理居民、房间、消息审核', capabilities: [] },
+      { id: 'builtin-resident', name: '正式居民', description: '可创建房间、发送消息、邀请他人', capabilities: [] },
+      { id: 'builtin-restricted', name: '受限居民', description: '仅可加入已有房间、发送消息需审核', capabilities: [] },
+      { id: 'builtin-guest', name: '访客', description: '仅可浏览世界广场、不可私聊', capabilities: [] }
+    ];
+
+    // Count people per group
+    var counts = {};
+    groups.forEach(function(g) { counts[g.id] = 0; });
+
+    for (var i = 0; i < groups.length; i++) {
+      var g = groups[i];
+      var row = el('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--ds-border-light);';
+      var left = el('div');
+      var nameEl = el('strong');
+      nameEl.textContent = g.name;
+      left.appendChild(nameEl);
+      var descEl = el('div');
+      descEl.style.cssText = 'color:var(--ds-text-muted);font-size:12px;';
+      descEl.textContent = g.description;
+      left.appendChild(descEl);
+
+      // Show capability tags for custom groups
+      if (g.capabilities && g.capabilities.length) {
+        var capRow = el('div');
+        capRow.style.cssText = 'margin-top:4px;';
+        g.capabilities.forEach(function(cap) {
+          var tag = el('span');
+          tag.className = 'ds-tag default';
+          tag.style.cssText = 'margin-right:4px;font-size:11px;';
+          tag.textContent = cap;
+          capRow.appendChild(tag);
+        });
+        left.appendChild(capRow);
+      }
+
+      row.appendChild(left);
+      var tagEl = el('span');
+      tagEl.className = 'ds-tag ' + (g.capabilities && g.capabilities.length ? 'info' : 'default');
+      tagEl.textContent = (counts[g.id] || 0) + ' 人';
+      row.appendChild(tagEl);
+      container.appendChild(row);
     }
   }
 
@@ -427,6 +622,12 @@
     closeDetail();
     if (window.innerWidth <= 768) { collapseSidebar(); }
     if (moduleName === 'sysconfig') { loadSysConfig(); }
+    if (moduleName === 'permissions') { loadInviteCodes(); loadPermissionGroups(); }
+    if (moduleName === 'logs') { setSectionLoading('mod-logs', true); loadAuditLog().finally(function () { setSectionLoading('mod-logs', false); }); }
+    if (moduleName === 'world-notices') { loadWorldNotices(); }
+    if (moduleName === 'safety-advisories') { loadSafetyData(); }
+    if (moduleName === 'scene') { loadSceneModule(); }
+    if (moduleName === 'devices') { loadDevices(); }
   }
 
   var navItems = document.querySelectorAll('.ds-nav-item');
@@ -868,6 +1069,206 @@
               container.appendChild(detailField('未读消息', room.unread + ' 条'));
               container.appendChild(detailField('创建者', room.creator));
               container.appendChild(detailField('创建时间', room.created));
+              // --- 场景配置 ---
+              var sceneConfig = el('div', { class: 'admin-room-scene-config' });
+              var sectionTitle = el('div', { class: 'admin-scene-title' }, '场景配置');
+              sceneConfig.appendChild(sectionTitle);
+              var sceneParts = [];
+              var il = room.image_layer;
+              var hl = room.hotspot_layer;
+              if (il && il.preset) {
+                sceneParts.push('预设: ' + il.preset);
+                if (il.layer_id) sceneParts.push('图层: ' + il.layer_id);
+              }
+              if (hl && hl.hotspots && hl.hotspots.length) {
+                sceneParts.push(hl.hotspots.length + ' 个热点');
+              }
+              var sceneText = sceneParts.length ? sceneParts.join(' · ') : '未自定义场景（使用默认）';
+              sceneConfig.appendChild(detailField('当前场景', sceneText));
+              var presetSelect = el('select', { class: 'ds-select admin-scene-preset' });
+              var presetOpts = [
+                { v: '', t: '默认（无自定义）' },
+                { v: 'creative-room', t: '创意房间 · creative-room' },
+                { v: 'main-city', t: '主城夜景 · main-city' },
+                { v: 'contract-private-room', t: '合约私室 · contract-private-room' },
+                { v: 'contract-square-night', t: '合约广场 · contract-square-night' }
+              ];
+              for (var oi = 0; oi < presetOpts.length; oi++) {
+                var opt = el('option', { value: presetOpts[oi].v }, presetOpts[oi].t);
+                if (il && il.preset === presetOpts[oi].v) opt.selected = true;
+                presetSelect.appendChild(opt);
+              }
+              sceneConfig.appendChild(detailField('选择预设', presetSelect));
+
+              // --- 自定义背景图（白天+夜晚必须成对）---
+              var dayUrlInput = el('input', {
+                type: 'text', class: 'ds-input', placeholder: '白天背景图 URL（可选）',
+                value: (il && il.day_image_url) ? il.day_image_url : '',
+                style: 'width:100%;margin-top:6px;'
+              });
+              var nightUrlInput = el('input', {
+                type: 'text', class: 'ds-input', placeholder: '夜晚背景图 URL（可选）',
+                value: (il && il.night_image_url) ? il.night_image_url : '',
+                style: 'width:100%;margin-top:4px;'
+              });
+              sceneConfig.appendChild(el('div', { style: 'margin-top:8px;' }, [
+                el('label', { style: 'font-size:11px;color:var(--ds-text-secondary);' }, '自定义背景（白天+夜晚必须成对填写）'),
+                dayUrlInput,
+                nightUrlInput
+              ]));
+
+              // --- 热点编辑器 ---
+              var hotspotSection = el('div', { class: 'admin-hotspot-editor' });
+              var hotspotTitle = el('div', { class: 'admin-scene-subtitle' }, '热点配置');
+              hotspotSection.appendChild(hotspotTitle);
+
+              var existingHotspots = (hl && hl.hotspots && hl.hotspots.length) ? hl.hotspots : [];
+              var hotspotList = el('div', { class: 'admin-hotspot-list' });
+
+              function renderHotspotRows() {
+                clear(hotspotList);
+                for (var hi = 0; hi < existingHotspots.length; hi++) {
+                  (function (hs, idx) {
+                    var row = el('div', { class: 'admin-hotspot-row' });
+                    var fields = el('div', { class: 'admin-hotspot-fields' });
+                    var idInput = el('input', { type: 'text', class: 'ds-input admin-hotspot-id', placeholder: 'ID', value: hs.hotspot_id || '' });
+                    var labelInput = el('input', { type: 'text', class: 'ds-input admin-hotspot-label', placeholder: '标签', value: hs.label || '' });
+                    var hintInput = el('input', { type: 'text', class: 'ds-input admin-hotspot-hint', placeholder: '交互提示', value: hs.interaction_hint || '' });
+                    fields.appendChild(idInput);
+                    fields.appendChild(labelInput);
+                    fields.appendChild(hintInput);
+
+                    var coords = el('div', { class: 'admin-hotspot-coords' });
+                    var inputs = [
+                      { key: 'x_permyriad', placeholder: 'X', def: 2500 },
+                      { key: 'y_permyriad', placeholder: 'Y', def: 2500 },
+                      { key: 'width_permyriad', placeholder: 'W', def: 800 },
+                      { key: 'height_permyriad', placeholder: 'H', def: 600 }
+                    ];
+                    var coordInputs = [];
+                    for (var ci = 0; ci < inputs.length; ci++) {
+                      var inp = el('input', {
+                        type: 'number', class: 'ds-input admin-hotspot-coord',
+                        placeholder: inputs[ci].placeholder,
+                        value: String(typeof hs[inputs[ci].key] === 'number' ? hs[inputs[ci].key] : inputs[ci].def),
+                        style: 'width:58px;'
+                      });
+                      coordInputs.push({ input: inp, key: inputs[ci].key, def: inputs[ci].def });
+                      coords.appendChild(inp);
+                    }
+                    fields.appendChild(coords);
+
+                    var delBtn = makeBtn('删除', 'ds-btn-danger-text ds-btn-xs');
+                    delBtn.addEventListener('click', function () {
+                      existingHotspots.splice(idx, 1);
+                      renderHotspotRows();
+                    });
+
+                    row.appendChild(fields);
+                    row.appendChild(delBtn);
+                    hotspotList.appendChild(row);
+
+                    row._coordInputs = coordInputs;
+                    row._textInputs = [idInput, labelInput, hintInput];
+                  })(existingHotspots[hi], hi);
+                }
+
+                if (!existingHotspots.length) {
+                  hotspotList.appendChild(el('div', { class: 'admin-hotspot-empty', style: 'color:var(--ds-text-secondary);font-size:12px;padding:8px 0;' }, '暂无热点'));
+                }
+              }
+
+              renderHotspotRows();
+              hotspotSection.appendChild(hotspotList);
+
+              var addHotspotBtn = makeBtn('+ 添加热点', 'ds-btn-outline ds-btn-xs');
+              addHotspotBtn.addEventListener('click', function () {
+                existingHotspots.push({
+                  hotspot_id: 'hotspot-' + Date.now(),
+                  label: '新热点',
+                  interaction_hint: '',
+                  x_permyriad: 2500,
+                  y_permyriad: 2500,
+                  width_permyriad: 800,
+                  height_permyriad: 600
+                });
+                renderHotspotRows();
+              });
+              hotspotSection.appendChild(el('div', { style: 'margin-top:6px;' }, addHotspotBtn));
+              sceneConfig.appendChild(hotspotSection);
+
+              var applyBtn = makeBtn('应用场景', 'ds-btn-primary ds-btn-sm');
+              var statusMsg = el('span', { class: 'admin-scene-msg' });
+              applyBtn.addEventListener('click', async function () {
+                applyBtn.disabled = true; applyBtn.textContent = '保存中...';
+                statusMsg.textContent = ''; statusMsg.style.color = '';
+                var selectedPreset = presetSelect.value;
+
+                var hlPayload = null;
+                if (existingHotspots.length) {
+                  var rows = Array.from(hotspotList.querySelectorAll('.admin-hotspot-row'));
+                  var hotspotsOut = [];
+                  for (var ri = 0; ri < rows.length; ri++) {
+                    var r = rows[ri];
+                    var ids = r._textInputs;
+                    var cs = r._coordInputs;
+                    var h = {
+                      hotspot_id: (ids && ids[0]) ? ids[0].value : ('hotspot-' + ri),
+                      label: (ids && ids[1]) ? ids[1].value : '',
+                      sprite_hint: 'default',
+                      interaction_hint: (ids && ids[2]) ? ids[2].value : ''
+                    };
+                    for (var ci2 = 0; ci2 < (cs ? cs.length : 0); ci2++) {
+                      var c = cs[ci2];
+                      h[c.key] = parseInt(c.input.value, 10) || c.def;
+                    }
+                    if (!h.x_permyriad) h.x_permyriad = 2500;
+                    if (!h.y_permyriad) h.y_permyriad = 2500;
+                    if (!h.width_permyriad) h.width_permyriad = 800;
+                    if (!h.height_permyriad) h.height_permyriad = 600;
+                    hotspotsOut.push(h);
+                  }
+                  hlPayload = {
+                    layer_id: 'admin-hotspot-' + Date.now(),
+                    coordinate_system: 'scene-permyriad',
+                    owner_editable: true,
+                    hotspots: hotspotsOut
+                  };
+                }
+
+                try {
+                  var dayUrl = dayUrlInput.value.trim();
+                  var nightUrl = nightUrlInput.value.trim();
+                  var ilPayload = null;
+                  if (selectedPreset || dayUrl || nightUrl) {
+                    ilPayload = {
+                      layer_id: 'admin-custom-' + Date.now(),
+                      preset: selectedPreset || 'custom',
+                      asset_hint: selectedPreset || 'custom',
+                      aspect_ratio_permyriad: 5625,
+                      owner_editable: true,
+                      day_image_url: dayUrl || null,
+                      night_image_url: nightUrl || null
+                    };
+                  }
+                  var res = await fetchGatewayJsonPost('/v1/admin/scene', {
+                    room_id: room.id,
+                    image_layer: ilPayload,
+                    hotspot_layer: hlPayload
+                  });
+                  if (res.error) { statusMsg.textContent = '失败: ' + res.error; statusMsg.style.color = 'var(--ds-danger)'; }
+                  else if (!res.ok) { statusMsg.textContent = '失败 (HTTP ' + res.status + ')'; statusMsg.style.color = 'var(--ds-danger)'; }
+                  else {
+                    statusMsg.textContent = '场景已应用'; statusMsg.style.color = 'var(--ds-success)';
+                    renderRooms(document.getElementById('roomTypeFilter').value, document.getElementById('roomSearch').value);
+                  }
+                } catch (err) {
+                  statusMsg.textContent = '请求异常: ' + (err.message || ''); statusMsg.style.color = 'var(--ds-danger)';
+                }
+                applyBtn.disabled = false; applyBtn.textContent = '应用场景';
+              });
+              sceneConfig.appendChild(el('div', { class: 'admin-scene-actions' }, applyBtn, statusMsg));
+              container.appendChild(sceneConfig);
             },
             function (actions) {
               var viewMsgBtn = makeBtn('查看消息', 'ds-btn-outline ds-btn-sm');
@@ -888,7 +1289,7 @@
                 if (!residentId) return;
                 var action = confirm('确定要切换该居民在本房间的成员状态？\n按确定=添加, 取消=移除') ? 'add' : 'remove';
                 memberBtn.disabled = true; memberBtn.textContent = '处理中...';
-                fetchGatewayJsonPost('/v1/admin/rooms/members', {room_id: room.id, resident_id: residentId, actor_id: currentIdentity(), action: action}).then(function(r) {
+                fetchGatewayJsonPost('/v1/admin/rooms/members', {room_id: room.id, resident_id: residentId, actor_id: currentGatewayIdentity(), action: action}).then(function(r) {
                   memberBtn.disabled = false; memberBtn.textContent = '管理成员';
                   if (r.error) { showAdminNotice('成员操作失败: ' + r.error, 'error'); }
                   else { showAdminNotice('成员 ' + residentId + ' 已' + (action==='add'?'添加至':'移出') + '房间 ' + room.id, 'success'); }
@@ -1276,7 +1677,7 @@
           revokeBtn.addEventListener('click', function () {
                 if (!confirm('确定要作废邀请码 ' + ic.code + ' ?')) return;
                 revokeBtn.disabled = true; revokeBtn.textContent = '作废中...';
-                fetchGatewayJsonPost('/v1/admin/invites/revoke', {code: ic.code, actor_id: currentIdentity()}).then(function(r) {
+                fetchGatewayJsonPost('/v1/admin/invites/revoke', {code: ic.code, actor_id: currentGatewayIdentity()}).then(function(r) {
                   revokeBtn.disabled = false; revokeBtn.textContent = '已作废';
                   if (r.error) { showAdminNotice('作废失败: ' + r.error, 'error'); revokeBtn.textContent = '作废'; }
                   else { showAdminNotice('邀请码 ' + ic.code + ' 已作废', 'success'); revokeBtn.textContent = '已作废'; revokeBtn.style.color = 'var(--ds-text-muted)'; }
@@ -1292,6 +1693,74 @@
     }
 
     renderPagination('permissions', inviteCodes.length, function(p) { renderInvites(); });
+  }
+
+  // ====== Audit Log ======
+
+  function formatAuditTime(ms) {
+    var d = new Date(ms);
+    var h = d.getHours().toString().padStart(2, '0');
+    var m = d.getMinutes().toString().padStart(2, '0');
+    var s = d.getSeconds().toString().padStart(2, '0');
+    return h + ':' + m + ':' + s;
+  }
+
+  function auditEventToLog(event) {
+    var action = event.action || '';
+    var level = 'info';
+    var type = 'audit_config';
+    if (action === 'admin:ban_resident') { level = 'warn'; type = 'audit_security'; }
+    else if (action === 'admin:unban_resident') { level = 'info'; type = 'audit_security'; }
+    else if (action === 'admin:freeze_room') { level = 'warn'; type = 'audit_security'; }
+    else if (action === 'admin:unfreeze_room') { level = 'info'; type = 'audit_security'; }
+    else if (action.indexOf('admin:moderate_message') === 0) { level = 'info'; type = 'audit_content'; }
+    else if (action === 'admin:create_permission_group') { level = 'info'; type = 'audit_permission'; }
+    else if (action === 'admin:assign_permission_group') { level = 'info'; type = 'audit_permission'; }
+    var desc = action + ' → ' + (event.target || '');
+    if (event.reason) { desc = desc + ' (' + event.reason + ')'; }
+    return {
+      id: event.event_id || '',
+      time: formatAuditTime(event.timestamp_ms),
+      level: level,
+      type: type,
+      desc: desc,
+      source: event.actor_id || ''
+    };
+  }
+
+  async function loadAuditLog() {
+    if (!gatewayUrl) {
+      showAdminNotice('Gateway 未连接，无法加载审计日志', 'error');
+      renderLogs('all', 'all', '');
+      return;
+    }
+    try {
+      var result = await fetchGatewayJson('/v1/admin/audit-log?limit=200');
+      if (result && result.events) {
+        auditEvents = result.events;
+        gatewayAuditLogs = [];
+        for (var i = 0; i < auditEvents.length; i++) {
+          gatewayAuditLogs.push(auditEventToLog(auditEvents[i]));
+        }
+        if (gatewayAuditLogs.length > 0) {
+          logs = gatewayAuditLogs;
+        } else if (DS && DS.logs && DS.logs.length > 0) {
+          logs = DS.logs;
+        }
+      } else if (DS && DS.logs && DS.logs.length > 0) {
+        logs = DS.logs;
+      }
+    } catch (e) {
+      showAdminNotice('加载审计日志失败: ' + (e.message || '网络错误'), 'error');
+      if (DS && DS.logs && DS.logs.length > 0) {
+        logs = DS.logs;
+      }
+    }
+    renderLogs(
+      document.getElementById('logLevelFilter') ? document.getElementById('logLevelFilter').value : 'all',
+      document.getElementById('logTypeFilter') ? document.getElementById('logTypeFilter').value : 'all',
+      document.getElementById('logSearch') ? document.getElementById('logSearch').value : ''
+    );
   }
 
   // ====== Render Logs ======
@@ -1352,7 +1821,7 @@
               var handleLogBtn = makeBtn('标记已处理', 'ds-btn-outline ds-btn-sm');
               handleLogBtn.addEventListener('click', function () {
                 handleLogBtn.disabled = true; handleLogBtn.textContent = '处理中...';
-                fetchGatewayJsonPost('/v1/admin/logs/handle', {log_id: log.id, actor_id: currentIdentity()}).then(function(r) {
+                fetchGatewayJsonPost('/v1/admin/logs/handle', {log_id: log.id, actor_id: currentGatewayIdentity()}).then(function(r) {
                   handleLogBtn.disabled = false;
                   if (r.error) { showAdminNotice('标记失败: ' + r.error, 'error'); handleLogBtn.textContent = '标记已处理'; }
                   else { showAdminNotice('日志 ' + log.id + ' 已标记为已处理', 'success'); handleLogBtn.textContent = '已处理'; handleLogBtn.style.color = 'var(--ds-success)'; }
@@ -1393,6 +1862,322 @@
   document.getElementById('logTypeFilter').addEventListener('change', function () {
     renderLogs(document.getElementById('logLevelFilter').value, this.value, document.getElementById('logSearch').value);
   });
+
+  // ====== Scene Editor Module ======
+
+  function loadSceneModule() {
+    var sel = document.getElementById('sceneRoomSelect');
+    if (!sel) return;
+    // Populate room selector from current rooms data
+    while (sel.firstChild) sel.removeChild(sel.firstChild);
+    var defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = '-- 请选择房间 --';
+    sel.appendChild(defaultOpt);
+    for (var i = 0; i < rooms.length; i++) {
+      var opt = document.createElement('option');
+      opt.value = rooms[i].id;
+      opt.textContent = rooms[i].name + ' (' + rooms[i].id + ')';
+      sel.appendChild(opt);
+    }
+    if (!sel._listenerBound) {
+      sel._listenerBound = true;
+      sel.addEventListener('change', function () {
+        var roomId = this.value;
+        var container = document.getElementById('sceneEditorContainer');
+        if (!roomId) {
+          clear(container);
+          var placeholderP = document.createElement('p');
+          placeholderP.style.cssText = 'color:var(--ds-text-muted);font-size:13px;';
+          placeholderP.textContent = '请先选择一个房间以编辑其场景配置。';
+          container.appendChild(placeholderP);
+          return;
+        }
+        var room = null;
+        for (var r = 0; r < rooms.length; r++) {
+          if (rooms[r].id === roomId) { room = rooms[r]; break; }
+        }
+        if (room) renderSceneEditor(room, container);
+      });
+    }
+    // Auto-select if rooms data available
+    if (rooms.length && !sel.value) {
+      sel.value = rooms[0].id;
+      sel.dispatchEvent(new Event('change'));
+    }
+  }
+
+  function renderSceneEditor(room, container) {
+    clear(container);
+    var il = room.image_layer;
+    var hl = room.hotspot_layer;
+
+    // Image layer section
+    var imgSection = el('div', { class: 'ds-card', style: 'margin-bottom:1rem;' });
+    imgSection.appendChild(el('div', { class: 'ds-card-header' },
+      el('span', { class: 'ds-card-title' }, '图像层配置')
+    ));
+
+    var presetSelect = el('select', { class: 'ds-select', style: 'width:100%;max-width:320px;' });
+    var presetOpts = [
+      { v: '', t: '默认（无自定义）' },
+      { v: 'creative-room', t: '创意房间 · creative-room' },
+      { v: 'main-city', t: '主城夜景 · main-city' },
+      { v: 'contract-private-room', t: '合约私室 · contract-private-room' },
+      { v: 'contract-square-night', t: '合约广场 · contract-square-night' }
+    ];
+    for (var oi = 0; oi < presetOpts.length; oi++) {
+      var opt = el('option', { value: presetOpts[oi].v }, presetOpts[oi].t);
+      if (il && il.preset === presetOpts[oi].v) opt.selected = true;
+      presetSelect.appendChild(opt);
+    }
+    imgSection.appendChild(el('div', { style: 'padding:0.75rem 1rem;' },
+      el('label', { style: 'display:block;margin-bottom:4px;font-size:12px;color:var(--ds-text-secondary);' }, '场景预设'),
+      presetSelect
+    ));
+    if (il && il.layer_id) {
+      imgSection.appendChild(el('div', { style: 'padding:0 1rem 0.75rem;font-size:11px;color:var(--ds-text-muted);' }, '图层ID: ' + il.layer_id));
+    }
+    container.appendChild(imgSection);
+
+    // Hotspot layer section
+    var hsSection = el('div', { class: 'ds-card', style: 'margin-bottom:1rem;' });
+    hsSection.appendChild(el('div', { class: 'ds-card-header' },
+      el('span', { class: 'ds-card-title' }, '热点配置 (' + ((hl && hl.hotspots && hl.hotspots.length) || 0) + ' 个)')
+    ));
+
+    var existingHotspots = (hl && hl.hotspots && hl.hotspots.length) ? hl.hotspots.slice() : [];
+    var hotspotList = el('div', { style: 'padding:0 1rem;' });
+
+    function renderHotspotRows() {
+      clear(hotspotList);
+      for (var hi = 0; hi < existingHotspots.length; hi++) {
+        (function (hs, idx) {
+          var row = el('div', { style: 'display:flex;gap:0.5rem;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--ds-border-light);flex-wrap:wrap;' });
+          var idInput = el('input', { type: 'text', class: 'ds-input', placeholder: 'ID', value: hs.hotspot_id || '', style: 'width:100px;' });
+          var labelInput = el('input', { type: 'text', class: 'ds-input', placeholder: '标签', value: hs.label || '', style: 'width:100px;' });
+          var hintInput = el('input', { type: 'text', class: 'ds-input', placeholder: '交互提示', value: hs.interaction_hint || '', style: 'width:140px;' });
+          row.appendChild(idInput);
+          row.appendChild(labelInput);
+          row.appendChild(hintInput);
+
+          var coordInputs = [
+            { key: 'x_permyriad', placeholder: 'X', def: 2500 },
+            { key: 'y_permyriad', placeholder: 'Y', def: 2500 },
+            { key: 'width_permyriad', placeholder: 'W', def: 800 },
+            { key: 'height_permyriad', placeholder: 'H', def: 600 }
+          ];
+          var coordRefs = [];
+          for (var ci = 0; ci < coordInputs.length; ci++) {
+            var inp = el('input', {
+              type: 'number', class: 'ds-input',
+              placeholder: coordInputs[ci].placeholder,
+              value: String(typeof hs[coordInputs[ci].key] === 'number' ? hs[coordInputs[ci].key] : coordInputs[ci].def),
+              style: 'width:58px;'
+            });
+            coordRefs.push({ input: inp, key: coordInputs[ci].key, def: coordInputs[ci].def });
+            row.appendChild(inp);
+          }
+
+          var delBtn = makeBtn('删除', 'ds-btn-danger-text ds-btn-xs');
+          delBtn.addEventListener('click', function () {
+            existingHotspots.splice(idx, 1);
+            renderHotspotRows();
+          });
+          row.appendChild(delBtn);
+          hotspotList.appendChild(row);
+
+          row._coordInputs = coordRefs;
+          row._textInputs = [idInput, labelInput, hintInput];
+        })(existingHotspots[hi], hi);
+      }
+      if (!existingHotspots.length) {
+        hotspotList.appendChild(el('div', { style: 'color:var(--ds-text-secondary);font-size:12px;padding:8px 0;' }, '暂无热点'));
+      }
+    }
+
+    renderHotspotRows();
+    hsSection.appendChild(hotspotList);
+
+    var addBtn = makeBtn('+ 添加热点', 'ds-btn-outline ds-btn-xs');
+    addBtn.style.margin = '0.5rem 1rem';
+    addBtn.addEventListener('click', function () {
+      existingHotspots.push({
+        hotspot_id: 'hotspot-' + Date.now(),
+        label: '新热点',
+        interaction_hint: '',
+        sprite_hint: 'default',
+        x_permyriad: 2500,
+        y_permyriad: 2500,
+        width_permyriad: 800,
+        height_permyriad: 600
+      });
+      renderHotspotRows();
+    });
+    hsSection.appendChild(el('div', { style: 'margin-top:6px;' }, addBtn));
+    container.appendChild(hsSection);
+
+    // Save button
+    var actionsRow = el('div', { style: 'display:flex;align-items:center;gap:0.75rem;' });
+    var saveBtn = makeBtn('保存场景', 'ds-btn-primary ds-btn-sm');
+    var statusMsg = el('span', { style: 'font-size:12px;' });
+    saveBtn.addEventListener('click', async function () {
+      saveBtn.disabled = true; saveBtn.textContent = '保存中...';
+      statusMsg.textContent = ''; statusMsg.style.color = '';
+      var selectedPreset = presetSelect.value;
+
+      var hlPayload = null;
+      if (existingHotspots.length) {
+        var rows = Array.from(hotspotList.querySelectorAll('[data-no-clear]')).length ? [] : [];
+        // Re-collect from DOM
+        var allRows = hotspotList.children;
+        var hotspotsOut = [];
+        for (var ri = 0; ri < allRows.length; ri++) {
+          var r = allRows[ri];
+          if (!r._textInputs) continue;
+          var ids = r._textInputs;
+          var cs = r._coordInputs;
+          var h = {
+            hotspot_id: (ids && ids[0]) ? ids[0].value : ('hotspot-' + ri),
+            label: (ids && ids[1]) ? ids[1].value : '',
+            sprite_hint: 'default',
+            interaction_hint: (ids && ids[2]) ? ids[2].value : ''
+          };
+          for (var ci2 = 0; ci2 < (cs ? cs.length : 0); ci2++) {
+            var c = cs[ci2];
+            h[c.key] = parseInt(c.input.value, 10) || c.def;
+          }
+          if (!h.x_permyriad) h.x_permyriad = 2500;
+          if (!h.y_permyriad) h.y_permyriad = 2500;
+          if (!h.width_permyriad) h.width_permyriad = 800;
+          if (!h.height_permyriad) h.height_permyriad = 600;
+          hotspotsOut.push(h);
+        }
+        if (hotspotsOut.length) {
+          hlPayload = {
+            layer_id: 'admin-hotspot-' + Date.now(),
+            coordinate_system: 'scene-permyriad',
+            owner_editable: true,
+            hotspots: hotspotsOut
+          };
+        }
+      }
+
+      try {
+        var res = await fetchGatewayJsonPost('/v1/admin/scene', {
+          room_id: room.id,
+          image_layer: selectedPreset ? { layer_id: 'admin-scene-' + Date.now(), preset: selectedPreset, asset_hint: selectedPreset, aspect_ratio_permyriad: 5625, owner_editable: true } : null,
+          hotspot_layer: hlPayload
+        });
+        if (res.error) { statusMsg.textContent = '失败: ' + res.error; statusMsg.style.color = 'var(--ds-danger)'; }
+        else if (res.ok) {
+          statusMsg.textContent = '场景已保存'; statusMsg.style.color = 'var(--ds-success)';
+          // Refresh room data in-memory
+          if (res.image_layer) room.image_layer = res.image_layer;
+          if (res.hotspot_layer) room.hotspot_layer = res.hotspot_layer;
+        } else { statusMsg.textContent = '保存失败'; statusMsg.style.color = 'var(--ds-danger)'; }
+      } catch (err) {
+        statusMsg.textContent = '请求异常: ' + (err.message || ''); statusMsg.style.color = 'var(--ds-danger)';
+      }
+      saveBtn.disabled = false; saveBtn.textContent = '保存场景';
+    });
+    actionsRow.appendChild(saveBtn);
+    actionsRow.appendChild(statusMsg);
+    container.appendChild(actionsRow);
+  }
+
+  // ====== Device Management ======
+  function renderDeviceEmptyRow(tbody, message) {
+    clear(tbody);
+    var tr = el('tr');
+    var td = el('td', { colspan: '6', class: 'ds-empty' });
+    td.textContent = message;
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+
+  async function loadDevices() {
+    var tbody = document.getElementById('deviceTableBody');
+    var countEl = document.getElementById('deviceCount');
+    if (!tbody) return;
+    renderDeviceEmptyRow(tbody, '加载中...');
+
+    try {
+      var devices = await fetchGatewayJson('/v1/admin/devices');
+      if (!Array.isArray(devices)) { renderDeviceEmptyRow(tbody, '暂无设备数据'); return; }
+      if (countEl) countEl.textContent = '(' + devices.length + ' 台设备)';
+      clear(tbody);
+
+      for (var i = 0; i < devices.length; i++) {
+        (function (d) {
+          var tr = el('tr');
+          tr.appendChild(el('td', {}, el('code', { style: 'font-family:var(--ds-font-mono);font-size:12px;' }, d.address)));
+          tr.appendChild(el('td', {}, d.label));
+          var statusCell = el('td');
+          if (d.blocked) {
+            statusCell.appendChild(el('span', { class: 'ds-badge', style: 'background:var(--ds-danger);color:#fff;' }, '已封禁'));
+          } else {
+            statusCell.appendChild(el('span', { class: 'ds-badge', style: 'background:var(--ds-success);color:#fff;' }, '正常'));
+          }
+          tr.appendChild(statusCell);
+          tr.appendChild(el('td', {}, d.bound_resident_id || '-'));
+          tr.appendChild(el('td', { style: 'font-size:12px;color:var(--ds-text-secondary);' }, new Date(d.added_at_ms).toLocaleString('zh-CN')));
+
+          var actionsCell = el('td');
+          var btnGroup = makeBtnGroup();
+          if (d.blocked) {
+            var unblockBtn = makeBtn('解封', 'ds-btn-outline ds-btn-xs');
+            unblockBtn.addEventListener('click', function () {
+              fetchGatewayJsonPost('/v1/admin/devices/unblock', { address: d.address }).then(function () { loadDevices(); });
+            });
+            btnGroup.appendChild(unblockBtn);
+          } else {
+            var blockBtn = makeBtn('封禁', 'ds-btn-outline ds-btn-xs');
+            blockBtn.style.color = 'var(--ds-danger)';
+            blockBtn.addEventListener('click', function () {
+              fetchGatewayJsonPost('/v1/admin/devices/block', { address: d.address }).then(function () { loadDevices(); });
+            });
+            btnGroup.appendChild(blockBtn);
+          }
+          var removeBtn = makeBtn('移除', 'ds-btn-danger-text ds-btn-xs');
+          removeBtn.addEventListener('click', function () {
+            if (confirm('确定移除设备 ' + d.address + ' ？')) {
+              fetchGatewayJsonPost('/v1/admin/devices/remove', { address: d.address }).then(function () { loadDevices(); });
+            }
+          });
+          btnGroup.appendChild(removeBtn);
+          actionsCell.appendChild(btnGroup);
+          tr.appendChild(actionsCell);
+          tbody.appendChild(tr);
+        })(devices[i]);
+      }
+    } catch (e) {
+      renderDeviceEmptyRow(tbody, '加载失败: ' + (e.message || '未知错误'));
+    }
+  }
+
+  // Bind device add button
+  var deviceAddBtn = document.getElementById('deviceAddBtn');
+  if (deviceAddBtn) {
+    deviceAddBtn.addEventListener('click', async function () {
+      var addr = document.getElementById('deviceAddressInput');
+      var label = document.getElementById('deviceLabelInput');
+      if (!addr || !addr.value.trim()) { showAdminNotice('请输入 MAC 地址', 'error'); return; }
+      deviceAddBtn.disabled = true; deviceAddBtn.textContent = '添加中...';
+      try {
+        var res = await fetchGatewayJsonPost('/v1/admin/devices/add', {
+          address: addr.value.trim(),
+          label: (label && label.value.trim()) ? label.value.trim() : '未命名设备'
+        });
+        if (res.error) { showAdminNotice('添加失败: ' + res.error, 'error'); }
+        else { showAdminNotice('设备已添加', 'success'); addr.value = ''; if (label) label.value = ''; loadDevices(); }
+      } catch (e) {
+        showAdminNotice('添加失败: ' + (e.message || '网络错误'), 'error');
+      } finally {
+        deviceAddBtn.disabled = false; deviceAddBtn.textContent = '添加设备';
+      }
+    });
+  }
 
   function bindStaticAdminActions() {
     var residentExport = document.querySelector('[data-admin-action="export-residents"]');
@@ -1436,21 +2221,49 @@
       });
     }
 
-    var unavailableActions = [
-          ['create-permission-group', '新建权限组需要 Gateway 权限写接口接入后才能执行'],
-        ];
+    var unavailableActions = [];
     for (var i = 0; i < unavailableActions.length; i++) {
       var button = document.querySelector('[data-admin-action="' + unavailableActions[i][0] + '"]');
       markUnavailableButton(button, unavailableActions[i][1]);
     }
 
     // sysconfig: refresh from gateway (real GET + POST)
+    // Wire create-permission-group button
+    var createPgBtn = document.querySelector('[data-admin-action="create-permission-group"]');
+    if (createPgBtn) {
+      createPgBtn.addEventListener('click', async function () {
+        var capabilities = await loadCapabilities();
+        var capHelpLines = ['可选 capability:'];
+        for (var ci = 0; ci < capabilities.length; ci++) {
+          capHelpLines.push(capabilities[ci].key + ' - ' + capabilities[ci].label);
+        }
+        capHelpLines.push('');
+        capHelpLines.push('请输入 capability key，多个用逗号分隔 (如: freeze:room, moderate:message):');
+        var name = prompt('权限组名称 (如: 协管员):');
+        if (!name) return;
+        var desc = prompt('描述:') || '';
+        var capInput = prompt(capHelpLines.join('\n'));
+        if (!capInput) return;
+        var capList = capInput.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+
+        createPgBtn.disabled = true; createPgBtn.textContent = '创建中...';
+        try {
+          var resp = await fetchGatewayJsonPost('/v1/admin/permission-groups', {
+            actor_id: currentGatewayIdentity(), name: name, description: desc, capabilities: capList
+          });
+          if (resp.error) { showAdminNotice('创建失败: ' + resp.error, 'error'); }
+          else { showAdminNotice('权限组 ' + name + ' 已创建', 'success'); await loadPermissionGroups(); }
+        } catch (e) { showAdminNotice('创建请求失败', 'error'); }
+        createPgBtn.disabled = false; createPgBtn.textContent = '+ 新建权限组';
+      });
+    }
+
     // Wire generate-invite button
     var genInviteBtn = document.querySelector('[data-admin-action="generate-invite"]');
     if (genInviteBtn) {
       genInviteBtn.addEventListener('click', function () {
         genInviteBtn.disabled = true; genInviteBtn.textContent = '生成中...';
-        fetchGatewayJsonPost('/v1/admin/invites', {actor_id: currentIdentity(), max_uses: 10}).then(function(r) {
+        fetchGatewayJsonPost('/v1/admin/invites', {actor_id: currentGatewayIdentity(), max_uses: 10}).then(function(r) {
           genInviteBtn.disabled = false; genInviteBtn.textContent = '+ 生成邀请码';
           if (r.error) { showAdminNotice('生成失败: ' + r.error, 'error'); }
           else { showAdminNotice('邀请码已生成: ' + r.data.code, 'success'); loadInviteCodes(); }
@@ -1498,7 +2311,7 @@
         fetchGatewayJsonPost('/v1/admin/residents', {resident_id: residentId, email: email}).then(function(r) {
           createResidentBtn.disabled = false; createResidentBtn.textContent = '+ 新建居民';
           if (r.error) { showAdminNotice('创建失败: ' + r.error, 'error'); }
-          else { showAdminNotice('居民 ' + residentId + ' 已创建', 'success'); loadResidents(); }
+          else { showAdminNotice('居民 ' + residentId + ' 已创建', 'success'); loadGatewayAdminData(); }
         }).catch(function() {
           createResidentBtn.disabled = false; createResidentBtn.textContent = '+ 新建居民';
         });
@@ -1513,7 +2326,7 @@
         fetchGatewayJsonPost('/v1/admin/logs/clear', {}).then(function (r) {
           clearLogsBtn.disabled = false; clearLogsBtn.textContent = '清空已处理';
           if (r.error) { showAdminNotice('清空失败: ' + r.error, 'error'); }
-          else { showAdminNotice('已清空 ' + (r.data && r.data.cleared || '') + ' 条已处理日志', 'success'); loadLogs(); }
+          else { showAdminNotice('已清空 ' + (r.data && r.data.cleared || '') + ' 条已处理日志', 'success'); loadAuditLog(); }
         }).catch(function () {
           clearLogsBtn.disabled = false; clearLogsBtn.textContent = '清空已处理';
         });
@@ -1528,6 +2341,38 @@
     var addSysConfig = document.querySelector('[data-admin-action="add-sysconfig"]');
     if (addSysConfig) {
       addSysConfig.addEventListener('click', addSysConfigItem);
+    }
+
+    var refreshScene = document.querySelector('[data-admin-action="refresh-scene"]');
+    if (refreshScene) {
+      refreshScene.addEventListener('click', loadSceneModule);
+    }
+
+    // World notices
+    var publishNoticeBtn = document.querySelector('[data-admin-action="publish-world-notice"]');
+    if (publishNoticeBtn) {
+      publishNoticeBtn.addEventListener('click', publishWorldNotice);
+    }
+
+    // Safety advisories
+    var publishAdvisoryBtn = document.querySelector('[data-admin-action="publish-safety-advisory"]');
+    if (publishAdvisoryBtn) {
+      publishAdvisoryBtn.addEventListener('click', publishSafetyAdvisory);
+    }
+
+    var refreshAdvisoriesBtn = document.querySelector('[data-admin-action="refresh-safety-advisories"]');
+    if (refreshAdvisoriesBtn) {
+      refreshAdvisoriesBtn.addEventListener('click', function () { loadSafetyData(); });
+    }
+
+    var refreshReportsBtn = document.querySelector('[data-admin-action="refresh-safety-reports"]');
+    if (refreshReportsBtn) {
+      refreshReportsBtn.addEventListener('click', function () { loadSafetyData(); });
+    }
+
+    var refreshSanctionsBtn = document.querySelector('[data-admin-action="refresh-resident-sanctions"]');
+    if (refreshSanctionsBtn) {
+      refreshSanctionsBtn.addEventListener('click', function () { loadSafetyData(); });
     }
 
   }
@@ -1641,6 +2486,284 @@
       renderSysConfigEditor(sysConfigCache);
     } else {
       showAdminNotice('添加失败 (HTTP ' + result.status + '): ' + JSON.stringify(result.data), 'error');
+    }
+  }
+
+  // ====== World Notices ======
+
+  async function loadWorldNotices() {
+    if (!gatewayUrl) return;
+    try {
+      var result = await fetchGatewayJson('/v1/world-square');
+      if (Array.isArray(result)) {
+        worldNotices = result;
+        renderWorldNotices();
+      }
+    } catch (e) {
+      console.warn('admin-ds load world notices failed', e);
+    }
+  }
+
+  function renderWorldNotices() {
+    var tbody = document.getElementById('worldNoticeTableBody');
+    if (!tbody) return;
+    clear(tbody);
+
+    if (!worldNotices.length) {
+      renderEmptyRow(tbody, 6, '暂无世界公告');
+      return;
+    }
+
+    var severityMap = { info: '信息', warning: '警告', critical: '严重' };
+    var severityTag = { info: 'info', warning: 'warning', critical: 'error' };
+
+    for (var i = 0; i < worldNotices.length; i++) {
+      (function (notice) {
+        var tr = el('tr');
+        var timeStr = new Date(notice.posted_at_ms).toLocaleString('zh-CN');
+        tr.appendChild(makeTd(timeStr, 'font-family:var(--ds-font-mono);font-size:12px;color:var(--ds-text-secondary);'));
+        tr.appendChild(makeTd(notice.title));
+        var tdBody = el('td');
+        tdBody.style.cssText = 'max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+        tdBody.textContent = notice.body;
+        tr.appendChild(tdBody);
+        var tdSev = el('td');
+        var sevLabel = severityMap[notice.severity] || notice.severity;
+        var sevTag = severityTag[notice.severity] || 'default';
+        tdSev.appendChild(makeTag(sevLabel, sevTag));
+        tr.appendChild(tdSev);
+        tr.appendChild(makeTd(notice.author_id));
+        var tdTags = el('td');
+        tdTags.textContent = Array.isArray(notice.tags) ? notice.tags.join(', ') : '';
+        tdTags.style.cssText = 'color:var(--ds-text-secondary);font-size:12px;';
+        tr.appendChild(tdTags);
+        tbody.appendChild(tr);
+      })(worldNotices[i]);
+    }
+  }
+
+  async function publishWorldNotice() {
+    var titleEl = document.getElementById('worldNoticeTitle');
+    var bodyEl = document.getElementById('worldNoticeBody');
+    var severityEl = document.getElementById('worldNoticeSeverity');
+    var tagsEl = document.getElementById('worldNoticeTags');
+    var btn = document.querySelector('[data-admin-action="publish-world-notice"]');
+
+    var title = (titleEl && titleEl.value || '').trim();
+    var body = (bodyEl && bodyEl.value || '').trim();
+    if (!title || !body) { showAdminNotice('标题和正文不能为空', 'error'); return; }
+
+    var tagsRaw = (tagsEl && tagsEl.value || '').trim();
+    var tags = tagsRaw ? tagsRaw.split(',').map(function (s) { return s.trim(); }).filter(Boolean) : [];
+
+    if (btn) { btn.disabled = true; btn.textContent = '发布中...'; }
+
+    var result = await fetchGatewayJsonPost('/v1/world-square/notices', {
+      actor_id: currentGatewayIdentity(),
+      title: title,
+      body: body,
+      severity: severityEl ? severityEl.value : 'info',
+      tags: tags.length ? tags : null
+    });
+
+    if (btn) { btn.disabled = false; btn.textContent = '发布'; }
+
+    if (result.error) {
+      showAdminNotice('发布失败: ' + result.error, 'error');
+    } else if (result.ok) {
+      showAdminNotice('公告已发布', 'success');
+      if (titleEl) titleEl.value = '';
+      if (bodyEl) bodyEl.value = '';
+      if (tagsEl) tagsEl.value = '';
+      loadWorldNotices();
+    } else {
+      showAdminNotice('发布失败 (HTTP ' + result.status + ')', 'error');
+    }
+  }
+
+  // ====== Safety Advisories ======
+
+  async function loadSafetyData() {
+    if (!gatewayUrl) return;
+    try {
+      var result = await fetchGatewayJson('/v1/world-safety');
+      if (result && typeof result === 'object') {
+        safetyAdvisories = Array.isArray(result.advisories) ? result.advisories : [];
+        safetyReports = Array.isArray(result.reports) ? result.reports : [];
+        residentSanctions = Array.isArray(result.resident_sanctions) ? result.resident_sanctions : [];
+        renderSafetyAdvisories();
+        renderSafetyReports();
+        renderResidentSanctions();
+      }
+    } catch (e) {
+      console.warn('admin-ds load safety data failed', e);
+    }
+  }
+
+  function renderSafetyAdvisories() {
+    var tbody = document.getElementById('safetyAdvisoryTableBody');
+    if (!tbody) return;
+    clear(tbody);
+
+    if (!safetyAdvisories.length) {
+      renderEmptyRow(tbody, 6, '暂无安全通告');
+      return;
+    }
+
+    var actionTag = { warn: 'warning', restrict: 'error', block: 'error', monitor: 'info' };
+    var actionText = { warn: '警告', restrict: '限制', block: '封禁', monitor: '监控' };
+
+    for (var i = 0; i < safetyAdvisories.length; i++) {
+      (function (adv) {
+        var tr = el('tr');
+        var timeStr = new Date(adv.issued_at_ms).toLocaleString('zh-CN');
+        tr.appendChild(makeTd(timeStr, 'font-family:var(--ds-font-mono);font-size:12px;color:var(--ds-text-secondary);'));
+        tr.appendChild(makeTd(adv.subject_kind));
+        tr.appendChild(makeTd(adv.subject_ref, 'font-family:var(--ds-font-mono);font-size:12px;'));
+        var tdAction = el('td');
+        tdAction.appendChild(makeTag(actionText[adv.action] || adv.action, actionTag[adv.action] || 'default'));
+        tr.appendChild(tdAction);
+        tr.appendChild(makeTd(adv.reason));
+        tr.appendChild(makeTd(adv.issued_by));
+        tbody.appendChild(tr);
+      })(safetyAdvisories[i]);
+    }
+  }
+
+  function renderSafetyReports() {
+    var tbody = document.getElementById('safetyReportTableBody');
+    if (!tbody) return;
+    clear(tbody);
+
+    if (!safetyReports.length) {
+      renderEmptyRow(tbody, 6, '暂无安全举报');
+      return;
+    }
+
+    var statusTag = { Submitted: 'warning', Reviewing: 'info', Resolved: 'success', Dismissed: 'default' };
+    var statusText = { Submitted: '待审', Reviewing: '审核中', Resolved: '已解决', Dismissed: '已驳回' };
+
+    for (var i = 0; i < safetyReports.length; i++) {
+      (function (report) {
+        var tr = el('tr');
+        tr.appendChild(makeTd(report.report_id, 'font-family:var(--ds-font-mono);font-size:11px;'));
+        tr.appendChild(makeTd((report.target_kind || '') + ': ' + (report.target_ref || '')));
+        tr.appendChild(makeTd(report.reporter_id));
+        tr.appendChild(makeTd(report.summary, 'max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'));
+        var tdStatus = el('td');
+        var stLabel = statusText[report.status] || report.status;
+        var stTag = statusTag[report.status] || 'default';
+        tdStatus.appendChild(makeTag(stLabel, stTag));
+        tr.appendChild(tdStatus);
+
+        var tdActions = el('td');
+        var btnGroup = makeBtnGroup();
+        if (report.status === 'Submitted' || report.status === 'Reviewing') {
+          var resolveBtn = makeBtn('解决', 'ds-btn-primary ds-btn-xs');
+          resolveBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            reviewSafetyReport(report.report_id, 'Resolved', resolveBtn);
+          });
+          btnGroup.appendChild(resolveBtn);
+          var dismissBtn = makeBtn('驳回', 'ds-btn-danger-text ds-btn-xs');
+          dismissBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            reviewSafetyReport(report.report_id, 'Dismissed', dismissBtn);
+          });
+          btnGroup.appendChild(dismissBtn);
+        }
+        tdActions.appendChild(btnGroup);
+        tr.appendChild(tdActions);
+
+        tbody.appendChild(tr);
+      })(safetyReports[i]);
+    }
+  }
+
+  async function reviewSafetyReport(reportId, status, btn) {
+    if (!reportId) return;
+    if (btn) { btn.disabled = true; btn.textContent = '...'; }
+    var result = await fetchGatewayJsonPost('/v1/world-safety/reports/review', {
+      actor_id: currentGatewayIdentity(),
+      report_id: reportId,
+      status: status,
+      resolution: status === 'Resolved' ? '已处理' : '证据不足'
+    });
+    if (btn) { btn.disabled = false; btn.textContent = status === 'Resolved' ? '解决' : '驳回'; }
+    if (result.error) {
+      showAdminNotice('操作失败: ' + result.error, 'error');
+    } else if (result.ok) {
+      showAdminNotice('举报 ' + reportId + ' 已' + (status === 'Resolved' ? '解决' : '驳回'), 'success');
+      loadSafetyData();
+    } else {
+      showAdminNotice('操作失败 (HTTP ' + result.status + ')', 'error');
+    }
+  }
+
+  function renderResidentSanctions() {
+    var tbody = document.getElementById('sanctionTableBody');
+    if (!tbody) return;
+    clear(tbody);
+
+    if (!residentSanctions.length) {
+      renderEmptyRow(tbody, 4, '暂无居民制裁');
+      return;
+    }
+
+    var statusTag = { Active: 'error', Lifted: 'success' };
+    var statusText = { Active: '生效中', Lifted: '已解除' };
+
+    for (var i = 0; i < residentSanctions.length; i++) {
+      (function (sanction) {
+        var tr = el('tr');
+        tr.appendChild(makeTd(sanction.resident_id, 'font-family:var(--ds-font-mono);font-size:12px;'));
+        tr.appendChild(makeTd(sanction.reason));
+        var tdStatus = el('td');
+        var sl = statusText[sanction.status] || sanction.status;
+        var sc = statusTag[sanction.status] || 'default';
+        tdStatus.appendChild(makeTag(sl, sc));
+        tr.appendChild(tdStatus);
+        tr.appendChild(makeTd(sanction.issued_by));
+        tbody.appendChild(tr);
+      })(residentSanctions[i]);
+    }
+  }
+
+  async function publishSafetyAdvisory() {
+    var kindEl = document.getElementById('safetyAdvisorySubjectKind');
+    var refEl = document.getElementById('safetyAdvisorySubjectRef');
+    var actionEl = document.getElementById('safetyAdvisoryAction');
+    var reasonEl = document.getElementById('safetyAdvisoryReason');
+    var btn = document.querySelector('[data-admin-action="publish-safety-advisory"]');
+
+    var subjectKind = kindEl ? kindEl.value : 'resident';
+    var subjectRef = (refEl && refEl.value || '').trim();
+    var action = actionEl ? actionEl.value : 'warn';
+    var reason = (reasonEl && reasonEl.value || '').trim();
+
+    if (!subjectRef || !reason) { showAdminNotice('目标 ID 和原因不能为空', 'error'); return; }
+
+    if (btn) { btn.disabled = true; btn.textContent = '发布中...'; }
+
+    var result = await fetchGatewayJsonPost('/v1/world-safety/advisories', {
+      actor_id: currentGatewayIdentity(),
+      subject_kind: subjectKind,
+      subject_ref: subjectRef,
+      action: action,
+      reason: reason
+    });
+
+    if (btn) { btn.disabled = false; btn.textContent = '发布'; }
+
+    if (result.error) {
+      showAdminNotice('发布失败: ' + result.error, 'error');
+    } else if (result.ok) {
+      showAdminNotice('安全通告已发布', 'success');
+      if (refEl) refEl.value = '';
+      if (reasonEl) reasonEl.value = '';
+      loadSafetyData();
+    } else {
+      showAdminNotice('发布失败 (HTTP ' + result.status + ')', 'error');
     }
   }
 

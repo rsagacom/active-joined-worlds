@@ -2,7 +2,8 @@
 
 > 可用命令：`/phase`、`/status`、`/checkpoint`、`/review`、`/archive`
 
-@.claude/project-state.md
+**启动必读：** `@docs/DEVELOPMENT_BLUEPRINT.md` — 权限模型、UI 规范、待办事项
+**项目状态：** `@.claude/project-state.md`
 
 ## 项目记忆入口
 

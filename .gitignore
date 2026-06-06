@@ -25,6 +25,31 @@ __pycache__/
 # Deployment/runtime leftovers copied into the repo during manual tests
 *.log
 
+# Secrets & credentials
+.env
+.env.*
+*.pem
+*.key
+credentials.json
+service-account.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Rust
+*.rs.bk
+/incremental/
+
+# OS
+Thumbs.db
+.AppleDouble
+.LSOverride
+Icon
+
 # Tooling
 /.playwright-cli/
 

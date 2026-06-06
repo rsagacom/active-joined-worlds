@@ -10,7 +10,8 @@ use tiny_http::{Response, StatusCode};
 use transport_waku::WakuGatewayResponse;
 
 use crate::{
-    ConversationId, GatewayRuntime, GatewayStateNotifier, IdentityId,
+    capability_catalog, AdminModerationStatusResponse, ConversationId, GatewayRuntime,
+    GatewayStateNotifier, IdentityId,
     http_support::{
         cli_missing_for_body, json_header, no_cache_header, parse_bool, parse_cli_address,
         parse_export_format, sse_header,
@@ -410,6 +411,89 @@ pub(crate) fn handle_get_admin_config(runtime: &Arc<Mutex<GatewayRuntime>>) -> H
         .expect("gateway runtime mutex poisoned")
         .admin_get_config();
     Response::from_string(serde_json::to_string(&config).unwrap_or_else(|_| "{}".into()))
+        .with_status_code(StatusCode(200))
+        .with_header(json_header())
+}
+
+pub(crate) fn handle_get_admin_logs(runtime: &Arc<Mutex<GatewayRuntime>>) -> HttpResponse {
+    let logs = runtime
+        .lock()
+        .expect("gateway runtime mutex poisoned")
+        .admin_logs();
+    Response::from_string(serde_json::to_string(&logs).unwrap_or_else(|_| "[]".into()))
+        .with_status_code(StatusCode(200))
+        .with_header(json_header())
+}
+
+pub(crate) fn handle_get_admin_messages_moderation(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    query_params: &HashMap<String, String>,
+) -> HttpResponse {
+    let message_id = match query_params.get("message_id") {
+        Some(id) if !id.trim().is_empty() => id.clone(),
+        _ => {
+            return Response::from_string(
+                r#"{"error":"message_id query parameter required"}"#,
+            )
+            .with_status_code(StatusCode(400))
+            .with_header(json_header());
+        }
+    };
+    let status = runtime
+        .lock()
+        .expect("gateway runtime mutex poisoned")
+        .admin_message_moderation_status(&message_id)
+        .map(|s| s.to_string());
+    let resp = AdminModerationStatusResponse {
+        message_id,
+        status,
+    };
+    Response::from_string(serde_json::to_string(&resp).unwrap_or_else(|_| "{}".into()))
+        .with_status_code(StatusCode(200))
+        .with_header(json_header())
+}
+
+pub(crate) fn handle_get_admin_invites(runtime: &Arc<Mutex<GatewayRuntime>>) -> HttpResponse {
+    let invites = runtime
+        .lock()
+        .expect("gateway runtime mutex poisoned")
+        .admin_list_invites();
+    Response::from_string(serde_json::to_string(&invites).unwrap_or_else(|_| "[]".into()))
+        .with_status_code(StatusCode(200))
+        .with_header(json_header())
+}
+
+pub(crate) fn handle_get_permission_groups(runtime: &Arc<Mutex<GatewayRuntime>>) -> HttpResponse {
+    let groups = runtime
+        .lock()
+        .expect("gateway runtime mutex poisoned")
+        .admin_list_permission_groups();
+    Response::from_string(serde_json::to_string(&groups).unwrap_or_else(|_| "[]".into()))
+        .with_status_code(StatusCode(200))
+        .with_header(json_header())
+}
+
+pub(crate) fn handle_get_capability_catalog() -> HttpResponse {
+    let catalog = capability_catalog();
+    Response::from_string(serde_json::to_string(&catalog).unwrap_or_else(|_| "[]".into()))
+        .with_status_code(StatusCode(200))
+        .with_header(json_header())
+}
+
+pub(crate) fn handle_get_audit_log(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    query_params: &HashMap<String, String>,
+) -> HttpResponse {
+    let limit = query_params
+        .get("limit")
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(100)
+        .min(500);
+    let response = runtime
+        .lock()
+        .expect("gateway runtime mutex poisoned")
+        .admin_list_audit_events(limit);
+    Response::from_string(serde_json::to_string(&response).unwrap_or_else(|_| "{}".into()))
         .with_status_code(StatusCode(200))
         .with_header(json_header())
 }

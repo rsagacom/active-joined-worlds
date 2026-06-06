@@ -837,6 +837,35 @@
 /* ============================================================
    Responsive
    ============================================================ */
+/* ============================================================
+   Room Scene Config (inside detail panel)
+   ============================================================ */
+.admin-room-scene-config {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ds-border-light);
+}
+.admin-scene-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ds-text);
+  margin-bottom: 12px;
+}
+.admin-scene-preset {
+  width: 100%;
+}
+.admin-scene-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+.admin-scene-msg {
+  font-size: 12px;
+  color: var(--ds-text-muted);
+  white-space: nowrap;
+}
+
 @media (max-width: 1024px) {
   .ds-detail-panel {
     position: fixed;

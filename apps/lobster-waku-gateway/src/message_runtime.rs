@@ -83,6 +83,9 @@ impl GatewayRuntime {
         if sender_id.is_empty() || sender_id == "访客" {
             return Err("login required before sending messages".into());
         }
+        if self.resident_portability_revoked(sender) {
+            return Err("resident is sanctioned and cannot send messages".into());
+        }
         Ok(())
     }
 

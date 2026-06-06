@@ -5,9 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>龙虾聊天 · 世界广场</title>
     <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles.tokens.css?v=20260604-css-split" />
     <link rel="stylesheet" href="./styles.world-square.css?v=20260525-h5-shell-fix-v2" />
+    <link rel="stylesheet" href="./styles.creative.css?v=20260525-h5-shell-fix-v2" />
   </head>
-  <body data-shell-page="world-square" data-shell-variant="world-square-readonly" data-sfc-theme="city">
+  <body data-shell-page="world-square" data-shell-variant="world-square-readonly" data-sfc-theme="city" data-resident-login="enabled">
+    <div id="resident-login-overlay" class="resident-login-overlay shell-hidden" aria-hidden="true">
+      <section id="resident-login-card" class="resident-login-card" aria-label="居民登录">
+        <button type="button" id="resident-login-close" class="resident-login-close" aria-label="关闭登录窗口">×</button>
+        <div class="resident-login-copy">
+          <span class="resident-login-kicker">居民身份</span>
+          <strong id="auth-status">登录状态：访客模式</strong>
+        </div>
+        <form id="auth-request-form" class="resident-login-form" data-auth-step="request">
+          <label for="auth-email-input" class="resident-login-field-label">邮箱地址（也是你的注册ID）</label>
+          <input id="auth-email-input" type="email" placeholder="输入邮箱地址" autocomplete="email" required />
+          <label for="auth-nickname-input" class="resident-login-field-label">用户昵称</label>
+          <input id="auth-nickname-input" type="text" placeholder="输入用户昵称" autocomplete="nickname" />
+          <input id="auth-resident-input" type="hidden" autocomplete="off" />
+          <input id="auth-device-input" type="hidden" autocomplete="off" />
+          <input id="auth-delivery-select" type="hidden" value="email" />
+          <button id="auth-request-button" type="submit">获取验证码</button>
+        </form>
+        <form id="auth-verify-form" class="resident-login-form resident-login-verify shell-hidden" data-auth-step="verify">
+          <input id="auth-challenge-input" type="hidden" autocomplete="off" />
+          <label for="auth-code-input" class="resident-login-field-label">邮箱验证码</label>
+          <input id="auth-code-input" type="text" placeholder="输入邮箱验证码" autocomplete="one-time-code" />
+          <button id="auth-verify-button" type="submit">完成登录</button>
+        </form>
+      </section>
+    </div>
+
     <div class="world-square-shell">
       <header class="world-square-hud">
         <div class="world-square-title-stack">
@@ -16,6 +44,7 @@
           <p class="world-square-hud-note">公共广场入口，后续接入公告与跨城发现。</p>
         </div>
         <nav class="world-square-actions" aria-label="世界广场导航">
+          <button type="button" id="hud-login-toggle" class="hud-login-toggle shell-hidden" aria-label="打开登录窗口">登录</button>
           <a href="./unified.html">返回世界入口</a>
           <a href="./index.html">回主城群聊</a>
         </nav>
@@ -49,6 +78,11 @@
 
       <section class="world-square-stage" aria-label="世界广场概念图">
         <div class="world-square-scene" role="img" aria-label="世界广场完整概念图"></div>
+        <div class="scene-hotspots" aria-label="场景热点">
+          <button class="scene-hotspot" data-hotspot-title="广场公告" data-hotspot-kind="notice" style="left:25%;top:18%;width:22%;height:16%;" aria-label="查看广场公告"></button>
+          <button class="scene-hotspot" data-hotspot-title="公共讨论" data-hotspot-kind="discussion" style="left:55%;top:14%;width:22%;height:16%;" aria-label="查看公共讨论"></button>
+          <button class="scene-hotspot" data-hotspot-title="跨城发现" data-hotspot-kind="discovery" style="left:40%;top:55%;width:24%;height:16%;" aria-label="查看跨城发现"></button>
+        </div>
         <details class="world-square-card world-square-card--compact" aria-label="世界广场说明">
           <summary class="world-square-card-toggle">广场信息</summary>
           <div class="world-square-card-panel">
@@ -116,6 +150,78 @@
         link.href = preloadAsset;
         document.head.appendChild(link);
 
+        /* ── Scene hotspots ── */
+        var hotspotTimer = 0;
+        var clearMode = false;
+        var stageEl = document.querySelector(".world-square-stage");
+        var cardEl = document.querySelector(".world-square-card");
+        var hotspots = document.querySelectorAll(".scene-hotspot");
+
+        function showHotspotLabel(hs) {
+          var label = hs.querySelector(".scene-hotspot-label");
+          if (!label) {
+            label = document.createElement("span");
+            label.className = "scene-hotspot-label";
+            label.textContent = hs.dataset.hotspotTitle || "";
+            hs.appendChild(label);
+          }
+          hs.classList.add("is-active");
+        }
+
+        function hideHotspotLabels() {
+          for (var i = 0; i < hotspots.length; i++) {
+            hotspots[i].classList.remove("is-active");
+            var l = hotspots[i].querySelector(".scene-hotspot-label");
+            if (l) l.remove();
+          }
+        }
+
+        function showAllLabelsBriefly() {
+          for (var i = 0; i < hotspots.length; i++) showHotspotLabel(hotspots[i]);
+          clearTimeout(hotspotTimer);
+          hotspotTimer = setTimeout(hideHotspotLabels, 2800);
+        }
+
+        function toggleClearMode() {
+          clearMode = !clearMode;
+          document.body.classList.toggle("scene-clear-mode", clearMode);
+          if (clearMode) {
+            if (cardEl) cardEl.open = false;
+            showAllLabelsBriefly();
+            clearTimeout(hotspotTimer);
+          } else {
+            hideHotspotLabels();
+          }
+        }
+
+        for (var i = 0; i < hotspots.length; i++) {
+          hotspots[i].addEventListener("mouseenter", function() { showHotspotLabel(this); });
+          hotspots[i].addEventListener("mouseleave", function() { hideHotspotLabels(); });
+          hotspots[i].addEventListener("focus", function() { showHotspotLabel(this); });
+          hotspots[i].addEventListener("blur", function() { hideHotspotLabels(); });
+          hotspots[i].addEventListener("click", function(e) {
+            e.stopPropagation();
+            var kind = this.dataset.hotspotKind;
+            var item = document.querySelector('[data-readonly-kind="' + kind + '"]');
+            if (item) item.scrollIntoView({ behavior: "smooth", block: "center" });
+            if (cardEl && !cardEl.open) cardEl.open = true;
+            showAllLabelsBriefly();
+          });
+        }
+
+        if (stageEl) {
+          stageEl.addEventListener("click", function(e) {
+            if (e.target.closest(".scene-hotspot") || e.target.closest(".world-square-card")) return;
+            toggleClearMode();
+          });
+        }
+
+        document.addEventListener("keydown", function(e) {
+          if (e.key === "Escape" && clearMode) {
+            toggleClearMode();
+          }
+        });
+
         const gateway = new URLSearchParams(window.location.search).get("gateway");
         if (!gateway) return;
 
@@ -125,6 +231,8 @@
           discussion: document.querySelector('[data-readonly-kind="discussion"]'),
           discovery: document.querySelector('[data-readonly-kind="discovery"]'),
         };
+
+        const hudNote = document.querySelector(".world-square-hud-note");
 
         const classifyNotice = (notice) => {
           const tags = Array.isArray(notice.tags) ? notice.tags.join(" ").toLowerCase() : "";
@@ -143,13 +251,15 @@
           if (title) title.textContent = notice.title || title.textContent;
           if (body) body.textContent = notice.body || body.textContent;
           if (meta) meta.textContent = "来自网关";
+          card.removeAttribute("aria-disabled");
           card.dataset.source = "gateway";
         };
 
         fetch(endpoint)
           .then((response) => (response.ok ? response.json() : []))
           .then((notices) => {
-            if (!Array.isArray(notices)) return;
+            if (!Array.isArray(notices) || !notices.length) return;
+            if (hudNote) hudNote.textContent = `已接入网关 · ${notices.length} 条广场公告`;
             const picked = {};
             for (const notice of notices) {
               const kind = classifyNotice(notice);
@@ -158,11 +268,74 @@
             applyNotice("notice", picked.notice || notices[0]);
             applyNotice("discussion", picked.discussion);
             applyNotice("discovery", picked.discovery);
+            document.body.dataset.worldSquareSource = "gateway";
           })
           .catch(() => {
             document.body.dataset.worldSquareSource = "fallback";
           });
       })();
+    </script>
+
+    <!-- 注册登录模块（轻量接入，不加载完整 app.js） -->
+    <script type="module">
+      import { initAuth } from "./shell-auth.js";
+
+      const gatewayUrl = new URLSearchParams(window.location.search).get("gateway") || "";
+
+      const els = {
+        statusEl: document.getElementById("auth-status"),
+        requestFormEl: document.getElementById("auth-request-form"),
+        deliverySelectEl: document.getElementById("auth-delivery-select"),
+        residentInputEl: document.getElementById("auth-resident-input"),
+        nicknameInputEl: document.getElementById("auth-nickname-input"),
+        emailInputEl: document.getElementById("auth-email-input"),
+        mobileInputEl: document.getElementById("auth-mobile-input"),
+        deviceInputEl: document.getElementById("auth-device-input"),
+        verifyFormEl: document.getElementById("auth-verify-form"),
+        challengeInputEl: document.getElementById("auth-challenge-input"),
+        codeInputEl: document.getElementById("auth-code-input"),
+        loginCardEl: document.getElementById("resident-login-card"),
+        loginOverlayEl: document.getElementById("resident-login-overlay"),
+        hudLoginToggleEl: document.getElementById("hud-login-toggle"),
+      };
+
+      initAuth(els, {
+        gatewayUrl: () => gatewayUrl,
+        postJson: async (path, body) => {
+          if (!gatewayUrl) throw new Error("gateway not connected");
+          const res = await fetch(gatewayUrl.replace(/\/+$/, "") + path, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+          return res.json();
+        },
+        refreshFromGateway: () => {},
+        persistIdentity: (id) => { try { localStorage.setItem("lobster-identity", id); } catch(e) {} },
+        userProjection: () => null,
+        desiredResidentId: () => undefined,
+      });
+
+      // Login toggle
+      const closeBtn = document.getElementById("resident-login-close");
+      const overlay = document.getElementById("resident-login-overlay");
+      const toggle = document.getElementById("hud-login-toggle");
+
+      toggle?.addEventListener("click", () => {
+        overlay?.removeAttribute("aria-hidden");
+        overlay?.classList.remove("shell-hidden");
+      });
+      closeBtn?.addEventListener("click", () => {
+        overlay?.setAttribute("aria-hidden", "true");
+        overlay?.classList.add("shell-hidden");
+      });
+
+      // Auto-show login if not logged in and gateway is connected
+      if (gatewayUrl && !localStorage.getItem("lobster-identity")) {
+        setTimeout(() => {
+          if (toggle) toggle.classList.remove("shell-hidden");
+        }, 800);
+      }
     </script>
   </body>
 </html>

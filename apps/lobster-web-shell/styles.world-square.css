@@ -210,6 +210,7 @@ body[data-shell-page="world-square"] {
   inset: 0;
   overflow: hidden;
   background: #15130f;
+  pointer-events: none;
 }
 
 .world-square-scene::before {
@@ -366,6 +367,18 @@ body[data-time-of-day="day"] .world-square-scene::before {
   white-space: nowrap;
 }
 
+/* Gateway-connected cards: remove readonly styling */
+.world-square-readonly-item[data-source="gateway"] {
+  pointer-events: auto;
+  cursor: default;
+  background: linear-gradient(180deg, rgba(200, 240, 180, 0.96), rgba(140, 200, 100, 0.94));
+  border-color: #8bc34a;
+}
+
+.world-square-readonly-item[data-source="gateway"] em {
+  color: #2e7d32;
+}
+
 @media (max-width: 820px) {
   body[data-shell-page="world-square"] {
     overflow-y: auto;
@@ -499,4 +512,61 @@ body[data-shell-page="world-square"] {
     min-height: 46px;
     font-size: 13px;
   }
+}
+
+/* ── Scene hotspots ── */
+.scene-hotspots {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.scene-hotspot {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.scene-hotspot:hover,
+.scene-hotspot:focus-visible,
+.scene-hotspot.is-active {
+  border-color: rgba(241, 201, 120, 0.72);
+  background: rgba(241, 201, 120, 0.12);
+  outline: none;
+}
+
+.scene-hotspot-label {
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(14, 9, 6, 0.88);
+  color: #fff4c9;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ── Clear mode ── */
+body.scene-clear-mode[data-shell-page="world-square"] .world-square-card {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+body.scene-clear-mode[data-shell-page="world-square"] .scene-hotspot {
+  pointer-events: auto;
+}
+
+body.scene-clear-mode[data-shell-page="world-square"] .scene-hotspot.is-active {
+  border-color: rgba(241, 201, 120, 0.72);
+  background: rgba(241, 201, 120, 0.12);
 }

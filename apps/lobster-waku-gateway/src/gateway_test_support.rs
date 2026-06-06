@@ -66,7 +66,7 @@ pub(super) fn register_resident(runtime: &mut GatewayRuntime, resident_id: &str)
     let mobile = format!("+86 13{:09}", seed % 1_000_000_000);
     let device = format!(
         "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-        (seed >> 0) as u8,
+        seed as u8,
         (seed >> 8) as u8,
         (seed >> 16) as u8,
         (seed >> 24) as u8,
@@ -80,6 +80,7 @@ pub(super) fn register_resident(runtime: &mut GatewayRuntime, resident_id: &str)
             mobile: Some(mobile),
             device_physical_address: Some(device),
             resident_id: Some(resident_id.into()),
+            nickname: None,
         })
         .expect("request email otp");
     runtime
@@ -93,6 +94,7 @@ pub(super) fn register_resident(runtime: &mut GatewayRuntime, resident_id: &str)
 
 pub(super) struct LocalGatewayHttpServer {
     pub(super) base_url: String,
+    pub(super) runtime: Arc<Mutex<GatewayRuntime>>,
     running: Arc<AtomicBool>,
     handle: Option<thread::JoinHandle<()>>,
 }
@@ -140,6 +142,7 @@ pub(super) fn start_local_gateway_http_server(runtime: GatewayRuntime) -> LocalG
 
     LocalGatewayHttpServer {
         base_url,
+        runtime: Arc::clone(&runtime),
         running,
         handle: Some(handle),
     }

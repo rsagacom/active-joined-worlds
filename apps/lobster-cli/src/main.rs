@@ -9,6 +9,14 @@ enum Command {
     Inbox(QueryCommand),
     Rooms(QueryCommand),
     Tail(TailCommand),
+    Ban(AdminCommand),
+    Unban(IdentityCommand),
+    Freeze(IdentityCommand),
+    Unfreeze(IdentityCommand),
+    InviteCreate(InviteCreateCommand),
+    InviteRevoke(InviteRevokeCommand),
+    AdminResidents(QueryCommand),
+    AdminRooms(QueryCommand),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -156,6 +164,92 @@ struct CliTailResponse {
     messages: Vec<CliTailMessage>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AdminCommand {
+    target: String,
+    reason: String,
+    gateway: String,
+    json: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct IdentityCommand {
+    target: String,
+    gateway: String,
+    json: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct InviteCreateCommand {
+    actor: String,
+    max_uses: u32,
+    gateway: String,
+    json: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct InviteRevokeCommand {
+    actor: String,
+    code: String,
+    gateway: String,
+    json: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct AdminBanRequest {
+    resident_id: String,
+    reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct AdminTargetRequest {
+    resident_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct AdminRoomTargetRequest {
+    room_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct AdminCreateInviteRequest {
+    actor_id: String,
+    max_uses: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct AdminRevokeInviteRequest {
+    code: String,
+    actor_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct AdminCreateInviteResponse {
+    ok: bool,
+    code: String,
+    max_uses: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct AdminResidentEntry {
+    resident_id: String,
+    #[serde(default)]
+    nickname: Option<String>,
+    online: bool,
+    is_banned: bool,
+    roles: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct AdminRoomEntry {
+    id: String,
+    title: String,
+    kind: String,
+    participant_count: u64,
+    message_count: u64,
+    is_frozen: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct CliErrorResponse {
     message: Option<String>,
@@ -184,6 +278,14 @@ where
         "inbox" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::Inbox),
         "rooms" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::Rooms),
         "tail" => parse_tail_command(iter.collect::<Vec<_>>()).map(Command::Tail),
+        "ban" => parse_admin_command(iter.collect::<Vec<_>>()).map(Command::Ban),
+        "unban" => parse_identity_command(iter.collect::<Vec<_>>()).map(Command::Unban),
+        "freeze" => parse_identity_command(iter.collect::<Vec<_>>()).map(Command::Freeze),
+        "unfreeze" => parse_identity_command(iter.collect::<Vec<_>>()).map(Command::Unfreeze),
+        "invite-create" => parse_invite_create_command(iter.collect::<Vec<_>>()).map(Command::InviteCreate),
+        "invite-revoke" => parse_invite_revoke_command(iter.collect::<Vec<_>>()).map(Command::InviteRevoke),
+        "residents" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminResidents),
+        "rooms-admin" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminRooms),
         other => Err(format!("unsupported command: {other}")),
     }
 }
@@ -374,6 +476,123 @@ fn parse_tail_command(args: Vec<String>) -> Result<TailCommand, String> {
         gateway,
         json,
         follow,
+    })
+}
+
+fn parse_admin_command(args: Vec<String>) -> Result<AdminCommand, String> {
+    let mut target = None;
+    let mut reason = "从 CLI 封禁".to_string();
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--target" => target = iter.next(),
+            "--reason" => reason = iter.next().unwrap_or_else(|| reason.clone()),
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?
+            }
+            "--json" => json = true,
+            other => return Err(format!("unsupported flag: {other}")),
+        }
+    }
+
+    Ok(AdminCommand {
+        target: target.ok_or_else(|| "missing required flag --target".to_string())?,
+        reason,
+        gateway,
+        json,
+    })
+}
+
+fn parse_identity_command(args: Vec<String>) -> Result<IdentityCommand, String> {
+    let mut target = None;
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--target" => target = iter.next(),
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?
+            }
+            "--json" => json = true,
+            other => return Err(format!("unsupported flag: {other}")),
+        }
+    }
+
+    Ok(IdentityCommand {
+        target: target.ok_or_else(|| "missing required flag --target".to_string())?,
+        gateway,
+        json,
+    })
+}
+
+fn parse_invite_create_command(args: Vec<String>) -> Result<InviteCreateCommand, String> {
+    let mut actor = None;
+    let mut max_uses = 10u32;
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--actor" => actor = iter.next(),
+            "--max-uses" => {
+                if let Some(val) = iter.next() {
+                    max_uses = val.parse::<u32>().map_err(|_| "invalid --max-uses value".to_string())?;
+                }
+            }
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?
+            }
+            "--json" => json = true,
+            other => return Err(format!("unsupported flag: {other}")),
+        }
+    }
+
+    Ok(InviteCreateCommand {
+        actor: actor.ok_or_else(|| "missing required flag --actor".to_string())?,
+        max_uses,
+        gateway,
+        json,
+    })
+}
+
+fn parse_invite_revoke_command(args: Vec<String>) -> Result<InviteRevokeCommand, String> {
+    let mut actor = None;
+    let mut code = None;
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--actor" => actor = iter.next(),
+            "--code" => code = iter.next(),
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?
+            }
+            "--json" => json = true,
+            other => return Err(format!("unsupported flag: {other}")),
+        }
+    }
+
+    Ok(InviteRevokeCommand {
+        actor: actor.ok_or_else(|| "missing required flag --actor".to_string())?,
+        code: code.ok_or_else(|| "missing required flag --code".to_string())?,
+        gateway,
+        json,
     })
 }
 
@@ -654,6 +873,133 @@ fn run_tail(command: TailCommand) -> Result<String, String> {
     }
 }
 
+fn format_admin_residents(payload: &[AdminResidentEntry]) -> String {
+    let mut lines = vec![format!("居民名单（共 {} 人）：", payload.len())];
+    for resident in payload {
+        let mut tags: Vec<String> = Vec::new();
+        if resident.online { tags.push("在线".into()); }
+        if resident.is_banned { tags.push("已封禁".into()); }
+        if !resident.roles.is_empty() { tags.push(format!("角色:{}", resident.roles.join(","))); }
+        let tag_str = if tags.is_empty() { String::new() } else { format!(" [{}]", tags.join(", ")) };
+        let display = match &resident.nickname {
+            Some(n) if !n.is_empty() => format!("{} ({})", n, resident.resident_id),
+            _ => resident.resident_id.clone(),
+        };
+        lines.push(format!("  {display}{tag_str}"));
+    }
+    lines.join("\n")
+}
+
+fn format_admin_rooms(payload: &[AdminRoomEntry]) -> String {
+    let mut lines = vec![format!("房间列表（共 {} 间）：", payload.len())];
+    for room in payload {
+        let frozen_tag = if room.is_frozen { " [已冻结]" } else { "" };
+        lines.push(format!(
+            "  {} ({}) · {}人 · {}条消息{}",
+            room.title, room.kind, room.participant_count, room.message_count, frozen_tag
+        ));
+    }
+    lines.join("\n")
+}
+
+fn run_admin_ban(command: AdminCommand) -> Result<String, String> {
+    let request = AdminBanRequest {
+        resident_id: command.target,
+        reason: command.reason,
+    };
+    let url = format!("{}/v1/admin/residents/ban", command.gateway.trim_end_matches('/'));
+    let payload = post_json::<_, serde_json::Value>(&url, &request, "ban")?;
+    if command.json {
+        serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
+    } else {
+        Ok(format!("已封禁居民 {}", request.resident_id))
+    }
+}
+
+fn run_admin_unban(command: IdentityCommand) -> Result<String, String> {
+    let request = AdminTargetRequest { resident_id: command.target };
+    let url = format!("{}/v1/admin/residents/unban", command.gateway.trim_end_matches('/'));
+    let payload = post_json::<_, serde_json::Value>(&url, &request, "unban")?;
+    if command.json {
+        serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
+    } else {
+        let count = payload["lifted_count"].as_u64().unwrap_or(0);
+        Ok(format!("已解封居民 {}（解除 {} 条封禁）", request.resident_id, count))
+    }
+}
+
+fn run_admin_freeze(command: IdentityCommand) -> Result<String, String> {
+    let request = AdminRoomTargetRequest { room_id: command.target };
+    let url = format!("{}/v1/admin/rooms/freeze", command.gateway.trim_end_matches('/'));
+    let _payload = post_json::<_, serde_json::Value>(&url, &request, "freeze")?;
+    if command.json {
+        serde_json::to_string(&serde_json::json!({"ok": true, "room_id": request.room_id}))
+            .map_err(|e| format!("serialize response: {e}"))
+    } else {
+        Ok(format!("已冻结房间 {}", request.room_id))
+    }
+}
+
+fn run_admin_unfreeze(command: IdentityCommand) -> Result<String, String> {
+    let request = AdminRoomTargetRequest { room_id: command.target };
+    let url = format!("{}/v1/admin/rooms/unfreeze", command.gateway.trim_end_matches('/'));
+    let _payload = post_json::<_, serde_json::Value>(&url, &request, "unfreeze")?;
+    if command.json {
+        serde_json::to_string(&serde_json::json!({"ok": true, "room_id": request.room_id}))
+            .map_err(|e| format!("serialize response: {e}"))
+    } else {
+        Ok(format!("已解冻房间 {}", request.room_id))
+    }
+}
+
+fn run_invite_create(command: InviteCreateCommand) -> Result<String, String> {
+    let request = AdminCreateInviteRequest {
+        actor_id: command.actor,
+        max_uses: command.max_uses,
+    };
+    let url = format!("{}/v1/admin/invites", command.gateway.trim_end_matches('/'));
+    let payload = post_json::<_, AdminCreateInviteResponse>(&url, &request, "invite create")?;
+    if command.json {
+        serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
+    } else {
+        Ok(format!("已创建邀请码：{}（可用 {} 次）", payload.code, payload.max_uses))
+    }
+}
+
+fn run_invite_revoke(command: InviteRevokeCommand) -> Result<String, String> {
+    let request = AdminRevokeInviteRequest {
+        code: command.code,
+        actor_id: command.actor,
+    };
+    let url = format!("{}/v1/admin/invites/revoke", command.gateway.trim_end_matches('/'));
+    let _payload = post_json::<_, serde_json::Value>(&url, &request, "invite revoke")?;
+    if command.json {
+        serde_json::to_string(&serde_json::json!({"ok": true})).map_err(|e| format!("serialize: {e}"))
+    } else {
+        Ok(format!("已撤销邀请码 {}", request.code))
+    }
+}
+
+fn run_admin_residents(command: QueryCommand) -> Result<String, String> {
+    let url = format!("{}/v1/admin/residents", command.gateway.trim_end_matches('/'));
+    let payload = run_query::<Vec<AdminResidentEntry>>(&url)?;
+    if command.json {
+        serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
+    } else {
+        Ok(format_admin_residents(&payload))
+    }
+}
+
+fn run_admin_rooms(command: QueryCommand) -> Result<String, String> {
+    let url = format!("{}/v1/admin/rooms", command.gateway.trim_end_matches('/'));
+    let payload = run_query::<Vec<AdminRoomEntry>>(&url)?;
+    if command.json {
+        serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
+    } else {
+        Ok(format_admin_rooms(&payload))
+    }
+}
+
 fn run_command(command: Command) -> Result<String, String> {
     match command {
         Command::Send(command) => run_send(command),
@@ -662,6 +1008,14 @@ fn run_command(command: Command) -> Result<String, String> {
         Command::Inbox(command) => run_inbox(command),
         Command::Rooms(command) => run_rooms(command),
         Command::Tail(command) => run_tail(command),
+        Command::Ban(command) => run_admin_ban(command),
+        Command::Unban(command) => run_admin_unban(command),
+        Command::Freeze(command) => run_admin_freeze(command),
+        Command::Unfreeze(command) => run_admin_unfreeze(command),
+        Command::InviteCreate(command) => run_invite_create(command),
+        Command::InviteRevoke(command) => run_invite_revoke(command),
+        Command::AdminResidents(command) => run_admin_residents(command),
+        Command::AdminRooms(command) => run_admin_rooms(command),
     }
 }
 
@@ -1020,5 +1374,241 @@ mod tests {
 
         assert!(rendered.contains("[已撤回] rsaga: 消息已撤回"));
         assert!(rendered.contains("[已编辑] openclaw: 改过的内容"));
+    }
+
+    #[test]
+    fn ban_command_parses_target_and_reason() {
+        let command = parse_args([
+            "lobster-cli",
+            "ban",
+            "--target",
+            "user:troublemaker",
+            "--reason",
+            "spam",
+        ])
+        .expect("ban command should parse");
+
+        match command {
+            Command::Ban(ban) => {
+                assert_eq!(ban.target, "user:troublemaker");
+                assert_eq!(ban.reason, "spam");
+            }
+            other => panic!("expected ban command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ban_command_defaults_reason_when_missing() {
+        let command = parse_args(["lobster-cli", "ban", "--target", "user:spammer"])
+            .expect("ban without --reason should parse");
+
+        match command {
+            Command::Ban(ban) => {
+                assert_eq!(ban.target, "user:spammer");
+                assert!(ban.reason.contains("CLI"));
+            }
+            other => panic!("expected ban command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unban_command_parses_target() {
+        let command = parse_args(["lobster-cli", "unban", "--target", "user:reformed"])
+            .expect("unban command should parse");
+
+        match command {
+            Command::Unban(unban) => assert_eq!(unban.target, "user:reformed"),
+            other => panic!("expected unban command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn freeze_command_parses_target() {
+        let command = parse_args(["lobster-cli", "freeze", "--target", "room:world:toxic"])
+            .expect("freeze command should parse");
+
+        match command {
+            Command::Freeze(freeze) => assert_eq!(freeze.target, "room:world:toxic"),
+            other => panic!("expected freeze command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn unfreeze_command_parses_target() {
+        let command = parse_args(["lobster-cli", "unfreeze", "--target", "room:world:thawed"])
+            .expect("unfreeze command should parse");
+
+        match command {
+            Command::Unfreeze(unfreeze) => assert_eq!(unfreeze.target, "room:world:thawed"),
+            other => panic!("expected unfreeze command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn invite_create_command_parses_actor_and_max_uses() {
+        let command = parse_args([
+            "lobster-cli",
+            "invite-create",
+            "--actor",
+            "user:admin",
+            "--max-uses",
+            "5",
+        ])
+        .expect("invite-create should parse");
+
+        match command {
+            Command::InviteCreate(invite) => {
+                assert_eq!(invite.actor, "user:admin");
+                assert_eq!(invite.max_uses, 5);
+            }
+            other => panic!("expected invite-create command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn invite_create_defaults_max_uses_to_10() {
+        let command = parse_args(["lobster-cli", "invite-create", "--actor", "user:admin"])
+            .expect("invite-create without max-uses should parse");
+
+        match command {
+            Command::InviteCreate(invite) => assert_eq!(invite.max_uses, 10),
+            other => panic!("expected invite-create command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn invite_revoke_command_parses_actor_and_code() {
+        let command = parse_args([
+            "lobster-cli",
+            "invite-revoke",
+            "--actor",
+            "user:admin",
+            "--code",
+            "INVITE-ABC",
+        ])
+        .expect("invite-revoke should parse");
+
+        match command {
+            Command::InviteRevoke(revoke) => {
+                assert_eq!(revoke.actor, "user:admin");
+                assert_eq!(revoke.code, "INVITE-ABC");
+            }
+            other => panic!("expected invite-revoke command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn admin_residents_command_uses_query_parser() {
+        let command = parse_args([
+            "lobster-cli",
+            "residents",
+            "--for",
+            "user:admin",
+            "--gateway",
+            "http://127.0.0.1:8787",
+        ])
+        .expect("residents command should parse");
+
+        match command {
+            Command::AdminResidents(q) => {
+                assert_eq!(q.target, "user:admin");
+                assert_eq!(q.gateway, "http://127.0.0.1:8787");
+            }
+            other => panic!("expected residents command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn admin_rooms_command_uses_query_parser() {
+        let command = parse_args([
+            "lobster-cli",
+            "rooms-admin",
+            "--for",
+            "user:admin",
+        ])
+        .expect("rooms-admin command should parse");
+
+        match command {
+            Command::AdminRooms(q) => assert_eq!(q.target, "user:admin"),
+            other => panic!("expected rooms-admin command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn format_admin_residents_shows_tags() {
+        let payload = vec![
+            AdminResidentEntry {
+                resident_id: "alice".into(),
+                nickname: Some("爱丽丝".into()),
+                online: true,
+                is_banned: false,
+                roles: vec!["moderator".into()],
+            },
+            AdminResidentEntry {
+                resident_id: "bob".into(),
+                nickname: None,
+                online: false,
+                is_banned: true,
+                roles: vec![],
+            },
+        ];
+        let rendered = format_admin_residents(&payload);
+        assert!(rendered.contains("共 2 人"));
+        assert!(rendered.contains("爱丽丝 (alice)"));
+        assert!(rendered.contains("bob"));
+        assert!(rendered.contains("在线"));
+        assert!(rendered.contains("已封禁"));
+        assert!(rendered.contains("角色:moderator"));
+    }
+
+    #[test]
+    fn format_admin_rooms_shows_frozen_tag() {
+        let payload = vec![
+            AdminRoomEntry {
+                id: "room:world:lobby".into(),
+                title: "大厅".into(),
+                kind: "world_public".into(),
+                participant_count: 42,
+                message_count: 1000,
+                is_frozen: false,
+            },
+            AdminRoomEntry {
+                id: "room:world:toxic".into(),
+                title: "违规房".into(),
+                kind: "world_public".into(),
+                participant_count: 3,
+                message_count: 50,
+                is_frozen: true,
+            },
+        ];
+        let rendered = format_admin_rooms(&payload);
+        assert!(rendered.contains("共 2 间"));
+        assert!(rendered.contains("大厅"));
+        assert!(rendered.contains("违规房"));
+        assert!(rendered.contains("已冻结"));
+    }
+
+    #[test]
+    fn format_inbox_shows_identity_header() {
+        let payload = CliInboxResponse { identity: "test-user".into(), conversations: vec![] };
+        let rendered = format_inbox(&payload);
+        assert!(rendered.contains("收件箱"));
+        assert!(rendered.contains("test-user"));
+    }
+
+    #[test]
+    fn format_rooms_shows_identity_header() {
+        let payload = CliRoomsResponse { identity: "test-user".into(), entries: vec![] };
+        let rendered = format_rooms(&payload);
+        assert!(rendered.contains("会话列表"));
+        assert!(rendered.contains("test-user"));
+    }
+
+    #[test]
+    fn format_error_includes_action_name() {
+        let rendered = format_gateway_status_error("send", 503, None);
+        assert!(rendered.contains("send"));
+        let rendered2 = format_gateway_status_error("edit", 400, Some("bad request"));
+        assert!(rendered2.contains("edit"));
     }
 }

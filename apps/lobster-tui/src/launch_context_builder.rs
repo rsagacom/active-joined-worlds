@@ -59,6 +59,7 @@ pub(crate) struct LaunchContext {
     pub(crate) input_buffer: String,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn build_launch_context(
     mode: LaunchSurface,
     store: &impl TimelineStore,
