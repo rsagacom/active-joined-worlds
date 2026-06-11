@@ -320,7 +320,7 @@ test("admin tool drawer does not open disabled tools", async () => {
 
 test("admin nav is collapsible and keeps keyboard access when collapsed", async () => {
   const html = await readShellPage("admin.html");
-  const css = await readShellModule("styles.css");
+  const css = await readShellModule("styles.admin.css");
 
   // 收起按钮存在
   assert.match(html, /id="admin-nav-toggle"/);
@@ -394,7 +394,7 @@ test("admin summary disabled tools show reason in primaryReason and catalog", as
   assert.match(html, /disabled aria-disabled="true" title="需要已连接的网关"/);
 
   // 标准原因类型在 CSS 中有高对比样式
-  const css = await readShellModule("styles.css");
+  const css = await readShellModule("styles.admin.css");
   assert.match(css, /\.admin-summary-reason\s*\{/);
   assert.match(css, /\.admin-summary-reason-type\s*\{/);
   assert.match(css, /\.admin-summary-reason-label\s*\{/);
@@ -443,7 +443,7 @@ test("admin tool forms are hidden by default and show on category switch", async
 });
 
 test("admin workspace css keeps auth and detail panels workspace-driven", async () => {
-  const css = await readShellModule("styles.css");
+  const css = await readShellModule("styles.admin.css");
 
   assert.doesNotMatch(
     css,
@@ -468,24 +468,25 @@ test("admin workspace css keeps auth and detail panels workspace-driven", async 
 });
 
 test("admin tools panel css has high-contrast action status labels", async () => {
-  const css = await readShellModule("styles.css");
+  const shared = await readShellModule("styles.css");
+  const adminCss = await readShellModule("styles.admin.css");
 
-  assert.match(css, /\.admin-nav-shell/);
-  assert.match(css, /\.admin-nav-panel/);
-  assert.match(css, /\.admin-nav-toggle/);
-  assert.match(css, /\.admin-nav-item/);
-  assert.match(css, /\[data-admin-nav="collapsed"\]/);
-  assert.match(css, /body\[data-shell-page="admin"\]\[data-admin-nav="collapsed"\] \.layout-admin-shell/);
-  assert.match(css, /\.tool-group\s*\{/);
-  assert.match(css, /\.tool-group-title\s*\{/);
-  assert.match(css, /\.action-row\s*\{/);
-  assert.match(css, /\.action-status\s*\{/);
-  assert.match(css, /\.action-status-available\s*\{/);
-  assert.match(css, /\.action-status-pending\s*\{/);
-  assert.match(css, /\.action-status-readonly\s*\{/);
-  assert.match(css, /\.action-status-gateway\s*\{/);
-  assert.match(css, /body\[data-shell-page="admin"\]\s+\.tool-group\s*\{/);
-  assert.match(css, /body\[data-shell-page="admin"\]\s+\.action-status-gateway\s*\{/);
+  assert.match(adminCss, /\.admin-nav-shell/);
+  assert.match(adminCss, /\.admin-nav-panel/);
+  assert.match(adminCss, /\.admin-nav-toggle/);
+  assert.match(adminCss, /\.admin-nav-item/);
+  assert.match(adminCss, /\[data-admin-nav="collapsed"\]/);
+  assert.match(adminCss, /body\[data-shell-page="admin"\]\[data-admin-nav="collapsed"\] \.layout-admin-shell/);
+  assert.match(shared, /\.tool-group\s*\{/);
+  assert.match(shared, /\.tool-group-title\s*\{/);
+  assert.match(shared, /\.action-row\s*\{/);
+  assert.match(shared, /\.action-status\s*\{/);
+  assert.match(shared, /\.action-status-available\s*\{/);
+  assert.match(shared, /\.action-status-pending\s*\{/);
+  assert.match(shared, /\.action-status-readonly\s*\{/);
+  assert.match(shared, /\.action-status-gateway\s*\{/);
+  assert.match(adminCss, /body\[data-shell-page="admin"\]\s+\.tool-group\s*\{/);
+  assert.match(adminCss, /body\[data-shell-page="admin"\]\s+\.action-status-gateway\s*\{/);
 });
 
 test("unified page is world-entry metro station with pixel scene and hotspots", async () => {
@@ -651,7 +652,8 @@ test("pixel scene hotspot labels reveal near pointer and from blank-scene click"
   assert.match(source, /let labelTimer = null/);
   assert.match(source, /function setHotspotLabelsVisible\(visible/);
   assert.match(source, /setTimeout\(\(\) => setHotspotLabelsVisible\(false\), autoHideMs\)/);
-  assert.match(source, /setClearMode\(!isClearMode\(\)\)/);
+  assert.match(source, /setHotspotLabelsVisible\(true\).*\/\/.*auto-hide/);
+  assert.match(source, /if \(isClearMode\(\)\)/);
 });
 
 test("world-entry hotspot css follows the metro contract", async () => {

@@ -726,9 +726,10 @@ body[data-shell-variant="creative-terminal"] .scene-hotspot {
   cursor: pointer;
   color: transparent;
   text-decoration: none;
-  background: rgba(255, 216, 122, 0);
-  border: 2px solid rgba(255, 216, 122, 0);
-  border-radius: 0;
+  background: rgba(255, 216, 122, 0.04);
+  border: 2px solid rgba(255, 216, 122, 0.1);
+  border-radius: 4px;
+  transition: background 0.2s, border-color 0.2s;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot span,
@@ -751,8 +752,14 @@ body[data-shell-variant="creative-terminal"] .scene-hotspot:hover,
 body[data-shell-variant="creative-terminal"] .scene-hotspot:focus-visible,
 body[data-shell-variant="creative-terminal"] .scene-hotspot[aria-expanded="true"] {
   outline: none;
-  background: transparent;
-  border-color: transparent;
+  background: rgba(255, 216, 122, 0.14);
+  border-color: rgba(255, 216, 122, 0.45);
+}
+
+body[data-shell-variant="creative-terminal"] .scene-hotspot.is-near-pointer,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot.is-near-pointer {
+  background: rgba(255, 216, 122, 0.08);
+  border-color: rgba(255, 216, 122, 0.28);
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot:hover span,
@@ -1088,6 +1095,18 @@ body[data-shell-variant="creative-terminal"] .hud-title {
 
 body[data-shell-variant="creative-terminal"] .creative-rail .rail-actions {
   gap: 8px;
+}
+
+body[data-shell-variant="creative-terminal"] .creative-rail .rail-item--scene-editor {
+  font-size: 12px;
+  opacity: 0.7;
+  min-height: 36px;
+  margin-top: 4px;
+  border-top: 1px solid rgba(241, 201, 120, 0.15);
+  padding-top: 8px;
+}
+body[data-shell-variant="creative-terminal"] .creative-rail .rail-item--scene-editor:hover {
+  opacity: 1;
 }
 
 body[data-shell-variant="creative-terminal"] .creative-rail .rail-item {
@@ -2764,5 +2783,65 @@ body[data-time-of-day="day"][data-shell-variant="creative-terminal"] .creative-s
       linear-gradient(180deg, rgba(255, 231, 178, 0.03), rgba(255, 231, 178, 0.08)),
       var(--creative-scene-image, url("assets/pixel/composed/creative-room-scene-v2-mobile-day-256.png")) center / cover no-repeat,
       #c9b58c !important;
+  }
+}
+
+@media (max-width: 480px) {
+  body[data-shell-variant="creative-terminal"] .creative-hud {
+    min-height: 40px;
+    padding: 5px 7px;
+  }
+  body[data-shell-variant="creative-terminal"] .creative-hud .hud-title {
+    font-size: 20px;
+  }
+  body[data-shell-variant="creative-terminal"] .creative-hud .hud-kicker {
+    font-size: 10px;
+  }
+  body[data-shell-variant="creative-terminal"] .creative-hud-chip {
+    display: none;
+  }
+  body[data-shell-variant="creative-terminal"] .creative-rail {
+    width: calc(100vw - 40px) !important;
+  }
+  body[data-shell-variant="creative-terminal"] .creative-stage {
+    min-height: calc(100svh - 60px) !important;
+    background-position: center center !important;
+    background-size: cover !important;
+  }
+  body[data-shell-variant="creative-terminal"] .scene-hotspot {
+    min-width: 48px;
+    min-height: 48px;
+  }
+  body[data-shell-variant="creative-terminal"] .scene-hotspot span {
+    font-size: 11px;
+    padding: 1px 5px;
+  }
+  body[data-shell-variant="creative-terminal"] .creative-chat-frame {
+    left: 8px !important;
+    width: auto !important;
+  }
+  body[data-shell-variant="creative-terminal"] .creative-chat-log {
+    max-height: 28vh;
+  }
+  body[data-shell-variant="creative-terminal"] .creative-chat-log .message {
+    padding: 6px 7px;
+    font-size: 12px;
+  }
+  body[data-shell-variant="creative-terminal"] .creative-composer {
+    padding: 5px;
+    bottom: max(5px, env(safe-area-inset-bottom));
+  }
+  body[data-shell-variant="creative-terminal"] .creative-composer-field {
+    min-height: 36px;
+    padding: 3px 8px;
+  }
+  body[data-shell-variant="creative-terminal"] .creative-composer textarea {
+    min-height: 24px;
+    font-size: 14px;
+  }
+  body[data-shell-variant="creative-terminal"] .creative-composer #composer-send {
+    min-width: 48px;
+    min-height: 36px;
+    font-size: 12px;
   }
 }

@@ -225,8 +225,35 @@ export function initSceneRuntime({
       if (event.target.closest(".creative-composer, .public-square-composer, .user-composer")) return;
       if (event.target.closest(".creative-rail, .public-square-rail, .world-entry-rail, .user-rail")) return;
       if (event.target.closest(".creative-hud, .public-square-hud, .world-entry-hud, .user-hud")) return;
-      if (event.target.closest(".scene-hotspot, .scene-hotspot-popover")) return;
-      setClearMode(!isClearMode());
+      if (event.target.closest(".scene-hotspot-popover")) return;
+      // On mobile (pointer-events:none), find hotspot near click point
+      var tappedHotspot = null;
+      if (hotspotEls.length) {
+        var tapPadding = 64;
+        tappedHotspot = hotspotEls.find(function(button) {
+          var rect = button.getBoundingClientRect();
+          if (!rect) return false;
+          return (
+            event.clientX >= rect.left - tapPadding &&
+            event.clientX <= rect.right + tapPadding &&
+            event.clientY >= rect.top - tapPadding &&
+            event.clientY <= rect.bottom + tapPadding
+          );
+        });
+      }
+      if (tappedHotspot) {
+        // Tap near hotspot → open its popover (handles mobile touch where pointer-events:none)
+        setHotspotLabelsVisible(false);
+        openPopover(tappedHotspot);
+        schedulePopoverClose(3200);
+        return;
+      }
+      // Click on empty scene: briefly show all hotspot labels
+      if (isClearMode()) {
+        setClearMode(false);
+      } else {
+        setHotspotLabelsVisible(true); // auto-hide after 3200ms
+      }
     });
   }
 
@@ -237,7 +264,11 @@ export function initSceneRuntime({
       }
       if (event.target === timelineEl || event.target.closest(".message-row, .message-stack")) {
         event.stopPropagation();
-        setClearMode(!isClearMode());
+        if (isClearMode()) {
+          setClearMode(false);
+        } else {
+          setHotspotLabelsVisible(true); // briefly show hotspot labels
+        }
       }
     });
   }

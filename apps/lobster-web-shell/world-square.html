@@ -45,6 +45,7 @@
         </div>
         <nav class="world-square-actions" aria-label="世界广场导航">
           <button type="button" id="hud-login-toggle" class="hud-login-toggle shell-hidden" aria-label="打开登录窗口">登录</button>
+          <button type="button" id="theme-toggle" class="theme-toggle" aria-label="切换亮色/暗色模式" title="切换亮色/暗色模式">☀️</button>
           <a href="./unified.html">返回世界入口</a>
           <a href="./index.html">回主城群聊</a>
         </nav>
@@ -236,9 +237,9 @@
 
         const classifyNotice = (notice) => {
           const tags = Array.isArray(notice.tags) ? notice.tags.join(" ").toLowerCase() : "";
-          const text = `${notice.title || ""} ${notice.body || ""} ${tags}`.toLowerCase();
-          if (/discover|route|city|mirror|migration|跨城|路线|主城|发现/.test(text)) return "discovery";
-          if (/discussion|forum|public|thread|议题|讨论|公开/.test(text)) return "discussion";
+          const text = `${notice.title || ""} ${tags}`.toLowerCase();
+          if (/跨城|发现|新.*路线|route|新.*线路|discover|直达/.test(text)) return "discovery";
+          if (/discussion|forum|议题|讨论|公开.*话题/.test(text)) return "discussion";
           return "notice";
         };
 

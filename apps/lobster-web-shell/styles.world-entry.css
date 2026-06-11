@@ -266,9 +266,11 @@ body[data-time-of-day="day"] .world-entry-scene::after {
   color: transparent;
   text-decoration: none;
   cursor: pointer;
-  background: transparent;
-  border: 2px solid transparent;
+  background: rgba(253, 209, 110, 0.04);
+  border: 2px solid rgba(253, 209, 110, 0.12);
+  border-radius: 4px;
   pointer-events: none;
+  transition: background 0.2s, border-color 0.2s;
 }
 
 .scene-hotspot span {
@@ -290,9 +292,13 @@ body[data-time-of-day="day"] .world-entry-scene::after {
 .scene-hotspot:focus-visible,
 .scene-hotspot[aria-expanded="true"] {
   outline: none;
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
+  background: rgba(253, 209, 110, 0.14);
+  border-color: rgba(253, 209, 110, 0.45);
+}
+
+.scene-hotspot.is-near-pointer {
+  background: rgba(253, 209, 110, 0.08);
+  border-color: rgba(253, 209, 110, 0.28);
 }
 
 .scene-hotspot:hover span,

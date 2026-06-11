@@ -1,5 +1,6 @@
 import { computeComposerAvailability } from "./composer-state.js";
 import { composerStatusState } from "./shell-composer.js";
+import { applyAvatarStyle } from "./shell-avatar.js";
 import {
   createChatDetailCardMetaRow,
   createDetailRow,
@@ -47,6 +48,8 @@ import {
   visiblePendingEchoesForRoomData,
 } from "./shell-message-state.js";
 import {
+  buildReplyPreview,
+  createDateSeparator,
   escapeHtml,
   formatDateTime,
   isSystemSender,
@@ -188,6 +191,7 @@ import {
   currentShellPage,
   defaultIdentityForShellMode,
   defaultWorkspaceForShellMode,
+  initThemeToggle,
   normalizeProviderConnectionState,
   parseStoredObject,
   providerIndicatesGatewayOffline,
@@ -1256,6 +1260,34 @@ const governanceAdminForms = [
   worldResidentSanctionFormEl,
 ].filter(Boolean);
 
+// === Message Search UI elements ===
+const searchToggleBtn = document.createElement("button");
+searchToggleBtn.className = "search-toggle-btn";
+searchToggleBtn.innerHTML = "🔍";
+searchToggleBtn.title = "搜索消息";
+searchToggleBtn.addEventListener("click", toggleMessageSearch);
+
+const searchBar = document.createElement("div");
+searchBar.className = "message-search-bar";
+searchBar.style.display = "none";
+searchBar.innerHTML = [
+  '<input type="search" class="message-search-input" placeholder="搜索消息..." />',
+  '<button class="message-search-close" type="button">✕</button>',
+  '<div class="message-search-results"></div>',
+].join("");
+
+// Insert search bar before timeline (once)
+if (timelineEl && timelineEl.parentNode) {
+  timelineEl.parentNode.insertBefore(searchBar, timelineEl);
+}
+// Insert search toggle button into conversation stage side area
+if (roomStageSideEl) {
+  const toggleWrapper = document.createElement("span");
+  toggleWrapper.className = "stage-chip";
+  toggleWrapper.appendChild(searchToggleBtn);
+  roomStageSideEl.appendChild(toggleWrapper);
+}
+
 let bootstrap = DEFAULT_BOOTSTRAP;
 let state = structuredClone(SAMPLE_STATE);
 setStateGetter(() => state);
@@ -1282,6 +1314,7 @@ let senderIdentity = "访客";
 let currentWorkspace = "chat";
 let roomSearch = "";
 let roomFilter = "all";
+let searchMode = "all"; // "all" | "rooms" | "residents"
 let chatPaneMode = "split";
 let roomReadMarkers = {};
 let roomDrafts = {};
@@ -1314,6 +1347,8 @@ let workspaceTabs = [];
 let roomSearchInputEl = document.querySelector("#room-search-input");
 let roomToolbarNoteEl = null;
 let roomFilterButtons = [];
+let searchModeControlsEl = null;
+let searchModeSegments = [];
 let conversationOverviewEl = null;
 let conversationCalloutEl = null;
 let modeBannerEl = null;
@@ -2843,6 +2878,7 @@ function renderTimelineSkeletonRows(count = 4) {
 
     const avatar = document.createElement("div");
     avatar.className = `message-avatar timeline-skeleton-avatar${isSelf ? " message-avatar-self" : ""}`;
+    applyAvatarStyle(avatar, isSelf ? currentIdentity() : "timeline-skeleton");
 
     const stack = document.createElement("div");
     stack.className = "message-stack";
@@ -2989,6 +3025,33 @@ function createRoomFilterButton(filter, label) {
   return button;
 }
 
+function createSearchModeButton(mode, label) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "segment";
+  button.dataset.searchMode = mode;
+  button.textContent = label;
+  button.addEventListener("click", () => {
+    searchMode = mode;
+    updateSearchModeTabs();
+    renderRooms();
+    if (currentShellPage() === "user") renderResidentList();
+  });
+  return button;
+}
+
+function updateSearchModeTabs() {
+  if (!searchModeSegments) return;
+  for (const seg of searchModeSegments) {
+    seg.classList.toggle("active", seg.dataset.searchMode === searchMode);
+  }
+  if (roomSearchInputEl) {
+    if (searchMode === "rooms") roomSearchInputEl.placeholder = "搜索房间...";
+    else if (searchMode === "residents") roomSearchInputEl.placeholder = "搜索居民...";
+    else roomSearchInputEl.placeholder = "搜索居民或房间...";
+  }
+}
+
 function ensureWorkspaceChrome() {
   const userProjection = currentShellPage() === "user";
   const hubProjection = currentShellPage() === "hub";
@@ -3024,6 +3087,22 @@ function ensureWorkspaceChrome() {
     roomSearchInputEl.placeholder = "搜索居民、房间或最近消息";
     roomSearchInputEl.autocomplete = "off";
     roomListEl.insertAdjacentElement("beforebegin", roomSearchInputEl);
+
+    // Search mode segmented control (creative/user page only)
+    if (!searchModeControlsEl) {
+      searchModeControlsEl = document.createElement("div");
+      searchModeControlsEl.className = "segmented-control creative-search-mode";
+      searchModeSegments = [
+        createSearchModeButton("all", "全部"),
+        createSearchModeButton("rooms", "房间"),
+        createSearchModeButton("residents", "居民"),
+      ];
+      for (const seg of searchModeSegments) {
+        searchModeControlsEl.appendChild(seg);
+      }
+      roomSearchInputEl.insertAdjacentElement("beforebegin", searchModeControlsEl);
+      updateSearchModeTabs();
+    }
   }
 
   bindRoomSearchInput();
@@ -3138,6 +3217,7 @@ function bindRoomSearchInput() {
     roomSearch = event.target.value.trim().toLowerCase();
     updateRoomToolbarState();
     renderRooms();
+    if (currentShellPage() === "user") renderResidentList();
     renderTimeline();
   });
   roomSearchInputEl.dataset.roomSearchBound = "true";
@@ -4608,6 +4688,8 @@ function focusRoom(roomId) {
   }
   roomSearch = "";
   roomFilter = "all";
+  searchMode = "all";
+  if (searchModeControlsEl) updateSearchModeTabs();
   followTimelineToLatest = shouldFollowExistingTimeline;
   syncComposerDraft({ force: true });
   syncChatPaneMode(window.matchMedia("(max-width: 960px)").matches ? "thread" : "split");
@@ -4621,6 +4703,29 @@ function focusRoom(roomId) {
   // Close mobile drawers after selecting a room
   railDrawerEl?.classList.remove("open");
   setSfcRailOpen(false);
+}
+
+/**
+ * Returns the online status of the peer in a direct conversation room,
+ * by cross-referencing governance.residents with the room's participant list.
+ * @returns {"online" | "offline" | null}
+ */
+function directRoomPeerOnlineStatus(room) {
+  if (!room || roomKind(room) !== "direct") return null;
+  if (!governance?.residents?.length) return null;
+  const identity = currentIdentity();
+  const participants = room.participants;
+  if (!participants?.length) return null;
+  const peerId = participants.find(
+    (p) => (typeof p === "string" ? p : p?.id || p?.resident_id || "") !== identity,
+  );
+  if (!peerId) return null;
+  const peerKey = typeof peerId === "string" ? peerId : peerId.id || peerId.resident_id || "";
+  const resident = governance.residents.find(
+    (r) => r.resident_id === peerKey,
+  );
+  if (!resident) return null;
+  return resident.online ? "online" : "offline";
 }
 
 function confirmResidentRoomJump(room) {
@@ -5065,6 +5170,10 @@ function persistAuthDraft() {
 
 function renderRooms() {
   if (!roomListEl) return;
+  // Hide rooms when search mode is residents-only (only when search tabs exist)
+  if (searchModeControlsEl) {
+    roomListEl.style.display = searchMode === "residents" ? "none" : "";
+  }
   clearChildren(roomListEl);
   const rooms = filteredRooms();
   const shellPage = currentShellPage();
@@ -5137,7 +5246,14 @@ function renderRooms() {
       const spec = roomAvatarSpec({ room, kind, shellPage, headline });
       const avatar = document.createElement("div");
       avatar.className = spec.className;
+      const peerStatus = directRoomPeerOnlineStatus(room);
+      if (peerStatus) {
+        avatar.classList.add("peer-" + peerStatus);
+        var statusLabel = peerStatus === "online" ? " (在线)" : " (离线)";
+        avatar.setAttribute("aria-label", (spec.ariaLabel || spec.title || "") + statusLabel);
+      }
       avatar.textContent = spec.text;
+      applyAvatarStyle(avatar, room.id);
       if (spec.isResidentRoomEntry) {
         avatar.dataset.residentRoomEntry = room.id;
         avatar.title = spec.title;
@@ -5943,9 +6059,20 @@ function renderTimeline() {
       timelineEl.appendChild(unreadDivider);
     }
 
+    // Date separator between messages on different days
+    const prevMessage = index > 0 ? messages[index - 1] : null;
+    if (prevMessage && message.timestamp_ms) {
+      const dateSep = createDateSeparator(prevMessage.timestamp_ms, message.timestamp_ms);
+      if (dateSep) {
+        const dateDivider = document.createElement("div");
+        dateDivider.className = "timeline-divider";
+        dateDivider.textContent = dateSep.label;
+        timelineEl.appendChild(dateDivider);
+      }
+    }
+
     const isSelf = message.sender === currentIdentity();
     const messageKind = messageThreadKind(message, room, isSelf);
-    const prevMessage = index > 0 ? messages[index - 1] : null;
     const isGrouped = prevMessage
       && prevMessage.sender === message.sender
       && messageKind === messageThreadKind(prevMessage, room, prevMessage.sender === currentIdentity())
@@ -5972,6 +6099,7 @@ function renderTimeline() {
       isSelf ? currentIdentity() : message.sender,
       messageKind === "system" ? "系" : messageKind === "caretaker" ? "管" : isSelf ? "我" : "聊",
     );
+    applyAvatarStyle(avatar, message.sender);
 
     const stack = document.createElement("div");
     stack.className = "message-stack";
@@ -6030,6 +6158,13 @@ function renderTimeline() {
     const ownerActions = createMessageOwnerActions(room, message, { isSelf, messageKind });
 
     article.appendChild(header);
+    const replyPreview = buildReplyPreview(message, messages);
+    if (replyPreview) {
+      const replyEl = document.createElement("div");
+      replyEl.className = "message-reply-preview";
+      replyEl.textContent = `↩ ${replyPreview.sender}: ${replyPreview.text}`;
+      article.appendChild(replyEl);
+    }
     article.appendChild(body);
     if (ownerActions) {
       article.appendChild(ownerActions);
@@ -6049,6 +6184,7 @@ function renderTimeline() {
     const avatar = document.createElement("div");
     avatar.className = "message-avatar message-avatar-self";
     avatar.textContent = badgeToken(currentIdentity(), "我");
+    applyAvatarStyle(avatar, currentIdentity());
 
     const stack = document.createElement("div");
     stack.className = "message-stack";
@@ -6827,13 +6963,10 @@ function renderResidents() {
       directButton.type = "button";
       directButton.className = "secondary";
       directButton.textContent = "发起私聊";
-      directButton.addEventListener("click", async () => {
-        directPeerInputEl.value = resident.resident_id;
-        try {
-          await openDirectSession(resident.resident_id);
-        } catch (error) {
-          setGovernanceStatus(localizedRuntimeError(error, "打开私聊失败"), true);
-        }
+      directButton.addEventListener("click", () => {
+        enterResidentRoom(resident).catch((err) => {
+          setGovernanceStatus(localizedRuntimeError(err, "打开私聊失败"), true);
+        });
       });
       actions.appendChild(directButton);
       li.appendChild(actions);
@@ -6845,6 +6978,10 @@ function renderResidents() {
 /** Render compact resident directory in creative.html sidebar */
 function renderResidentList() {
   if (!residentListEl) return;
+  // Hide residents when search mode is rooms-only (only when search tabs exist)
+  if (searchModeControlsEl) {
+    residentListEl.style.display = searchMode === "rooms" ? "none" : "";
+  }
   clearChildren(residentListEl);
   const residents = governance.residents;
   const identity = currentIdentity();
@@ -6883,6 +7020,7 @@ function renderResidentList() {
     const avatar = document.createElement("div");
     avatar.className = "room-avatar";
     avatar.textContent = displayName.charAt(0).toUpperCase();
+    applyAvatarStyle(avatar, resident.resident_id);
     const content = document.createElement("div");
     content.className = "room-content";
     const top = document.createElement("div");
@@ -6908,10 +7046,7 @@ function renderResidentList() {
     button.appendChild(avatar);
     button.appendChild(content);
     button.addEventListener("click", () => {
-      const name = displayName;
-      const message = "进入「" + name + "」的房间私聊？";
-      if (typeof window.confirm === "function" && !window.confirm(message)) return;
-      openDirectSession(name).catch((err) => {
+      enterResidentRoom(resident).catch((err) => {
         setGovernanceStatus(localizedRuntimeError(err, "打开私聊失败"), true);
       });
     });
@@ -7751,6 +7886,27 @@ async function submitFederationPolicy(city, policy) {
   setGovernanceStatus(`${city} 的联邦策略已切换为 ${translateFederationPolicy(policy)}`);
 }
 
+/**
+ * Enter a resident's personal room, preferring the gateway-provided
+ * personal_room_id over a fresh /v1/direct/open roundtrip.
+ */
+async function enterResidentRoom(resident) {
+  if (!gatewayUrl) return;
+  const displayName = resident.nickname || resident.resident_id;
+  const message = "进入「" + displayName + "」的房间私聊？";
+  if (typeof window.confirm === "function" && !window.confirm(message)) return;
+
+  // If gateway already knows the personal room, navigate directly.
+  if (resident.personal_room_id) {
+    focusRoom(resident.personal_room_id);
+    await refreshFromGateway();
+    setGovernanceStatus("私聊已就绪：" + displayName);
+    return;
+  }
+  // Fall back to opening a fresh direct session.
+  await openDirectSession(resident.resident_id);
+}
+
 async function openDirectSession(peerId) {
   if (!gatewayUrl) return;
   const peer = peerId.trim();
@@ -8048,6 +8204,7 @@ async function exportHistory({ conversationId = null, includePublic = true } = {
 }
 
 async function main() {
+  initThemeToggle();
   chatFocusPreference = loadChatFocusPreference();
   setChatFocusMode(chatFocusPreference);
   applyShellMode();
@@ -8072,6 +8229,14 @@ async function main() {
   await loadGatewayBootstrap();
   gatewayUrl = resolveGatewayUrl();
   await refreshFromGateway();
+  // Populate scene-editor link with current gateway URL and active room
+  const sceneEditorLink = document.getElementById("scene-editor-link");
+  if (sceneEditorLink && gatewayUrl) {
+    var editorUrl = "./scene-editor.html?gateway=" + encodeURIComponent(gatewayUrl);
+    var id = currentIdentity();
+    if (id && id !== "访客") editorUrl += "&room=" + encodeURIComponent("dm:" + id + ":");
+    sceneEditorLink.href = editorUrl;
+  }
   await loadWorldEntry();
   bootTransportStatus();
   refreshGatewayBadge();
@@ -8590,6 +8755,96 @@ sceneRuntime.bindTimeline(timelineEl);
 
 function renderSceneHotspotsForRoom(room) {
   sceneRuntime.renderSceneHotspotsForRoom(room);
+}
+
+// === Message Search Functions ===
+function toggleMessageSearch() {
+  const bar = document.querySelector(".message-search-bar");
+  const input = bar?.querySelector(".message-search-input");
+  if (!bar) return;
+  const isVisible = bar.style.display !== "none";
+  if (isVisible) {
+    bar.style.display = "none";
+    clearSearchResults();
+  } else {
+    bar.style.display = "block";
+    setupSearchInput();
+    input?.focus();
+  }
+}
+
+function clearSearchResults() {
+  const container = document.querySelector(".message-search-results");
+  if (container) container.innerHTML = "";
+}
+
+async function performMessageSearch(query) {
+  if (!gatewayUrl || !activeRoomId || !query.trim()) return;
+  const q = encodeURIComponent(query.trim());
+  const roomId = encodeURIComponent(activeRoomId);
+  const url = `${gatewayUrl}/v1/shell/messages/search?q=${q}&room_id=${roomId}&limit=20`;
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return;
+    const messages = await resp.json();
+    renderSearchResults(messages);
+  } catch (e) {
+    // silently fail
+  }
+}
+
+function renderSearchResults(messages) {
+  const container = document.querySelector(".message-search-results");
+  if (!container) return;
+  container.innerHTML = "";
+  if (!messages?.length) {
+    container.innerHTML = '<div class="search-empty">未找到匹配消息</div>';
+    return;
+  }
+  for (const msg of messages) {
+    const item = document.createElement("div");
+    item.className = "search-result-item";
+    item.innerHTML =
+      '<span class="search-result-sender">' + escapeHtml(msg.sender) + '</span>' +
+      '<span class="search-result-text">' + escapeHtml(msg.text?.substring(0, 100) || "") + '</span>' +
+      '<span class="search-result-time">' + formatDateTime(msg.timestamp_ms) + '</span>';
+    item.addEventListener("click", () => {
+      scrollToMessage(msg.message_id);
+      toggleMessageSearch();
+    });
+    container.appendChild(item);
+  }
+}
+
+let searchDebounceTimer = null;
+
+function setupSearchInput() {
+  const input = document.querySelector(".message-search-input");
+  if (!input || input.dataset.searchWired === "true") return;
+  input.dataset.searchWired = "true";
+  input.addEventListener("input", () => {
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      performMessageSearch(input.value);
+    }, 300);
+  });
+  const closeBtn = document.querySelector(".message-search-close");
+  if (closeBtn) {
+    closeBtn.addEventListener("click", () => {
+      const bar = document.querySelector(".message-search-bar");
+      if (bar) bar.style.display = "none";
+      clearSearchResults();
+    });
+  }
+}
+
+function scrollToMessage(messageId) {
+  const row = document.querySelector('[data-message-id="' + messageId + '"]');
+  if (row) {
+    row.scrollIntoView({ behavior: "smooth", block: "center" });
+    row.classList.add("message-highlight");
+    setTimeout(() => row.classList.remove("message-highlight"), 2000);
+  }
 }
 
 // Close drawer when clicking outside

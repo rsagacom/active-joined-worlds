@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>龙虾聊天 · 场景编辑器</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./styles.tokens.css?v=20260607-scene-editor">
+<link rel="stylesheet" href="./styles.css?v=20260525-h5-shell-fix-v2">
+<link rel="stylesheet" href="./styles.pixel-map.css?v=20260525-h5-shell-fix-v2">
+<style>
+:root { --editor-bg: #0d0a08; --editor-panel: #1a1410; --editor-accent: #f1c978; --editor-text: #e8dcc8; }
+body { margin:0; background:var(--editor-bg); color:var(--editor-text); font-family:"PingFang SC","Microsoft YaHei",sans-serif; }
+.editor-shell { display:grid; grid-template-columns:280px 1fr; height:100vh; }
+.editor-sidebar { background:var(--editor-panel); padding:16px; overflow-y:auto; border-right:2px solid rgba(241,201,120,0.2); }
+.editor-sidebar h2 { color:var(--editor-accent); font-size:16px; margin:0 0 12px; }
+.editor-sidebar label { display:block; font-size:12px; color:#999; margin:8px 0 4px; }
+.editor-sidebar input, .editor-sidebar select { width:100%; padding:8px; background:#1a1410; border:1px solid rgba(241,201,120,0.3); color:var(--editor-text); border-radius:6px; font-size:13px; box-sizing:border-box; }
+.editor-sidebar button { width:100%; padding:10px; margin-top:12px; background:var(--editor-accent); color:#1a1410; border:0; border-radius:6px; font-weight:700; cursor:pointer; font-size:13px; }
+.editor-sidebar button.secondary { background:rgba(241,201,120,0.15); color:var(--editor-accent); }
+.editor-sidebar button.danger { background:rgba(255,80,80,0.15); color:#ff6060; }
+.editor-sidebar .prop-group { margin-top:12px; padding-top:12px; border-top:1px solid rgba(241,201,120,0.1); }
+.editor-sidebar .prop-row { display:flex; gap:8px; }
+.editor-sidebar .prop-row > * { flex:1; }
+.editor-stage { position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+.editor-stage img { max-width:100%; max-height:100%; object-fit:contain; image-rendering:pixelated; }
+.editor-hotspot { position:absolute; border:2px dashed rgba(241,201,120,0.5); background:rgba(241,201,120,0.1); cursor:move; display:flex; align-items:center; justify-content:center; min-width:40px; min-height:24px; }
+.editor-hotspot:hover { border-color:var(--editor-accent); background:rgba(241,201,120,0.2); }
+.editor-hotspot.selected { border:2px solid var(--editor-accent); background:rgba(241,201,120,0.25); box-shadow:0 0 0 2px rgba(241,201,120,0.15); }
+.editor-hotspot-label { position:absolute; top:-20px; left:50%; transform:translateX(-50%); background:#1a1410; color:var(--editor-accent); padding:2px 8px; border-radius:4px; font-size:11px; white-space:nowrap; pointer-events:none; }
+/* Resize handles */
+.editor-resize-handle { position:absolute; width:10px; height:10px; background:var(--editor-accent); border:1px solid #1a1410; border-radius:2px; z-index:2; }
+.editor-resize-handle--nw { top:-6px; left:-6px; cursor:nw-resize; }
+.editor-resize-handle--ne { top:-6px; right:-6px; cursor:ne-resize; }
+.editor-resize-handle--sw { bottom:-6px; left:-6px; cursor:sw-resize; }
+.editor-resize-handle--se { bottom:-6px; right:-6px; cursor:se-resize; }
+/* Hotspot delete button */
+.editor-hotspot-delete { position:absolute; top:-26px; right:-6px; width:18px; height:18px; background:rgba(255,60,60,0.85); color:#fff; border:none; border-radius:50%; font-size:11px; line-height:18px; text-align:center; cursor:pointer; z-index:3; opacity:0; transition:opacity 0.15s; padding:0; }
+.editor-hotspot.selected .editor-hotspot-delete { opacity:1; }
+.editor-hotspot-delete:hover { background:#ff3030; }
+.editor-toolbar { position:absolute; top:12px; right:12px; z-index:10; display:flex; gap:8px; }
+.editor-toolbar button { padding:8px 16px; background:var(--editor-panel); color:var(--editor-accent); border:1px solid rgba(241,201,120,0.3); border-radius:6px; cursor:pointer; font-size:12px; }
+.editor-toolbar button:hover { background:rgba(241,201,120,0.15); }
+.editor-status { position:absolute; bottom:12px; left:12px; font-size:11px; color:#888; }
+</style>
+</head>
+<body>
+<div class="editor-shell">
+  <aside class="editor-sidebar">
+    <h2>🖼️ 场景编辑器</h2>
+    <label>房间 ID</label>
+    <input id="roomId" placeholder="dm:yourname:friendname" />
+    <label>白天背景 URL</label>
+    <input id="dayUrl" placeholder="https://... 白天像素图" />
+    <label>夜晚背景 URL</label>
+    <input id="nightUrl" placeholder="https://... 夜晚像素图" />
+    <label>Gateway</label>
+    <input id="gatewayUrl" placeholder="http://127.0.0.1:8787" value="" />
+    <label>Session Token</label>
+    <input id="sessionToken" placeholder="lbst_..." />
+    <hr style="border-color:rgba(241,201,120,0.1);margin:12px 0;" />
+    <button id="loadBtn">📥 加载当前场景</button>
+    <button id="addHotspotBtn" class="secondary">➕ 添加热点</button>
+    <button id="saveBtn">💾 保存场景</button>
+    <div style="margin-top:8px;display:flex;gap:8px;">
+      <button id="previewBtn" class="secondary" style="flex:1;">👁 预览</button>
+      <button id="resetBtn" class="danger" style="flex:1;">↩ 重置</button>
+    </div>
+    <div id="hotspot-props" class="prop-group" style="display:none;">
+      <label style="font-weight:600;color:var(--editor-accent);margin-bottom:8px;">🎯 热点属性</label>
+      <label>标签名</label>
+      <input id="prop-label" placeholder="热点名称" />
+      <label>交互提示</label>
+      <input id="prop-hint" placeholder="鼠标悬停时显示的说明" />
+      <div class="prop-row">
+        <div><label>X%</label><input id="prop-x" type="number" min="0" max="100" step="0.5" /></div>
+        <div><label>Y%</label><input id="prop-y" type="number" min="0" max="100" step="0.5" /></div>
+      </div>
+      <div class="prop-row">
+        <div><label>宽%</label><input id="prop-w" type="number" min="1" max="100" step="0.5" /></div>
+        <div><label>高%</label><input id="prop-h" type="number" min="1" max="100" step="0.5" /></div>
+      </div>
+    </div>
+    <div id="status" style="margin-top:12px;font-size:11px;color:#888;"></div>
+  </aside>
+  <div class="editor-stage" id="stage">
+    <img id="sceneImage" src="" alt="场景预览" style="display:none;" />
+    <div class="editor-toolbar">
+      <button id="zoomIn">🔍+</button>
+      <button id="zoomOut">🔍-</button>
+      <button id="fitBtn">📐 适应</button>
+    </div>
+    <div class="editor-status" id="coordDisplay">坐标: -</div>
+  </div>
+</div>
+
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const stage = $('stage');
+const img = $('sceneImage');
+const statusEl = $('status');
+const coordEl = $('coordDisplay');
+const props = $('hotspot-props');
+
+// State
+let hotspots = [];
+let selectedHotspot = null;
+let isDragging = false;
+let isResizing = false;
+let resizeCorner = null;
+let dragOffset = { x: 0, y: 0 };
+let resizeStart = { x: 0, y: 0, w: 0, h: 0 };
+let scale = 1;
+
+// Parse URL params
+const params = new URLSearchParams(location.search);
+$('roomId').value = params.get('room') || params.get('room_id') || '';
+$('gatewayUrl').value = params.get('gateway') || 'http://127.0.0.1:8787';
+$('sessionToken').value = params.get('token') || localStorage.getItem('lobster-session-token') || '';
+
+function status(msg, isError) { statusEl.textContent = msg; statusEl.style.color = isError ? '#ff6060' : '#888'; }
+
+async function api(path, method, body) {
+  const gw = $('gatewayUrl').value.trim().replace(/\/+$/, '');
+  const token = $('sessionToken').value.trim();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(gw + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  return res.json();
+}
+
+function selectHotspot(i) {
+  selectedHotspot = i;
+  document.querySelectorAll('.editor-hotspot').forEach(function(el) { el.classList.remove('selected'); });
+  var el = document.querySelector('.editor-hotspot[data-index="' + i + '"]');
+  if (el) el.classList.add('selected');
+  updatePropsPanel();
+}
+
+function updatePropsPanel() {
+  if (selectedHotspot == null || !hotspots[selectedHotspot]) {
+    props.style.display = 'none';
+    return;
+  }
+  props.style.display = 'block';
+  var h = hotspots[selectedHotspot];
+  $('prop-label').value = h.label || '';
+  $('prop-hint').value = h.interaction_hint || '';
+  $('prop-x').value = Math.round(h.x_permyriad / 100 * 10) / 10;
+  $('prop-y').value = Math.round(h.y_permyriad / 100 * 10) / 10;
+  $('prop-w').value = Math.round(h.width_permyriad / 100 * 10) / 10;
+  $('prop-h').value = Math.round(h.height_permyriad / 100 * 10) / 10;
+  coordEl.textContent = '热点 #' + (selectedHotspot + 1) + ' — ' + (h.label || '未命名');
+}
+
+function applyPropChanges() {
+  if (selectedHotspot == null || !hotspots[selectedHotspot]) return;
+  var h = hotspots[selectedHotspot];
+  h.label = $('prop-label').value.trim() || ('热点' + (selectedHotspot + 1));
+  h.interaction_hint = $('prop-hint').value.trim();
+  h.x_permyriad = Math.round(parseFloat($('prop-x').value || 0) * 100);
+  h.y_permyriad = Math.round(parseFloat($('prop-y').value || 0) * 100);
+  h.width_permyriad = Math.round(parseFloat($('prop-w').value || 8) * 100);
+  h.height_permyriad = Math.round(parseFloat($('prop-h').value || 6) * 100);
+  renderHotspots();
+}
+
+// Bind property inputs to update model
+['label','hint','x','y','w','h'].forEach(function(key) {
+  var el = $('prop-' + key);
+  if (el) el.addEventListener('input', applyPropChanges);
+});
+
+// Render hotspots
+function makeHandle(corner) {
+  var handle = document.createElement('div');
+  handle.className = 'editor-resize-handle editor-resize-handle--' + corner;
+  handle.addEventListener('mousedown', function(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    if (selectedHotspot == null) return;
+    isResizing = true;
+    resizeCorner = corner;
+    var h = hotspots[selectedHotspot];
+    resizeStart = { x: h.x_permyriad, y: h.y_permyriad, w: h.width_permyriad, h: h.height_permyriad };
+  });
+  return handle;
+}
+
+function makeDeleteBtn(i) {
+  var btn = document.createElement('button');
+  btn.className = 'editor-hotspot-delete';
+  btn.textContent = '×';
+  btn.title = '删除此热点';
+  btn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    hotspots.splice(i, 1);
+    if (selectedHotspot === i) { selectedHotspot = null; props.style.display = 'none'; }
+    else if (selectedHotspot > i) selectedHotspot--;
+    renderHotspots();
+    status('热点已删除', false);
+  });
+  return btn;
+}
+
+function renderHotspots() {
+  document.querySelectorAll('.editor-hotspot').forEach(function(el) { el.remove(); });
+  hotspots.forEach(function(h, i) {
+    var el = document.createElement('div');
+    el.className = 'editor-hotspot';
+    el.style.left = (h.x_permyriad / 100) + '%';
+    el.style.top = (h.y_permyriad / 100) + '%';
+    el.style.width = (h.width_permyriad / 100) + '%';
+    el.style.height = (h.height_permyriad / 100) + '%';
+    el.dataset.index = i;
+
+    var label = document.createElement('span');
+    label.className = 'editor-hotspot-label';
+    label.textContent = h.label || ('热点' + (i + 1));
+    el.appendChild(label);
+
+    // Resize handles (4 corners)
+    el.appendChild(makeHandle('nw'));
+    el.appendChild(makeHandle('ne'));
+    el.appendChild(makeHandle('sw'));
+    el.appendChild(makeHandle('se'));
+
+    // Delete button
+    el.appendChild(makeDeleteBtn(i));
+
+    // Drag
+    el.addEventListener('mousedown', function(e) {
+      if (e.target.closest('.editor-resize-handle, .editor-hotspot-delete')) return;
+      e.preventDefault();
+      isDragging = true;
+      selectedHotspot = i;
+      var rect = stage.getBoundingClientRect();
+      dragOffset.x = e.clientX - rect.left - (h.x_permyriad / 100) * rect.width;
+      dragOffset.y = e.clientY - rect.top - (h.y_permyriad / 100) * rect.height;
+      renderHotspots();
+      updatePropsPanel();
+    });
+    el.addEventListener('click', function(e) { e.stopPropagation(); selectHotspot(i); });
+    stage.appendChild(el);
+
+    if (selectedHotspot === i) el.classList.add('selected');
+  });
+  if (selectedHotspot != null) updatePropsPanel();
+}
+
+// Load
+$('loadBtn').onclick = async function() {
+  var room = $('roomId').value.trim();
+  if (!room) return status('请输入房间 ID', true);
+  status('加载中...');
+  try {
+    var data = await api('/v1/shell/state?room_id=' + encodeURIComponent(room), 'GET');
+    var rooms = data?.rooms || data?.conversation_state?.rooms || [];
+    var found = rooms.find(function(r) { return r.id === room || r.conversation_id === room; });
+    if (found) {
+      if (found.image_layer) {
+        $('dayUrl').value = found.image_layer.day_image_url || '';
+        $('nightUrl').value = found.image_layer.night_image_url || '';
+        var bg = document.body.dataset.timeOfDay === 'day' ? found.image_layer.day_image_url : found.image_layer.night_image_url;
+        if (bg) { img.src = bg; img.style.display = 'block'; }
+      }
+      if (found.hotspot_layer?.hotspots) {
+        hotspots = JSON.parse(JSON.stringify(found.hotspot_layer.hotspots));
+        selectedHotspot = null;
+        renderHotspots();
+      }
+      status('已加载', false);
+    } else {
+      status('未找到房间场景数据，将创建新场景', false);
+    }
+  } catch (e) { status('加载失败: ' + e.message, true); }
+};
+
+// Add hotspot
+$('addHotspotBtn').onclick = function() {
+  hotspots.push({ hotspot_id: 'h-' + Date.now(), label: '热点' + (hotspots.length + 1), interaction_hint: "", sprite_hint: "default", x_permyriad: 2500, y_permyriad: 2500, width_permyriad: 800, height_permyriad: 600 });
+  selectedHotspot = hotspots.length - 1;
+  renderHotspots();
+  status('已添加热点 ' + hotspots.length, false);
+};
+
+// Drag (move) — global
+document.addEventListener('mousemove', function(e) {
+  if (!isDragging || selectedHotspot == null) return;
+  var rect = stage.getBoundingClientRect();
+  var h = hotspots[selectedHotspot];
+  var nx = Math.max(0, Math.min(10000 - h.width_permyriad, ((e.clientX - rect.left - dragOffset.x) / rect.width * 10000)));
+  var ny = Math.max(0, Math.min(10000 - h.height_permyriad, ((e.clientY - rect.top - dragOffset.y) / rect.height * 10000)));
+  h.x_permyriad = Math.round(nx);
+  h.y_permyriad = Math.round(ny);
+  renderHotspots();
+  coordEl.textContent = '移动: ' + Math.round(nx / 100) + '%, ' + Math.round(ny / 100) + '%';
+});
+
+// Resize — global
+document.addEventListener('mousemove', function(e) {
+  if (!isResizing || selectedHotspot == null || !resizeCorner) return;
+  var rect = stage.getBoundingClientRect();
+  var h = hotspots[selectedHotspot];
+  var mx = (e.clientX - rect.left) / rect.width * 10000;
+  var my = (e.clientY - rect.top) / rect.height * 10000;
+  var sx = resizeStart.x, sy = resizeStart.y, sw = resizeStart.w, sh = resizeStart.h;
+  var corner = resizeCorner;
+  var newX = sx, newY = sy, newW = sw, newH = sh;
+
+  if (corner === 'nw') {
+    newX = Math.max(0, Math.min(sx + sw - 100, mx));
+    newY = Math.max(0, Math.min(sy + sh - 100, my));
+    newW = sx + sw - newX;
+    newH = sy + sh - newY;
+  } else if (corner === 'ne') {
+    newY = Math.max(0, Math.min(sy + sh - 100, my));
+    newW = Math.max(100, mx - sx);
+    newH = sy + sh - newY;
+  } else if (corner === 'sw') {
+    newX = Math.max(0, Math.min(sx + sw - 100, mx));
+    newW = sx + sw - newX;
+    newH = Math.max(100, my - sy);
+  } else if (corner === 'se') {
+    newW = Math.max(100, mx - sx);
+    newH = Math.max(100, my - sy);
+  }
+
+  h.x_permyriad = Math.round(Math.min(newX, 10000 - newW));
+  h.y_permyriad = Math.round(Math.min(newY, 10000 - newH));
+  h.width_permyriad = Math.round(Math.min(newW, 10000 - h.x_permyriad));
+  h.height_permyriad = Math.round(Math.min(newH, 10000 - h.y_permyriad));
+  renderHotspots();
+  coordEl.textContent = '缩放: ' + Math.round(h.width_permyriad / 100) + '% × ' + Math.round(h.height_permyriad / 100) + '%';
+});
+
+document.addEventListener('mouseup', function() { isDragging = false; isResizing = false; resizeCorner = null; });
+
+// Stage click → deselect
+stage.addEventListener('click', function(e) {
+  if (e.target === stage || e.target === img) { selectedHotspot = null; document.querySelectorAll('.editor-hotspot').forEach(function(el) { el.classList.remove('selected'); }); props.style.display = 'none'; coordEl.textContent = '坐标: -'; }
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (selectedHotspot != null && hotspots[selectedHotspot]) {
+      if (e.target.tagName === 'INPUT') return; // not in input
+      hotspots.splice(selectedHotspot, 1);
+      selectedHotspot = null;
+      props.style.display = 'none';
+      renderHotspots();
+      status('热点已删除 (Delete)', false);
+    }
+  }
+  if (e.key === 'Escape') {
+    selectedHotspot = null;
+    document.querySelectorAll('.editor-hotspot').forEach(function(el) { el.classList.remove('selected'); });
+    props.style.display = 'none';
+    coordEl.textContent = '坐标: -';
+  }
+});
+
+// Save
+$('saveBtn').onclick = async function() {
+  var room = $('roomId').value.trim();
+  if (!room) return status('请输入房间 ID', true);
+  var dayUrl = $('dayUrl').value.trim();
+  var nightUrl = $('nightUrl').value.trim();
+  var payload = {
+    room_id: room,
+    actor: localStorage.getItem('lobster-identity') || 'user',
+    image_layer: { layer_id: 'user-custom', preset: 'custom', asset_hint: 'custom', aspect_ratio_permyriad: 5625, owner_editable: true, day_image_url: dayUrl || null, night_image_url: nightUrl || null },
+    hotspot_layer: hotspots.length ? { layer_id: 'user-hotspots', coordinate_system: 'scene-permyriad', owner_editable: true, hotspots: hotspots } : null
+  };
+  status('保存中...');
+  try {
+    var res = await api('/v1/shell/scene', 'POST', payload);
+    if (res.error) status('保存失败: ' + res.error, true);
+    else status('✅ 已保存 (' + hotspots.length + ' 个热点)', false);
+  } catch (e) { status('保存失败: ' + e.message, true); }
+};
+
+$('resetBtn').onclick = function() { hotspots = []; selectedHotspot = null; props.style.display = 'none'; renderHotspots(); status('已重置', false); };
+$('previewBtn').onclick = function() { var d = $('dayUrl').value.trim(); if (d) { img.src = d; img.style.display = 'block'; } };
+$('zoomIn').onclick = function() { scale = Math.min(3, scale + 0.25); img.style.transform = 'scale(' + scale + ')'; };
+$('zoomOut').onclick = function() { scale = Math.max(0.25, scale - 0.25); img.style.transform = 'scale(' + scale + ')'; };
+$('fitBtn').onclick = function() { scale = 1; img.style.transform = 'scale(1)'; };
+
+// Set default background from time of day
+var hour = new Date().getHours();
+document.body.dataset.timeOfDay = (hour >= 6 && hour < 18) ? 'day' : 'night';
+</script>
+</body>
+</html>
