@@ -1,0 +1,11 @@
+# Fix macOS Sequoia build: Claude Code cc shim intercepts C compiler calls
+# See: error: unknown option '-liconv' and '-mmacosx-version-min=26.5'
+# Must override PATH so ring's cc crate finds real /usr/bin/clang not CC shim
+[target.aarch64-apple-darwin]
+linker = "/usr/bin/clang"
+ar = "/usr/bin/ar"
+
+[env]
+MACOSX_DEPLOYMENT_TARGET = "15.0"
+CC = "/usr/bin/clang"
+CXX = "/usr/bin/clang++"
