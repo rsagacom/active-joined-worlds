@@ -268,12 +268,17 @@ impl GatewayRuntime {
     pub(crate) fn admin_clear_processed_logs(&mut self) -> usize {
         let before = self.message_moderation.len();
         self.message_moderation.retain(|_k, v| v != "handled");
-        before - self.message_moderation.len()
+        let cleared = before - self.message_moderation.len();
+        if cleared > 0 {
+            let _ = self.persist_moderation_state();
+        }
+        cleared
     }
 
     pub(crate) fn admin_handle_log(&mut self, log_id: &str) -> bool {
         let key = format!("log:{}", log_id);
         self.message_moderation.insert(key, "handled".to_string());
+        let _ = self.persist_moderation_state();
         true
     }
 

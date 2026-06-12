@@ -1,4 +1,4 @@
-.PHONY: build check test test-gateway test-frontend test-all smoke release clean dev watch
+.PHONY: build check test test-gateway test-frontend test-all smoke smoke-e2e release clean dev watch
 
 # Default target
 help:
@@ -13,6 +13,7 @@ help:
 	@echo "  make test-frontend  — web-shell frontend tests only"
 	@echo "  make lint           — clippy workspace-wide"
 	@echo "  make smoke          — CLI + shell + web smoke"
+	@echo "  make smoke-e2e      — full e2e: smoke + Playwright dual-browser"
 	@echo "  make release        — full release packaging"
 	@echo "  make dev            — build + restart gateway"
 	@echo "  make clean          — remove build artifacts"
@@ -51,6 +52,9 @@ smoke:
 	./scripts/smoke-cli-channel.sh
 	./scripts/smoke-shell-dual-http.sh
 	./scripts/smoke-web-shell.sh
+
+smoke-e2e: smoke
+	node ./scripts/smoke-web-dual-browser.mjs
 
 release:
 	./scripts/package-release.sh
