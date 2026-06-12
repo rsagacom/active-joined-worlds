@@ -12,9 +12,9 @@ help:
 	@echo "  make test-cli       — CLI tests only"
 	@echo "  make test-frontend  — web-shell frontend tests only"
 	@echo "  make lint           — clippy workspace-wide"
-	@echo "  make smoke          — dual-browser HTTP smoke"
+	@echo "  make smoke          — CLI + shell + web smoke"
 	@echo "  make release        — full release packaging"
-	@echo "  make dev            — dev build + start gateway"
+	@echo "  make dev            — build + restart gateway"
 	@echo "  make clean          — remove build artifacts"
 	@echo "  make watch          — cargo watch (gateway auto-rebuild)"
 
@@ -47,6 +47,8 @@ lint:
 	cargo clippy --workspace -- -D warnings
 
 smoke:
+	python3 ./scripts/test_smoke_cli_channel_unit.py
+	./scripts/smoke-cli-channel.sh
 	./scripts/smoke-shell-dual-http.sh
 	./scripts/smoke-web-shell.sh
 
@@ -54,7 +56,7 @@ release:
 	./scripts/package-release.sh
 
 dev:
-	cargo build --release -p lobster-waku-gateway && ./scripts/restart-gateway.sh
+	./scripts/restart-gateway.sh
 
 clean:
 	cargo clean

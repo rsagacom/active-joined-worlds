@@ -7,6 +7,9 @@ HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8787}"
 STATE_DIR="${STATE_DIR:-$ROOT_DIR/.lobster-chat-dev/gateway}"
 GATEWAY_URL="${LOBSTER_WAKU_GATEWAY_URL:-http://$HOST:$PORT}"
+SKIP_BUILD="${SKIP_BUILD:-0}"
+GATEWAY_BIN="${GATEWAY_BIN:-$ROOT_DIR/target/debug/lobster-waku-gateway}"
+TUI_BIN="${TUI_BIN:-$ROOT_DIR/target/debug/lobster-tui}"
 LOG_DIR="${LOG_DIR:-$ROOT_DIR/.lobster-chat-dev/logs}"
 LOG_FILE="$LOG_DIR/gateway-terminal.log"
 
@@ -30,7 +33,9 @@ wait_for_health() {
   return 1
 }
 
-need_cmd cargo
+if [[ "$SKIP_BUILD" != "1" ]]; then
+  need_cmd cargo
+fi
 need_cmd curl
 
 if [[ ! -t 0 || ! -t 1 ]]; then
@@ -49,7 +54,14 @@ if curl -fsS "$GATEWAY_URL/health" >/dev/null 2>&1; then
   echo "== reusing gateway: $GATEWAY_URL =="
 else
   echo "== starting gateway: $GATEWAY_URL =="
-  nohup cargo run -p lobster-waku-gateway -- \
+  if [[ "$SKIP_BUILD" != "1" ]]; then
+    cargo build -p lobster-waku-gateway
+  fi
+  if [[ ! -x "$GATEWAY_BIN" ]]; then
+    echo "gateway binary not found: $GATEWAY_BIN" >&2
+    exit 1
+  fi
+  nohup "$GATEWAY_BIN" \
     --host "$HOST" \
     --port "$PORT" \
     --state-dir "$STATE_DIR" \
@@ -65,15 +77,16 @@ echo "== log: $LOG_FILE"
 echo "== tips: startup focus stays on the conversation list; press i to enter input, Enter sends, /open switches the active conversation =="
 echo "== /world switches to the world lobby, /governance only works when the current surface exposes a governance thread, /quit exits =="
 
-echo "== building lobster terminal =="
-cargo build -p lobster-tui
+if [[ "$SKIP_BUILD" != "1" ]]; then
+  echo "== building lobster terminal =="
+  cargo build -p lobster-tui
+fi
 
-TTY_BIN="$ROOT_DIR/target/debug/lobster-tui"
-if [[ ! -x "$TTY_BIN" ]]; then
-  echo "missing built terminal binary: $TTY_BIN" >&2
+if [[ ! -x "$TUI_BIN" ]]; then
+  echo "missing terminal binary: $TUI_BIN" >&2
   exit 1
 fi
 
 exec env \
   LOBSTER_WAKU_GATEWAY_URL="$GATEWAY_URL" \
-  "$TTY_BIN" --mode "$MODE"
+  "$TUI_BIN" --mode "$MODE"

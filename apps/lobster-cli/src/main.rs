@@ -6,6 +6,7 @@ enum Command {
     Send(SendCommand),
     Edit(EditCommand),
     Recall(RecallCommand),
+    Export(ExportCommand),
     Inbox(QueryCommand),
     Rooms(QueryCommand),
     Tail(TailCommand),
@@ -43,6 +44,16 @@ struct RecallCommand {
     actor: String,
     conversation_id: String,
     message_id: String,
+    gateway: String,
+    json: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ExportCommand {
+    target: String,
+    conversation_id: Option<String>,
+    format: String,
+    include_public: bool,
     gateway: String,
     json: bool,
 }
@@ -164,6 +175,23 @@ struct CliTailResponse {
     messages: Vec<CliTailMessage>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct CliExportConversation {
+    conversation_id: String,
+    title: String,
+    kind: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct CliExportResponse {
+    resident_id: String,
+    format: String,
+    exported_at_ms: i64,
+    conversation_count: usize,
+    conversations: Vec<CliExportConversation>,
+    content: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct AdminCommand {
     target: String,
@@ -275,6 +303,7 @@ where
         "send" => parse_send_command(iter.collect::<Vec<_>>()).map(Command::Send),
         "edit" => parse_edit_command(iter.collect::<Vec<_>>()).map(Command::Edit),
         "recall" => parse_recall_command(iter.collect::<Vec<_>>()).map(Command::Recall),
+        "export" => parse_export_command(iter.collect::<Vec<_>>()).map(Command::Export),
         "inbox" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::Inbox),
         "rooms" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::Rooms),
         "tail" => parse_tail_command(iter.collect::<Vec<_>>()).map(Command::Tail),
@@ -282,8 +311,12 @@ where
         "unban" => parse_identity_command(iter.collect::<Vec<_>>()).map(Command::Unban),
         "freeze" => parse_identity_command(iter.collect::<Vec<_>>()).map(Command::Freeze),
         "unfreeze" => parse_identity_command(iter.collect::<Vec<_>>()).map(Command::Unfreeze),
-        "invite-create" => parse_invite_create_command(iter.collect::<Vec<_>>()).map(Command::InviteCreate),
-        "invite-revoke" => parse_invite_revoke_command(iter.collect::<Vec<_>>()).map(Command::InviteRevoke),
+        "invite-create" => {
+            parse_invite_create_command(iter.collect::<Vec<_>>()).map(Command::InviteCreate)
+        }
+        "invite-revoke" => {
+            parse_invite_revoke_command(iter.collect::<Vec<_>>()).map(Command::InviteRevoke)
+        }
         "residents" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminResidents),
         "rooms-admin" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminRooms),
         other => Err(format!("unsupported command: {other}")),
@@ -406,6 +439,50 @@ fn parse_recall_command(args: Vec<String>) -> Result<RecallCommand, String> {
         conversation_id: conversation_id
             .ok_or_else(|| "missing required flag --conversation-id".to_string())?,
         message_id: message_id.ok_or_else(|| "missing required flag --message-id".to_string())?,
+        gateway,
+        json,
+    })
+}
+
+fn parse_export_command(args: Vec<String>) -> Result<ExportCommand, String> {
+    let mut target = None;
+    let mut conversation_id = None;
+    let mut format = "md".to_string();
+    let mut include_public = false;
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--for" => target = iter.next(),
+            "--conversation-id" => conversation_id = iter.next(),
+            "--format" => {
+                format = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --format".to_string())?
+            }
+            "--include-public" => include_public = true,
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?
+            }
+            "--json" => json = true,
+            other => return Err(format!("unsupported export flag: {other}")),
+        }
+    }
+
+    match format.as_str() {
+        "md" | "markdown" | "jsonl" | "txt" | "text" => {}
+        other => return Err(format!("unsupported export format: {other}")),
+    }
+
+    Ok(ExportCommand {
+        target: target.ok_or_else(|| "missing required flag --for".to_string())?,
+        conversation_id,
+        format,
+        include_public,
         gateway,
         json,
     })
@@ -546,7 +623,9 @@ fn parse_invite_create_command(args: Vec<String>) -> Result<InviteCreateCommand,
             "--actor" => actor = iter.next(),
             "--max-uses" => {
                 if let Some(val) = iter.next() {
-                    max_uses = val.parse::<u32>().map_err(|_| "invalid --max-uses value".to_string())?;
+                    max_uses = val
+                        .parse::<u32>()
+                        .map_err(|_| "invalid --max-uses value".to_string())?;
                 }
             }
             "--gateway" => {
@@ -684,6 +763,22 @@ fn format_tail(response: &CliTailResponse) -> String {
     lines.join("\n")
 }
 
+fn format_export(response: &CliExportResponse) -> String {
+    response.content.clone()
+}
+
+fn query_escape(value: &str) -> String {
+    value
+        .bytes()
+        .flat_map(|byte| match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                vec![byte as char]
+            }
+            other => format!("%{other:02X}").chars().collect(),
+        })
+        .collect()
+}
+
 fn extract_gateway_error_message(body: &str) -> Option<String> {
     serde_json::from_str::<CliErrorResponse>(body)
         .ok()
@@ -766,6 +861,28 @@ fn run_recall(command: RecallCommand) -> Result<String, String> {
             .map_err(|error| format!("serialize recall response failed: {error}"))
     } else {
         Ok(format_recall_success(&payload))
+    }
+}
+
+fn run_export(command: ExportCommand) -> Result<String, String> {
+    let resident_id = parse_actor_identity(&command.target)?;
+    let mut url = format!(
+        "{}/v1/export?resident_id={}&format={}&include_public={}",
+        command.gateway.trim_end_matches('/'),
+        query_escape(&resident_id),
+        query_escape(&command.format),
+        command.include_public
+    );
+    if let Some(conversation_id) = &command.conversation_id {
+        url.push_str("&conversation_id=");
+        url.push_str(&query_escape(conversation_id));
+    }
+    let payload = run_query::<CliExportResponse>(&url)?;
+    if command.json {
+        serde_json::to_string(&payload)
+            .map_err(|error| format!("serialize export response failed: {error}"))
+    } else {
+        Ok(format_export(&payload))
     }
 }
 
@@ -877,10 +994,20 @@ fn format_admin_residents(payload: &[AdminResidentEntry]) -> String {
     let mut lines = vec![format!("居民名单（共 {} 人）：", payload.len())];
     for resident in payload {
         let mut tags: Vec<String> = Vec::new();
-        if resident.online { tags.push("在线".into()); }
-        if resident.is_banned { tags.push("已封禁".into()); }
-        if !resident.roles.is_empty() { tags.push(format!("角色:{}", resident.roles.join(","))); }
-        let tag_str = if tags.is_empty() { String::new() } else { format!(" [{}]", tags.join(", ")) };
+        if resident.online {
+            tags.push("在线".into());
+        }
+        if resident.is_banned {
+            tags.push("已封禁".into());
+        }
+        if !resident.roles.is_empty() {
+            tags.push(format!("角色:{}", resident.roles.join(",")));
+        }
+        let tag_str = if tags.is_empty() {
+            String::new()
+        } else {
+            format!(" [{}]", tags.join(", "))
+        };
         let display = match &resident.nickname {
             Some(n) if !n.is_empty() => format!("{} ({})", n, resident.resident_id),
             _ => resident.resident_id.clone(),
@@ -907,7 +1034,10 @@ fn run_admin_ban(command: AdminCommand) -> Result<String, String> {
         resident_id: command.target,
         reason: command.reason,
     };
-    let url = format!("{}/v1/admin/residents/ban", command.gateway.trim_end_matches('/'));
+    let url = format!(
+        "{}/v1/admin/residents/ban",
+        command.gateway.trim_end_matches('/')
+    );
     let payload = post_json::<_, serde_json::Value>(&url, &request, "ban")?;
     if command.json {
         serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
@@ -917,20 +1047,33 @@ fn run_admin_ban(command: AdminCommand) -> Result<String, String> {
 }
 
 fn run_admin_unban(command: IdentityCommand) -> Result<String, String> {
-    let request = AdminTargetRequest { resident_id: command.target };
-    let url = format!("{}/v1/admin/residents/unban", command.gateway.trim_end_matches('/'));
+    let request = AdminTargetRequest {
+        resident_id: command.target,
+    };
+    let url = format!(
+        "{}/v1/admin/residents/unban",
+        command.gateway.trim_end_matches('/')
+    );
     let payload = post_json::<_, serde_json::Value>(&url, &request, "unban")?;
     if command.json {
         serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
     } else {
         let count = payload["lifted_count"].as_u64().unwrap_or(0);
-        Ok(format!("已解封居民 {}（解除 {} 条封禁）", request.resident_id, count))
+        Ok(format!(
+            "已解封居民 {}（解除 {} 条封禁）",
+            request.resident_id, count
+        ))
     }
 }
 
 fn run_admin_freeze(command: IdentityCommand) -> Result<String, String> {
-    let request = AdminRoomTargetRequest { room_id: command.target };
-    let url = format!("{}/v1/admin/rooms/freeze", command.gateway.trim_end_matches('/'));
+    let request = AdminRoomTargetRequest {
+        room_id: command.target,
+    };
+    let url = format!(
+        "{}/v1/admin/rooms/freeze",
+        command.gateway.trim_end_matches('/')
+    );
     let _payload = post_json::<_, serde_json::Value>(&url, &request, "freeze")?;
     if command.json {
         serde_json::to_string(&serde_json::json!({"ok": true, "room_id": request.room_id}))
@@ -941,8 +1084,13 @@ fn run_admin_freeze(command: IdentityCommand) -> Result<String, String> {
 }
 
 fn run_admin_unfreeze(command: IdentityCommand) -> Result<String, String> {
-    let request = AdminRoomTargetRequest { room_id: command.target };
-    let url = format!("{}/v1/admin/rooms/unfreeze", command.gateway.trim_end_matches('/'));
+    let request = AdminRoomTargetRequest {
+        room_id: command.target,
+    };
+    let url = format!(
+        "{}/v1/admin/rooms/unfreeze",
+        command.gateway.trim_end_matches('/')
+    );
     let _payload = post_json::<_, serde_json::Value>(&url, &request, "unfreeze")?;
     if command.json {
         serde_json::to_string(&serde_json::json!({"ok": true, "room_id": request.room_id}))
@@ -962,7 +1110,10 @@ fn run_invite_create(command: InviteCreateCommand) -> Result<String, String> {
     if command.json {
         serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
     } else {
-        Ok(format!("已创建邀请码：{}（可用 {} 次）", payload.code, payload.max_uses))
+        Ok(format!(
+            "已创建邀请码：{}（可用 {} 次）",
+            payload.code, payload.max_uses
+        ))
     }
 }
 
@@ -971,17 +1122,24 @@ fn run_invite_revoke(command: InviteRevokeCommand) -> Result<String, String> {
         code: command.code,
         actor_id: command.actor,
     };
-    let url = format!("{}/v1/admin/invites/revoke", command.gateway.trim_end_matches('/'));
+    let url = format!(
+        "{}/v1/admin/invites/revoke",
+        command.gateway.trim_end_matches('/')
+    );
     let _payload = post_json::<_, serde_json::Value>(&url, &request, "invite revoke")?;
     if command.json {
-        serde_json::to_string(&serde_json::json!({"ok": true})).map_err(|e| format!("serialize: {e}"))
+        serde_json::to_string(&serde_json::json!({"ok": true}))
+            .map_err(|e| format!("serialize: {e}"))
     } else {
         Ok(format!("已撤销邀请码 {}", request.code))
     }
 }
 
 fn run_admin_residents(command: QueryCommand) -> Result<String, String> {
-    let url = format!("{}/v1/admin/residents", command.gateway.trim_end_matches('/'));
+    let url = format!(
+        "{}/v1/admin/residents",
+        command.gateway.trim_end_matches('/')
+    );
     let payload = run_query::<Vec<AdminResidentEntry>>(&url)?;
     if command.json {
         serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
@@ -1005,6 +1163,7 @@ fn run_command(command: Command) -> Result<String, String> {
         Command::Send(command) => run_send(command),
         Command::Edit(command) => run_edit(command),
         Command::Recall(command) => run_recall(command),
+        Command::Export(command) => run_export(command),
         Command::Inbox(command) => run_inbox(command),
         Command::Rooms(command) => run_rooms(command),
         Command::Tail(command) => run_tail(command),
@@ -1195,6 +1354,63 @@ mod tests {
                 actor: "openclaw".into(),
             }
         );
+    }
+
+    #[test]
+    fn export_command_parses_gateway_export_request() {
+        let command = parse_args([
+            "lobster-cli",
+            "export",
+            "--for",
+            "user:rsaga",
+            "--conversation-id",
+            "room:world:lobby",
+            "--format",
+            "jsonl",
+            "--include-public",
+            "--gateway",
+            "http://127.0.0.1:8787",
+        ])
+        .expect("export command should parse");
+
+        let rendered = format!("{command:?}");
+        assert!(rendered.contains("Export"));
+        assert!(rendered.contains("user:rsaga"));
+        assert!(rendered.contains("room:world:lobby"));
+        assert!(rendered.contains("jsonl"));
+        assert!(rendered.contains("include_public: true"));
+    }
+
+    #[test]
+    fn export_command_rejects_room_actor_target() {
+        let command = parse_args(["lobster-cli", "export", "--for", "room:world:lobby"])
+            .expect("parse should defer identity validation to runner");
+
+        let export = match command {
+            Command::Export(export) => export,
+            other => panic!("expected export command, got {other:?}"),
+        };
+
+        let err = run_export(export).expect_err("room actor should fail");
+        assert!(err.contains("actor must be an identity"));
+    }
+
+    #[test]
+    fn export_command_prints_export_content_by_default() {
+        let rendered = format_export(&CliExportResponse {
+            resident_id: "rsaga".into(),
+            format: "md".into(),
+            exported_at_ms: 1760000000300,
+            conversation_count: 1,
+            conversations: vec![CliExportConversation {
+                conversation_id: "room:world:lobby".into(),
+                title: "世界大厅".into(),
+                kind: "public".into(),
+            }],
+            content: "# 世界大厅\n\nrsaga: hello".into(),
+        });
+
+        assert_eq!(rendered, "# 世界大厅\n\nrsaga: hello");
     }
 
     #[test]
@@ -1520,13 +1736,8 @@ mod tests {
 
     #[test]
     fn admin_rooms_command_uses_query_parser() {
-        let command = parse_args([
-            "lobster-cli",
-            "rooms-admin",
-            "--for",
-            "user:admin",
-        ])
-        .expect("rooms-admin command should parse");
+        let command = parse_args(["lobster-cli", "rooms-admin", "--for", "user:admin"])
+            .expect("rooms-admin command should parse");
 
         match command {
             Command::AdminRooms(q) => assert_eq!(q.target, "user:admin"),
@@ -1590,7 +1801,10 @@ mod tests {
 
     #[test]
     fn format_inbox_shows_identity_header() {
-        let payload = CliInboxResponse { identity: "test-user".into(), conversations: vec![] };
+        let payload = CliInboxResponse {
+            identity: "test-user".into(),
+            conversations: vec![],
+        };
         let rendered = format_inbox(&payload);
         assert!(rendered.contains("收件箱"));
         assert!(rendered.contains("test-user"));
@@ -1598,7 +1812,10 @@ mod tests {
 
     #[test]
     fn format_rooms_shows_identity_header() {
-        let payload = CliRoomsResponse { identity: "test-user".into(), entries: vec![] };
+        let payload = CliRoomsResponse {
+            identity: "test-user".into(),
+            entries: vec![],
+        };
         let rendered = format_rooms(&payload);
         assert!(rendered.contains("会话列表"));
         assert!(rendered.contains("test-user"));

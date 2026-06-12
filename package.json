@@ -1,1 +1,8 @@
-{}
+{
+  "name": "lobster-chat",
+  "private": true,
+  "scripts": {
+    "test": "npm --prefix apps/lobster-web-shell test",
+    "test:frontend": "npm --prefix apps/lobster-web-shell test"
+  }
+}

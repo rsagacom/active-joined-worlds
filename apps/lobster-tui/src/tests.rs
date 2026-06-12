@@ -6,6 +6,10 @@ use super::test_support::{runtime_context_with_selection_preview, test_context};
 use super::*;
 use crate::compact_shell::compact_terminal_shell_lines;
 use crate::terminal_smoke_script::run_submission_script;
+use crate::terminal_submission::{
+    build_edit_message_request, build_recall_message_request,
+    handle_terminal_submission_with_gateway_post,
+};
 use crate::transport_sync::{merge_polled_messages, republish_pending_messages};
 use chat_core::{
     ArchivePolicy, ClientProfile, DeliveryState, DeviceId, IdentityId, MessageBody,
@@ -729,14 +733,21 @@ fn admin_ban_command_without_gateway_shows_error_notice() {
     let mut selected_id = active_id.clone();
 
     let result = handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/ban",
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(matches!(result, SubmissionAction::Continue));
     let messages = store.export_messages(&active_id);
-    let notice = messages.iter().find(|m| m.envelope.body.plain_text.contains("用法")).unwrap();
+    let notice = messages
+        .iter()
+        .find(|m| m.envelope.body.plain_text.contains("用法"))
+        .unwrap();
     assert!(notice.envelope.body.plain_text.contains("/ban"));
     let _ = fs::remove_dir_all(&temp_root);
 }
@@ -751,13 +762,21 @@ fn admin_unban_command_requires_resident_id() {
     let mut selected_id = active_id.clone();
 
     handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/unban",
-    ).unwrap();
+    )
+    .unwrap();
 
     let messages = store.export_messages(&active_id);
-    assert!(messages.iter().any(|m| m.envelope.body.plain_text.contains("用法：/unban")));
+    assert!(
+        messages
+            .iter()
+            .any(|m| m.envelope.body.plain_text.contains("用法：/unban"))
+    );
     let _ = fs::remove_dir_all(&temp_root);
 }
 
@@ -771,13 +790,21 @@ fn admin_freeze_command_requires_room_id() {
     let mut selected_id = active_id.clone();
 
     handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/freeze",
-    ).unwrap();
+    )
+    .unwrap();
 
     let messages = store.export_messages(&active_id);
-    assert!(messages.iter().any(|m| m.envelope.body.plain_text.contains("用法：/freeze")));
+    assert!(
+        messages
+            .iter()
+            .any(|m| m.envelope.body.plain_text.contains("用法：/freeze"))
+    );
     let _ = fs::remove_dir_all(&temp_root);
 }
 
@@ -791,13 +818,21 @@ fn admin_unfreeze_command_requires_room_id() {
     let mut selected_id = active_id.clone();
 
     handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/unfreeze",
-    ).unwrap();
+    )
+    .unwrap();
 
     let messages = store.export_messages(&active_id);
-    assert!(messages.iter().any(|m| m.envelope.body.plain_text.contains("用法：/unfreeze")));
+    assert!(
+        messages
+            .iter()
+            .any(|m| m.envelope.body.plain_text.contains("用法：/unfreeze"))
+    );
     let _ = fs::remove_dir_all(&temp_root);
 }
 
@@ -811,10 +846,14 @@ fn admin_invite_without_subcommand_shows_usage() {
     let mut selected_id = active_id.clone();
 
     handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/invite",
-    ).unwrap();
+    )
+    .unwrap();
 
     let messages = store.export_messages(&active_id);
     assert!(messages.iter().any(|m| {
@@ -834,10 +873,14 @@ fn admin_residents_command_runs_without_gateway() {
     let mut selected_id = active_id.clone();
 
     let result = handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/residents",
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(matches!(result, SubmissionAction::Continue));
     assert_eq!(active_id, selected_id);
@@ -854,10 +897,14 @@ fn admin_commands_work_from_user_surface_too() {
     let mut selected_id = active_id.clone();
 
     let result = handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::User,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::User,
+        &mut active_id,
+        &mut selected_id,
         "/residents",
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(matches!(result, SubmissionAction::Continue));
     let messages = store.export_messages(&active_id);
@@ -878,13 +925,18 @@ fn help_command_lists_admin_governance_commands() {
     let mut selected_id = active_id.clone();
 
     handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/help",
-    ).unwrap();
+    )
+    .unwrap();
 
     let messages = store.export_messages(&active_id);
-    let help_text = messages.iter()
+    let help_text = messages
+        .iter()
         .find(|m| m.envelope.sender.0 == "system")
         .map(|m| &m.envelope.body.plain_text)
         .unwrap();
@@ -917,10 +969,14 @@ fn admin_rooms_command_runs_without_gateway() {
     let mut selected_id = active_id.clone();
 
     let result = handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/rooms",
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(matches!(result, SubmissionAction::Continue));
     assert_eq!(active_id, selected_id);
@@ -937,13 +993,21 @@ fn admin_config_without_args_shows_usage() {
     let mut selected_id = active_id.clone();
 
     handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/config",
-    ).unwrap();
+    )
+    .unwrap();
 
     let messages = store.export_messages(&active_id);
-    assert!(messages.iter().any(|m| m.envelope.body.plain_text.contains("用法：/config")));
+    assert!(
+        messages
+            .iter()
+            .any(|m| m.envelope.body.plain_text.contains("用法：/config"))
+    );
     let _ = fs::remove_dir_all(&temp_root);
 }
 
@@ -957,10 +1021,14 @@ fn world_status_command_runs_without_gateway() {
     let mut selected_id = active_id.clone();
 
     let result = handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/world-status",
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(matches!(result, SubmissionAction::Continue));
     assert_eq!(active_id, selected_id);
@@ -977,10 +1045,14 @@ fn cities_command_runs_without_gateway() {
     let mut selected_id = active_id.clone();
 
     let result = handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/cities",
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(matches!(result, SubmissionAction::Continue));
     assert_eq!(active_id, selected_id);
@@ -997,10 +1069,14 @@ fn world_safety_command_runs_without_gateway() {
     let mut selected_id = active_id.clone();
 
     let result = handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/world-safety",
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(matches!(result, SubmissionAction::Continue));
     let messages = store.export_messages(&active_id);
@@ -1021,10 +1097,14 @@ fn safety_reports_command_runs_without_gateway() {
     let mut selected_id = active_id.clone();
 
     let result = handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/safety-reports",
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(matches!(result, SubmissionAction::Continue));
     assert_eq!(active_id, selected_id);
@@ -1041,10 +1121,14 @@ fn safety_residents_command_runs_without_gateway() {
     let mut selected_id = active_id.clone();
 
     let result = handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/safety-residents",
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(matches!(result, SubmissionAction::Continue));
     assert_eq!(active_id, selected_id);
@@ -1061,10 +1145,14 @@ fn world_directory_command_runs_without_gateway() {
     let mut selected_id = active_id.clone();
 
     let result = handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/world-directory",
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(matches!(result, SubmissionAction::Continue));
     assert_eq!(active_id, selected_id);
@@ -1081,10 +1169,14 @@ fn world_square_command_runs_without_gateway() {
     let mut selected_id = active_id.clone();
 
     let result = handle_terminal_submission(
-        &mut store, &mut transport, LaunchSurface::Admin,
-        &mut active_id, &mut selected_id,
+        &mut store,
+        &mut transport,
+        LaunchSurface::Admin,
+        &mut active_id,
+        &mut selected_id,
         "/world-square",
-    ).unwrap();
+    )
+    .unwrap();
 
     assert!(matches!(result, SubmissionAction::Continue));
     assert_eq!(active_id, selected_id);
@@ -1204,6 +1296,20 @@ fn help_command_appends_local_terminal_notice_without_publishing() {
     assert!(entries[0].envelope.body.plain_text.contains("/help"));
     assert!(entries[0].envelope.body.plain_text.contains("/status"));
     assert!(entries[0].envelope.body.plain_text.contains("/refresh"));
+    assert!(
+        entries[0]
+            .envelope
+            .body
+            .plain_text
+            .contains("/edit <消息ID> <新正文>")
+    );
+    assert!(
+        entries[0]
+            .envelope
+            .body
+            .plain_text
+            .contains("/recall <消息ID>")
+    );
     assert!(transport.published.is_empty());
     assert_eq!(active_conversation_id, conversation_id);
     assert_eq!(selected_conversation_id, conversation_id);
@@ -1307,6 +1413,175 @@ fn plain_submission_publishes_and_marks_entry_delivered() {
 }
 
 #[test]
+fn edit_command_without_args_shows_usage_without_publishing_plain_text() {
+    let (temp_root, mut store) = temp_store("lobster-tui-edit-usage");
+    let conversation = launch_conversation(LaunchSurface::User);
+    let conversation_id = conversation.conversation_id.clone();
+    store.upsert_conversation(conversation).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_conversation_id = conversation_id.clone();
+    let mut selected_conversation_id = ConversationId("room:world:lobby".into());
+
+    let result = handle_terminal_submission(
+        &mut store,
+        &mut transport,
+        LaunchSurface::User,
+        &mut active_conversation_id,
+        &mut selected_conversation_id,
+        "/edit",
+    )
+    .unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    assert!(transport.published.is_empty());
+    assert_eq!(selected_conversation_id, conversation_id);
+    let entries = store.export_messages(&conversation_id);
+    assert_eq!(entries.len(), 1);
+    assert!(
+        entries[0]
+            .envelope
+            .body
+            .plain_text
+            .contains("/edit <消息ID> <新正文>")
+    );
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn recall_command_without_args_shows_usage_without_publishing_plain_text() {
+    let (temp_root, mut store) = temp_store("lobster-tui-recall-usage");
+    let conversation = launch_conversation(LaunchSurface::User);
+    let conversation_id = conversation.conversation_id.clone();
+    store.upsert_conversation(conversation).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_conversation_id = conversation_id.clone();
+    let mut selected_conversation_id = ConversationId("room:world:lobby".into());
+
+    let result = handle_terminal_submission(
+        &mut store,
+        &mut transport,
+        LaunchSurface::User,
+        &mut active_conversation_id,
+        &mut selected_conversation_id,
+        "/recall",
+    )
+    .unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    assert!(transport.published.is_empty());
+    assert_eq!(selected_conversation_id, conversation_id);
+    let entries = store.export_messages(&conversation_id);
+    assert_eq!(entries.len(), 1);
+    assert!(
+        entries[0]
+            .envelope
+            .body
+            .plain_text
+            .contains("/recall <消息ID>")
+    );
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn terminal_edit_command_request_matches_gateway_shell_contract() {
+    let request = build_edit_message_request("rsaga", "msg-42", "修订后的正文");
+
+    assert_eq!(request.0, "/v1/shell/message/edit");
+    assert_eq!(
+        request.1,
+        serde_json::json!({
+            "sender": "rsaga",
+            "message_id": "msg-42",
+            "text": "修订后的正文",
+        })
+    );
+}
+
+#[test]
+fn terminal_recall_command_request_matches_gateway_shell_contract() {
+    let request = build_recall_message_request("rsaga", "msg-42");
+
+    assert_eq!(request.0, "/v1/shell/message/recall");
+    assert_eq!(
+        request.1,
+        serde_json::json!({
+            "sender": "rsaga",
+            "message_id": "msg-42",
+        })
+    );
+}
+
+#[test]
+fn edit_command_with_args_posts_to_gateway_path_without_local_publish() {
+    let (temp_root, mut store) = temp_store("lobster-tui-edit-gateway-path");
+    let conversation = launch_conversation(LaunchSurface::User);
+    let conversation_id = conversation.conversation_id.clone();
+    store.upsert_conversation(conversation).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_conversation_id = conversation_id.clone();
+    let mut selected_conversation_id = ConversationId("room:world:lobby".into());
+
+    let result = handle_terminal_submission(
+        &mut store,
+        &mut transport,
+        LaunchSurface::User,
+        &mut active_conversation_id,
+        &mut selected_conversation_id,
+        "/edit msg-42 新正文",
+    )
+    .unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    assert!(transport.published.is_empty());
+    assert_eq!(selected_conversation_id, conversation_id);
+    let entries = store.export_messages(&conversation_id);
+    assert_eq!(entries.len(), 1);
+    assert!(
+        entries[0]
+            .envelope
+            .body
+            .plain_text
+            .contains("编辑消息失败：Gateway 未配置")
+    );
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn recall_command_with_args_posts_to_gateway_path_without_local_publish() {
+    let (temp_root, mut store) = temp_store("lobster-tui-recall-gateway-path");
+    let conversation = launch_conversation(LaunchSurface::User);
+    let conversation_id = conversation.conversation_id.clone();
+    store.upsert_conversation(conversation).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_conversation_id = conversation_id.clone();
+    let mut selected_conversation_id = ConversationId("room:world:lobby".into());
+
+    let result = handle_terminal_submission(
+        &mut store,
+        &mut transport,
+        LaunchSurface::User,
+        &mut active_conversation_id,
+        &mut selected_conversation_id,
+        "/recall msg-42",
+    )
+    .unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    assert!(transport.published.is_empty());
+    assert_eq!(selected_conversation_id, conversation_id);
+    let entries = store.export_messages(&conversation_id);
+    assert_eq!(entries.len(), 1);
+    assert!(
+        entries[0]
+            .envelope
+            .body
+            .plain_text
+            .contains("撤回消息失败：Gateway 未配置")
+    );
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
 fn plain_submission_keeps_pending_entry_when_publish_fails() {
     let (temp_root, mut store) = temp_store("lobster-tui-plain-submit-pending");
     let conversation = launch_conversation(LaunchSurface::User);
@@ -1338,6 +1613,90 @@ fn plain_submission_keeps_pending_entry_when_publish_fails() {
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].delivery_state, DeliveryState::PendingNetwork);
     assert_eq!(entries[0].envelope.body.plain_text, "失败时保留待投递正文");
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn edit_command_success_notice_can_be_tested_without_global_gateway_env() {
+    let (temp_root, mut store) = temp_store("lobster-tui-edit-success-injected");
+    let conversation = launch_conversation(LaunchSurface::User);
+    let conversation_id = conversation.conversation_id.clone();
+    store.upsert_conversation(conversation).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_conversation_id = conversation_id.clone();
+    let mut selected_conversation_id = ConversationId("room:world:lobby".into());
+    let mut calls = Vec::new();
+
+    let result = handle_terminal_submission_with_gateway_post(
+        &mut store,
+        &mut transport,
+        LaunchSurface::User,
+        &mut active_conversation_id,
+        &mut selected_conversation_id,
+        "/edit msg-42 修订正文",
+        &mut |path, body| {
+            calls.push((path.to_string(), body));
+            Ok(serde_json::json!({"edit_status": "edited"}))
+        },
+    )
+    .unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    assert!(transport.published.is_empty());
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].0, "/v1/shell/message/edit");
+    assert_eq!(calls[0].1["message_id"], "msg-42");
+    let entries = store.export_messages(&conversation_id);
+    assert_eq!(entries.len(), 1);
+    assert!(
+        entries[0]
+            .envelope
+            .body
+            .plain_text
+            .contains("已编辑消息 msg-42")
+    );
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn recall_command_success_notice_can_be_tested_without_global_gateway_env() {
+    let (temp_root, mut store) = temp_store("lobster-tui-recall-success-injected");
+    let conversation = launch_conversation(LaunchSurface::User);
+    let conversation_id = conversation.conversation_id.clone();
+    store.upsert_conversation(conversation).unwrap();
+    let mut transport = RecordingTransport::new();
+    let mut active_conversation_id = conversation_id.clone();
+    let mut selected_conversation_id = ConversationId("room:world:lobby".into());
+    let mut calls = Vec::new();
+
+    let result = handle_terminal_submission_with_gateway_post(
+        &mut store,
+        &mut transport,
+        LaunchSurface::User,
+        &mut active_conversation_id,
+        &mut selected_conversation_id,
+        "/recall msg-42",
+        &mut |path, body| {
+            calls.push((path.to_string(), body));
+            Ok(serde_json::json!({"recall_status": "recalled"}))
+        },
+    )
+    .unwrap();
+
+    assert!(matches!(result, SubmissionAction::Continue));
+    assert!(transport.published.is_empty());
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].0, "/v1/shell/message/recall");
+    assert_eq!(calls[0].1["message_id"], "msg-42");
+    let entries = store.export_messages(&conversation_id);
+    assert_eq!(entries.len(), 1);
+    assert!(
+        entries[0]
+            .envelope
+            .body
+            .plain_text
+            .contains("已撤回消息 msg-42")
+    );
     let _ = fs::remove_dir_all(&temp_root);
 }
 
@@ -4955,11 +5314,20 @@ fn session_info_panel_uses_diegetic_status_labels() {
 fn scene_tile_kind_enum_covers_all_fourteen_variants() {
     // Verify the enum has no accidental gaps
     let all = vec![
-        SceneTileKind::Wall, SceneTileKind::Floor, SceneTileKind::Window,
-        SceneTileKind::Desk, SceneTileKind::Sofa, SceneTileKind::Cabinet,
-        SceneTileKind::Door, SceneTileKind::Avatar, SceneTileKind::Lamp,
-        SceneTileKind::Gate, SceneTileKind::Bridge, SceneTileKind::Water,
-        SceneTileKind::Portal, SceneTileKind::Tower,
+        SceneTileKind::Wall,
+        SceneTileKind::Floor,
+        SceneTileKind::Window,
+        SceneTileKind::Desk,
+        SceneTileKind::Sofa,
+        SceneTileKind::Cabinet,
+        SceneTileKind::Door,
+        SceneTileKind::Avatar,
+        SceneTileKind::Lamp,
+        SceneTileKind::Gate,
+        SceneTileKind::Bridge,
+        SceneTileKind::Water,
+        SceneTileKind::Portal,
+        SceneTileKind::Tower,
     ];
     assert_eq!(all.len(), 14);
     // Verify Debug/Clone/PartialEq work
@@ -4972,7 +5340,10 @@ fn scene_tile_kind_enum_covers_all_fourteen_variants() {
 fn scene_tile_grid_empty_yields_empty_rows() {
     let ctx = test_context(LaunchSurface::User);
     let grid = ratatui_scene_tile_grid(&ctx);
-    assert!(!grid.rows.is_empty(), "even empty scene should have grid rows");
+    assert!(
+        !grid.rows.is_empty(),
+        "even empty scene should have grid rows"
+    );
     // Grid should be non-empty even in admin surface
     let admin_grid = ratatui_scene_tile_grid(&test_context(LaunchSurface::Admin));
     assert!(!admin_grid.rows.is_empty());
@@ -4985,13 +5356,20 @@ fn scene_tile_grid_world_surface_differs_from_user() {
     assert!(!user_grid.rows.is_empty());
     assert!(!world_grid.rows.is_empty());
     // World and User should have different grid layouts
-    assert_ne!(user_grid.rows, world_grid.rows, "world and user should differ");
+    assert_ne!(
+        user_grid.rows, world_grid.rows,
+        "world and user should differ"
+    );
 }
 
 #[test]
 fn scene_panel_entities_cover_all_renderable_surfaces() {
     // Verify all surfaces produce non-empty output
-    for surface in &[LaunchSurface::User, LaunchSurface::Admin, LaunchSurface::World] {
+    for surface in &[
+        LaunchSurface::User,
+        LaunchSurface::Admin,
+        LaunchSurface::World,
+    ] {
         let lines = ratatui_scene_lines(&test_context(*surface));
         assert!(!lines.is_empty(), "surface {:?} should render", surface);
     }
@@ -5001,7 +5379,11 @@ fn scene_panel_entities_cover_all_renderable_surfaces() {
 fn admin_and_world_surfaces_have_non_empty_scene_lines() {
     for surface in &[LaunchSurface::Admin, LaunchSurface::World] {
         let lines = ratatui_scene_lines(&test_context(*surface));
-        assert!(!lines.is_empty(), "surface {:?} should produce scene lines", surface);
+        assert!(
+            !lines.is_empty(),
+            "surface {:?} should produce scene lines",
+            surface
+        );
     }
     let user_lines = ratatui_scene_lines(&test_context(LaunchSurface::User));
     let admin_lines = ratatui_scene_lines(&test_context(LaunchSurface::Admin));

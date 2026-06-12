@@ -9,7 +9,7 @@ use transport_waku::WakuGatewayResponse;
 use crate::{
     ApproveCityJoinRequest, CreateCityRequest, CreatePublicRoomRequest, FreezePublicRoomRequest,
     GatewayRuntime, GatewayStateNotifier, JoinCityRequest, UpdateFederationPolicyRequest,
-    UpdateStewardRequest, http_support::json_header,
+    UpdateStewardRequest, http_support::json_header, http_write_routes::require_admin_auth,
 };
 
 pub(crate) type HttpResponse = Response<Cursor<Vec<u8>>>;
@@ -19,6 +19,9 @@ pub(crate) fn handle_post_create_city(
     notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = Vec::new();
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
         return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
@@ -65,6 +68,9 @@ pub(crate) fn handle_post_join_city(
     notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = Vec::new();
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
         return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
@@ -111,6 +117,9 @@ pub(crate) fn handle_post_approve_city_join(
     notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = Vec::new();
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
         return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
@@ -157,6 +166,9 @@ pub(crate) fn handle_post_update_steward(
     notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = Vec::new();
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
         return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
@@ -203,6 +215,9 @@ pub(crate) fn handle_post_update_federation_policy(
     notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = Vec::new();
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
         return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
@@ -249,6 +264,9 @@ pub(crate) fn handle_post_create_public_room(
     notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = Vec::new();
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
         return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
@@ -295,6 +313,9 @@ pub(crate) fn handle_post_freeze_public_room(
     notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = Vec::new();
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
         return Response::from_string(format!("{{\"error\":\"{error}\"}}"))

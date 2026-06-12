@@ -1276,6 +1276,12 @@ pub(crate) struct SanctionResidentRequest {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub(crate) struct UnsanctionResidentRequest {
+    pub(crate) actor_id: String,
+    pub(crate) sanction_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub(crate) struct AuthPreflightRequest {
     pub(crate) email: String,
     pub(crate) mobile: Option<String>,
@@ -1545,6 +1551,7 @@ pub(crate) struct GatewayRuntime {
     pub(crate) permission_groups: HashMap<String, PermissionGroup>,
     pub(crate) resident_permission_groups: HashMap<String, String>,
     pub(crate) audit_events: Vec<AuditEvent>,
+    pub(crate) dev_auth_bypass: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1565,7 +1572,6 @@ pub(crate) struct AdminModerateMessageRequest {
     #[serde(default)]
     pub(crate) actor_id: Option<String>,
 }
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct InviteCode {
@@ -1680,22 +1686,86 @@ pub(crate) const CAP_ADMIN_SCENE: &str = "admin:scene";
 
 pub(crate) fn capability_catalog() -> Vec<CapabilityInfo> {
     vec![
-        CapabilityInfo { key: CAP_READ_PUBLIC.to_string(), label: "读公开群聊".to_string(), description: "可浏览世界广场与公共房间".to_string() },
-        CapabilityInfo { key: CAP_READ_OWN_DIRECT.to_string(), label: "读本人私聊".to_string(), description: "可查看自己参与的私聊对话".to_string() },
-        CapabilityInfo { key: CAP_SEND_MESSAGE.to_string(), label: "发送消息".to_string(), description: "可在有权限的房间内发送消息".to_string() },
-        CapabilityInfo { key: CAP_EDIT_OWN_MESSAGE.to_string(), label: "编辑/撤回".to_string(), description: "可编辑或撤回本人已发送的消息".to_string() },
-        CapabilityInfo { key: CAP_CREATE_ROOM.to_string(), label: "创建房间".to_string(), description: "可创建新的公共或私密房间".to_string() },
-        CapabilityInfo { key: CAP_INVITE_RESIDENT.to_string(), label: "邀请居民".to_string(), description: "可生成邀请码邀请新居民".to_string() },
-        CapabilityInfo { key: CAP_FREEZE_ROOM.to_string(), label: "冻结房间".to_string(), description: "可冻结或解冻公共房间".to_string() },
-        CapabilityInfo { key: CAP_MANAGE_RESIDENT.to_string(), label: "管理居民".to_string(), description: "可审批加入、移除成员、分配权限".to_string() },
-        CapabilityInfo { key: CAP_MODERATE_MESSAGE.to_string(), label: "消息审核".to_string(), description: "可审核与处置待审消息".to_string() },
-        CapabilityInfo { key: CAP_PUBLISH_NOTICE.to_string(), label: "发布公告".to_string(), description: "可向世界广场或本城发布公告".to_string() },
-        CapabilityInfo { key: CAP_HANDLE_REPORT.to_string(), label: "处理举报".to_string(), description: "可查看与处理安全举报".to_string() },
-        CapabilityInfo { key: CAP_BAN_RESIDENT.to_string(), label: "封禁居民".to_string(), description: "可封禁或解除封禁居民".to_string() },
-        CapabilityInfo { key: CAP_ADMIN_CONFIG.to_string(), label: "系统配置".to_string(), description: "可修改网关运行配置".to_string() },
-        CapabilityInfo { key: CAP_ADMIN_DIAGNOSTICS.to_string(), label: "诊断信息".to_string(), description: "可查看系统诊断与运行状态".to_string() },
-        CapabilityInfo { key: CAP_MANAGE_PERMISSIONS.to_string(), label: "管理权限".to_string(), description: "可创建/编辑权限组并分配".to_string() },
-        CapabilityInfo { key: CAP_ADMIN_SCENE.to_string(), label: "场景管理".to_string(), description: "可编辑房间场景的图像层与热点层配置".to_string() },
+        CapabilityInfo {
+            key: CAP_READ_PUBLIC.to_string(),
+            label: "读公开群聊".to_string(),
+            description: "可浏览世界广场与公共房间".to_string(),
+        },
+        CapabilityInfo {
+            key: CAP_READ_OWN_DIRECT.to_string(),
+            label: "读本人私聊".to_string(),
+            description: "可查看自己参与的私聊对话".to_string(),
+        },
+        CapabilityInfo {
+            key: CAP_SEND_MESSAGE.to_string(),
+            label: "发送消息".to_string(),
+            description: "可在有权限的房间内发送消息".to_string(),
+        },
+        CapabilityInfo {
+            key: CAP_EDIT_OWN_MESSAGE.to_string(),
+            label: "编辑/撤回".to_string(),
+            description: "可编辑或撤回本人已发送的消息".to_string(),
+        },
+        CapabilityInfo {
+            key: CAP_CREATE_ROOM.to_string(),
+            label: "创建房间".to_string(),
+            description: "可创建新的公共或私密房间".to_string(),
+        },
+        CapabilityInfo {
+            key: CAP_INVITE_RESIDENT.to_string(),
+            label: "邀请居民".to_string(),
+            description: "可生成邀请码邀请新居民".to_string(),
+        },
+        CapabilityInfo {
+            key: CAP_FREEZE_ROOM.to_string(),
+            label: "冻结房间".to_string(),
+            description: "可冻结或解冻公共房间".to_string(),
+        },
+        CapabilityInfo {
+            key: CAP_MANAGE_RESIDENT.to_string(),
+            label: "管理居民".to_string(),
+            description: "可审批加入、移除成员、分配权限".to_string(),
+        },
+        CapabilityInfo {
+            key: CAP_MODERATE_MESSAGE.to_string(),
+            label: "消息审核".to_string(),
+            description: "可审核与处置待审消息".to_string(),
+        },
+        CapabilityInfo {
+            key: CAP_PUBLISH_NOTICE.to_string(),
+            label: "发布公告".to_string(),
+            description: "可向世界广场或本城发布公告".to_string(),
+        },
+        CapabilityInfo {
+            key: CAP_HANDLE_REPORT.to_string(),
+            label: "处理举报".to_string(),
+            description: "可查看与处理安全举报".to_string(),
+        },
+        CapabilityInfo {
+            key: CAP_BAN_RESIDENT.to_string(),
+            label: "封禁居民".to_string(),
+            description: "可封禁或解除封禁居民".to_string(),
+        },
+        CapabilityInfo {
+            key: CAP_ADMIN_CONFIG.to_string(),
+            label: "系统配置".to_string(),
+            description: "可修改网关运行配置".to_string(),
+        },
+        CapabilityInfo {
+            key: CAP_ADMIN_DIAGNOSTICS.to_string(),
+            label: "诊断信息".to_string(),
+            description: "可查看系统诊断与运行状态".to_string(),
+        },
+        CapabilityInfo {
+            key: CAP_MANAGE_PERMISSIONS.to_string(),
+            label: "管理权限".to_string(),
+            description: "可创建/编辑权限组并分配".to_string(),
+        },
+        CapabilityInfo {
+            key: CAP_ADMIN_SCENE.to_string(),
+            label: "场景管理".to_string(),
+            description: "可编辑房间场景的图像层与热点层配置".to_string(),
+        },
     ]
 }
 

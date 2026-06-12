@@ -90,9 +90,10 @@ pub(crate) fn conversation_route_label(conversation: &Conversation) -> String {
 
 pub(crate) fn conversation_scene_banner(conversation: &Conversation) -> Option<String> {
     if let Some(scene) = &conversation.scene
-        && let Some(banner) = &scene.title_banner {
-            return Some(banner.clone());
-        }
+        && let Some(banner) = &scene.title_banner
+    {
+        return Some(banner.clone());
+    }
     let builder_dm = builder_dm_id();
     let guide_dm = guide_dm_id();
     match conversation.conversation_id.0.as_str() {

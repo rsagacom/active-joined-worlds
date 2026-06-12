@@ -197,8 +197,7 @@ pub(crate) fn render_compact_conversation_panel(
         "accent",
         sidebar_nav_row(context.mode),
     ));
-    let rows = context
-        .conversation_rows.to_vec();
+    let rows = context.conversation_rows.to_vec();
     let (private_rows, room_rows): (Vec<_>, Vec<_>) =
         rows.into_iter().partition(|row| row.is_private);
     let body_limit = 12usize;

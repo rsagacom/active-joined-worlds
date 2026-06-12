@@ -126,12 +126,11 @@ impl GatewayRuntime {
         // Device check: optional, for admin-controlled devices. User registration uses email.
         if let Some(device) = normalized_device_physical_address.as_deref()
             && let Some(record) = self.allowed_devices.get(device)
-                && record.blocked
-            {
-                blocked_reasons.push(
-                    "device blocked: this device has been blocked by the administrator".into(),
-                );
-            }
+            && record.blocked
+        {
+            blocked_reasons
+                .push("device blocked: this device has been blocked by the administrator".into());
+        }
 
         Ok(AuthPreflightResponse {
             allowed: blocked_reasons.is_empty(),
@@ -455,8 +454,8 @@ impl GatewayRuntime {
             return Err("unknown otp challenge".into());
         };
 
-        if let Some(retry_ms) = self
-            .check_rate_limit(&format!("otp-verify:{}", request.challenge_id), 5)
+        if let Some(retry_ms) =
+            self.check_rate_limit(&format!("otp-verify:{}", request.challenge_id), 5)
         {
             return Err(format!(
                 "too many otp verification attempts, retry in {}s",
@@ -611,7 +610,14 @@ impl GatewayRuntime {
             return "***".into();
         }
         let head = mobile.chars().take(3).collect::<String>();
-        let tail = mobile.chars().rev().take(4).collect::<String>().chars().rev().collect::<String>();
+        let tail = mobile
+            .chars()
+            .rev()
+            .take(4)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect::<String>();
         format!("{head}****{tail}")
     }
 
@@ -629,7 +635,9 @@ impl GatewayRuntime {
         let normalized_mobile = Self::normalize_mobile(&request.mobile)
             .ok_or_else(|| "valid mobile number required".to_string())?;
 
-        if let Some(retry_ms) = self.check_rate_limit(&format!("mobile-otp-req:{}", normalized_mobile), 1) {
+        if let Some(retry_ms) =
+            self.check_rate_limit(&format!("mobile-otp-req:{}", normalized_mobile), 1)
+        {
             return Err(format!(
                 "too many otp requests for this mobile, retry in {}s",
                 (retry_ms / 1000).max(1)
@@ -705,8 +713,8 @@ impl GatewayRuntime {
             return Err("unknown mobile otp challenge".into());
         };
 
-        if let Some(retry_ms) = self
-            .check_rate_limit(&format!("mobile-otp-verify:{}", request.challenge_id), 5)
+        if let Some(retry_ms) =
+            self.check_rate_limit(&format!("mobile-otp-verify:{}", request.challenge_id), 5)
         {
             return Err(format!(
                 "too many otp verification attempts, retry in {}s",
@@ -730,7 +738,9 @@ impl GatewayRuntime {
             return Err("invalid otp code".into());
         }
 
-        let mobile_hash = challenge.mobile_hash_sha256.clone()
+        let mobile_hash = challenge
+            .mobile_hash_sha256
+            .clone()
             .ok_or_else(|| "mobile hash missing in challenge".to_string())?;
 
         if self
@@ -769,11 +779,10 @@ impl GatewayRuntime {
             IdentityId(format!("mobile-user-{suffix}"))
         };
 
-        let registration = if let Some(existing) = self
-            .registrations
-            .iter_mut()
-            .find(|item| item.mobile_hash_sha256.as_ref() == Some(&mobile_hash) || item.resident_id == resident_id)
-        {
+        let registration = if let Some(existing) = self.registrations.iter_mut().find(|item| {
+            item.mobile_hash_sha256.as_ref() == Some(&mobile_hash)
+                || item.resident_id == resident_id
+        }) {
             existing.resident_id = resident_id.clone();
             existing.mobile_hash_sha256 = Some(mobile_hash.clone());
             if let Some(device_hash) = challenge.device_hash_sha256.clone()

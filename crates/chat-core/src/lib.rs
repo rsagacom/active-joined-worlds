@@ -126,7 +126,6 @@ pub struct MessageEnvelope {
     pub ciphertext: Vec<u8>,
     pub timestamp_ms: i64,
     pub ephemeral: bool,
-    #[serde(skip)]
     pub reply_to_message_id: Option<MessageId>,
 }
 
@@ -869,44 +868,93 @@ mod tests {
         );
     }
 
-    #[test] fn identity_id_equality() { assert_eq!(IdentityId("a".into()), IdentityId("a".into())); assert_ne!(IdentityId("a".into()), IdentityId("b".into())); }
-    #[test] fn conversation_id_format() { let c = ConversationId("dm:a:b".into()); assert_eq!(c.0, "dm:a:b"); }
-    #[test] fn identity_id_clone_eq() {
+    #[test]
+    fn identity_id_equality() {
+        assert_eq!(IdentityId("a".into()), IdentityId("a".into()));
+        assert_ne!(IdentityId("a".into()), IdentityId("b".into()));
+    }
+    #[test]
+    fn conversation_id_format() {
+        let c = ConversationId("dm:a:b".into());
+        assert_eq!(c.0, "dm:a:b");
+    }
+    #[test]
+    fn identity_id_clone_eq() {
         let a = IdentityId("test".into());
         let b = a.clone();
         assert_eq!(a, b);
         assert_eq!(format!("{a:?}"), "IdentityId(\"test\")");
     }
-    #[test] fn client_profiles_are_distinct() {
-        assert_ne!(ClientProfile::desktop_terminal().class, ClientProfile::mobile_web().class);
+    #[test]
+    fn client_profiles_are_distinct() {
+        assert_ne!(
+            ClientProfile::desktop_terminal().class,
+            ClientProfile::mobile_web().class
+        );
         assert!(ClientProfile::lobster_embedded().supports_background_sync);
     }
-    #[test] fn scene_image_layer_defaults() {
-        let layer = SceneImageLayer { layer_id: "l1".into(), preset: "p1".into(), asset_hint: "a1".into(), aspect_ratio_permyriad: 16000, owner_editable: true, day_image_url: None, night_image_url: None };
+    #[test]
+    fn scene_image_layer_defaults() {
+        let layer = SceneImageLayer {
+            layer_id: "l1".into(),
+            preset: "p1".into(),
+            asset_hint: "a1".into(),
+            aspect_ratio_permyriad: 16000,
+            owner_editable: true,
+            day_image_url: None,
+            night_image_url: None,
+        };
         assert_eq!(layer.preset, "p1");
         assert!(layer.day_image_url.is_none());
     }
-    #[test] fn conversation_scope_default_is_private() {
+    #[test]
+    fn conversation_scope_default_is_private() {
         assert_eq!(default_conversation_scope(), ConversationScope::Private);
     }
-    #[test] fn scene_hotspot_defaults() {
-        let h = SceneHotspot { hotspot_id: "h1".into(), label: "test".into(), sprite_hint: "def".into(), interaction_hint: "click".into(), x_permyriad: 100, y_permyriad: 200, width_permyriad: 300, height_permyriad: 400 };
+    #[test]
+    fn scene_hotspot_defaults() {
+        let h = SceneHotspot {
+            hotspot_id: "h1".into(),
+            label: "test".into(),
+            sprite_hint: "def".into(),
+            interaction_hint: "click".into(),
+            x_permyriad: 100,
+            y_permyriad: 200,
+            width_permyriad: 300,
+            height_permyriad: 400,
+        };
         assert_eq!(h.label, "test");
         assert_eq!(h.x_permyriad, 100);
         assert_eq!(h.height_permyriad, 400);
     }
-    #[test] fn scene_hotspot_layer_defaults() {
-        let layer = SceneHotspotLayer { layer_id: "l1".into(), coordinate_system: "scene-permyriad".into(), owner_editable: false, hotspots: vec![] };
+    #[test]
+    fn scene_hotspot_layer_defaults() {
+        let layer = SceneHotspotLayer {
+            layer_id: "l1".into(),
+            coordinate_system: "scene-permyriad".into(),
+            owner_editable: false,
+            hotspots: vec![],
+        };
         assert!(!layer.owner_editable);
         assert!(layer.hotspots.is_empty());
     }
-    #[test] fn all_client_classes_distinct() {
-        let all = [ClientClass::Embedded, ClientClass::Desktop, ClientClass::MobileWeb, ClientClass::Wearable, ClientClass::Service];
+    #[test]
+    fn all_client_classes_distinct() {
+        let all = [
+            ClientClass::Embedded,
+            ClientClass::Desktop,
+            ClientClass::MobileWeb,
+            ClientClass::Wearable,
+            ClientClass::Service,
+        ];
         let mut unique = std::collections::BTreeSet::new();
-        for c in all { unique.insert(format!("{c:?}")); }
+        for c in all {
+            unique.insert(format!("{c:?}"));
+        }
         assert_eq!(unique.len(), 5, "all 5 client classes should be distinct");
     }
-    #[test] fn conversation_id_default_invalid() {
+    #[test]
+    fn conversation_id_default_invalid() {
         assert_eq!(ConversationId(String::new()).0, "");
     }
 }

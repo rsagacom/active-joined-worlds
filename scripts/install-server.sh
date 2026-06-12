@@ -214,8 +214,6 @@ echo "== target triple: ${host_target} =="
 
 if [[ -n "$GATEWAY_ARTIFACT" ]]; then
   validate_gateway_artifact "$GATEWAY_ARTIFACT" "$host_target"
-else
-  ensure_modern_rust
 fi
 
 if [[ -n "$WEB_ARTIFACT" && ! -f "$WEB_ARTIFACT" ]]; then
@@ -245,6 +243,7 @@ if [[ -n "$GATEWAY_ARTIFACT" ]]; then
   install_gateway_from_artifact "$GATEWAY_ARTIFACT"
 else
   echo "== building gateway from source =="
+  ensure_modern_rust
   cd "$ROOT_DIR"
   install -d "$BUILD_DIR"
   export CARGO_TARGET_DIR

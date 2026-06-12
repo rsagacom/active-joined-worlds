@@ -1,7 +1,16 @@
 use std::collections::{HashMap, HashSet};
+use std::time::Duration;
 
 use chat_core::{ConversationId, MessageEnvelope, MessageId};
 use serde::{Deserialize, Serialize};
+
+fn http_agent() -> ureq::Agent {
+    ureq::AgentBuilder::new()
+        .timeout_connect(Duration::from_secs(10))
+        .timeout_read(Duration::from_secs(30))
+        .timeout_write(Duration::from_secs(10))
+        .build()
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WakuLightConfig {
@@ -138,7 +147,8 @@ impl HttpWakuGatewayClient {
 
     pub fn healthcheck(&self) -> Result<(), String> {
         let url = format!("{}/health", self.base_url);
-        let response = ureq::get(&url)
+        let response = http_agent()
+            .get(&url)
             .call()
             .map_err(|error| format!("gateway health check failed: {error}"))?;
         if response.status() == 200 {
@@ -153,7 +163,8 @@ impl HttpWakuGatewayClient {
 
     fn send_request(&self, request: &WakuGatewayRequest) -> Result<WakuGatewayResponse, String> {
         let url = format!("{}/v1/waku", self.base_url);
-        let response = ureq::post(&url)
+        let response = http_agent()
+            .post(&url)
             .send_json(
                 serde_json::to_value(request)
                     .map_err(|error| format!("serialize gateway request failed: {error}"))?,

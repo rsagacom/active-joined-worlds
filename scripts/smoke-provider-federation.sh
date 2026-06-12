@@ -38,7 +38,6 @@ wait_for_health() {
   return 1
 }
 
-need_cmd cargo
 need_cmd curl
 need_cmd grep
 need_cmd mktemp
@@ -52,14 +51,30 @@ if [[ -n "$GATEWAY_ARTIFACT" ]]; then
 fi
 
 if [[ "$SKIP_BUILD" != "1" && -z "$GATEWAY_ARTIFACT" ]]; then
+  need_cmd cargo
   echo "== building lobster-waku-gateway =="
   cargo build --manifest-path "$ROOT_DIR/Cargo.toml" --release -p lobster-waku-gateway
+fi
+
+EXTRACT_DIR=""
+
+if [[ -n "$GATEWAY_ARTIFACT" ]]; then
+  EXTRACT_DIR="$(mktemp_dir)"
+  tar -xzf "$GATEWAY_ARTIFACT" -C "$EXTRACT_DIR"
+  BIN_PATH="$EXTRACT_DIR/lobster-waku-gateway"
+fi
+
+if [[ ! -x "$BIN_PATH" ]]; then
+  echo "gateway binary not found: $BIN_PATH" >&2
+  if [[ -n "$EXTRACT_DIR" && "$KEEP_STATE" != "1" && -d "$EXTRACT_DIR" ]]; then
+    rm -rf "$EXTRACT_DIR"
+  fi
+  exit 1
 fi
 
 STATE_ROOT="$(mktemp_dir)"
 UPSTREAM_LOG="$STATE_ROOT/upstream.log"
 DOWNSTREAM_LOG="$STATE_ROOT/downstream.log"
-EXTRACT_DIR="$STATE_ROOT/extracted"
 UPSTREAM_PID=""
 DOWNSTREAM_PID=""
 
@@ -76,20 +91,12 @@ cleanup() {
   if [[ "$KEEP_STATE" != "1" && -d "$STATE_ROOT" ]]; then
     rm -rf "$STATE_ROOT"
   fi
+  if [[ -n "$EXTRACT_DIR" && "$KEEP_STATE" != "1" && -d "$EXTRACT_DIR" ]]; then
+    rm -rf "$EXTRACT_DIR"
+  fi
   exit "$exit_code"
 }
 trap cleanup EXIT
-
-if [[ -n "$GATEWAY_ARTIFACT" ]]; then
-  mkdir -p "$EXTRACT_DIR"
-  tar -xzf "$GATEWAY_ARTIFACT" -C "$EXTRACT_DIR"
-  BIN_PATH="$EXTRACT_DIR/lobster-waku-gateway"
-fi
-
-if [[ ! -x "$BIN_PATH" ]]; then
-  echo "gateway binary not found: $BIN_PATH" >&2
-  exit 1
-fi
 
 echo "== starting upstream gateway on :$UPSTREAM_PORT =="
 "$BIN_PATH" \

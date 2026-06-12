@@ -43,6 +43,34 @@ fn gateway_get(path: &str) -> Result<serde_json::Value, String> {
         .map_err(|e| format!("Gateway 响应解析失败: {e}"))
 }
 
+pub(crate) fn build_edit_message_request(
+    sender: &str,
+    message_id: &str,
+    text: &str,
+) -> (&'static str, serde_json::Value) {
+    (
+        "/v1/shell/message/edit",
+        serde_json::json!({
+            "sender": sender,
+            "message_id": message_id,
+            "text": text,
+        }),
+    )
+}
+
+pub(crate) fn build_recall_message_request(
+    sender: &str,
+    message_id: &str,
+) -> (&'static str, serde_json::Value) {
+    (
+        "/v1/shell/message/recall",
+        serde_json::json!({
+            "sender": sender,
+            "message_id": message_id,
+        }),
+    )
+}
+
 pub(crate) enum SubmissionAction {
     Continue,
     Quit,
@@ -150,7 +178,7 @@ fn append_terminal_notice(
 }
 
 fn terminal_help_notice() -> &'static str {
-    "终端命令：/help 查看帮助；/status 查看当前会话与连接；/refresh 刷新当前视图；/world-status 世界治理总览；/cities 城市信任列表；/world-safety 安全快照；/safety-reports 安全报告；/safety-residents 制裁名单；/world-directory 世界黄页；/world-square 世界广场公告；/governance 进入治理房间；/dm <身份> 打开私聊；/open <序号> 打开会话；/residents 居民名单；/rooms 房间列表；/ban <居民> <原因> 封禁居民；/unban <居民> 解封居民；/freeze <房间> 冻结房间；/unfreeze <房间> 解冻房间；/invite create [次数] 创建邀请码；/invite revoke <码> 撤销邀请码；/config <key> 查看配置；/config set <key> <val> 修改配置；/quit 退出。"
+    "终端命令：/help 查看帮助；/status 查看当前会话与连接；/refresh 刷新当前视图；/edit <消息ID> <新正文> 编辑消息；/recall <消息ID> 撤回消息；/world-status 世界治理总览；/cities 城市信任列表；/world-safety 安全快照；/safety-reports 安全报告；/safety-residents 制裁名单；/world-directory 世界黄页；/world-square 世界广场公告；/governance 进入治理房间；/dm <身份> 打开私聊；/open <序号> 打开会话；/residents 居民名单；/rooms 房间列表；/ban <居民> <原因> 封禁居民；/unban <居民> 解封居民；/freeze <房间> 冻结房间；/unfreeze <房间> 解冻房间；/invite create [次数] 创建邀请码；/invite revoke <码> 撤销邀请码；/config <key> 查看配置；/config set <key> <val> 修改配置；/quit 退出。"
 }
 
 fn terminal_status_notice(
@@ -176,6 +204,29 @@ pub(crate) fn handle_terminal_submission(
     selected_conversation_id: &mut ConversationId,
     trimmed: &str,
 ) -> Result<SubmissionAction, String> {
+    handle_terminal_submission_with_gateway_post(
+        store,
+        transport,
+        launch_mode,
+        active_conversation_id,
+        selected_conversation_id,
+        trimmed,
+        &mut gateway_post,
+    )
+}
+
+pub(crate) fn handle_terminal_submission_with_gateway_post<F>(
+    store: &mut FileTimelineStore,
+    transport: &mut dyn TransportAdapter,
+    launch_mode: LaunchSurface,
+    active_conversation_id: &mut ConversationId,
+    selected_conversation_id: &mut ConversationId,
+    trimmed: &str,
+    gateway_post_fn: &mut F,
+) -> Result<SubmissionAction, String>
+where
+    F: FnMut(&str, serde_json::Value) -> Result<serde_json::Value, String>,
+{
     match trimmed {
         "/quit" | "/exit" => Ok(SubmissionAction::Quit),
         "/help" => {
@@ -196,6 +247,59 @@ pub(crate) fn handle_terminal_submission(
         }
         "/refresh" => {
             append_terminal_notice(store, active_conversation_id, "已刷新当前终端视图。")?;
+            *selected_conversation_id = active_conversation_id.clone();
+            Ok(SubmissionAction::Continue)
+        }
+        "/edit" => {
+            append_terminal_notice(
+                store,
+                active_conversation_id,
+                "用法：/edit <消息ID> <新正文>",
+            )?;
+            *selected_conversation_id = active_conversation_id.clone();
+            Ok(SubmissionAction::Continue)
+        }
+        text if text.starts_with("/edit ") => {
+            let rest = text.trim_start_matches("/edit").trim();
+            let parts: Vec<&str> = rest.splitn(2, ' ').collect();
+            let message_id = parts.first().map(|s| s.trim()).unwrap_or("");
+            let new_text = parts.get(1).map(|s| s.trim()).unwrap_or("");
+            if message_id.is_empty() || new_text.is_empty() {
+                append_terminal_notice(
+                    store,
+                    active_conversation_id,
+                    "用法：/edit <消息ID> <新正文>",
+                )?;
+            } else {
+                let identity = launch_identity(launch_mode);
+                let (path, body) = build_edit_message_request(&identity, message_id, new_text);
+                let notice = match gateway_post_fn(path, body) {
+                    Ok(_) => format!("已编辑消息 {message_id}"),
+                    Err(e) => format!("编辑消息失败：{e}"),
+                };
+                append_terminal_notice(store, active_conversation_id, &notice)?;
+            }
+            *selected_conversation_id = active_conversation_id.clone();
+            Ok(SubmissionAction::Continue)
+        }
+        "/recall" => {
+            append_terminal_notice(store, active_conversation_id, "用法：/recall <消息ID>")?;
+            *selected_conversation_id = active_conversation_id.clone();
+            Ok(SubmissionAction::Continue)
+        }
+        text if text.starts_with("/recall ") => {
+            let message_id = text.trim_start_matches("/recall").trim();
+            if message_id.is_empty() {
+                append_terminal_notice(store, active_conversation_id, "用法：/recall <消息ID>")?;
+            } else {
+                let identity = launch_identity(launch_mode);
+                let (path, body) = build_recall_message_request(&identity, message_id);
+                let notice = match gateway_post_fn(path, body) {
+                    Ok(_) => format!("已撤回消息 {message_id}"),
+                    Err(e) => format!("撤回消息失败：{e}"),
+                };
+                append_terminal_notice(store, active_conversation_id, &notice)?;
+            }
             *selected_conversation_id = active_conversation_id.clone();
             Ok(SubmissionAction::Continue)
         }
@@ -229,13 +333,22 @@ pub(crate) fn handle_terminal_submission(
             let notice = match gateway_get("/v1/world") {
                 Ok(json) => {
                     let cities = json["cities"].as_array().map(|a| a.len()).unwrap_or(0);
-                    let stewards: Vec<&str> = json["stewards"].as_array()
+                    let stewards: Vec<&str> = json["stewards"]
+                        .as_array()
                         .map(|a| a.iter().filter_map(|s| s.as_str()).collect())
                         .unwrap_or_default();
-                    let notice_count = json["world_square_notices"].as_array().map(|a| a.len()).unwrap_or(0);
-                    let report_count = json["safety_reports"].as_array().map(|a| a.len()).unwrap_or(0);
+                    let notice_count = json["world_square_notices"]
+                        .as_array()
+                        .map(|a| a.len())
+                        .unwrap_or(0);
+                    let report_count = json["safety_reports"]
+                        .as_array()
+                        .map(|a| a.len())
+                        .unwrap_or(0);
                     let trust_count = json["city_trust"].as_array().map(|a| a.len()).unwrap_or(0);
-                    let mut lines = vec![format!("世界治理总览：{cities} 座城市，{trust_count} 条信任记录，{notice_count} 条广场公告，{report_count} 条安全报告")];
+                    let mut lines = vec![format!(
+                        "世界治理总览：{cities} 座城市，{trust_count} 条信任记录，{notice_count} 条广场公告，{report_count} 条安全报告"
+                    )];
                     if !stewards.is_empty() {
                         lines.push(format!("世界管理员：{}", stewards.join("、")));
                     }
@@ -257,7 +370,11 @@ pub(crate) fn handle_terminal_submission(
                             let id = city["city_id"].as_str().unwrap_or("?");
                             let state = city["state"].as_str().unwrap_or("?");
                             let reason = city["reason"].as_str().unwrap_or("");
-                            let reason_str = if reason.is_empty() { String::new() } else { format!(" · {reason}") };
+                            let reason_str = if reason.is_empty() {
+                                String::new()
+                            } else {
+                                format!(" · {reason}")
+                            };
                             lines.push(format!("  {id} [{state}]{reason_str}"));
                         }
                     }
@@ -272,15 +389,25 @@ pub(crate) fn handle_terminal_submission(
         "/world-safety" => {
             let notice = match gateway_get("/v1/world-safety") {
                 Ok(json) => {
-                    let stewards: Vec<&str> = json["stewards"].as_array()
+                    let stewards: Vec<&str> = json["stewards"]
+                        .as_array()
                         .map(|a| a.iter().filter_map(|s| s.as_str()).collect())
                         .unwrap_or_default();
                     let trust_count = json["city_trust"].as_array().map(|a| a.len()).unwrap_or(0);
-                    let advisory_count = json["advisories"].as_array().map(|a| a.len()).unwrap_or(0);
+                    let advisory_count =
+                        json["advisories"].as_array().map(|a| a.len()).unwrap_or(0);
                     let report_count = json["reports"].as_array().map(|a| a.len()).unwrap_or(0);
-                    let sanction_count = json["resident_sanctions"].as_array().map(|a| a.len()).unwrap_or(0);
-                    let blacklist_count = json["registration_blacklist"].as_array().map(|a| a.len()).unwrap_or(0);
-                    let mut lines = vec![format!("世界安全快照：{trust_count} 条信任记录，{advisory_count} 条公告，{report_count} 条报告，{sanction_count} 条制裁，{blacklist_count} 条注册黑名单")];
+                    let sanction_count = json["resident_sanctions"]
+                        .as_array()
+                        .map(|a| a.len())
+                        .unwrap_or(0);
+                    let blacklist_count = json["registration_blacklist"]
+                        .as_array()
+                        .map(|a| a.len())
+                        .unwrap_or(0);
+                    let mut lines = vec![format!(
+                        "世界安全快照：{trust_count} 条信任记录，{advisory_count} 条公告，{report_count} 条报告，{sanction_count} 条制裁，{blacklist_count} 条注册黑名单"
+                    )];
                     if !stewards.is_empty() {
                         lines.push(format!("安全管理员：{}", stewards.join("、")));
                     }
@@ -321,7 +448,9 @@ pub(crate) fn handle_terminal_submission(
                     let blacklist = json["registration_blacklist"].as_array();
                     let s_count = sanctions.map(|a| a.len()).unwrap_or(0);
                     let b_count = blacklist.map(|a| a.len()).unwrap_or(0);
-                    let mut lines = vec![format!("世界安全居民：{s_count} 条制裁，{b_count} 条注册黑名单")];
+                    let mut lines = vec![format!(
+                        "世界安全居民：{s_count} 条制裁，{b_count} 条注册黑名单"
+                    )];
                     if let Some(arr) = sanctions {
                         for s in arr {
                             let resident = s["resident_id"].as_str().unwrap_or("?");
@@ -358,7 +487,11 @@ pub(crate) fn handle_terminal_submission(
                             let trust = city["trust_state"].as_str().unwrap_or("?");
                             let residents = city["resident_count"].as_u64().unwrap_or(0);
                             let rooms = city["public_room_count"].as_u64().unwrap_or(0);
-                            let mirror = if city["mirror_enabled"].as_bool().unwrap_or(false) { " [镜像]" } else { "" };
+                            let mirror = if city["mirror_enabled"].as_bool().unwrap_or(false) {
+                                " [镜像]"
+                            } else {
+                                ""
+                            };
                             lines.push(format!("  {title} ({city_id}) · {residents}人 · {rooms}间公共房 · 信任:{trust}{mirror}"));
                         }
                     }
@@ -380,7 +513,11 @@ pub(crate) fn handle_terminal_submission(
                             let title = notice_item["title"].as_str().unwrap_or("?");
                             let severity = notice_item["severity"].as_str().unwrap_or("");
                             let body = notice_item["body"].as_str().unwrap_or("");
-                            let sev_tag = if severity.is_empty() { String::new() } else { format!("[{severity}] ") };
+                            let sev_tag = if severity.is_empty() {
+                                String::new()
+                            } else {
+                                format!("[{severity}] ")
+                            };
                             lines.push(format!("  {sev_tag}{title}"));
                             if !body.is_empty() {
                                 lines.push(format!("    {body}"));
@@ -438,10 +575,20 @@ pub(crate) fn handle_terminal_submission(
                                 .map(|a| a.iter().filter_map(|r| r.as_str()).collect())
                                 .unwrap_or_default();
                             let mut tags: Vec<String> = Vec::new();
-                            if online { tags.push("在线".into()); }
-                            if banned { tags.push("已封禁".into()); }
-                            if !roles.is_empty() { tags.push(format!("角色:{}", roles.join(","))); }
-                            let tag_str = if tags.is_empty() { String::new() } else { format!(" [{}]", tags.join(", ")) };
+                            if online {
+                                tags.push("在线".into());
+                            }
+                            if banned {
+                                tags.push("已封禁".into());
+                            }
+                            if !roles.is_empty() {
+                                tags.push(format!("角色:{}", roles.join(",")));
+                            }
+                            let tag_str = if tags.is_empty() {
+                                String::new()
+                            } else {
+                                format!(" [{}]", tags.join(", "))
+                            };
                             let display = match nick {
                                 Some(n) if !n.is_empty() => format!("{n} ({id})"),
                                 _ => id.to_string(),
@@ -471,7 +618,9 @@ pub(crate) fn handle_terminal_submission(
                             let pcount = room["participant_count"].as_u64().unwrap_or(0);
                             let mcount = room["message_count"].as_u64().unwrap_or(0);
                             let frozen_tag = if frozen { " [已冻结]" } else { "" };
-                            lines.push(format!("  {title} ({kind}) · {pcount}人 · {mcount}条消息{frozen_tag}"));
+                            lines.push(format!(
+                                "  {title} ({kind}) · {pcount}人 · {mcount}条消息{frozen_tag}"
+                            ));
                         }
                     }
                     lines.join("\n")
@@ -483,21 +632,36 @@ pub(crate) fn handle_terminal_submission(
             Ok(SubmissionAction::Continue)
         }
         "/config" => {
-            append_terminal_notice(store, active_conversation_id, "用法：/config <key> 获取配置值  或  /config set <key> <value> 设置配置")?;
+            append_terminal_notice(
+                store,
+                active_conversation_id,
+                "用法：/config <key> 获取配置值  或  /config set <key> <value> 设置配置",
+            )?;
             *selected_conversation_id = active_conversation_id.clone();
             Ok(SubmissionAction::Continue)
         }
         text if text.starts_with("/config ") => {
             let rest = text.trim_start_matches("/config").trim();
             if rest.is_empty() {
-                append_terminal_notice(store, active_conversation_id, "用法：/config <key> 获取配置值  或  /config set <key> <value> 设置配置")?;
-            } else if let Some(key) = rest.strip_prefix("set ").map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                append_terminal_notice(
+                    store,
+                    active_conversation_id,
+                    "用法：/config <key> 获取配置值  或  /config set <key> <value> 设置配置",
+                )?;
+            } else if let Some(key) = rest
+                .strip_prefix("set ")
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+            {
                 let parts: Vec<&str> = key.splitn(2, ' ').collect();
                 let config_key = parts[0];
                 let config_value = parts.get(1).copied().unwrap_or("");
-                let notice = match gateway_post("/v1/admin/config", serde_json::json!({
-                    "config": { config_key: config_value },
-                })) {
+                let notice = match gateway_post_fn(
+                    "/v1/admin/config",
+                    serde_json::json!({
+                        "config": { config_key: config_value },
+                    }),
+                ) {
                     Ok(_) => format!("已设置 {config_key} = {config_value}"),
                     Err(e) => format!("设置配置失败：{e}"),
                 };
@@ -508,7 +672,8 @@ pub(crate) fn handle_terminal_submission(
                         if let Some(val) = json.get(rest) {
                             format!("{rest} = {val}")
                         } else if let Some(obj) = json.as_object() {
-                            let matching: Vec<String> = obj.iter()
+                            let matching: Vec<String> = obj
+                                .iter()
                                 .filter(|(k, _)| k.contains(rest))
                                 .map(|(k, v)| format!("  {k} = {v}"))
                                 .collect();
@@ -534,16 +699,31 @@ pub(crate) fn handle_terminal_submission(
             Ok(SubmissionAction::Continue)
         }
         text if text.starts_with("/ban ") => {
-            let parts: Vec<&str> = text.trim_start_matches("/ban").trim().splitn(2, ' ').collect();
+            let parts: Vec<&str> = text
+                .trim_start_matches("/ban")
+                .trim()
+                .splitn(2, ' ')
+                .collect();
             let resident_id = parts.first().map(|s| s.trim()).unwrap_or("").to_string();
-            let reason = parts.get(1).map(|s| s.trim()).unwrap_or("从终端封禁").to_string();
+            let reason = parts
+                .get(1)
+                .map(|s| s.trim())
+                .unwrap_or("从终端封禁")
+                .to_string();
             if resident_id.is_empty() {
-                append_terminal_notice(store, active_conversation_id, "用法：/ban <居民ID> [原因]")?;
+                append_terminal_notice(
+                    store,
+                    active_conversation_id,
+                    "用法：/ban <居民ID> [原因]",
+                )?;
             } else {
-                let notice = match gateway_post("/v1/admin/residents/ban", serde_json::json!({
-                    "resident_id": &resident_id,
-                    "reason": &reason,
-                })) {
+                let notice = match gateway_post_fn(
+                    "/v1/admin/residents/ban",
+                    serde_json::json!({
+                        "resident_id": &resident_id,
+                        "reason": &reason,
+                    }),
+                ) {
                     Ok(_) => format!("已封禁居民 {resident_id}：{reason}"),
                     Err(e) => format!("封禁失败：{e}"),
                 };
@@ -562,9 +742,12 @@ pub(crate) fn handle_terminal_submission(
             if resident_id.is_empty() {
                 append_terminal_notice(store, active_conversation_id, "用法：/unban <居民ID>")?;
             } else {
-                let notice = match gateway_post("/v1/admin/residents/unban", serde_json::json!({
-                    "resident_id": &resident_id,
-                })) {
+                let notice = match gateway_post_fn(
+                    "/v1/admin/residents/unban",
+                    serde_json::json!({
+                        "resident_id": &resident_id,
+                    }),
+                ) {
                     Ok(json) => {
                         let count = json["lifted_count"].as_u64().unwrap_or(0);
                         format!("已解封居民 {resident_id}（解除 {count} 条封禁）")
@@ -586,9 +769,12 @@ pub(crate) fn handle_terminal_submission(
             if room_id.is_empty() {
                 append_terminal_notice(store, active_conversation_id, "用法：/freeze <房间ID>")?;
             } else {
-                let notice = match gateway_post("/v1/admin/rooms/freeze", serde_json::json!({
-                    "room_id": &room_id,
-                })) {
+                let notice = match gateway_post_fn(
+                    "/v1/admin/rooms/freeze",
+                    serde_json::json!({
+                        "room_id": &room_id,
+                    }),
+                ) {
                     Ok(_) => format!("已冻结房间 {room_id}"),
                     Err(e) => format!("冻结失败：{e}"),
                 };
@@ -607,9 +793,12 @@ pub(crate) fn handle_terminal_submission(
             if room_id.is_empty() {
                 append_terminal_notice(store, active_conversation_id, "用法：/unfreeze <房间ID>")?;
             } else {
-                let notice = match gateway_post("/v1/admin/rooms/unfreeze", serde_json::json!({
-                    "room_id": &room_id,
-                })) {
+                let notice = match gateway_post_fn(
+                    "/v1/admin/rooms/unfreeze",
+                    serde_json::json!({
+                        "room_id": &room_id,
+                    }),
+                ) {
                     Ok(_) => format!("已解冻房间 {room_id}"),
                     Err(e) => format!("解冻失败：{e}"),
                 };
@@ -625,10 +814,13 @@ pub(crate) fn handle_terminal_submission(
                 .parse()
                 .unwrap_or(10);
             let identity = launch_identity(launch_mode);
-            let notice = match gateway_post("/v1/admin/invites", serde_json::json!({
-                "actor_id": identity,
-                "max_uses": max_uses,
-            })) {
+            let notice = match gateway_post_fn(
+                "/v1/admin/invites",
+                serde_json::json!({
+                    "actor_id": identity,
+                    "max_uses": max_uses,
+                }),
+            ) {
                 Ok(json) => {
                     let code = json["code"].as_str().unwrap_or("?");
                     format!("已创建邀请码：{code}（可用 {max_uses} 次）")
@@ -642,13 +834,20 @@ pub(crate) fn handle_terminal_submission(
         text if text.starts_with("/invite revoke ") => {
             let code = text.trim_start_matches("/invite revoke").trim().to_string();
             if code.is_empty() {
-                append_terminal_notice(store, active_conversation_id, "用法：/invite revoke <邀请码>")?;
+                append_terminal_notice(
+                    store,
+                    active_conversation_id,
+                    "用法：/invite revoke <邀请码>",
+                )?;
             } else {
                 let identity = launch_identity(launch_mode);
-                let notice = match gateway_post("/v1/admin/invites/revoke", serde_json::json!({
-                    "code": &code,
-                    "actor_id": identity,
-                })) {
+                let notice = match gateway_post_fn(
+                    "/v1/admin/invites/revoke",
+                    serde_json::json!({
+                        "code": &code,
+                        "actor_id": identity,
+                    }),
+                ) {
                     Ok(_) => format!("已撤销邀请码 {code}"),
                     Err(e) => format!("撤销邀请码失败：{e}"),
                 };

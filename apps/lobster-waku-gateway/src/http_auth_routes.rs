@@ -155,6 +155,15 @@ pub(crate) fn handle_post_verify_email_otp(
             match result {
                 Ok(response_body) => {
                     notifier.notify_changed();
+                    {
+                        let mut rt = runtime.lock().expect("gateway runtime mutex poisoned");
+                        rt.log_audit_event(
+                            &response_body.resident_id,
+                            "auth:login",
+                            &response_body.session.session_id,
+                            None,
+                        );
+                    }
                     Response::from_string(
                         serde_json::to_string(&response_body).unwrap_or_else(|_| "{}".into()),
                     )
@@ -243,6 +252,15 @@ pub(crate) fn handle_post_verify_mobile_otp(
             match result {
                 Ok(response_body) => {
                     notifier.notify_changed();
+                    {
+                        let mut rt = runtime.lock().expect("gateway runtime mutex poisoned");
+                        rt.log_audit_event(
+                            &response_body.resident_id,
+                            "auth:login",
+                            &response_body.session.session_id,
+                            None,
+                        );
+                    }
                     Response::from_string(
                         serde_json::to_string(&response_body).unwrap_or_else(|_| "{}".into()),
                     )
@@ -275,12 +293,21 @@ pub(crate) fn handle_post_auth_logout(
     let Some(token) = authorization_bearer_token(request) else {
         return unauthorized("authorization bearer token required".into());
     };
-    match runtime
-        .lock()
-        .expect("gateway runtime mutex poisoned")
-        .revoke_auth_session(&token)
-    {
-        Ok(()) => ok_json(),
+    let mut rt = runtime.lock().expect("gateway runtime mutex poisoned");
+    let session = match rt.resolve_bearer_session(&token) {
+        Ok(s) => s,
+        Err(e) => return unauthorized(e),
+    };
+    match rt.revoke_auth_session(&token) {
+        Ok(()) => {
+            rt.log_audit_event(
+                &session.resident_id.0,
+                "auth:logout",
+                &session.session_id,
+                None,
+            );
+            ok_json()
+        }
         Err(message) => unauthorized(message),
     }
 }

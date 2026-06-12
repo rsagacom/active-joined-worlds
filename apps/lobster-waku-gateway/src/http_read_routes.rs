@@ -10,8 +10,8 @@ use tiny_http::{Response, StatusCode};
 use transport_waku::WakuGatewayResponse;
 
 use crate::{
-    capability_catalog, AdminModerationStatusResponse, ConversationId, GatewayRuntime,
-    GatewayStateNotifier, IdentityId,
+    AdminModerationStatusResponse, ConversationId, GatewayRuntime, GatewayStateNotifier,
+    IdentityId, capability_catalog,
     http_support::{
         cli_missing_for_body, json_header, no_cache_header, parse_bool, parse_cli_address,
         parse_export_format, sse_header,
@@ -331,18 +331,14 @@ pub(crate) fn handle_get_admin_summary(runtime: &Arc<Mutex<GatewayRuntime>>) -> 
         .with_header(json_header())
 }
 
-pub(crate) fn handle_get_admin_conversations(
-    runtime: &Arc<Mutex<GatewayRuntime>>,
-) -> HttpResponse {
+pub(crate) fn handle_get_admin_conversations(runtime: &Arc<Mutex<GatewayRuntime>>) -> HttpResponse {
     let conversations = runtime
         .lock()
         .expect("gateway runtime mutex poisoned")
         .admin_conversations();
-    Response::from_string(
-        serde_json::to_string(&conversations).unwrap_or_else(|_| "[]".into()),
-    )
-    .with_status_code(StatusCode(200))
-    .with_header(json_header())
+    Response::from_string(serde_json::to_string(&conversations).unwrap_or_else(|_| "[]".into()))
+        .with_status_code(StatusCode(200))
+        .with_header(json_header())
 }
 
 pub(crate) fn handle_get_admin_messages(
@@ -383,9 +379,7 @@ pub(crate) fn handle_get_admin_messages(
     }
 }
 
-pub(crate) fn handle_get_admin_residents(
-    runtime: &Arc<Mutex<GatewayRuntime>>,
-) -> HttpResponse {
+pub(crate) fn handle_get_admin_residents(runtime: &Arc<Mutex<GatewayRuntime>>) -> HttpResponse {
     let residents = runtime
         .lock()
         .expect("gateway runtime mutex poisoned")
@@ -432,11 +426,9 @@ pub(crate) fn handle_get_admin_messages_moderation(
     let message_id = match query_params.get("message_id") {
         Some(id) if !id.trim().is_empty() => id.clone(),
         _ => {
-            return Response::from_string(
-                r#"{"error":"message_id query parameter required"}"#,
-            )
-            .with_status_code(StatusCode(400))
-            .with_header(json_header());
+            return Response::from_string(r#"{"error":"message_id query parameter required"}"#)
+                .with_status_code(StatusCode(400))
+                .with_header(json_header());
         }
     };
     let status = runtime
@@ -444,11 +436,43 @@ pub(crate) fn handle_get_admin_messages_moderation(
         .expect("gateway runtime mutex poisoned")
         .admin_message_moderation_status(&message_id)
         .map(|s| s.to_string());
-    let resp = AdminModerationStatusResponse {
-        message_id,
-        status,
-    };
+    let resp = AdminModerationStatusResponse { message_id, status };
     Response::from_string(serde_json::to_string(&resp).unwrap_or_else(|_| "{}".into()))
+        .with_status_code(StatusCode(200))
+        .with_header(json_header())
+}
+
+pub(crate) fn handle_get_message_search(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    query_params: &HashMap<String, String>,
+) -> HttpResponse {
+    let q = match query_params.get("q") {
+        Some(q) if !q.trim().is_empty() => q.trim().to_string(),
+        _ => {
+            return Response::from_string(
+                serde_json::to_string(&WakuGatewayResponse::Error {
+                    message: "q query parameter required".into(),
+                })
+                .unwrap_or_else(|_| "{\"error\":true}".into()),
+            )
+            .with_status_code(StatusCode(400))
+            .with_header(json_header());
+        }
+    };
+    let room_id = query_params
+        .get("room_id")
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty());
+    let limit = query_params
+        .get("limit")
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(50)
+        .min(200);
+    let results = runtime
+        .lock()
+        .expect("gateway runtime mutex poisoned")
+        .search_messages(&q, room_id, limit);
+    Response::from_string(serde_json::to_string(&results).unwrap_or_else(|_| "[]".into()))
         .with_status_code(StatusCode(200))
         .with_header(json_header())
 }

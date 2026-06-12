@@ -74,11 +74,11 @@ else:
 PY
 }
 
-need_cmd cargo
 need_cmd curl
 need_cmd python3
 
 if [[ "$SKIP_BUILD" != "1" ]]; then
+  need_cmd cargo
   echo "== building lobster-waku-gateway =="
   cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p lobster-waku-gateway
 fi

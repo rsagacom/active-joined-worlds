@@ -38,12 +38,27 @@ wait_for_health() {
   return 1
 }
 
-need_cmd cargo
 need_cmd curl
 need_cmd python3
 
 if [[ "$SKIP_BUILD" != "1" ]]; then
+  need_cmd cargo
   cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p lobster-waku-gateway -p lobster-cli -p lobster-tui >/dev/null
+fi
+
+if [[ ! -x "$GATEWAY_BIN" ]]; then
+  echo "gateway binary not found: $GATEWAY_BIN" >&2
+  exit 1
+fi
+
+if [[ ! -x "$CLI_BIN" ]]; then
+  echo "cli binary not found: $CLI_BIN" >&2
+  exit 1
+fi
+
+if [[ ! -x "$TUI_BIN" ]]; then
+  echo "tui binary not found: $TUI_BIN" >&2
+  exit 1
 fi
 
 STATE_ROOT="$(mktemp_dir)"
@@ -73,19 +88,6 @@ LOBSTER_DEV_EMAIL_OTP_INLINE=1 "$GATEWAY_BIN"   --host "$HOST"   --port "$PORT" 
 GATEWAY_PID="$!"
 wait_for_health "$GATEWAY_URL/health"
 
-join_unregistered_body="$STATE_ROOT/join-unregistered.json"
-join_unregistered_status="$(curl -sS -o "$join_unregistered_body" -w '%{http_code}' -X POST "$GATEWAY_URL/v1/cities/join" -H 'content-type: application/json' -d '{"city":"core-harbor","resident_id":"guest-01"}')"
-[[ "$join_unregistered_status" == "400" ]] || {
-  echo "expected unregistered join to fail with 400" >&2
-  cat "$join_unregistered_body" >&2 || true
-  exit 1
-}
-grep -F 'not registered' "$join_unregistered_body" >/dev/null || {
-  echo "expected unregistered join response to mention registration" >&2
-  cat "$join_unregistered_body" >&2 || true
-  exit 1
-}
-
 preflight_allowed="$(curl -fsS -X POST "$GATEWAY_URL/v1/auth/preflight" -H 'content-type: application/json' -d '{"email":"novel.reader@example.com","mobile":"+86 13800138000","device_physical_address":"66:55:44:33:22:11"}')"
 JSON_PAYLOAD="$preflight_allowed" python3 - <<'PY2'
 import json, os
@@ -113,8 +115,26 @@ payload = json.loads(os.environ['JSON_PAYLOAD'])
 assert payload['resident_id'] == 'novel-reader'
 assert payload['state'] == 'Active'
 PY2
+session_token="$(JSON_PAYLOAD="$otp_verify" python3 - <<'PY2'
+import json, os
+print(json.loads(os.environ['JSON_PAYLOAD'])['session_token'])
+PY2
+)"
 
-join_registered="$(curl -fsS -X POST "$GATEWAY_URL/v1/cities/join" -H 'content-type: application/json' -d '{"city":"core-harbor","resident_id":"novel-reader"}')"
+join_unregistered_body="$STATE_ROOT/join-unregistered.json"
+join_unregistered_status="$(curl -sS -o "$join_unregistered_body" -w '%{http_code}' -X POST "$GATEWAY_URL/v1/cities/join" -H 'content-type: application/json' -H "authorization: Bearer $session_token" -d '{"city":"core-harbor","resident_id":"guest-01"}')"
+[[ "$join_unregistered_status" == "400" ]] || {
+  echo "expected unregistered join to fail with 400" >&2
+  cat "$join_unregistered_body" >&2 || true
+  exit 1
+}
+grep -F 'not registered' "$join_unregistered_body" >/dev/null || {
+  echo "expected unregistered join response to mention registration" >&2
+  cat "$join_unregistered_body" >&2 || true
+  exit 1
+}
+
+join_registered="$(curl -fsS -X POST "$GATEWAY_URL/v1/cities/join" -H 'content-type: application/json' -H "authorization: Bearer $session_token" -d '{"city":"core-harbor","resident_id":"novel-reader"}')"
 JSON_PAYLOAD="$join_registered" python3 - <<'PY2'
 import json, os
 payload = json.loads(os.environ['JSON_PAYLOAD'])

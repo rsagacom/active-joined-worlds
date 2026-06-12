@@ -16,17 +16,84 @@ def main() -> int:
     assert "smoke-shell-dual-http.sh" in text
     assert "smoke-shell-direct-http.sh" in text
     assert "smoke-cli-channel.sh" in text
+    assert "test_scripts_quick_unit_coverage.py" in text
+    assert "test_preflight_unit.py" in text
+    assert "test_makefile_unit.py" in text
+    assert "test_smoke_cli_channel_unit.py" in text
+    assert "test_smoke_auth_registration_unit.py" in text
+    assert "test_smoke_resident_mainline_unit.py" in text
+    assert "test_smoke_shell_dual_http_unit.py" in text
+    assert "test_smoke_shell_direct_http_unit.py" in text
+    assert "test_smoke_web_shell_unit.py" in text
+    assert "test_smoke_web_dual_browser_unit.py" in text
+    assert "test_start_terminal_unit.py" in text
+    assert "test_start_terminal_shell_unit.py" in text
     assert "test_start_terminal.py" in text
+    assert "test_smoke_provider_federation_unit.py" in text
+    assert "test_install_server_unit.py" in text
+    assert "test_smoke_install_layout_unit.py" in text
+    assert "test_smoke_public_ingress_unit.py" in text
+    assert "test_package_release_unit.py" in text
+    assert "test_restart_gateway_unit.py" in text
+    assert "test_start_web_preview_unit.py" in text
+    assert "test_preview_server_unit.py" in text
+    assert "test_lobster_device_id_unit.py" in text
+    assert "test_audit_web_assets_unit.py" in text
     assert "smoke-provider-federation.sh" in text
     assert "run_shell_step()" in text
+    assert 'run_step "preflight unit" python3 "$ROOT_DIR/scripts/test_preflight_unit.py"' in text
+    assert 'run_step "scripts quick unit coverage" python3 "$ROOT_DIR/scripts/test_scripts_quick_unit_coverage.py"' in text
+    assert text.index('run_step "scripts quick unit coverage"') < text.index('run_step "preflight unit"')
+    assert text.index('run_step "preflight unit"') < text.index('run_shell_step "preflight"')
     assert 'run_shell_step "preflight" "$ROOT_DIR/scripts/preflight.sh"' in text
+    assert "need_cmd bash\nneed_cmd python3" in text
+    assert text.index('if [[ "$SKIP_BUILD" != "1" ]]; then') < text.index("need_cmd cargo")
+    assert text.index("need_cmd cargo") < text.index('cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p lobster-waku-gateway -p lobster-cli -p lobster-tui')
+    assert 'run_step "makefile smoke unit" python3 "$ROOT_DIR/scripts/test_makefile_unit.py"' in text
     assert 'run_shell_step "cli channel smoke" "$ROOT_DIR/scripts/smoke-cli-channel.sh"' in text
+    assert 'run_step "cli channel smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_cli_channel_unit.py"' in text
+    assert 'run_step "auth registration smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_auth_registration_unit.py"' in text
+    assert text.index('run_step "auth registration smoke unit"') < text.index('run_shell_step "auth registration smoke"')
     assert 'run_shell_step "auth registration smoke" "$ROOT_DIR/scripts/smoke-auth-registration.sh"' in text
+    assert 'run_step "resident mainline smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_resident_mainline_unit.py"' in text
+    assert text.index('run_step "resident mainline smoke unit"') < text.index('run_shell_step "resident mainline smoke"')
     assert 'run_shell_step "resident mainline smoke" "$ROOT_DIR/scripts/smoke-resident-mainline.sh"' in text
+    assert 'run_step "shell dual HTTP smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_shell_dual_http_unit.py"' in text
+    assert text.index('run_step "shell dual HTTP smoke unit"') < text.index('run_shell_step "shell dual HTTP smoke"')
     assert 'run_shell_step "shell dual HTTP smoke" "$ROOT_DIR/scripts/smoke-shell-dual-http.sh"' in text
+    assert 'run_step "shell direct HTTP smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_shell_direct_http_unit.py"' in text
+    assert text.index('run_step "shell direct HTTP smoke unit"') < text.index('run_shell_step "shell direct HTTP smoke"')
     assert 'run_shell_step "shell direct HTTP smoke" "$ROOT_DIR/scripts/smoke-shell-direct-http.sh"' in text
+    assert 'run_step "web shell smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_web_shell_unit.py"' in text
+    assert text.index('run_step "web shell smoke unit"') < text.index('run_shell_step "web shell smoke"')
     assert 'run_shell_step "web shell smoke" "$ROOT_DIR/scripts/smoke-web-shell.sh"' in text
+    assert 'run_step "web dual browser smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_web_dual_browser_unit.py"' in text
+    assert text.index('run_step "web dual browser smoke unit"') < text.index('run_step "terminal smoke unit"')
+    assert 'run_step "terminal smoke unit" python3 "$ROOT_DIR/scripts/test_start_terminal_unit.py"' in text
+    assert text.index('run_step "terminal smoke unit"') < text.index('run_step "terminal smoke"')
+    assert 'run_step "start terminal shell unit" python3 "$ROOT_DIR/scripts/test_start_terminal_shell_unit.py"' in text
+    assert text.index('run_step "start terminal shell unit"') < text.index('run_step "terminal smoke"')
+    assert 'run_step "provider federation smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_provider_federation_unit.py"' in text
+    assert text.index('run_step "provider federation smoke unit"') < text.index('run_shell_step "provider federation smoke"')
     assert 'run_shell_step "provider federation smoke" "$ROOT_DIR/scripts/smoke-provider-federation.sh"' in text
+    assert 'run_step "install server unit" python3 "$ROOT_DIR/scripts/test_install_server_unit.py"' in text
+    assert text.index('run_step "install server unit"') < text.index('run_step "install layout smoke unit"')
+    assert 'run_step "install layout smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_install_layout_unit.py"' in text
+    assert text.index('run_step "install layout smoke unit"') < text.index('echo "== release gate passed =="')
+    assert 'run_step "public ingress smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_public_ingress_unit.py"' in text
+    assert text.index('run_step "public ingress smoke unit"') < text.index('echo "== release gate passed =="')
+    assert 'run_step "package release unit" python3 "$ROOT_DIR/scripts/test_package_release_unit.py"' in text
+    assert text.index('run_step "package release unit"') < text.index('echo "== release gate passed =="')
+    assert 'run_step "restart gateway unit" python3 "$ROOT_DIR/scripts/test_restart_gateway_unit.py"' in text
+    assert text.index('run_step "restart gateway unit"') < text.index('echo "== release gate passed =="')
+    assert 'run_step "web preview unit" python3 "$ROOT_DIR/scripts/test_start_web_preview_unit.py"' in text
+    assert text.index('run_step "web preview unit"') < text.index('echo "== release gate passed =="')
+    assert 'run_step "preview server unit" python3 "$ROOT_DIR/scripts/test_preview_server_unit.py"' in text
+    assert text.index('run_step "preview server unit"') < text.index('echo "== release gate passed =="')
+    assert 'run_step "device id unit" python3 "$ROOT_DIR/scripts/test_lobster_device_id_unit.py"' in text
+    assert text.index('run_step "device id unit"') < text.index('echo "== release gate passed =="')
+    assert 'run_step "web assets audit unit" python3 "$ROOT_DIR/scripts/test_audit_web_assets_unit.py"' in text
+    assert text.index('run_step "web assets audit unit"') < text.index('echo "== release gate passed =="')
     assert 'export GATEWAY_BIN="' in text
     assert 'export CLI_BIN="' in text
     assert 'export TUI_BIN="' in text

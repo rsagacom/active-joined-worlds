@@ -18,6 +18,19 @@ license = "MIT"
 version = "0.1.0"
 authors = ["lobster-chat contributors"]
 
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+[workspace.lints.clippy]
+correctness = "deny"
+complexity = "deny"
+perf = "deny"
+style = "deny"
+
 [workspace.dependencies]
 chat-core = { path = "crates/chat-core" }
 chat-storage = { path = "crates/chat-storage" }

@@ -2,7 +2,10 @@ use super::*;
 use std::{
     io::Read,
     net::TcpStream,
-    sync::{Arc, Mutex, atomic::Ordering},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -136,7 +139,8 @@ fn waku_http_route_roundtrips_connect_subscribe_publish_and_poll_contract() {
     assert!(
         !poll["Frames"]["frames"][0]["payload"]
             .as_array()
-            .expect("encoded frame payload").is_empty()
+            .expect("encoded frame payload")
+            .is_empty()
     );
 }
 
@@ -1940,7 +1944,12 @@ fn auth_http_routes_roundtrip_mobile_otp_registration() {
     assert_eq!(verify_status, 200);
     assert_eq!(verified["resident_id"], "mobile-reader");
     assert_eq!(verified["mobile"], "8613800138000");
-    assert!(verified["mobile_masked"].as_str().unwrap_or_default().contains("****"));
+    assert!(
+        verified["mobile_masked"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("****")
+    );
     assert_eq!(verified["nickname"], "手机用户");
     assert_eq!(verified["token_type"], "Bearer");
     assert_eq!(verified["session"]["resident_id"], "mobile-reader");
@@ -2050,16 +2059,18 @@ fn auth_mobile_otp_blacklisted_mobile_rejected() {
     let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
     let blacklisted_mobile = "13800000001";
     let mobile_hash = GatewayRuntime::hash_registration_handle("mobile", blacklisted_mobile);
-    runtime.registration_blacklist.push(RegistrationBlacklistEntry {
-        entry_id: "blacklist:test".into(),
-        resident_id: IdentityId("system".into()),
-        report_id: None,
-        handle_kind: "mobile".into(),
-        hash_sha256: mobile_hash,
-        reason: "test blacklisted mobile".into(),
-        added_by: IdentityId("system".into()),
-        added_at_ms: GatewayRuntime::now_ms(),
-    });
+    runtime
+        .registration_blacklist
+        .push(RegistrationBlacklistEntry {
+            entry_id: "blacklist:test".into(),
+            resident_id: IdentityId("system".into()),
+            report_id: None,
+            handle_kind: "mobile".into(),
+            hash_sha256: mobile_hash,
+            reason: "test blacklisted mobile".into(),
+            added_by: IdentityId("system".into()),
+            added_at_ms: GatewayRuntime::now_ms(),
+        });
     let server = start_local_gateway_http_server(runtime);
 
     let (request_status, _resp) = http_json(
@@ -2698,7 +2709,7 @@ fn shell_message_http_route_accepts_open_city_public_room_posts() {
         &server.base_url,
         "/v1/shell/message",
         Some(&serde_json::json!({
-            "room_id": "room:city:core-harbor:lobby",
+            "room_id": "room:city:core-harbor:lobby", "actor_id": "rsaga", "actor_id": "rsaga", "actor_id": "rsaga", "actor_id": "rsaga",
             "sender": "qa2",
             "text": "open city lobby should accept this",
             "device_id": "browser",
@@ -4299,7 +4310,7 @@ fn read_http_routes_return_stable_gateway_projection_contract() {
         &server.base_url,
         "/v1/shell/message",
         Some(&serde_json::json!({
-            "room_id": "room:city:core-harbor:lobby",
+            "room_id": "room:city:core-harbor:lobby", "actor_id": "rsaga", "actor_id": "rsaga", "actor_id": "rsaga", "actor_id": "rsaga",
             "sender": "read-contract-user",
             "text": "read route export message",
             "device_id": "browser",
@@ -5190,6 +5201,193 @@ fn cli_tail_and_inbox_project_recall_and_edit_metadata() {
 }
 
 #[test]
+fn cli_send_to_nonexistent_room_is_rejected() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (status, body) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/cli/send",
+        Some(&serde_json::json!({
+            "from": "user:qa-a",
+            "to": "room:nonexistent:fake",
+            "text": "hello"
+        })),
+    );
+    assert_eq!(status, 400);
+    assert!(
+        body["Error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("unknown public room")
+    );
+}
+
+#[test]
+fn cli_send_rejects_blank_text_at_http_level() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (status, body) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/cli/send",
+        Some(&serde_json::json!({
+            "from": "user:qa-a",
+            "to": "user:qa-b",
+            "text": "   "
+        })),
+    );
+    assert_eq!(status, 400);
+    assert_eq!(body["Error"]["message"], "message text required");
+}
+
+#[test]
+fn cli_edit_nonexistent_message_is_rejected() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (send_status, sent) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/cli/send",
+        Some(&serde_json::json!({
+            "from": "user:qa-a",
+            "to": "user:qa-b",
+            "text": "first message"
+        })),
+    );
+    assert_eq!(send_status, 200);
+    assert_eq!(sent["ok"], true);
+    let conversation_id = sent["conversation_id"].as_str().expect("conversation id");
+
+    let (edit_status, edit) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/message/edit",
+        Some(&serde_json::json!({
+            "room_id": conversation_id,
+            "message_id": "msg:nonexistent:000",
+            "actor": "qa-a",
+            "text": "edited"
+        })),
+    );
+    assert_eq!(edit_status, 400);
+    assert!(
+        edit["Error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("not found")
+    );
+}
+
+#[test]
+fn cli_recall_nonexistent_message_is_rejected() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (send_status, sent) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/cli/send",
+        Some(&serde_json::json!({
+            "from": "user:qa-a",
+            "to": "user:qa-b",
+            "text": "first message"
+        })),
+    );
+    assert_eq!(send_status, 200);
+    assert_eq!(sent["ok"], true);
+    let conversation_id = sent["conversation_id"].as_str().expect("conversation id");
+
+    let (recall_status, recall) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/message/recall",
+        Some(&serde_json::json!({
+            "room_id": conversation_id,
+            "message_id": "msg:nonexistent:000",
+            "actor": "qa-a"
+        })),
+    );
+    assert_eq!(recall_status, 400);
+    assert!(
+        recall["Error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("not found")
+    );
+}
+
+#[test]
+fn cli_double_recall_is_idempotent() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (send_status, sent) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/cli/send",
+        Some(&serde_json::json!({
+            "from": "user:qa-a",
+            "to": "user:qa-b",
+            "text": "to be recalled"
+        })),
+    );
+    assert_eq!(send_status, 200);
+    assert_eq!(sent["ok"], true);
+    let conversation_id = sent["conversation_id"].as_str().expect("conversation id");
+    let message_id = sent["message_id"].as_str().expect("message id");
+
+    let (first_recall_status, first_recall) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/message/recall",
+        Some(&serde_json::json!({
+            "room_id": conversation_id,
+            "message_id": message_id,
+            "actor": "qa-a"
+        })),
+    );
+    assert_eq!(first_recall_status, 200);
+    assert_eq!(first_recall["ok"], true);
+
+    let (second_recall_status, _second_recall) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/message/recall",
+        Some(&serde_json::json!({
+            "room_id": conversation_id,
+            "message_id": message_id,
+            "actor": "qa-a"
+        })),
+    );
+    // Double recall should be idempotent — either 200 or 400.
+    assert!(second_recall_status == 200 || second_recall_status == 400);
+
+    let (tail_status, tail) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/cli/tail?for=user%3Aqa-a&conversation_id=dm%3Aqa-a%3Aqa-b",
+        None,
+    );
+    assert_eq!(tail_status, 200);
+    let recalled_message = tail["messages"]
+        .as_array()
+        .expect("tail messages")
+        .iter()
+        .find(|message| message["message_id"] == message_id)
+        .expect("recalled message");
+    assert_eq!(recalled_message["is_recalled"], true);
+}
+
+#[test]
 fn cli_send_to_room_appends_message_into_existing_room() {
     let temp = tempdir().expect("temp dir");
     let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
@@ -5960,6 +6158,75 @@ fn governance_http_routes_roundtrip_world_notice_report_review_advisory_and_sanc
             .iter()
             .any(|item| item["resident_id"] == "bad-actor" && item["portability_revoked"] == true)
     );
+}
+
+#[test]
+fn unsanction_resident_endpoint_records_actor_audit_event() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (sanction_status, sanction) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/world-safety/residents/sanction",
+        Some(&serde_json::json!({
+            "actor_id": "rsaga",
+            "resident_id": "bad-actor",
+            "city": "core-harbor",
+            "reason": "temporary enforcement",
+            "portability_revoked": true
+        })),
+    );
+    assert_eq!(sanction_status, 200);
+    let sanction_id = sanction["sanction_id"].as_str().expect("sanction id");
+
+    let (unsanction_status, unsanctioned) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/residents/unsanction",
+        Some(&serde_json::json!({
+            "actor_id": "rsaga",
+            "sanction_id": sanction_id
+        })),
+    );
+    assert_eq!(unsanction_status, 200);
+    assert_eq!(unsanctioned["sanction_id"], sanction_id);
+
+    let (audit_status, _, audit_body) =
+        http_raw("GET", &server.base_url, "/v1/admin/audit-log?limit=5", None);
+    assert_eq!(audit_status, 200);
+    let audit: serde_json::Value = serde_json::from_str(&audit_body).expect("parse audit log");
+    assert!(
+        audit["events"]
+            .as_array()
+            .expect("audit events")
+            .iter()
+            .any(|event| event["actor_id"] == "rsaga"
+                && event["action"] == "admin:unsanction_resident"
+                && event["target"] == sanction_id)
+    );
+}
+
+#[test]
+fn unsanction_resident_endpoint_rejects_oversized_body() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+    let oversized_actor = "a".repeat(1_050_000);
+
+    let (status, _, body) = http_raw(
+        "POST",
+        &server.base_url,
+        "/v1/admin/residents/unsanction",
+        Some(&serde_json::json!({
+            "actor_id": oversized_actor,
+            "sanction_id": "resident-sanction:test"
+        })),
+    );
+
+    assert_eq!(status, 400);
+    assert!(body.contains("exceeds 1 MiB"), "body was: {body}");
 }
 
 #[test]
@@ -7170,7 +7437,7 @@ fn mark_read_endpoint_rejects_missing_conversation_id() {
     let temp = tempdir().expect("temp dir");
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
     let server = start_local_gateway_http_server(runtime);
-    let body = serde_json::json!({"resident_id": "builder"});
+    let body = serde_json::json!({"resident_id": "builder", "actor_id": "rsaga"});
     let (status, payload) = http_json("POST", &server.base_url, "/v1/shell/read", Some(&body));
     assert_eq!(status, 400);
     assert!(payload["error"].as_str().unwrap().contains("decode"));
@@ -7213,8 +7480,12 @@ fn mark_read_http_endpoint_resets_unread_and_reflects_in_shell_state() {
     assert_eq!(send_status, 200);
 
     // Check unread count for qa-b before mark read
-    let (state_before_status, state_before) =
-        http_json("GET", &server.base_url, "/v1/shell/state?resident_id=qa-b", None);
+    let (state_before_status, state_before) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/shell/state?resident_id=qa-b",
+        None,
+    );
     assert_eq!(state_before_status, 200);
     let dm_before = state_before["rooms"]
         .as_array()
@@ -7223,7 +7494,10 @@ fn mark_read_http_endpoint_resets_unread_and_reflects_in_shell_state() {
         .find(|room| room["id"] == dm_id)
         .expect("dm room");
     let unread_before = dm_before["unread_count"].as_u64().unwrap_or(0);
-    assert!(unread_before > 0, "unread should be > 0 after message, got {unread_before}");
+    assert!(
+        unread_before > 0,
+        "unread should be > 0 after message, got {unread_before}"
+    );
 
     // Mark read
     let (mark_status, _mark_payload) = http_json(
@@ -7238,8 +7512,12 @@ fn mark_read_http_endpoint_resets_unread_and_reflects_in_shell_state() {
     assert_eq!(mark_status, 200);
 
     // Check unread count after mark read
-    let (state_after_status, state_after) =
-        http_json("GET", &server.base_url, "/v1/shell/state?resident_id=qa-b", None);
+    let (state_after_status, state_after) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/shell/state?resident_id=qa-b",
+        None,
+    );
     assert_eq!(state_after_status, 200);
     let dm_after = state_after["rooms"]
         .as_array()
@@ -7248,7 +7526,10 @@ fn mark_read_http_endpoint_resets_unread_and_reflects_in_shell_state() {
         .find(|room| room["id"] == dm_id)
         .expect("dm room");
     let unread_after = dm_after["unread_count"].as_u64().unwrap_or(0);
-    assert_eq!(unread_after, 0, "unread should be 0 after mark read, got {unread_after}");
+    assert_eq!(
+        unread_after, 0,
+        "unread should be 0 after mark read, got {unread_after}"
+    );
 }
 
 #[test]
@@ -7279,12 +7560,38 @@ fn admin_summary_endpoint_returns_counts_and_uptime() {
     let server = start_local_gateway_http_server(runtime);
     let (status, payload) = http_json("GET", &server.base_url, "/v1/admin/summary", None);
     assert_eq!(status, 200);
-    assert!(payload.get("resident_count").and_then(|v| v.as_u64()).unwrap_or(0) > 0);
+    assert!(
+        payload
+            .get("resident_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            > 0
+    );
     assert!(payload.get("room_count").and_then(|v| v.as_u64()).is_some());
-    assert!(payload.get("message_count").and_then(|v| v.as_u64()).is_some());
-    assert!(payload.get("online_count").and_then(|v| v.as_u64()).is_some());
-    assert!(payload.get("gateway_uptime_ms").and_then(|v| v.as_i64()).is_some());
-    assert!(payload.get("state_version").and_then(|v| v.as_str()).is_some());
+    assert!(
+        payload
+            .get("message_count")
+            .and_then(|v| v.as_u64())
+            .is_some()
+    );
+    assert!(
+        payload
+            .get("online_count")
+            .and_then(|v| v.as_u64())
+            .is_some()
+    );
+    assert!(
+        payload
+            .get("gateway_uptime_ms")
+            .and_then(|v| v.as_i64())
+            .is_some()
+    );
+    assert!(
+        payload
+            .get("state_version")
+            .and_then(|v| v.as_str())
+            .is_some()
+    );
 }
 
 #[test]
@@ -7295,13 +7602,31 @@ fn admin_conversations_endpoint_lists_all_conversations() {
     let (status, payload) = http_json("GET", &server.base_url, "/v1/admin/conversations", None);
     assert_eq!(status, 200);
     let conversations = payload.as_array().expect("should be array");
-    assert!(!conversations.is_empty(), "should have seeded conversations");
+    assert!(
+        !conversations.is_empty(),
+        "should have seeded conversations"
+    );
     let first = &conversations[0];
-    assert!(first.get("conversation_id").and_then(|v| v.as_str()).is_some());
+    assert!(
+        first
+            .get("conversation_id")
+            .and_then(|v| v.as_str())
+            .is_some()
+    );
     assert!(first.get("kind").and_then(|v| v.as_str()).is_some());
     assert!(first.get("title").and_then(|v| v.as_str()).is_some());
-    assert!(first.get("participant_count").and_then(|v| v.as_u64()).is_some());
-    assert!(first.get("message_count").and_then(|v| v.as_u64()).is_some());
+    assert!(
+        first
+            .get("participant_count")
+            .and_then(|v| v.as_u64())
+            .is_some()
+    );
+    assert!(
+        first
+            .get("message_count")
+            .and_then(|v| v.as_u64())
+            .is_some()
+    );
 }
 
 #[test]
@@ -7312,9 +7637,24 @@ fn admin_messages_endpoint_returns_audit_for_known_conversation() {
     let url = "/v1/admin/messages?conversation_id=room:world:lobby&limit=10".to_string();
     let (status, payload) = http_json("GET", &server.base_url, &url, None);
     assert_eq!(status, 200);
-    assert!(payload.get("conversation_id").and_then(|v| v.as_str()).is_some());
-    assert!(payload.get("total_count").and_then(|v| v.as_u64()).is_some());
-    assert!(payload.get("returned_count").and_then(|v| v.as_u64()).is_some());
+    assert!(
+        payload
+            .get("conversation_id")
+            .and_then(|v| v.as_str())
+            .is_some()
+    );
+    assert!(
+        payload
+            .get("total_count")
+            .and_then(|v| v.as_u64())
+            .is_some()
+    );
+    assert!(
+        payload
+            .get("returned_count")
+            .and_then(|v| v.as_u64())
+            .is_some()
+    );
     let messages = payload.get("messages").and_then(|v| v.as_array());
     assert!(messages.is_some());
 }
@@ -7340,8 +7680,18 @@ fn admin_residents_endpoint_returns_resident_list() {
     let first = &residents[0];
     assert!(first.get("resident_id").and_then(|v| v.as_str()).is_some());
     assert!(first.get("roles").and_then(|v| v.as_array()).is_some());
-    assert!(first.get("active_cities").and_then(|v| v.as_array()).is_some());
-    assert!(first.get("pending_cities").and_then(|v| v.as_array()).is_some());
+    assert!(
+        first
+            .get("active_cities")
+            .and_then(|v| v.as_array())
+            .is_some()
+    );
+    assert!(
+        first
+            .get("pending_cities")
+            .and_then(|v| v.as_array())
+            .is_some()
+    );
     assert!(first.get("sanctions").and_then(|v| v.as_array()).is_some());
     assert!(first.get("is_banned").and_then(|v| v.as_bool()).is_some());
     assert!(first.get("online").and_then(|v| v.as_bool()).is_some());
@@ -7354,9 +7704,13 @@ fn admin_ban_and_unban_resident_endpoints_roundtrip() {
     let server = start_local_gateway_http_server(runtime);
 
     // Use a seeded resident that already has memberships (e.g. builder)
-    let ban_body = serde_json::json!({"resident_id": "builder", "reason": "testing ban"});
-    let (ban_status, ban_payload) =
-        http_json("POST", &server.base_url, "/v1/admin/residents/ban", Some(&ban_body));
+    let ban_body = serde_json::json!({"resident_id": "builder", "reason": "testing ban", "actor_id": "builder", "actor_id": "rsaga"});
+    let (ban_status, ban_payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/residents/ban",
+        Some(&ban_body),
+    );
     assert_eq!(ban_status, 200);
     assert_eq!(ban_payload.get("ok").and_then(|v| v.as_bool()), Some(true));
 
@@ -7369,14 +7723,30 @@ fn admin_ban_and_unban_resident_endpoints_roundtrip() {
         .iter()
         .find(|r| r.get("resident_id").and_then(|v| v.as_str()) == Some("builder"))
         .expect("should find builder in residents");
-    assert_eq!(banned.get("is_banned").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(
+        banned.get("is_banned").and_then(|v| v.as_bool()),
+        Some(true)
+    );
 
-    let unban_body = serde_json::json!({"resident_id": "builder"});
-    let (unban_status, unban_payload) =
-        http_json("POST", &server.base_url, "/v1/admin/residents/unban", Some(&unban_body));
+    let unban_body = serde_json::json!({"resident_id": "builder", "actor_id": "rsaga"});
+    let (unban_status, unban_payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/residents/unban",
+        Some(&unban_body),
+    );
     assert_eq!(unban_status, 200);
-    assert_eq!(unban_payload.get("ok").and_then(|v| v.as_bool()), Some(true));
-    assert!(unban_payload.get("lifted_count").and_then(|v| v.as_u64()).unwrap_or(0) > 0);
+    assert_eq!(
+        unban_payload.get("ok").and_then(|v| v.as_bool()),
+        Some(true)
+    );
+    assert!(
+        unban_payload
+            .get("lifted_count")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            > 0
+    );
 }
 
 #[test]
@@ -7387,13 +7757,21 @@ fn admin_set_nickname_endpoint_roundtrip() {
 
     // Ensure builder has a registration (seeded only as message sender)
     let create_body = serde_json::json!({"resident_id": "builder", "email": "builder@localhost"});
-    let (create_status, _) =
-        http_json("POST", &server.base_url, "/v1/admin/residents", Some(&create_body));
+    let (create_status, _) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/residents",
+        Some(&create_body),
+    );
     assert_eq!(create_status, 200);
 
     let set_body = serde_json::json!({"resident_id": "builder", "nickname": "建筑大师"});
-    let (set_status, set_payload) =
-        http_json("POST", &server.base_url, "/v1/admin/residents/nickname", Some(&set_body));
+    let (set_status, set_payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/residents/nickname",
+        Some(&set_body),
+    );
     assert_eq!(set_status, 200);
     assert_eq!(set_payload.get("ok").and_then(|v| v.as_bool()), Some(true));
 
@@ -7407,14 +7785,24 @@ fn admin_set_nickname_endpoint_roundtrip() {
         .iter()
         .find(|r| r.get("resident_id").and_then(|v| v.as_str()) == Some("builder"))
         .expect("should find builder");
-    assert_eq!(entry.get("nickname").and_then(|v| v.as_str()), Some("建筑大师"));
+    assert_eq!(
+        entry.get("nickname").and_then(|v| v.as_str()),
+        Some("建筑大师")
+    );
 
     // Clear nickname
     let clear_body = serde_json::json!({"resident_id": "builder", "nickname": null});
-    let (clear_status, clear_payload) =
-        http_json("POST", &server.base_url, "/v1/admin/residents/nickname", Some(&clear_body));
+    let (clear_status, clear_payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/residents/nickname",
+        Some(&clear_body),
+    );
     assert_eq!(clear_status, 200);
-    assert_eq!(clear_payload.get("ok").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(
+        clear_payload.get("ok").and_then(|v| v.as_bool()),
+        Some(true)
+    );
 
     // Verify nickname is now null
     let (list2_status, list2_payload) =
@@ -7430,8 +7818,12 @@ fn admin_set_nickname_endpoint_roundtrip() {
 
     // Nonexistent resident
     let bad_body = serde_json::json!({"resident_id": "no-such-resident", "nickname": "test"});
-    let (bad_status, _) =
-        http_json("POST", &server.base_url, "/v1/admin/residents/nickname", Some(&bad_body));
+    let (bad_status, _) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/residents/nickname",
+        Some(&bad_body),
+    );
     assert_eq!(bad_status, 404);
 }
 
@@ -7440,9 +7832,13 @@ fn admin_ban_endpoint_requires_reason() {
     let temp = tempdir().expect("temp dir");
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
     let server = start_local_gateway_http_server(runtime);
-    let body = serde_json::json!({"resident_id": "rsaga", "reason": ""});
-    let (status, _payload) =
-        http_json("POST", &server.base_url, "/v1/admin/residents/ban", Some(&body));
+    let body = serde_json::json!({"resident_id": "rsaga", "reason": "", "actor_id": "rsaga"});
+    let (status, _payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/residents/ban",
+        Some(&body),
+    );
     assert_eq!(status, 400);
 }
 
@@ -7459,8 +7855,18 @@ fn admin_rooms_endpoint_returns_room_list() {
     assert!(first.get("id").and_then(|v| v.as_str()).is_some());
     assert!(first.get("kind").and_then(|v| v.as_str()).is_some());
     assert!(first.get("title").and_then(|v| v.as_str()).is_some());
-    assert!(first.get("participant_count").and_then(|v| v.as_u64()).is_some());
-    assert!(first.get("message_count").and_then(|v| v.as_u64()).is_some());
+    assert!(
+        first
+            .get("participant_count")
+            .and_then(|v| v.as_u64())
+            .is_some()
+    );
+    assert!(
+        first
+            .get("message_count")
+            .and_then(|v| v.as_u64())
+            .is_some()
+    );
     assert!(first.get("is_frozen").and_then(|v| v.as_bool()).is_some());
     assert!(first.get("has_scene").and_then(|v| v.as_bool()).is_some());
 }
@@ -7472,14 +7878,20 @@ fn admin_freeze_and_unfreeze_room_endpoints_roundtrip() {
     let server = start_local_gateway_http_server(runtime);
 
     let room_id = "room:city:core-harbor:lobby";
-    let freeze_body = serde_json::json!({"room_id": room_id});
-    let (freeze_status, freeze_payload) =
-        http_json("POST", &server.base_url, "/v1/admin/rooms/freeze", Some(&freeze_body));
+    let freeze_body = serde_json::json!({"room_id": room_id, "actor_id": "rsaga"});
+    let (freeze_status, freeze_payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/rooms/freeze",
+        Some(&freeze_body),
+    );
     assert_eq!(freeze_status, 200);
-    assert_eq!(freeze_payload.get("ok").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(
+        freeze_payload.get("ok").and_then(|v| v.as_bool()),
+        Some(true)
+    );
 
-    let (list_status, list_payload) =
-        http_json("GET", &server.base_url, "/v1/admin/rooms", None);
+    let (list_status, list_payload) = http_json("GET", &server.base_url, "/v1/admin/rooms", None);
     assert_eq!(list_status, 200);
     let room = list_payload
         .as_array()
@@ -7489,11 +7901,18 @@ fn admin_freeze_and_unfreeze_room_endpoints_roundtrip() {
         .expect("should find lobby room");
     assert_eq!(room.get("is_frozen").and_then(|v| v.as_bool()), Some(true));
 
-    let unfreeze_body = serde_json::json!({"room_id": room_id});
-    let (unfreeze_status, unfreeze_payload) =
-        http_json("POST", &server.base_url, "/v1/admin/rooms/unfreeze", Some(&unfreeze_body));
+    let unfreeze_body = serde_json::json!({"room_id": room_id, "actor_id": "rsaga"});
+    let (unfreeze_status, unfreeze_payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/rooms/unfreeze",
+        Some(&unfreeze_body),
+    );
     assert_eq!(unfreeze_status, 200);
-    assert_eq!(unfreeze_payload.get("ok").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(
+        unfreeze_payload.get("ok").and_then(|v| v.as_bool()),
+        Some(true)
+    );
 }
 
 #[test]
@@ -7501,9 +7920,13 @@ fn admin_freeze_endpoint_rejects_unknown_room() {
     let temp = tempdir().expect("temp dir");
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
     let server = start_local_gateway_http_server(runtime);
-    let body = serde_json::json!({"room_id": "room:nonexistent"});
-    let (status, _payload) =
-        http_json("POST", &server.base_url, "/v1/admin/rooms/freeze", Some(&body));
+    let body = serde_json::json!({"room_id": "room:nonexistent", "actor_id": "rsaga"});
+    let (status, _payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/rooms/freeze",
+        Some(&body),
+    );
     assert_eq!(status, 400);
 }
 
@@ -7513,25 +7936,29 @@ fn admin_config_endpoints_get_and_set_roundtrip() {
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
     let server = start_local_gateway_http_server(runtime);
 
-    let (get_status, _get_payload) =
-        http_json("GET", &server.base_url, "/v1/admin/config", None);
+    let (get_status, _get_payload) = http_json("GET", &server.base_url, "/v1/admin/config", None);
     assert_eq!(get_status, 200);
 
-    let set_body = serde_json::json!({"config": {"max_users": "1000", "maintenance_mode": "false"}});
-    let (set_status, set_payload) =
-        http_json("POST", &server.base_url, "/v1/admin/config", Some(&set_body));
+    let set_body = serde_json::json!({"config": {"max_users": "1000", "maintenance_mode": "false"}, "actor_id": "rsaga"});
+    let (set_status, set_payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/config",
+        Some(&set_body),
+    );
     assert_eq!(set_status, 200);
     assert_eq!(set_payload.get("ok").and_then(|v| v.as_bool()), Some(true));
 
-    let (get_status2, get_payload2) =
-        http_json("GET", &server.base_url, "/v1/admin/config", None);
+    let (get_status2, get_payload2) = http_json("GET", &server.base_url, "/v1/admin/config", None);
     assert_eq!(get_status2, 200);
     assert_eq!(
         get_payload2.get("max_users").and_then(|v| v.as_str()),
         Some("1000")
     );
     assert_eq!(
-        get_payload2.get("maintenance_mode").and_then(|v| v.as_str()),
+        get_payload2
+            .get("maintenance_mode")
+            .and_then(|v| v.as_str()),
         Some("false")
     );
 }
@@ -7542,8 +7969,12 @@ fn admin_ban_endpoint_rejects_missing_resident_id() {
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
     let server = start_local_gateway_http_server(runtime);
     let body = serde_json::json!({"reason": "testing"});
-    let (status, _payload) =
-        http_json("POST", &server.base_url, "/v1/admin/residents/ban", Some(&body));
+    let (status, _payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/residents/ban",
+        Some(&body),
+    );
     assert_eq!(status, 400);
 }
 
@@ -7552,12 +7983,19 @@ fn admin_unban_endpoint_returns_zero_lifted_for_nonexistent_resident() {
     let temp = tempdir().expect("temp dir");
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
     let server = start_local_gateway_http_server(runtime);
-    let body = serde_json::json!({"resident_id": "nonexistent-user"});
-    let (status, payload) =
-        http_json("POST", &server.base_url, "/v1/admin/residents/unban", Some(&body));
+    let body = serde_json::json!({"resident_id": "nonexistent-user", "actor_id": "rsaga"});
+    let (status, payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/residents/unban",
+        Some(&body),
+    );
     assert_eq!(status, 200);
     assert_eq!(payload.get("ok").and_then(|v| v.as_bool()), Some(true));
-    assert_eq!(payload.get("lifted_count").and_then(|v| v.as_u64()), Some(0));
+    assert_eq!(
+        payload.get("lifted_count").and_then(|v| v.as_u64()),
+        Some(0)
+    );
 }
 
 #[test]
@@ -7566,8 +8004,12 @@ fn admin_unban_endpoint_rejects_missing_resident_id() {
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
     let server = start_local_gateway_http_server(runtime);
     let body = serde_json::json!({});
-    let (status, _payload) =
-        http_json("POST", &server.base_url, "/v1/admin/residents/unban", Some(&body));
+    let (status, _payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/residents/unban",
+        Some(&body),
+    );
     assert_eq!(status, 400);
 }
 
@@ -7577,8 +8019,12 @@ fn admin_freeze_endpoint_rejects_missing_room_id() {
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
     let server = start_local_gateway_http_server(runtime);
     let body = serde_json::json!({});
-    let (status, _payload) =
-        http_json("POST", &server.base_url, "/v1/admin/rooms/freeze", Some(&body));
+    let (status, _payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/rooms/freeze",
+        Some(&body),
+    );
     assert_eq!(status, 400);
 }
 
@@ -7588,8 +8034,7 @@ fn admin_config_endpoint_rejects_empty_body() {
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
     let server = start_local_gateway_http_server(runtime);
     let body = serde_json::json!({});
-    let (status, _payload) =
-        http_json("POST", &server.base_url, "/v1/admin/config", Some(&body));
+    let (status, _payload) = http_json("POST", &server.base_url, "/v1/admin/config", Some(&body));
     assert_eq!(status, 400);
 }
 
@@ -7599,8 +8044,7 @@ fn admin_config_endpoint_rejects_missing_config_field() {
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
     let server = start_local_gateway_http_server(runtime);
     let body = serde_json::json!({"other": "value"});
-    let (status, _payload) =
-        http_json("POST", &server.base_url, "/v1/admin/config", Some(&body));
+    let (status, _payload) = http_json("POST", &server.base_url, "/v1/admin/config", Some(&body));
     assert_eq!(status, 400);
 }
 
@@ -7629,7 +8073,10 @@ fn admin_rooms_endpoint_returns_seeded_rooms_for_fresh_runtime() {
     let (status, payload) = http_json("GET", &server.base_url, "/v1/admin/rooms", None);
     assert_eq!(status, 200);
     let rooms = payload.as_array().expect("rooms array");
-    assert!(!rooms.is_empty(), "fresh runtime should have seeded public rooms");
+    assert!(
+        !rooms.is_empty(),
+        "fresh runtime should have seeded public rooms"
+    );
 }
 
 #[test]
@@ -7658,8 +8105,12 @@ fn scene_validate_endpoint_rejects_invalid_config() {
             "owner_editable": false
         }
     });
-    let (status, payload) =
-        http_json("POST", &server.base_url, "/v1/shell/scene/validate", Some(&body));
+    let (status, payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/scene/validate",
+        Some(&body),
+    );
     assert_eq!(status, 200);
     assert_eq!(payload.get("valid").and_then(|v| v.as_bool()), Some(false));
     let errors = payload.get("errors").and_then(|v| v.as_array());
@@ -7691,8 +8142,12 @@ fn scene_validate_endpoint_accepts_valid_config() {
             ]
         }
     });
-    let (status, payload) =
-        http_json("POST", &server.base_url, "/v1/shell/scene/validate", Some(&body));
+    let (status, payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/scene/validate",
+        Some(&body),
+    );
     assert_eq!(status, 200);
     assert_eq!(payload.get("valid").and_then(|v| v.as_bool()), Some(true));
     let errors = payload.get("errors").and_then(|v| v.as_array());
@@ -7877,10 +8332,17 @@ fn otp_verify_rate_limited_per_challenge() {
                 break;
             }
             // Otherwise it's "invalid otp code"
-            assert!(err.contains("invalid otp code"), "unexpected error at attempt {}: {err}", i + 1);
+            assert!(
+                err.contains("invalid otp code"),
+                "unexpected error at attempt {}: {err}",
+                i + 1
+            );
         }
     }
-    assert!(hit_rate_limit, "expected rate limit after 5 failed verify attempts");
+    assert!(
+        hit_rate_limit,
+        "expected rate limit after 5 failed verify attempts"
+    );
 }
 
 #[test]
@@ -7894,7 +8356,9 @@ fn cors_origin_reads_from_env() {
     );
 
     // Set env var and verify
-    unsafe { std::env::set_var("LOBSTER_CORS_ORIGIN", "https://example.com"); }
+    unsafe {
+        std::env::set_var("LOBSTER_CORS_ORIGIN", "https://example.com");
+    }
     let custom = crate::http_support::cors_origin_header();
     assert_eq!(
         custom.value.as_str(),
@@ -7903,11 +8367,19 @@ fn cors_origin_reads_from_env() {
     );
 
     // Empty string should fall back to wildcard
-    unsafe { std::env::set_var("LOBSTER_CORS_ORIGIN", ""); }
+    unsafe {
+        std::env::set_var("LOBSTER_CORS_ORIGIN", "");
+    }
     let empty = crate::http_support::cors_origin_header();
-    assert_eq!(empty.value.as_str(), "*", "empty CORS origin should be wildcard");
+    assert_eq!(
+        empty.value.as_str(),
+        "*",
+        "empty CORS origin should be wildcard"
+    );
 
-    unsafe { std::env::remove_var("LOBSTER_CORS_ORIGIN"); }
+    unsafe {
+        std::env::remove_var("LOBSTER_CORS_ORIGIN");
+    }
 }
 
 #[test]
@@ -8078,11 +8550,18 @@ fn shell_message_edit_does_not_increment_unread() {
         .expect("publish");
 
     let unread_after_send = runtime.unread_count(&bob, &dm);
-    assert!(unread_after_send > 0, "unread should increase after new message");
+    assert!(
+        unread_after_send > 0,
+        "unread should increase after new message"
+    );
 
     // Bob marks read
     runtime.mark_read(&bob, &dm);
-    assert_eq!(runtime.unread_count(&bob, &dm), 0, "unread should be 0 after mark read");
+    assert_eq!(
+        runtime.unread_count(&bob, &dm),
+        0,
+        "unread should be 0 after mark read"
+    );
 
     // Alice edits the message
     let message_id = runtime
@@ -8125,8 +8604,12 @@ fn admin_moderate_message_approve_block_handled_roundtrip() {
         "device_id": "test",
         "language_tag": "zh"
     });
-    let (send_status, send_payload) =
-        http_json("POST", &server.base_url, "/v1/shell/message", Some(&send_body));
+    let (send_status, send_payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/message",
+        Some(&send_body),
+    );
     assert_eq!(send_status, 200);
     let message_id = send_payload["message_id"]
         .as_str()
@@ -8136,7 +8619,8 @@ fn admin_moderate_message_approve_block_handled_roundtrip() {
     let approve_body = serde_json::json!({
         "message_id": message_id,
         "conversation_id": convo_id,
-        "action": "approved"
+        "action": "approved",
+        "actor_id": "rsaga"
     });
     let (status, payload) = http_json(
         "POST",
@@ -8152,7 +8636,8 @@ fn admin_moderate_message_approve_block_handled_roundtrip() {
     let block_body = serde_json::json!({
         "message_id": message_id,
         "conversation_id": convo_id,
-        "action": "blocked"
+        "action": "blocked",
+        "actor_id": "rsaga"
     });
     let (status, payload) = http_json(
         "POST",
@@ -8167,7 +8652,8 @@ fn admin_moderate_message_approve_block_handled_roundtrip() {
     let handled_body = serde_json::json!({
         "message_id": message_id,
         "conversation_id": convo_id,
-        "action": "handled"
+        "action": "handled",
+        "actor_id": "rsaga"
     });
     let (status, payload) = http_json(
         "POST",
@@ -8188,10 +8674,15 @@ fn admin_moderate_message_rejects_invalid_action() {
     let body = serde_json::json!({
         "message_id": "msg:nonexistent",
         "conversation_id": "room:world:lobby",
-        "action": "invalid_action"
+        "action": "invalid_action",
+        "actor_id": "rsaga"
     });
-    let (status, _payload) =
-        http_json("POST", &server.base_url, "/v1/admin/messages/moderate", Some(&body));
+    let (status, _payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/messages/moderate",
+        Some(&body),
+    );
     assert_eq!(status, 400);
 }
 
@@ -8204,13 +8695,17 @@ fn admin_moderate_message_rejects_nonexistent_message() {
     let body = serde_json::json!({
         "message_id": "msg:nonexistent-99999",
         "conversation_id": "room:world:lobby",
-        "action": "approved"
+        "action": "approved",
+        "actor_id": "rsaga"
     });
-    let (status, _payload) =
-        http_json("POST", &server.base_url, "/v1/admin/messages/moderate", Some(&body));
+    let (status, _payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/messages/moderate",
+        Some(&body),
+    );
     assert_eq!(status, 400);
 }
-
 
 #[test]
 fn admin_invites_create_and_revoke_endpoints_roundtrip() {
@@ -8219,17 +8714,32 @@ fn admin_invites_create_and_revoke_endpoints_roundtrip() {
     let server = start_local_gateway_http_server(runtime);
     // Create invite
     let create_body = serde_json::json!({"actor_id": "qa-a"});
-    let (status, payload) = http_json("POST", &server.base_url, "/v1/admin/invites", Some(&create_body));
+    let (status, payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/invites",
+        Some(&create_body),
+    );
     assert_eq!(status, 200);
     let code = payload["code"].as_str().unwrap().to_string();
     assert!(code.starts_with("AJW-"));
     // Revoke it
     let revoke_body = serde_json::json!({"code": code, "actor_id": "qa-a"});
-    let (status2, _) = http_json("POST", &server.base_url, "/v1/admin/invites/revoke", Some(&revoke_body));
+    let (status2, _) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/invites/revoke",
+        Some(&revoke_body),
+    );
     assert_eq!(status2, 200);
     // Revoke non-existent
     let bad_body = serde_json::json!({"code": "AJW-000000", "actor_id": "qa-a"});
-    let (status3, _) = http_json("POST", &server.base_url, "/v1/admin/invites/revoke", Some(&bad_body));
+    let (status3, _) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/invites/revoke",
+        Some(&bad_body),
+    );
     assert_eq!(status3, 404);
 }
 
@@ -8239,7 +8749,12 @@ fn admin_logs_handle_endpoint_returns_ok() {
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
     let server = start_local_gateway_http_server(runtime);
     let body = serde_json::json!({"log_id": "log-test-1", "actor_id": "qa-a"});
-    let (status, payload) = http_json("POST", &server.base_url, "/v1/admin/logs/handle", Some(&body));
+    let (status, payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/logs/handle",
+        Some(&body),
+    );
     assert_eq!(status, 200);
     assert_eq!(payload.get("ok").and_then(|v| v.as_bool()), Some(true));
 }
@@ -8252,17 +8767,32 @@ fn admin_rooms_members_add_and_remove_endpoints_roundtrip() {
     let room_id = "room:city:core-harbor:lobby";
     // Add
     let add_body = serde_json::json!({"room_id": room_id, "resident_id": "qa-b", "actor_id": "qa-a", "action": "add"});
-    let (status, payload) = http_json("POST", &server.base_url, "/v1/admin/rooms/members", Some(&add_body));
+    let (status, payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/rooms/members",
+        Some(&add_body),
+    );
     assert_eq!(status, 200);
     assert_eq!(payload.get("ok").and_then(|v| v.as_bool()), Some(true));
     // Remove
     let rm_body = serde_json::json!({"room_id": room_id, "resident_id": "qa-b", "actor_id": "qa-a", "action": "remove"});
-    let (status2, payload2) = http_json("POST", &server.base_url, "/v1/admin/rooms/members", Some(&rm_body));
+    let (status2, payload2) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/rooms/members",
+        Some(&rm_body),
+    );
     assert_eq!(status2, 200);
     assert_eq!(payload2.get("ok").and_then(|v| v.as_bool()), Some(true));
     // Bad room
     let bad_body = serde_json::json!({"room_id": "room:nonexistent", "resident_id": "qa-b", "actor_id": "qa-a", "action": "add"});
-    let (status3, _) = http_json("POST", &server.base_url, "/v1/admin/rooms/members", Some(&bad_body));
+    let (status3, _) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/rooms/members",
+        Some(&bad_body),
+    );
     assert_eq!(status3, 404);
 }
 
@@ -8272,9 +8802,19 @@ fn admin_logs_clear_returns_ok() {
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
     let server = start_local_gateway_http_server(runtime);
     let body = serde_json::json!({"log_id": "log-test-1", "actor_id": "qa-a"});
-    http_json("POST", &server.base_url, "/v1/admin/logs/handle", Some(&body));
+    http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/logs/handle",
+        Some(&body),
+    );
     let clear_body = serde_json::json!({});
-    let (status, payload) = http_json("POST", &server.base_url, "/v1/admin/logs/clear", Some(&clear_body));
+    let (status, payload) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/logs/clear",
+        Some(&clear_body),
+    );
     assert_eq!(status, 200);
     assert_eq!(payload.get("ok").and_then(|v| v.as_bool()), Some(true));
 }
@@ -8298,7 +8838,8 @@ fn admin_create_resident_duplicate_returns_409() {
     let body = serde_json::json!({"resident_id": "dup-test", "email": "dup@example.com"});
     let (status1, _) = http_json("POST", &server.base_url, "/v1/admin/residents", Some(&body));
     assert_eq!(status1, 200);
-    let (status2, payload2) = http_json("POST", &server.base_url, "/v1/admin/residents", Some(&body));
+    let (status2, payload2) =
+        http_json("POST", &server.base_url, "/v1/admin/residents", Some(&body));
     assert_eq!(status2, 409);
     assert_eq!(payload2.get("ok").and_then(|v| v.as_bool()), Some(false));
 }
@@ -8323,7 +8864,6 @@ fn world_safety_returns_ok() {
     assert!(payload.is_object());
 }
 
-
 #[test]
 fn shell_bootstrap_returns_ok() {
     let temp = tempdir().expect("temp dir");
@@ -8332,7 +8872,6 @@ fn shell_bootstrap_returns_ok() {
     let (status, _payload) = http_json("GET", &server.base_url, "/v1/shell/bootstrap", None);
     assert_eq!(status, 200);
 }
-
 
 #[test]
 fn admin_config_get_returns_ok() {
@@ -8343,7 +8882,6 @@ fn admin_config_get_returns_ok() {
     assert_eq!(status, 200);
     assert!(payload.is_object());
 }
-
 
 #[test]
 fn world_entry_returns_ok() {
@@ -8411,7 +8949,12 @@ fn send_to_nonexistent_room_is_rejected() {
         "sender": "qa-a",
         "text": "should fail"
     });
-    let (_status, body) = http_json("POST", &server.base_url, "/v1/shell/message", Some(&send_body));
+    let (_status, body) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/message",
+        Some(&send_body),
+    );
     let ok = body.get("ok").and_then(|v| v.as_bool()).unwrap_or(false);
     assert!(!ok, "send to nonexistent room must not succeed");
 }
@@ -8436,17 +8979,29 @@ fn concurrent_presence_heartbeats_via_http() {
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
     let server = start_local_gateway_http_server(runtime);
     // send presence for two residents
-    let a_body = serde_json::json!({"resident_id": "builder"});
-    let (s1, _) = http_json("POST", &server.base_url, "/v1/shell/presence", Some(&a_body));
+    let a_body = serde_json::json!({"resident_id": "builder", "actor_id": "rsaga"});
+    let (s1, _) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/presence",
+        Some(&a_body),
+    );
     assert_eq!(s1, 200);
     let b_body = serde_json::json!({"resident_id": "rsaga"});
-    let (s2, _) = http_json("POST", &server.base_url, "/v1/shell/presence", Some(&b_body));
+    let (s2, _) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/presence",
+        Some(&b_body),
+    );
     assert_eq!(s2, 200);
     // verify residents endpoint returns them (enriched)
     let (s3, residents) = http_json("GET", &server.base_url, "/v1/residents", None);
     assert_eq!(s3, 200);
-    assert!(!residents.as_array().map(|a| a.is_empty()).unwrap_or(true),
-        "residents list should not be empty after heartbeats");
+    assert!(
+        !residents.as_array().map(|a| a.is_empty()).unwrap_or(true),
+        "residents list should not be empty after heartbeats"
+    );
 }
 
 #[test]
@@ -8478,7 +9033,9 @@ fn admin_invites_list_endpoint_returns_created_invites() {
 fn admin_messages_moderation_endpoint_returns_status() {
     let temp = tempdir().expect("temp dir");
     let mut runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
-    runtime.message_moderation.insert("msg-xyz".into(), "approved".into());
+    runtime
+        .message_moderation
+        .insert("msg-xyz".into(), "approved".into());
     let server = start_local_gateway_http_server(runtime);
     let (status, body) = http_json(
         "GET",
@@ -8503,12 +9060,20 @@ fn create_and_list_permission_groups_via_http() {
         "description": "测试用权限组",
         "capabilities": ["send:message", "read:public"]
     });
-    let (status, created) = http_json("POST", &server.base_url, "/v1/admin/permission-groups", Some(&body));
+    let (status, created) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/permission-groups",
+        Some(&body),
+    );
     assert_eq!(status, 200);
     assert_eq!(created["ok"], serde_json::Value::Bool(true));
     assert!(created["group"]["id"].as_str().unwrap().starts_with("pg-"));
     assert_eq!(created["group"]["name"].as_str(), Some("测试组"));
-    assert_eq!(created["group"]["capabilities"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        created["group"]["capabilities"].as_array().unwrap().len(),
+        2
+    );
 
     let (status, list) = http_json("GET", &server.base_url, "/v1/admin/permission-groups", None);
     assert_eq!(status, 200);
@@ -8521,16 +9086,29 @@ fn assign_permission_group_via_http() {
     let temp = tempdir().expect("temp dir");
     let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
     register_resident(&mut runtime, "alice");
-    let resp = runtime.admin_create_permission_group("admin-1", "协管", "steward-like", vec!["freeze:room".into(), "moderate:message".into()]);
+    let resp = runtime.admin_create_permission_group(
+        "admin-1",
+        "协管",
+        "steward-like",
+        vec!["freeze:room".into(), "moderate:message".into()],
+    );
     let pg_id = resp.group.id;
     let server = start_local_gateway_http_server(runtime);
 
     let body = serde_json::json!({"actor_id": "admin-1", "resident_id": "alice", "permission_group_id": &pg_id});
-    let (status, assigned) = http_json("POST", &server.base_url, "/v1/admin/permission-groups/assign", Some(&body));
+    let (status, assigned) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/permission-groups/assign",
+        Some(&body),
+    );
     assert_eq!(status, 200);
     assert_eq!(assigned["ok"], serde_json::Value::Bool(true));
     assert_eq!(assigned["resident_id"].as_str(), Some("alice"));
-    assert_eq!(assigned["permission_group_id"].as_str(), Some(pg_id.as_str()));
+    assert_eq!(
+        assigned["permission_group_id"].as_str(),
+        Some(pg_id.as_str())
+    );
 }
 
 #[test]
@@ -8538,8 +9116,14 @@ fn permission_groups_persist_across_restart() {
     let temp = tempdir().expect("temp dir");
     let pg_id;
     {
-        let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
-        let resp = runtime.admin_create_permission_group("admin-1", "持久化组", "survive restart", vec!["admin:config".into()]);
+        let mut runtime =
+            GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+        let resp = runtime.admin_create_permission_group(
+            "admin-1",
+            "持久化组",
+            "survive restart",
+            vec!["admin:config".into()],
+        );
         pg_id = resp.group.id;
     }
     {
@@ -8571,8 +9155,14 @@ fn create_permission_group_rejects_empty_name() {
     let temp = tempdir().expect("temp dir");
     let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
     let server = start_local_gateway_http_server(runtime);
-    let body = serde_json::json!({"actor_id": "admin-1", "name": "", "capabilities": ["send:message"]});
-    let (status, resp) = http_json("POST", &server.base_url, "/v1/admin/permission-groups", Some(&body));
+    let body =
+        serde_json::json!({"actor_id": "admin-1", "name": "", "capabilities": ["send:message"]});
+    let (status, resp) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/permission-groups",
+        Some(&body),
+    );
     assert_eq!(status, 400);
     assert!(resp["error"].as_str().unwrap().contains("name"));
 }
@@ -8583,7 +9173,12 @@ fn create_permission_group_rejects_empty_capabilities() {
     let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
     let server = start_local_gateway_http_server(runtime);
     let body = serde_json::json!({"actor_id": "admin-1", "name": "X", "capabilities": []});
-    let (status, resp) = http_json("POST", &server.base_url, "/v1/admin/permission-groups", Some(&body));
+    let (status, resp) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/permission-groups",
+        Some(&body),
+    );
     assert_eq!(status, 400);
     assert!(resp["error"].as_str().unwrap().contains("capability"));
 }
@@ -8592,13 +9187,26 @@ fn create_permission_group_rejects_empty_capabilities() {
 fn resident_without_capability_is_denied_admin_action() {
     let temp = tempdir().expect("temp dir");
     let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
     register_resident(&mut runtime, "bob");
     // Bob has no permission group assigned - should be denied
     let server = start_local_gateway_http_server(runtime);
 
     let body = serde_json::json!({"actor_id": "bob", "room_id": "room-1"});
-    let (status, _resp) = http_json("POST", &server.base_url, "/v1/admin/rooms/freeze", Some(&body));
+    let (status, resp) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/admin/rooms/freeze",
+        &[("Authorization", "Bearer test-admin")],
+        Some(&body),
+    );
     assert_eq!(status, 401);
+    assert!(
+        resp["Error"]["message"]
+            .as_str()
+            .expect("error")
+            .contains("lacks capability")
+    );
 }
 
 #[test]
@@ -8606,20 +9214,32 @@ fn resident_with_capability_can_perform_admin_action() {
     let temp = tempdir().expect("temp dir");
     let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
     register_resident(&mut runtime, "alice");
-    let created = runtime.create_public_room(CreatePublicRoomRequest {
-        city: "core-harbor".into(),
-        creator_id: "rsaga".into(),
-        slug: Some("test-room".into()),
-        title: "Test Room".into(),
-        description: "capability test".into(),
-    }).expect("create room");
-    let pg = runtime.admin_create_permission_group("admin-1", "RoomOps", "room operations", vec!["freeze:room".into()]);
+    let created = runtime
+        .create_public_room(CreatePublicRoomRequest {
+            city: "core-harbor".into(),
+            creator_id: "rsaga".into(),
+            slug: Some("test-room".into()),
+            title: "Test Room".into(),
+            description: "capability test".into(),
+        })
+        .expect("create room");
+    let pg = runtime.admin_create_permission_group(
+        "admin-1",
+        "RoomOps",
+        "room operations",
+        vec!["freeze:room".into()],
+    );
     runtime.admin_assign_permission_group("alice", &pg.group.id);
 
     let server = start_local_gateway_http_server(runtime);
 
     let body = serde_json::json!({"actor_id": "alice", "room_id": created.room_id.0});
-    let (status, _resp) = http_json("POST", &server.base_url, "/v1/admin/rooms/freeze", Some(&body));
+    let (status, _resp) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/rooms/freeze",
+        Some(&body),
+    );
     assert_eq!(status, 200);
 }
 
@@ -8647,7 +9267,12 @@ fn unknown_resident_has_no_capabilities() {
 fn capability_check_only_matches_exact_key() {
     let temp = tempdir().expect("temp dir");
     let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
-    let pg = runtime.admin_create_permission_group("admin-1", "Limited", "only freeze", vec!["freeze:room".into()]);
+    let pg = runtime.admin_create_permission_group(
+        "admin-1",
+        "Limited",
+        "only freeze",
+        vec!["freeze:room".into()],
+    );
     runtime.admin_assign_permission_group("bob", &pg.group.id);
 
     assert!(runtime.resident_has_capability("bob", "freeze:room"));
@@ -8733,7 +9358,12 @@ fn audit_event_has_required_fields() {
     let temp = tempdir().expect("temp dir");
     let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
 
-    runtime.log_audit_event("admin-1", "admin:freeze_room", "room:test:3", Some("inappropriate"));
+    runtime.log_audit_event(
+        "admin-1",
+        "admin:freeze_room",
+        "room:test:3",
+        Some("inappropriate"),
+    );
 
     let response = runtime.admin_list_audit_events(1);
     let event = &response.events[0];
@@ -8797,16 +9427,34 @@ fn session_logout_revokes_token() {
     let auth_header: &[(&str, &str)] = &[("Authorization", &format!("Bearer {session_token}"))];
 
     // Verify session is valid before logout
-    let (status, _body) = http_json_with_headers("GET", &server.base_url, "/v1/auth/session", auth_header, None);
+    let (status, _body) = http_json_with_headers(
+        "GET",
+        &server.base_url,
+        "/v1/auth/session",
+        auth_header,
+        None,
+    );
     assert_eq!(status, 200);
 
     // Logout
-    let (logout_status, logout_body) = http_json_with_headers("POST", &server.base_url, "/v1/auth/logout", auth_header, None);
+    let (logout_status, logout_body) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/auth/logout",
+        auth_header,
+        None,
+    );
     assert_eq!(logout_status, 200);
     assert_eq!(logout_body["ok"], true);
 
     // Verify session is now invalid
-    let (status2, _body2) = http_json_with_headers("GET", &server.base_url, "/v1/auth/session", auth_header, None);
+    let (status2, _body2) = http_json_with_headers(
+        "GET",
+        &server.base_url,
+        "/v1/auth/session",
+        auth_header,
+        None,
+    );
     assert_eq!(status2, 401);
 }
 
@@ -8850,11 +9498,23 @@ fn double_logout_returns_error() {
     let auth_header: &[(&str, &str)] = &[("Authorization", &format!("Bearer {session_token}"))];
 
     // First logout
-    let (status1, _) = http_json_with_headers("POST", &server.base_url, "/v1/auth/logout", auth_header, None);
+    let (status1, _) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/auth/logout",
+        auth_header,
+        None,
+    );
     assert_eq!(status1, 200);
 
     // Second logout with same token
-    let (status2, _) = http_json_with_headers("POST", &server.base_url, "/v1/auth/logout", auth_header, None);
+    let (status2, _) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/auth/logout",
+        auth_header,
+        None,
+    );
     assert_eq!(status2, 401);
 }
 
@@ -8951,7 +9611,10 @@ fn admin_scene_endpoint_http_route_works_without_participant_check() {
 
     assert_eq!(status, 200);
     assert_eq!(payload["ok"], true);
-    assert_eq!(payload["hotspot_layer"]["hotspots"][0]["label"], "HTTP管理台");
+    assert_eq!(
+        payload["hotspot_layer"]["hotspots"][0]["label"],
+        "HTTP管理台"
+    );
 }
 
 #[test]
@@ -8984,15 +9647,18 @@ fn revoked_session_cannot_access_protected_endpoints() {
     let auth: &[(&str, &str)] = &[("Authorization", &format!("Bearer {session_token}"))];
 
     // Verify session is valid
-    let (status, _) = http_json_with_headers("GET", &server.base_url, "/v1/auth/session", auth, None);
+    let (status, _) =
+        http_json_with_headers("GET", &server.base_url, "/v1/auth/session", auth, None);
     assert_eq!(status, 200);
 
     // Logout
-    let (lo_status, _) = http_json_with_headers("POST", &server.base_url, "/v1/auth/logout", auth, None);
+    let (lo_status, _) =
+        http_json_with_headers("POST", &server.base_url, "/v1/auth/logout", auth, None);
     assert_eq!(lo_status, 200);
 
     // Session check should now be rejected
-    let (status2, _) = http_json_with_headers("GET", &server.base_url, "/v1/auth/session", auth, None);
+    let (status2, _) =
+        http_json_with_headers("GET", &server.base_url, "/v1/auth/session", auth, None);
     assert_eq!(status2, 401);
 }
 
@@ -9040,7 +9706,10 @@ fn shell_set_nickname_endpoint_roundtrip() {
     );
     assert_eq!(set_status, 200);
     assert_eq!(set_payload.get("ok").and_then(|v| v.as_bool()), Some(true));
-    assert_eq!(set_payload.get("nickname").and_then(|v| v.as_str()), Some("我的昵称"));
+    assert_eq!(
+        set_payload.get("nickname").and_then(|v| v.as_str()),
+        Some("我的昵称")
+    );
 
     // Clear nickname (omit field to set to None via serde(default))
     let (clear_status, clear_payload) = http_json_with_headers(
@@ -9051,7 +9720,10 @@ fn shell_set_nickname_endpoint_roundtrip() {
         Some(&serde_json::json!({})),
     );
     assert_eq!(clear_status, 200);
-    assert_eq!(clear_payload.get("ok").and_then(|v| v.as_bool()), Some(true));
+    assert_eq!(
+        clear_payload.get("ok").and_then(|v| v.as_bool()),
+        Some(true)
+    );
     assert_eq!(clear_payload.get("nickname").and_then(|v| v.as_str()), None);
 
     // Without auth should fail
@@ -9073,4 +9745,403 @@ fn shell_set_nickname_endpoint_roundtrip() {
         Some(&serde_json::json!({"nickname": "bad-auth"})),
     );
     assert_eq!(invalid_auth_status, 401);
+}
+
+#[test]
+fn concurrent_send_to_same_room_preserves_both_messages() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (send_status, sent) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/cli/send",
+        Some(&serde_json::json!({
+            "from": "agent:concurrency",
+            "to": "user:qa",
+            "text": "establish room",
+            "client_tag": "concurrent"
+        })),
+    );
+    assert_eq!(send_status, 200);
+    assert_eq!(sent["ok"], true);
+    let conversation_id = sent["conversation_id"]
+        .as_str()
+        .expect("conversation id")
+        .to_string();
+
+    let url1 = server.base_url.clone();
+    let t1 = thread::spawn(move || {
+        http_json(
+            "POST",
+            &url1,
+            "/v1/cli/send",
+            Some(&serde_json::json!({
+                "from": "agent:concurrency",
+                "to": "user:qa",
+                "text": "concurrent A",
+                "client_tag": "concurrent"
+            })),
+        )
+    });
+
+    let url2 = server.base_url.clone();
+    let t2 = thread::spawn(move || {
+        http_json(
+            "POST",
+            &url2,
+            "/v1/cli/send",
+            Some(&serde_json::json!({
+                "from": "agent:concurrency",
+                "to": "user:qa",
+                "text": "concurrent B",
+                "client_tag": "concurrent"
+            })),
+        )
+    });
+
+    let (s1, b1) = t1.join().expect("thread 1");
+    let (s2, b2) = t2.join().expect("thread 2");
+    assert_eq!(s1, 200);
+    assert_eq!(s2, 200);
+    assert_eq!(b1["ok"], true);
+    assert_eq!(b2["ok"], true);
+
+    let tail_for = "user%3Aqa";
+    let tail_conv = conversation_id.replace(':', "%3A");
+    let (tail_status, tail) = http_json(
+        "GET",
+        &server.base_url,
+        &format!(
+            "/v1/cli/tail?for={}&conversation_id={}",
+            tail_for, tail_conv
+        ),
+        None,
+    );
+    assert_eq!(tail_status, 200);
+    let messages = tail["messages"].as_array().expect("tail messages");
+    assert!(
+        messages.len() >= 3,
+        "expected >= 3 messages, got {}",
+        messages.len()
+    );
+    let texts: Vec<&str> = messages.iter().filter_map(|m| m["text"].as_str()).collect();
+    assert!(texts.contains(&"concurrent A"), "missing concurrent A");
+    assert!(texts.contains(&"concurrent B"), "missing concurrent B");
+}
+
+#[test]
+fn concurrent_edit_same_message_last_write_wins() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (send_status, sent) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/cli/send",
+        Some(&serde_json::json!({
+            "from": "user:qa-a",
+            "to": "agent:qa-b",
+            "text": "original text",
+            "client_tag": "concurrent-edit"
+        })),
+    );
+    assert_eq!(send_status, 200);
+    let conversation_id = sent["conversation_id"]
+        .as_str()
+        .expect("conversation id")
+        .to_string();
+    let message_id = sent["message_id"].as_str().expect("message id").to_string();
+
+    let url1 = server.base_url.clone();
+    let room1 = conversation_id.clone();
+    let msg1 = message_id.clone();
+    let t1 = thread::spawn(move || {
+        http_json(
+            "POST",
+            &url1,
+            "/v1/shell/message/edit",
+            Some(&serde_json::json!({
+                "room_id": room1,
+                "message_id": msg1,
+                "actor": "qa-a",
+                "text": "edit version GREEN"
+            })),
+        )
+    });
+
+    let url2 = server.base_url.clone();
+    let room2 = conversation_id.clone();
+    let msg2 = message_id.clone();
+    let t2 = thread::spawn(move || {
+        http_json(
+            "POST",
+            &url2,
+            "/v1/shell/message/edit",
+            Some(&serde_json::json!({
+                "room_id": room2,
+                "message_id": msg2,
+                "actor": "qa-a",
+                "text": "edit version BLUE"
+            })),
+        )
+    });
+
+    let (s1, b1) = t1.join().expect("thread 1");
+    let (s2, b2) = t2.join().expect("thread 2");
+    assert_eq!(s1, 200, "edit 1 failed: {:?}", b1);
+    assert_eq!(s2, 200, "edit 2 failed: {:?}", b2);
+
+    let tail_for = "user%3Aqa-a";
+    let tail_conv = conversation_id.replace(':', "%3A");
+    let (tail_status, tail) = http_json(
+        "GET",
+        &server.base_url,
+        &format!(
+            "/v1/cli/tail?for={}&conversation_id={}",
+            tail_for, tail_conv
+        ),
+        None,
+    );
+    assert_eq!(tail_status, 200);
+    let messages = tail["messages"].as_array().expect("tail messages");
+    let edited_msg = messages
+        .iter()
+        .find(|m| m["message_id"] == message_id)
+        .expect("edited message");
+    let final_text = edited_msg["text"].as_str().expect("text");
+    assert!(
+        final_text == "edit version GREEN" || final_text == "edit version BLUE",
+        "final text '{}' is neither edit version",
+        final_text
+    );
+}
+
+#[test]
+fn presence_heartbeat_updates_last_seen() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    register_resident(&mut runtime, "qa-a");
+    let server = start_local_gateway_http_server(runtime);
+
+    let before_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("time went backwards")
+        .as_millis() as i64;
+
+    let (status, _) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/presence",
+        Some(&serde_json::json!({"resident_id": "qa-a"})),
+    );
+    assert_eq!(status, 200);
+
+    // Verify presence recorded in runtime (不用 /v1/residents, 该端点需要 city
+    // membership 而 register_resident 不自动入城).
+    {
+        let rt = server.runtime.lock().expect("runtime lock");
+        let last_seen = rt.presence.get("qa-a").copied();
+        assert!(last_seen.is_some(), "qa-a should have a presence timestamp");
+        assert!(
+            last_seen.unwrap() >= before_ms,
+            "presence timestamp {last_seen:?} should be >= {before_ms}"
+        );
+    }
+}
+
+#[test]
+fn shell_state_read_consistent_during_concurrent_writes() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    for _ in 0..3 {
+        let (s, _) = http_json(
+            "POST",
+            &server.base_url,
+            "/v1/cli/send",
+            Some(&serde_json::json!({
+                "from": "user:qa-a",
+                "to": "agent:qa-b",
+                "text": "seed message",
+                "client_tag": "stress"
+            })),
+        );
+        assert_eq!(s, 200);
+    }
+
+    let running = Arc::new(AtomicBool::new(true));
+    let mut handles: Vec<thread::JoinHandle<()>> = vec![];
+
+    for _ in 0..3 {
+        let url = server.base_url.clone();
+        let flag = running.clone();
+        handles.push(thread::spawn(move || {
+            while flag.load(Ordering::Acquire) {
+                let (status, body) =
+                    http_json("GET", &url, "/v1/shell/state?resident_id=qa-a", None);
+                assert_eq!(status, 200, "reader got status {}", status);
+                assert!(body.is_object(), "reader got non-object body");
+                assert!(body.get("rooms").is_some(), "reader state missing rooms");
+            }
+        }));
+    }
+
+    for _ in 0..3 {
+        let url = server.base_url.clone();
+        let flag = running.clone();
+        handles.push(thread::spawn(move || {
+            for _ in 0..10 {
+                if !flag.load(Ordering::Acquire) {
+                    break;
+                }
+                let (status, _) = http_json(
+                    "POST",
+                    &url,
+                    "/v1/cli/send",
+                    Some(&serde_json::json!({
+                        "from": "user:qa-a",
+                        "to": "agent:qa-b",
+                        "text": "concurrent stress write",
+                        "client_tag": "stress"
+                    })),
+                );
+                assert_eq!(status, 200, "writer failed");
+            }
+        }));
+    }
+
+    thread::sleep(Duration::from_millis(500));
+    running.store(false, Ordering::Release);
+
+    for handle in handles {
+        handle
+            .join()
+            .expect("thread panicked during concurrent stress");
+    }
+
+    let (final_status, final_state) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/shell/state?resident_id=qa-a",
+        None,
+    );
+    assert_eq!(final_status, 200);
+    assert!(final_state["rooms"].is_array());
+    assert!(final_state["conversation_shell"]["conversations"].is_array());
+}
+
+#[test]
+fn message_search_finds_text_in_conversation() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    // Send 3 messages with different text into the world lobby
+    let (status1, _) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/message",
+        Some(&serde_json::json!({
+            "room_id": "room:world:lobby",
+            "sender": "qa-a",
+            "text": "Hello, this contains keyword_xyz",
+            "device_id": "browser",
+            "language_tag": "en"
+        })),
+    );
+    assert_eq!(status1, 200);
+
+    let (status2, _) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/message",
+        Some(&serde_json::json!({
+            "room_id": "room:world:lobby",
+            "sender": "qa-a",
+            "text": "Completely unrelated message",
+            "device_id": "browser",
+            "language_tag": "en"
+        })),
+    );
+    assert_eq!(status2, 200);
+
+    let (status3, _) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/message",
+        Some(&serde_json::json!({
+            "room_id": "room:world:lobby",
+            "sender": "qa-b",
+            "text": "Another message with keyword_xyz inside",
+            "device_id": "browser",
+            "language_tag": "en"
+        })),
+    );
+    assert_eq!(status3, 200);
+
+    // Search for keyword_xyz — should find 2 matching messages
+    let (search_status, search_results) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/shell/messages/search?q=keyword_xyz",
+        None,
+    );
+    assert_eq!(search_status, 200);
+    let results = search_results.as_array().expect("search results array");
+    assert_eq!(results.len(), 2, "should find exactly 2 matching messages");
+    for msg in results {
+        let text = msg["text"].as_str().expect("message text");
+        assert!(
+            text.contains("keyword_xyz"),
+            "matching message should contain keyword_xyz: got {text}"
+        );
+    }
+
+    // Search for nonexistent keyword — should find 0 results
+    let (notfound_status, notfound_results) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/shell/messages/search?q=nonexistent",
+        None,
+    );
+    assert_eq!(notfound_status, 200);
+    assert_eq!(
+        notfound_results
+            .as_array()
+            .expect("search results array")
+            .len(),
+        0,
+        "should find 0 messages for nonexistent keyword"
+    );
+
+    // Search with room_id filter — should still work
+    let (room_filtered_status, room_filtered_results) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/shell/messages/search?q=keyword_xyz&room_id=room:world:lobby",
+        None,
+    );
+    assert_eq!(room_filtered_status, 200);
+    let filtered = room_filtered_results
+        .as_array()
+        .expect("room filtered results");
+    assert_eq!(filtered.len(), 2, "room filter should also find 2 matches");
+
+    // Search with missing q — should return 400
+    let (no_q_status, _no_q_body) =
+        http_json("GET", &server.base_url, "/v1/shell/messages/search", None);
+    assert_eq!(no_q_status, 400);
+
+    // Search with empty q — should return 400
+    let (empty_q_status, _empty_q_body) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/shell/messages/search?q=",
+        None,
+    );
+    assert_eq!(empty_q_status, 400);
 }

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { constants as fsConstants } from "node:fs";
+import { access, mkdtemp, rm } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright";
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const WEB_ROOT = path.join(ROOT_DIR, "apps", "lobster-web-shell");
@@ -63,6 +63,14 @@ async function waitForHttp(url, attempts = 80) {
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   throw new Error(`timed out waiting for ${url}`);
+}
+
+async function assertExecutable(filePath, label) {
+  try {
+    await access(filePath, fsConstants.X_OK);
+  } catch (error) {
+    throw new Error(`${label} binary not found or not executable: ${filePath}`, { cause: error });
+  }
 }
 
 async function terminate(child) {
@@ -250,6 +258,9 @@ async function main() {
     await run("cargo", ["build", "--manifest-path", path.join(ROOT_DIR, "Cargo.toml"), "-p", "lobster-waku-gateway"]);
   }
 
+  await assertExecutable(GATEWAY_BIN, "gateway");
+  const { chromium } = await import("playwright");
+
   const stateRoot = await mkdtemp(path.join(os.tmpdir(), "lobster-web-dual-browser."));
   const gatewayPort = await freePort();
   const webPort = await freePort();
@@ -351,6 +362,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(error?.message || error);
   process.exit(1);
 });

@@ -48,6 +48,14 @@ elif mode == "tail":
     assert payload["identity"] == expected
     assert payload["conversation_id"] == "dm:openclaw:zhangsan"
     assert payload["messages"]
+elif mode == "edit":
+    assert payload["edit_status"] == "edited"
+    assert payload["message_id"] == expected
+    assert isinstance(payload["edited_at_ms"], int)
+elif mode == "recall":
+    assert payload["recall_status"] == "recalled"
+    assert payload["message_id"] == expected
+    assert isinstance(payload["recalled_at_ms"], int)
 else:
     raise AssertionError(f"unsupported mode: {mode}")
 PY
@@ -131,13 +139,13 @@ PY
   return 1
 }
 
-need_cmd cargo
 need_cmd curl
 need_cmd grep
 need_cmd mktemp
 need_cmd python3
 
 if [[ "$SKIP_BUILD" != "1" ]]; then
+  need_cmd cargo
   echo "== building lobster-waku-gateway + lobster-cli =="
   cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p lobster-waku-gateway -p lobster-cli
 fi
@@ -246,6 +254,65 @@ json_check "$rooms_json" "rooms" "user:zhangsan"
 tail_json="$("$CLI_BIN" tail --for user:zhangsan --gateway "$GATEWAY_URL" --json)"
 printf '%s\n' "$tail_json"
 json_check "$tail_json" "tail" "user:zhangsan"
+
+echo "== checking edit/recall =="
+edit_seed_json="$("$CLI_BIN" send \
+  --from agent:openclaw \
+  --to user:zhangsan \
+  --text "EDIT_SMOKE_原文" \
+  --gateway "$GATEWAY_URL" \
+  --json)"
+edit_message_id="$(JSON_PAYLOAD="$edit_seed_json" python3 - <<'PY'
+import json, os
+print(json.loads(os.environ["JSON_PAYLOAD"])["message_id"])
+PY
+)"
+edit_json="$("$CLI_BIN" edit \
+  --actor agent:openclaw \
+  --conversation-id dm:openclaw:zhangsan \
+  --message-id "$edit_message_id" \
+  --text "EDIT_SMOKE_已编辑" \
+  --gateway "$GATEWAY_URL" \
+  --json)"
+printf '%s\n' "$edit_json"
+json_check "$edit_json" "edit" "$edit_message_id"
+
+recall_seed_json="$("$CLI_BIN" send \
+  --from agent:openclaw \
+  --to user:zhangsan \
+  --text "RECALL_SMOKE_原文" \
+  --gateway "$GATEWAY_URL" \
+  --json)"
+recall_message_id="$(JSON_PAYLOAD="$recall_seed_json" python3 - <<'PY'
+import json, os
+print(json.loads(os.environ["JSON_PAYLOAD"])["message_id"])
+PY
+)"
+recall_json="$("$CLI_BIN" recall \
+  --actor agent:openclaw \
+  --conversation-id dm:openclaw:zhangsan \
+  --message-id "$recall_message_id" \
+  --gateway "$GATEWAY_URL" \
+  --json)"
+printf '%s\n' "$recall_json"
+json_check "$recall_json" "recall" "$recall_message_id"
+
+edit_recall_tail_json="$("$CLI_BIN" tail --for user:zhangsan --gateway "$GATEWAY_URL" --json)"
+JSON_PAYLOAD="$edit_recall_tail_json" EDIT_MESSAGE_ID="$edit_message_id" RECALL_MESSAGE_ID="$recall_message_id" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["JSON_PAYLOAD"])
+by_id = {item["message_id"]: item for item in payload["messages"]}
+edited = by_id[os.environ["EDIT_MESSAGE_ID"]]
+recalled = by_id[os.environ["RECALL_MESSAGE_ID"]]
+
+assert edited["text"] == "EDIT_SMOKE_已编辑"
+assert edited["is_edited"] is True
+assert edited["is_recalled"] is False
+assert recalled["text"] == "消息已撤回"
+assert recalled["is_recalled"] is True
+PY
 
 echo "== checking tail --follow live mode =="
 FOLLOW_LOG="$STATE_ROOT/tail-follow.jsonl"

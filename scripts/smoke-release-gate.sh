@@ -31,14 +31,17 @@ run_shell_step() {
 }
 
 need_cmd bash
-need_cmd cargo
 need_cmd python3
+
+run_step "scripts quick unit coverage" python3 "$ROOT_DIR/scripts/test_scripts_quick_unit_coverage.py"
+run_step "preflight unit" python3 "$ROOT_DIR/scripts/test_preflight_unit.py"
 
 if [[ "$RUN_PREFLIGHT" == "1" ]]; then
   run_shell_step "preflight" "$ROOT_DIR/scripts/preflight.sh"
 fi
 
 if [[ "$SKIP_BUILD" != "1" ]]; then
+  need_cmd cargo
   run_step \
     "building shared debug binaries" \
     cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p lobster-waku-gateway -p lobster-cli -p lobster-tui
@@ -53,17 +56,38 @@ export BIN_PATH="$GATEWAY_BIN"
 export CLI_BIN="${CLI_BIN:-$(dirname "$GATEWAY_BIN")/lobster-cli}"
 export TUI_BIN="${TUI_BIN:-$(dirname "$GATEWAY_BIN")/lobster-tui}"
 
+run_step "makefile smoke unit" python3 "$ROOT_DIR/scripts/test_makefile_unit.py"
+run_step "cli channel smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_cli_channel_unit.py"
 run_shell_step "cli channel smoke" "$ROOT_DIR/scripts/smoke-cli-channel.sh"
+run_step "auth registration smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_auth_registration_unit.py"
 run_shell_step "auth registration smoke" "$ROOT_DIR/scripts/smoke-auth-registration.sh"
+run_step "resident mainline smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_resident_mainline_unit.py"
 run_shell_step "resident mainline smoke" "$ROOT_DIR/scripts/smoke-resident-mainline.sh"
+run_step "shell dual HTTP smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_shell_dual_http_unit.py"
 run_shell_step "shell dual HTTP smoke" "$ROOT_DIR/scripts/smoke-shell-dual-http.sh"
+run_step "shell direct HTTP smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_shell_direct_http_unit.py"
 run_shell_step "shell direct HTTP smoke" "$ROOT_DIR/scripts/smoke-shell-direct-http.sh"
+run_step "web shell smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_web_shell_unit.py"
 run_shell_step "web shell smoke" "$ROOT_DIR/scripts/smoke-web-shell.sh"
+run_step "web dual browser smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_web_dual_browser_unit.py"
+run_step "terminal smoke unit" python3 "$ROOT_DIR/scripts/test_start_terminal_unit.py"
+run_step "start terminal shell unit" python3 "$ROOT_DIR/scripts/test_start_terminal_shell_unit.py"
 run_step "terminal smoke" python3 "$ROOT_DIR/scripts/test_start_terminal.py"
 
 if [[ "$INCLUDE_PROVIDER_FEDERATION" == "1" ]]; then
+  run_step "provider federation smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_provider_federation_unit.py"
   run_shell_step "provider federation smoke" "$ROOT_DIR/scripts/smoke-provider-federation.sh"
 fi
+
+run_step "install server unit" python3 "$ROOT_DIR/scripts/test_install_server_unit.py"
+run_step "install layout smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_install_layout_unit.py"
+run_step "public ingress smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_public_ingress_unit.py"
+run_step "package release unit" python3 "$ROOT_DIR/scripts/test_package_release_unit.py"
+run_step "restart gateway unit" python3 "$ROOT_DIR/scripts/test_restart_gateway_unit.py"
+run_step "web preview unit" python3 "$ROOT_DIR/scripts/test_start_web_preview_unit.py"
+run_step "preview server unit" python3 "$ROOT_DIR/scripts/test_preview_server_unit.py"
+run_step "device id unit" python3 "$ROOT_DIR/scripts/test_lobster_device_id_unit.py"
+run_step "web assets audit unit" python3 "$ROOT_DIR/scripts/test_audit_web_assets_unit.py"
 
 echo "== release gate passed =="
 echo "root: $ROOT_DIR"

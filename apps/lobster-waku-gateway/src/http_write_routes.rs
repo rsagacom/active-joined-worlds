@@ -8,12 +8,11 @@ use transport_waku::{WakuGatewayRequest, WakuGatewayResponse};
 
 use crate::{
     AddWorldMirrorSourceRequest, AdminBanResidentRequest, AdminConfigPayload,
-    AdminFreezeRoomRequest, AdminModerateMessageRequest, AdminSetNicknameRequest,
-    AdminUnbanResidentRequest, AdminUnfreezeRoomRequest,
-    AdminCreateResidentRequest, AdminCreateInviteRequest, AdminRevokeInviteRequest,
-    AdminManageRoomMemberRequest, AdminHandleLogRequest, AdminUpdateSceneRequest,
-    AssignPermissionGroupRequest, CliSendRequest, ConnectProviderRequest, ConversationId,
-    CreatePermissionGroupRequest,
+    AdminCreateInviteRequest, AdminCreateResidentRequest, AdminFreezeRoomRequest,
+    AdminHandleLogRequest, AdminManageRoomMemberRequest, AdminModerateMessageRequest,
+    AdminRevokeInviteRequest, AdminSetNicknameRequest, AdminUnbanResidentRequest,
+    AdminUnfreezeRoomRequest, AdminUpdateSceneRequest, AssignPermissionGroupRequest,
+    CliSendRequest, ConnectProviderRequest, ConversationId, CreatePermissionGroupRequest,
     EditShellMessageRequest, GatewayRuntime, GatewayStateNotifier, IdentityId,
     OpenDirectSessionRequest, RecallShellMessageRequest, SceneHotspotLayer, SceneImageLayer,
     ShellMarkReadRequest, ShellMessageRequest, ShellPresenceRequest, ShellSetNicknameRequest,
@@ -32,21 +31,42 @@ fn unauthorized(message: String) -> HttpResponse {
     .with_header(json_header())
 }
 
-fn require_capability(runtime: &Arc<Mutex<GatewayRuntime>>, actor_id: &str, capability: &str) -> Option<HttpResponse> {
+fn require_capability_or_bypass(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    actor_id: &str,
+    capability: &str,
+) -> Option<HttpResponse> {
     let rt = runtime.lock().expect("gateway runtime mutex");
+    if rt.dev_auth_bypass_enabled() {
+        return None;
+    }
     if !rt.resident_has_capability(actor_id, capability) {
         return Some(unauthorized(format!(
-            "forbidden: resident {} lacks capability {}", actor_id, capability
+            "forbidden: resident {} lacks capability {}",
+            actor_id, capability
         )));
     }
     None
 }
 
-fn require_capability_or_bypass(runtime: &Arc<Mutex<GatewayRuntime>>, actor_id: &str, capability: &str) -> Option<HttpResponse> {
-    if GatewayRuntime::dev_auth_bypass_enabled() {
+/// Require a valid Bearer token for admin operations. In dev mode, bypasses if LOBSTER_DEV_AUTH_BYPASS=1.
+pub(crate) fn require_admin_auth(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    request: &tiny_http::Request,
+) -> Option<HttpResponse> {
+    if runtime
+        .lock()
+        .expect("gateway runtime mutex")
+        .dev_auth_bypass_enabled()
+    {
         return None;
     }
-    require_capability(runtime, actor_id, capability)
+    match crate::http_support::authorization_bearer_token(request) {
+        Some(_token) => None,
+        None => Some(unauthorized(
+            "admin operations require a valid Bearer token".into(),
+        )),
+    }
 }
 
 pub(crate) fn handle_post_world_mirror_sources(
@@ -269,12 +289,10 @@ pub(crate) fn handle_post_shell_message(
                     }
                 }
                 if let Some(retry_ms) = runtime.check_rate_limit(&payload.sender, 30) {
-                    return Response::from_string(
-                        format!(
-                            "{{\"error\":\"rate_limited\",\"retry_after_ms\":{}}}",
-                            retry_ms
-                        ),
-                    )
+                    return Response::from_string(format!(
+                        "{{\"error\":\"rate_limited\",\"retry_after_ms\":{}}}",
+                        retry_ms
+                    ))
                     .with_status_code(StatusCode(429))
                     .with_header(json_header());
                 }
@@ -588,9 +606,9 @@ pub(crate) fn handle_post_shell_mark_read(
                     .lock()
                     .expect("gateway runtime mutex poisoned")
                     .validate_bearer_session_actor(token, &resident_id)
-                {
-                    return unauthorized(message);
-                }
+            {
+                return unauthorized(message);
+            }
             runtime
                 .lock()
                 .expect("gateway runtime mutex poisoned")
@@ -610,6 +628,9 @@ pub(crate) fn handle_post_admin_ban_resident(
     _notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string("{\"error\":\"read body failed\"}")
@@ -618,24 +639,43 @@ pub(crate) fn handle_post_admin_ban_resident(
     }
     match serde_json::from_str::<AdminBanResidentRequest>(&body) {
         Ok(req) => {
-            let actor = req.actor_id.clone().unwrap_or_default();
+            let actor = req
+                .actor_id
+                .clone()
+                .filter(|id| !id.trim().is_empty())
+                .ok_or_else(|| "actor_id required".to_string());
+            if actor.is_err() {
+                return Response::from_string(
+                    "{\"error\":\"actor_id is required for admin operations\"}",
+                )
+                .with_status_code(tiny_http::StatusCode(401))
+                .with_header(crate::http_support::json_header());
+            }
+            let actor = actor.unwrap();
             if let Some(ref actor_id) = req.actor_id
-                && let Some(resp) = require_capability_or_bypass(runtime, actor_id, crate::CAP_BAN_RESIDENT) {
-                    return resp;
-                }
+                && let Some(resp) =
+                    require_capability_or_bypass(runtime, actor_id, crate::CAP_BAN_RESIDENT)
+            {
+                return resp;
+            }
             let mut rt = runtime.lock().expect("gateway runtime mutex poisoned");
             match rt.admin_ban_resident(&req.resident_id, &req.reason) {
                 Ok(()) => {
-                    rt.log_audit_event(&actor, "admin:ban_resident", &req.resident_id, Some(&req.reason));
+                    rt.log_audit_event(
+                        &actor,
+                        "admin:ban_resident",
+                        &req.resident_id,
+                        Some(&req.reason),
+                    );
                     Response::from_string("{\"ok\":true}")
                         .with_status_code(StatusCode(200))
                         .with_header(json_header())
-                },
+                }
                 Err(e) => Response::from_string(format!("{{\"error\":\"{e}\"}}"))
                     .with_status_code(StatusCode(400))
                     .with_header(json_header()),
             }
-        },
+        }
         Err(e) => Response::from_string(format!("{{\"error\":\"decode failed: {e}\"}}"))
             .with_status_code(StatusCode(400))
             .with_header(json_header()),
@@ -647,6 +687,9 @@ pub(crate) fn handle_post_admin_unban_resident(
     _notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string("{\"error\":\"read body failed\"}")
@@ -654,21 +697,38 @@ pub(crate) fn handle_post_admin_unban_resident(
             .with_header(json_header());
     }
     match serde_json::from_str::<AdminUnbanResidentRequest>(&body) {
-        Ok(req) => match runtime
-            .lock()
-            .expect("gateway runtime mutex poisoned")
-            .admin_unban_resident(&req.resident_id)
-        {
-            Ok(count) => Response::from_string(
-                serde_json::to_string(&serde_json::json!({"ok": true, "lifted_count": count}))
-                    .unwrap_or_else(|_| "{}".into()),
-            )
-            .with_status_code(StatusCode(200))
-            .with_header(json_header()),
-            Err(e) => Response::from_string(format!("{{\"error\":\"{e}\"}}"))
-                .with_status_code(StatusCode(400))
-                .with_header(json_header()),
-        },
+        Ok(req) => {
+            let actor = req
+                .actor_id
+                .clone()
+                .filter(|id| !id.trim().is_empty())
+                .ok_or_else(|| "actor_id required".to_string());
+            if actor.is_err() {
+                return Response::from_string(
+                    "{\"error\":\"actor_id is required for admin operations\"}",
+                )
+                .with_status_code(tiny_http::StatusCode(401))
+                .with_header(crate::http_support::json_header());
+            }
+            let actor = actor.unwrap();
+            let mut rt = runtime.lock().expect("gateway runtime mutex poisoned");
+            match rt.admin_unban_resident(&req.resident_id) {
+                Ok(count) => {
+                    rt.log_audit_event(&actor, "admin:unban_resident", &req.resident_id, None);
+                    Response::from_string(
+                        serde_json::to_string(
+                            &serde_json::json!({"ok": true, "lifted_count": count}),
+                        )
+                        .unwrap_or_else(|_| "{}".into()),
+                    )
+                    .with_status_code(StatusCode(200))
+                    .with_header(json_header())
+                }
+                Err(e) => Response::from_string(format!("{{\"error\":\"{e}\"}}"))
+                    .with_status_code(StatusCode(400))
+                    .with_header(json_header()),
+            }
+        }
         Err(e) => Response::from_string(format!("{{\"error\":\"decode failed: {e}\"}}"))
             .with_status_code(StatusCode(400))
             .with_header(json_header()),
@@ -680,6 +740,9 @@ pub(crate) fn handle_post_admin_set_nickname(
     _notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string("{\"error\":\"read body failed\"}")
@@ -696,11 +759,9 @@ pub(crate) fn handle_post_admin_set_nickname(
                 )
                 .with_status_code(StatusCode(200))
                 .with_header(json_header()),
-                Ok(false) => Response::from_string(
-                    "{\"error\":\"resident not found\"}",
-                )
-                .with_status_code(StatusCode(404))
-                .with_header(json_header()),
+                Ok(false) => Response::from_string("{\"error\":\"resident not found\"}")
+                    .with_status_code(StatusCode(404))
+                    .with_header(json_header()),
                 Err(e) => Response::from_string(format!("{{\"error\":\"{e}\"}}"))
                     .with_status_code(StatusCode(400))
                     .with_header(json_header()),
@@ -765,6 +826,9 @@ pub(crate) fn handle_post_admin_freeze_room(
     _notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string("{\"error\":\"read body failed\"}")
@@ -773,11 +837,25 @@ pub(crate) fn handle_post_admin_freeze_room(
     }
     match serde_json::from_str::<AdminFreezeRoomRequest>(&body) {
         Ok(req) => {
-            let actor = req.actor_id.clone().unwrap_or_default();
+            let actor = req
+                .actor_id
+                .clone()
+                .filter(|id| !id.trim().is_empty())
+                .ok_or_else(|| "actor_id required".to_string());
+            if actor.is_err() {
+                return Response::from_string(
+                    "{\"error\":\"actor_id is required for admin operations\"}",
+                )
+                .with_status_code(tiny_http::StatusCode(401))
+                .with_header(crate::http_support::json_header());
+            }
+            let actor = actor.unwrap();
             if let Some(ref actor_id) = req.actor_id
-                && let Some(resp) = require_capability_or_bypass(runtime, actor_id, crate::CAP_FREEZE_ROOM) {
-                    return resp;
-                }
+                && let Some(resp) =
+                    require_capability_or_bypass(runtime, actor_id, crate::CAP_FREEZE_ROOM)
+            {
+                return resp;
+            }
             let mut rt = runtime.lock().expect("gateway runtime mutex poisoned");
             match rt.admin_freeze_room(&req.room_id) {
                 Ok(_) => {
@@ -785,12 +863,12 @@ pub(crate) fn handle_post_admin_freeze_room(
                     Response::from_string("{\"ok\":true}")
                         .with_status_code(StatusCode(200))
                         .with_header(json_header())
-                },
+                }
                 Err(e) => Response::from_string(format!("{{\"error\":\"{e}\"}}"))
                     .with_status_code(StatusCode(400))
                     .with_header(json_header()),
             }
-        },
+        }
         Err(e) => Response::from_string(format!("{{\"error\":\"decode failed: {e}\"}}"))
             .with_status_code(StatusCode(400))
             .with_header(json_header()),
@@ -802,6 +880,9 @@ pub(crate) fn handle_post_admin_unfreeze_room(
     _notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string("{\"error\":\"read body failed\"}")
@@ -810,11 +891,25 @@ pub(crate) fn handle_post_admin_unfreeze_room(
     }
     match serde_json::from_str::<AdminUnfreezeRoomRequest>(&body) {
         Ok(req) => {
-            let actor = req.actor_id.clone().unwrap_or_default();
+            let actor = req
+                .actor_id
+                .clone()
+                .filter(|id| !id.trim().is_empty())
+                .ok_or_else(|| "actor_id required".to_string());
+            if actor.is_err() {
+                return Response::from_string(
+                    "{\"error\":\"actor_id is required for admin operations\"}",
+                )
+                .with_status_code(tiny_http::StatusCode(401))
+                .with_header(crate::http_support::json_header());
+            }
+            let actor = actor.unwrap();
             if let Some(ref actor_id) = req.actor_id
-                && let Some(resp) = require_capability_or_bypass(runtime, actor_id, crate::CAP_FREEZE_ROOM) {
-                    return resp;
-                }
+                && let Some(resp) =
+                    require_capability_or_bypass(runtime, actor_id, crate::CAP_FREEZE_ROOM)
+            {
+                return resp;
+            }
             let mut rt = runtime.lock().expect("gateway runtime mutex poisoned");
             match rt.admin_unfreeze_room(&req.room_id) {
                 Ok(_) => {
@@ -822,12 +917,12 @@ pub(crate) fn handle_post_admin_unfreeze_room(
                     Response::from_string("{\"ok\":true}")
                         .with_status_code(StatusCode(200))
                         .with_header(json_header())
-                },
+                }
                 Err(e) => Response::from_string(format!("{{\"error\":\"{e}\"}}"))
                     .with_status_code(StatusCode(400))
                     .with_header(json_header()),
             }
-        },
+        }
         Err(e) => Response::from_string(format!("{{\"error\":\"decode failed: {e}\"}}"))
             .with_status_code(StatusCode(400))
             .with_header(json_header()),
@@ -839,6 +934,9 @@ pub(crate) fn handle_post_admin_config(
     _notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string("{\"error\":\"read body failed\"}")
@@ -847,11 +945,25 @@ pub(crate) fn handle_post_admin_config(
     }
     match serde_json::from_str::<AdminConfigPayload>(&body) {
         Ok(payload) => {
-            let actor = payload.actor_id.clone().unwrap_or_default();
+            let actor = payload
+                .actor_id
+                .clone()
+                .filter(|id| !id.trim().is_empty())
+                .ok_or_else(|| "actor_id required".to_string());
+            if actor.is_err() {
+                return Response::from_string(
+                    "{\"error\":\"actor_id is required for admin operations\"}",
+                )
+                .with_status_code(tiny_http::StatusCode(401))
+                .with_header(crate::http_support::json_header());
+            }
+            let actor = actor.unwrap();
             if let Some(ref actor_id) = payload.actor_id
-                && let Some(resp) = require_capability_or_bypass(runtime, actor_id, crate::CAP_ADMIN_CONFIG) {
-                    return resp;
-                }
+                && let Some(resp) =
+                    require_capability_or_bypass(runtime, actor_id, crate::CAP_ADMIN_CONFIG)
+            {
+                return resp;
+            }
             runtime
                 .lock()
                 .expect("gateway runtime mutex poisoned")
@@ -875,6 +987,9 @@ pub(crate) fn handle_post_admin_moderate_message(
     _notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string("{\"error\":\"read body failed\"}")
@@ -883,11 +998,25 @@ pub(crate) fn handle_post_admin_moderate_message(
     }
     match serde_json::from_str::<AdminModerateMessageRequest>(&body) {
         Ok(req) => {
-            let actor = req.actor_id.clone().unwrap_or_default();
+            let actor = req
+                .actor_id
+                .clone()
+                .filter(|id| !id.trim().is_empty())
+                .ok_or_else(|| "actor_id required".to_string());
+            if actor.is_err() {
+                return Response::from_string(
+                    "{\"error\":\"actor_id is required for admin operations\"}",
+                )
+                .with_status_code(tiny_http::StatusCode(401))
+                .with_header(crate::http_support::json_header());
+            }
+            let actor = actor.unwrap();
             if let Some(ref actor_id) = req.actor_id
-                && let Some(resp) = require_capability_or_bypass(runtime, actor_id, crate::CAP_MODERATE_MESSAGE) {
-                    return resp;
-                }
+                && let Some(resp) =
+                    require_capability_or_bypass(runtime, actor_id, crate::CAP_MODERATE_MESSAGE)
+            {
+                return resp;
+            }
             let mut rt = runtime.lock().expect("gateway runtime mutex poisoned");
             let msg_id = req.message_id.clone();
             let conv_id = req.conversation_id.clone();
@@ -895,49 +1024,59 @@ pub(crate) fn handle_post_admin_moderate_message(
             match rt.admin_moderate_message(&req.message_id, &req.conversation_id, &req.action) {
                 Ok(()) => {
                     let target = format!("msg:{}@{}", msg_id, conv_id);
-                    rt.log_audit_event(&actor, &format!("admin:moderate_message:{}", action), &target, req.reason.as_deref());
+                    rt.log_audit_event(
+                        &actor,
+                        &format!("admin:moderate_message:{}", action),
+                        &target,
+                        req.reason.as_deref(),
+                    );
                     Response::from_string(
                         serde_json::to_string(&serde_json::json!({"ok": true, "message_id": msg_id, "action": action}))
                             .unwrap_or_else(|_| "{}".into()),
                     )
                     .with_status_code(StatusCode(200))
                     .with_header(json_header())
-                },
+                }
                 Err(e) => Response::from_string(format!("{{\"error\":\"{e}\"}}"))
                     .with_status_code(StatusCode(400))
                     .with_header(json_header()),
             }
-        },
+        }
         Err(e) => Response::from_string(format!("{{\"error\":\"decode failed: {e}\"}}"))
             .with_status_code(StatusCode(400))
             .with_header(json_header()),
     }
 }
 
-
-
-
-
 pub(crate) fn handle_post_admin_create_invite(
     runtime: &Arc<Mutex<GatewayRuntime>>,
     _notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string(r#"{"error":"read body failed"}"#)
-            .with_status_code(StatusCode(400)).with_header(json_header());
+            .with_status_code(StatusCode(400))
+            .with_header(json_header());
     }
     let req: AdminCreateInviteRequest = match serde_json::from_str(&body) {
         Ok(r) => r,
-        Err(e) => return Response::from_string(serde_json::json!({"error": e.to_string()}).to_string())
-            .with_status_code(StatusCode(400)).with_header(json_header()),
+        Err(e) => {
+            return Response::from_string(serde_json::json!({"error": e.to_string()}).to_string())
+                .with_status_code(StatusCode(400))
+                .with_header(json_header());
+        }
     };
     let max_uses = req.max_uses.unwrap_or(10);
     let mut rt = runtime.lock().expect("gateway runtime mutex");
     let resp = rt.admin_create_invite(&req.actor_id, max_uses);
     let json = serde_json::to_string(&resp).unwrap_or_default();
-    Response::from_string(json).with_status_code(StatusCode(200)).with_header(json_header())
+    Response::from_string(json)
+        .with_status_code(StatusCode(200))
+        .with_header(json_header())
 }
 
 pub(crate) fn handle_post_admin_revoke_invite(
@@ -945,38 +1084,57 @@ pub(crate) fn handle_post_admin_revoke_invite(
     _notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string(r#"{"error":"read body failed"}"#)
-            .with_status_code(StatusCode(400)).with_header(json_header());
+            .with_status_code(StatusCode(400))
+            .with_header(json_header());
     }
     let req: AdminRevokeInviteRequest = match serde_json::from_str(&body) {
         Ok(r) => r,
-        Err(e) => return Response::from_string(serde_json::json!({"error": e.to_string()}).to_string())
-            .with_status_code(StatusCode(400)).with_header(json_header()),
+        Err(e) => {
+            return Response::from_string(serde_json::json!({"error": e.to_string()}).to_string())
+                .with_status_code(StatusCode(400))
+                .with_header(json_header());
+        }
     };
     let mut rt = runtime.lock().expect("gateway runtime mutex");
     let ok = rt.admin_revoke_invite(&req.code);
-    let body = if ok { r#"{"ok":true}"# } else { r#"{"ok":false,"error":"not found"}"# };
+    let body = if ok {
+        r#"{"ok":true}"#
+    } else {
+        r#"{"ok":false,"error":"not found"}"#
+    };
     let code = if ok { StatusCode(200) } else { StatusCode(404) };
-    Response::from_string(body).with_status_code(code).with_header(json_header())
+    Response::from_string(body)
+        .with_status_code(code)
+        .with_header(json_header())
 }
-
 
 pub(crate) fn handle_post_admin_manage_room_member(
     runtime: &Arc<Mutex<GatewayRuntime>>,
     _notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string(r#"{"error":"read body failed"}"#)
-            .with_status_code(StatusCode(400)).with_header(json_header());
+            .with_status_code(StatusCode(400))
+            .with_header(json_header());
     }
     let req: AdminManageRoomMemberRequest = match serde_json::from_str(&body) {
         Ok(r) => r,
-        Err(e) => return Response::from_string(serde_json::json!({"error": e.to_string()}).to_string())
-            .with_status_code(StatusCode(400)).with_header(json_header()),
+        Err(e) => {
+            return Response::from_string(serde_json::json!({"error": e.to_string()}).to_string())
+                .with_status_code(StatusCode(400))
+                .with_header(json_header());
+        }
     };
     let mut rt = runtime.lock().expect("gateway runtime mutex");
     let ok = rt.admin_manage_room_member(&req.room_id, &req.resident_id, &req.action);
@@ -986,7 +1144,9 @@ pub(crate) fn handle_post_admin_manage_room_member(
         r#"{"ok":false,"error":"room not found"}"#
     };
     let code = if ok { StatusCode(200) } else { StatusCode(404) };
-    Response::from_string(resp).with_status_code(code).with_header(json_header())
+    Response::from_string(resp)
+        .with_status_code(code)
+        .with_header(json_header())
 }
 
 pub(crate) fn handle_post_admin_handle_log(
@@ -997,19 +1157,23 @@ pub(crate) fn handle_post_admin_handle_log(
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string(r#"{"error":"read body failed"}"#)
-            .with_status_code(StatusCode(400)).with_header(json_header());
+            .with_status_code(StatusCode(400))
+            .with_header(json_header());
     }
     let req: AdminHandleLogRequest = match serde_json::from_str(&body) {
         Ok(r) => r,
-        Err(e) => return Response::from_string(serde_json::json!({"error": e.to_string()}).to_string())
-            .with_status_code(StatusCode(400)).with_header(json_header()),
+        Err(e) => {
+            return Response::from_string(serde_json::json!({"error": e.to_string()}).to_string())
+                .with_status_code(StatusCode(400))
+                .with_header(json_header());
+        }
     };
     let mut rt = runtime.lock().expect("gateway runtime mutex");
     rt.admin_handle_log(&req.log_id);
-    Response::from_string(r#"{"ok":true}"#).with_status_code(StatusCode(200)).with_header(json_header())
+    Response::from_string(r#"{"ok":true}"#)
+        .with_status_code(StatusCode(200))
+        .with_header(json_header())
 }
-
-
 
 pub(crate) fn handle_post_admin_clear_processed_logs(
     runtime: &Arc<Mutex<GatewayRuntime>>,
@@ -1019,7 +1183,9 @@ pub(crate) fn handle_post_admin_clear_processed_logs(
     let mut rt = runtime.lock().expect("gateway runtime mutex");
     let count = rt.admin_clear_processed_logs();
     let body = serde_json::json!({"ok": true, "cleared": count}).to_string();
-    Response::from_string(body).with_status_code(StatusCode(200)).with_header(json_header())
+    Response::from_string(body)
+        .with_status_code(StatusCode(200))
+        .with_header(json_header())
 }
 
 pub(crate) fn handle_post_admin_create_resident(
@@ -1030,12 +1196,16 @@ pub(crate) fn handle_post_admin_create_resident(
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string(r#"{"error":"read body failed"}"#)
-            .with_status_code(StatusCode(400)).with_header(json_header());
+            .with_status_code(StatusCode(400))
+            .with_header(json_header());
     }
     let req: AdminCreateResidentRequest = match serde_json::from_str(&body) {
         Ok(r) => r,
-        Err(e) => return Response::from_string(serde_json::json!({"error": e.to_string()}).to_string())
-            .with_status_code(StatusCode(400)).with_header(json_header()),
+        Err(e) => {
+            return Response::from_string(serde_json::json!({"error": e.to_string()}).to_string())
+                .with_status_code(StatusCode(400))
+                .with_header(json_header());
+        }
     };
     let mut rt = runtime.lock().expect("gateway runtime mutex");
     let ok = rt.admin_create_resident(&req.resident_id, &req.email);
@@ -1045,7 +1215,9 @@ pub(crate) fn handle_post_admin_create_resident(
         r#"{"ok":false,"error":"resident already exists"}"#
     };
     let code = if ok { StatusCode(200) } else { StatusCode(409) };
-    Response::from_string(resp).with_status_code(code).with_header(json_header())
+    Response::from_string(resp)
+        .with_status_code(code)
+        .with_header(json_header())
 }
 
 pub(crate) fn handle_post_scene_validate(
@@ -1090,32 +1262,48 @@ pub(crate) fn handle_post_create_permission_group(
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string(r#"{"error":"read body failed"}"#)
-            .with_status_code(StatusCode(400)).with_header(json_header());
+            .with_status_code(StatusCode(400))
+            .with_header(json_header());
     }
     let req: CreatePermissionGroupRequest = match serde_json::from_str(&body) {
         Ok(r) => r,
-        Err(e) => return Response::from_string(
-            serde_json::json!({"error": e.to_string()}).to_string()
-        ).with_status_code(StatusCode(400)).with_header(json_header()),
+        Err(e) => {
+            return Response::from_string(serde_json::json!({"error": e.to_string()}).to_string())
+                .with_status_code(StatusCode(400))
+                .with_header(json_header());
+        }
     };
     if req.name.is_empty() {
         return Response::from_string(r#"{"error":"name is required"}"#)
-            .with_status_code(StatusCode(400)).with_header(json_header());
+            .with_status_code(StatusCode(400))
+            .with_header(json_header());
     }
     if req.capabilities.is_empty() {
         return Response::from_string(r#"{"error":"at least one capability is required"}"#)
-            .with_status_code(StatusCode(400)).with_header(json_header());
+            .with_status_code(StatusCode(400))
+            .with_header(json_header());
     }
     let resp = {
         let mut rt = runtime.lock().expect("gateway runtime mutex");
-        let result = rt.admin_create_permission_group(&req.actor_id, &req.name, &req.description, req.capabilities);
+        let result = rt.admin_create_permission_group(
+            &req.actor_id,
+            &req.name,
+            &req.description,
+            req.capabilities,
+        );
         if result.ok {
-            rt.log_audit_event(&req.actor_id, "admin:create_permission_group", &result.group.id, None);
+            rt.log_audit_event(
+                &req.actor_id,
+                "admin:create_permission_group",
+                &result.group.id,
+                None,
+            );
         }
         result
     };
     Response::from_string(serde_json::to_string(&resp).unwrap_or_else(|_| r#"{"ok":false}"#.into()))
-        .with_status_code(StatusCode(200)).with_header(json_header())
+        .with_status_code(StatusCode(200))
+        .with_header(json_header())
 }
 
 pub(crate) fn handle_post_assign_permission_group(
@@ -1126,29 +1314,44 @@ pub(crate) fn handle_post_assign_permission_group(
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string(r#"{"error":"read body failed"}"#)
-            .with_status_code(StatusCode(400)).with_header(json_header());
+            .with_status_code(StatusCode(400))
+            .with_header(json_header());
     }
     let req: AssignPermissionGroupRequest = match serde_json::from_str(&body) {
         Ok(r) => r,
-        Err(e) => return Response::from_string(
-            serde_json::json!({"error": e.to_string()}).to_string()
-        ).with_status_code(StatusCode(400)).with_header(json_header()),
+        Err(e) => {
+            return Response::from_string(serde_json::json!({"error": e.to_string()}).to_string())
+                .with_status_code(StatusCode(400))
+                .with_header(json_header());
+        }
     };
     if req.resident_id.is_empty() || req.permission_group_id.is_empty() {
-        return Response::from_string(r#"{"error":"resident_id and permission_group_id are required"}"#)
-            .with_status_code(StatusCode(400)).with_header(json_header());
+        return Response::from_string(
+            r#"{"error":"resident_id and permission_group_id are required"}"#,
+        )
+        .with_status_code(StatusCode(400))
+        .with_header(json_header());
     }
     let resp = {
         let mut rt = runtime.lock().expect("gateway runtime mutex");
         let result = rt.admin_assign_permission_group(&req.resident_id, &req.permission_group_id);
         if result.ok {
-            let target = format!("resident:{}→pg:{}", req.resident_id, req.permission_group_id);
-            rt.log_audit_event(&req.actor_id, "admin:assign_permission_group", &target, None);
+            let target = format!(
+                "resident:{}→pg:{}",
+                req.resident_id, req.permission_group_id
+            );
+            rt.log_audit_event(
+                &req.actor_id,
+                "admin:assign_permission_group",
+                &target,
+                None,
+            );
         }
         result
     };
     Response::from_string(serde_json::to_string(&resp).unwrap_or_else(|_| r#"{"ok":false}"#.into()))
-        .with_status_code(StatusCode(200)).with_header(json_header())
+        .with_status_code(StatusCode(200))
+        .with_header(json_header())
 }
 
 pub(crate) fn handle_post_admin_scene(
@@ -1156,6 +1359,9 @@ pub(crate) fn handle_post_admin_scene(
     notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = Vec::new();
     if request.as_reader().read_to_end(&mut body).is_err() {
         return Response::from_string("{\"error\":\"read body failed\"}")
@@ -1165,9 +1371,11 @@ pub(crate) fn handle_post_admin_scene(
     match serde_json::from_slice::<AdminUpdateSceneRequest>(&body) {
         Ok(req) => {
             if let Some(ref actor_id) = req.actor_id
-                && let Some(resp) = require_capability_or_bypass(runtime, actor_id, crate::CAP_ADMIN_SCENE) {
-                    return resp;
-                }
+                && let Some(resp) =
+                    require_capability_or_bypass(runtime, actor_id, crate::CAP_ADMIN_SCENE)
+            {
+                return resp;
+            }
             let mut rt = runtime.lock().expect("gateway runtime mutex poisoned");
             match rt.admin_update_scene(req) {
                 Ok(response) => {

@@ -913,12 +913,34 @@ impl GatewayRuntime {
         conversation_id: &ConversationId,
         limit: usize,
     ) -> Vec<ShellRoomMessage> {
+        self.shell_messages_before(conversation_id, limit, None)
+    }
+
+    pub(crate) fn shell_messages_before(
+        &self,
+        conversation_id: &ConversationId,
+        limit: usize,
+        before_message_id: Option<&str>,
+    ) -> Vec<ShellRoomMessage> {
         let now_ms = Self::now_ms();
-        self.timeline_store
-            .recent_messages(conversation_id, limit)
+        let all = self
+            .timeline_store
+            .recent_messages(conversation_id, limit * 4);
+        let before_idx = before_message_id.and_then(|before_id| {
+            all.iter()
+                .position(|e| e.envelope.message_id.0 == before_id)
+        });
+        let eligible: Vec<_> = match before_idx {
+            Some(idx) => all.into_iter().skip(idx + 1).take(limit).collect(),
+            None => all.into_iter().take(limit).collect(),
+        };
+        eligible
             .into_iter()
             .map(|entry| {
-                let mod_key = format!("{}:{}", entry.envelope.conversation_id.0, entry.envelope.message_id.0);
+                let mod_key = format!(
+                    "{}:{}",
+                    entry.envelope.conversation_id.0, entry.envelope.message_id.0
+                );
                 let moderation_status = self.message_moderation.get(&mod_key).cloned();
                 ShellRoomMessage {
                     message_id: entry.envelope.message_id.0,

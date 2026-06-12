@@ -311,9 +311,7 @@ impl GatewayRuntime {
             return Ok(());
         }
         // 世界入口 / 世界广场 → 只有世界管家
-        if conversation_id.0 == "room:world:entry"
-            || conversation_id.0 == "room:world:square"
-        {
+        if conversation_id.0 == "room:world:entry" || conversation_id.0 == "room:world:square" {
             return Err("only world stewards can edit world entry/square scenes".into());
         }
         // 私宅 (dm:*) → 房主可以编辑
@@ -410,8 +408,14 @@ impl GatewayRuntime {
             return Err("image layer aspect ratio is out of range".into());
         }
         // 自定义背景：白天/夜晚必须同时提供
-        let has_day = layer.day_image_url.as_ref().is_some_and(|s| !s.trim().is_empty());
-        let has_night = layer.night_image_url.as_ref().is_some_and(|s| !s.trim().is_empty());
+        let has_day = layer
+            .day_image_url
+            .as_ref()
+            .is_some_and(|s| !s.trim().is_empty());
+        let has_night = layer
+            .night_image_url
+            .as_ref()
+            .is_some_and(|s| !s.trim().is_empty());
         if has_day != has_night {
             return Err("custom images must include both day and night urls (or neither)".into());
         }

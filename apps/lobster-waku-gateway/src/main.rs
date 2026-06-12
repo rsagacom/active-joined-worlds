@@ -52,7 +52,8 @@ use federation_read::GatewayFederationReadPlan;
 use gateway_models::*;
 use http_router::dispatch_http_request;
 use http_support::{
-    cors_headers_header, cors_methods_header, cors_origin_header, parse_cli_address, parse_cli_args,
+    cors_headers_header, cors_methods_header, cors_origin_header, parse_cli_address,
+    parse_cli_args, security_headers,
 };
 
 #[derive(Debug, Default)]
@@ -156,6 +157,9 @@ fn main() -> Result<(), String> {
                 .with_header(cors_origin_header())
                 .with_header(cors_methods_header())
                 .with_header(cors_headers_header());
+            for header in security_headers() {
+                response = response.with_header(header);
+            }
 
             let _ = request.respond(response);
         });

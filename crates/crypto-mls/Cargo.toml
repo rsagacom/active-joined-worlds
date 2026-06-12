@@ -11,3 +11,4 @@ hex = "0.4"
 postcard = { version = "1", features = ["alloc"] }
 ring = "0.17"
 serde = { version = "1", features = ["derive"] }
+zeroize = { version = "1", features = ["derive"] }

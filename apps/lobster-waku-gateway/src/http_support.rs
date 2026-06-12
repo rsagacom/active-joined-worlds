@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, io::Read, path::PathBuf};
 
 use chat_core::{ConversationId, IdentityId};
 use tiny_http::{Header, Request};
@@ -15,6 +15,22 @@ pub(crate) fn text_header() -> Header {
         .expect("static text header should be valid")
 }
 
+pub(crate) const MAX_BODY_SIZE: u64 = 1_048_576; // 1 MiB
+
+/// Read request body with a hard size limit to prevent OOM DoS.
+pub(crate) fn read_request_body(request: &mut Request) -> Result<Vec<u8>, String> {
+    let mut body = Vec::new();
+    request
+        .as_reader()
+        .take(MAX_BODY_SIZE + 1)
+        .read_to_end(&mut body)
+        .map_err(|e| format!("read body failed: {e}"))?;
+    if body.len() > MAX_BODY_SIZE as usize {
+        return Err("request body exceeds 1 MiB limit".into());
+    }
+    Ok(body)
+}
+
 pub(crate) fn sse_header() -> Header {
     Header::from_bytes("Content-Type", "text/event-stream; charset=utf-8")
         .expect("static sse header should be valid")
@@ -24,11 +40,21 @@ pub(crate) fn no_cache_header() -> Header {
     Header::from_bytes("Cache-Control", "no-cache").expect("static cache header should be valid")
 }
 
+pub(crate) fn security_headers() -> Vec<Header> {
+    vec![
+        Header::from_bytes("X-Content-Type-Options", "nosniff").unwrap(),
+        Header::from_bytes("X-Frame-Options", "DENY").unwrap(),
+        Header::from_bytes("Referrer-Policy", "strict-origin-when-cross-origin").unwrap(),
+    ]
+}
+
 pub(crate) fn cli_missing_for_body() -> String {
     serde_json::json!({ "message": "missing for" }).to_string()
 }
 
 pub(crate) fn cors_origin_header() -> Header {
+    // Defaults to "*" for local dev compatibility.
+    // Production MUST set LOBSTER_CORS_ORIGIN to the actual frontend origin.
     let origin = std::env::var("LOBSTER_CORS_ORIGIN").unwrap_or_else(|_| "*".into());
     let origin = origin.trim();
     let value = if origin.is_empty() { "*" } else { origin };

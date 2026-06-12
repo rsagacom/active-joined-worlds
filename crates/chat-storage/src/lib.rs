@@ -589,8 +589,20 @@ impl TimelineStore for FileTimelineStore {
     fn append_message(&mut self, message: MessageEnvelope) -> StorageResult<()> {
         let conversation_id = message.conversation_id.clone();
         self.inner.append_message(message)?;
-        self.persist_conversations()?;
-        self.persist_timeline(&conversation_id)
+        // Atomicity: if either persist step fails, remove the in-memory message
+        // to keep RAM and disk consistent (avoid silent data divergence)
+        if let Err(e) = self
+            .persist_conversations()
+            .and_then(|_| self.persist_timeline(&conversation_id))
+        {
+            // Undo the in-memory append to keep state consistent with disk
+            let timeline = self.inner.timelines.get_mut(&conversation_id);
+            if let Some(entries) = timeline {
+                entries.pop();
+            }
+            return Err(format!("append message persist failed, rolled back: {e}"));
+        }
+        Ok(())
     }
 
     fn recent_messages(
@@ -1006,28 +1018,35 @@ mod tests {
         );
     }
 
-    #[test] fn empty_timeline_returns_no_messages() {
+    #[test]
+    fn empty_timeline_returns_no_messages() {
         let dir = tempdir().unwrap();
-        let store = FileTimelineStore::open(dir.path().join("store"), ArchivePolicy::default()).unwrap();
+        let store =
+            FileTimelineStore::open(dir.path().join("store"), ArchivePolicy::default()).unwrap();
         let msgs = store.recent_messages(&ConversationId("dm:a:b".into()), 10);
         assert!(msgs.is_empty());
     }
 
-    #[test] fn open_empty_store_yields_no_conversations() {
+    #[test]
+    fn open_empty_store_yields_no_conversations() {
         let dir = tempdir().unwrap();
-        let store = FileTimelineStore::open(dir.path().join("store"), ArchivePolicy::default()).unwrap();
+        let store =
+            FileTimelineStore::open(dir.path().join("store"), ArchivePolicy::default()).unwrap();
         assert!(store.active_conversations().is_empty());
     }
 
-    #[test] fn append_and_read_single_message() {
+    #[test]
+    fn append_and_read_single_message() {
         let dir = tempdir().unwrap();
-        let mut store = FileTimelineStore::open(dir.path().join("store"), ArchivePolicy::default()).unwrap();
+        let mut store =
+            FileTimelineStore::open(dir.path().join("store"), ArchivePolicy::default()).unwrap();
         let msg = sample_message(1000);
         store.append_message(msg).unwrap();
         let loaded = store.recent_messages(&ConversationId("dm:alice:bob".into()), 10);
         assert_eq!(loaded.len(), 1);
     }
-    #[test] fn consecutive_opens_within_same_tempdir() {
+    #[test]
+    fn consecutive_opens_within_same_tempdir() {
         // Verify store can be opened twice at different paths without conflict
         let dir = tempdir().unwrap();
         let s1 = FileTimelineStore::open(dir.path().join("s1"), ArchivePolicy::default()).unwrap();

@@ -5,11 +5,33 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PORT="${GATEWAY_PORT:-8787}"
 LOG_FILE="${GATEWAY_LOG:-/tmp/lobster-gateway-${PORT}.log}"
-BINARY="$PROJECT_DIR/target/debug/lobster-waku-gateway"
+SKIP_BUILD="${SKIP_BUILD:-0}"
+BINARY="${GATEWAY_BIN:-$PROJECT_DIR/target/debug/lobster-waku-gateway}"
 
-echo ">>> Building gateway..."
+need_cmd() {
+    command -v "$1" >/dev/null 2>&1 || {
+        echo "missing command: $1" >&2
+        exit 1
+    }
+}
+
 cd "$PROJECT_DIR"
-cargo build -p lobster-waku-gateway 2>&1 | tail -3
+
+need_cmd curl
+need_cmd lsof
+need_cmd nohup
+need_cmd python3
+
+if [[ "$SKIP_BUILD" != "1" ]]; then
+    need_cmd cargo
+    echo ">>> Building gateway..."
+    cargo build -p lobster-waku-gateway 2>&1 | tail -3
+fi
+
+if [[ ! -x "$BINARY" ]]; then
+    echo "gateway binary not found: $BINARY" >&2
+    exit 1
+fi
 
 echo ">>> Stopping old gateway on port $PORT..."
 OLD_PID=$(lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true)

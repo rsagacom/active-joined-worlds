@@ -5,7 +5,9 @@ use tiny_http::{Request, Response, StatusCode};
 
 use crate::{AdminDeviceRequest, GatewayRuntime, GatewayStateNotifier, http_support::json_header};
 
-pub(crate) fn handle_get_admin_devices(runtime: &Arc<Mutex<GatewayRuntime>>) -> Response<std::io::Cursor<Vec<u8>>> {
+pub(crate) fn handle_get_admin_devices(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+) -> Response<std::io::Cursor<Vec<u8>>> {
     let devices = runtime.lock().expect("poisoned").admin_list_devices();
     let body = serde_json::to_string(&devices).unwrap_or_else(|_| "[]".into());
     Response::from_string(body)
@@ -64,7 +66,11 @@ pub(crate) fn handle_post_admin_remove_device(
         address: String,
     }
     match serde_json::from_str::<RemoveReq>(&body) {
-        Ok(req) => match runtime.lock().expect("poisoned").admin_remove_device(&req.address) {
+        Ok(req) => match runtime
+            .lock()
+            .expect("poisoned")
+            .admin_remove_device(&req.address)
+        {
             Ok(()) => Response::from_string(r#"{"ok":true}"#)
                 .with_status_code(StatusCode(200))
                 .with_header(json_header()),
@@ -94,7 +100,11 @@ pub(crate) fn handle_post_admin_block_device(
         address: String,
     }
     match serde_json::from_str::<BlockReq>(&body) {
-        Ok(req) => match runtime.lock().expect("poisoned").admin_block_device(&req.address) {
+        Ok(req) => match runtime
+            .lock()
+            .expect("poisoned")
+            .admin_block_device(&req.address)
+        {
             Ok(()) => Response::from_string(r#"{"ok":true}"#)
                 .with_status_code(StatusCode(200))
                 .with_header(json_header()),
@@ -124,7 +134,11 @@ pub(crate) fn handle_post_admin_unblock_device(
         address: String,
     }
     match serde_json::from_str::<UnblockReq>(&body) {
-        Ok(req) => match runtime.lock().expect("poisoned").admin_unblock_device(&req.address) {
+        Ok(req) => match runtime
+            .lock()
+            .expect("poisoned")
+            .admin_unblock_device(&req.address)
+        {
             Ok(()) => Response::from_string(r#"{"ok":true}"#)
                 .with_status_code(StatusCode(200))
                 .with_header(json_header()),
