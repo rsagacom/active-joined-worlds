@@ -43,6 +43,7 @@
       <div class="ds-sidebar-logo-icon">🦞</div>
       <span class="ds-sidebar-logo-text">AJW管理后台</span>
       <button type="button" id="hud-login-toggle" class="hud-login-toggle shell-hidden" aria-label="打开登录窗口" style="margin-left:auto;font-size:11px;padding:2px 8px;border-radius:4px;background:rgba(241,201,120,0.15);color:#f1c978;border:1px solid rgba(241,201,120,0.3);cursor:pointer;">登录</button>
+      <button type="button" id="theme-toggle" class="theme-toggle" aria-label="切换亮色/暗色模式" title="切换亮色/暗色模式" style="margin-left:8px;">☀️</button>
     </div>
 
     <nav class="ds-sidebar-nav">
@@ -788,10 +789,18 @@
             </select>
             <select class="ds-select" id="logTypeFilter">
               <option value="all">全部类型</option>
-              <option value="connection">连接失败</option>
-              <option value="login">登录失败</option>
-              <option value="message">消息发送失败</option>
-              <option value="ai">AI 助手异常</option>
+              <optgroup label="审计事件">
+                <option value="audit_security">安全操作</option>
+                <option value="audit_content">内容审核</option>
+                <option value="audit_permission">权限变更</option>
+                <option value="audit_config">系统配置</option>
+              </optgroup>
+              <optgroup label="系统事件">
+                <option value="connection">连接失败</option>
+                <option value="login">登录失败</option>
+                <option value="message">消息发送失败</option>
+                <option value="ai">AI 助手异常</option>
+              </optgroup>
             </select>
             <input type="text" class="ds-input" placeholder="搜索关键词…" id="logSearch" style="width:200px;" />
           </div>

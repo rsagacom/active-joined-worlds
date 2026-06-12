@@ -185,6 +185,29 @@ export function translateProviderConnectionState(state) {
   }
 }
 
+export function initThemeToggle() {
+  const STORAGE_KEY = 'lobster-theme';
+  const button = typeof document.getElementById === 'function'
+    ? document.getElementById('theme-toggle')
+    : document.querySelector('#theme-toggle');
+  if (!button) return;
+
+  // Load saved preference
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (saved === 'light') {
+    document.body.dataset.theme = 'light';
+    button.textContent = '\u{1F319}';
+  }
+
+  button.addEventListener('click', () => {
+    const current = document.body.dataset.theme;
+    const next = current === 'light' ? 'dark' : 'light';
+    document.body.dataset.theme = next;
+    button.textContent = next === 'light' ? '\u{1F319}' : '\u{2600}\u{FE0F}';
+    localStorage.setItem(STORAGE_KEY, next);
+  });
+}
+
 export function translateDeliveryMode(mode) {
   switch (mode) {
     case "dev-inline-code":

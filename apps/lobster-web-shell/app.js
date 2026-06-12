@@ -239,6 +239,7 @@ import {
   roomKind as _roomKind,
   roomThreadHeadline as _roomThreadHeadline,
 } from "./shell-room-rail.js";
+import { isVisitorIdentity, residentScopedShellStatePage, translateClientDisplayName, translateRoutePrefix } from "./shell-identity.js";
 
 const DEFAULT_BOOTSTRAP = {
   host: {
@@ -4001,24 +4002,15 @@ function currentIdentity() {
   return senderIdentity.trim() || "访客";
 }
 
-function isVisitorIdentity(value = currentIdentity()) {
-  const normalized = String(value || "").trim();
-  return !normalized || normalized === "访客";
-}
-
 function residentGatewayLoginRequired() {
   return _residentGatewayLoginRequired(userShellProjection(), gatewayUrl, senderIdentity);
-}
-
-function residentScopedShellStatePage(shellPage = currentShellPage()) {
-  return shellPage === "user" || shellPage === "hub" || shellPage === "admin";
 }
 
 function gatewayShellStateUrl() {
   return buildGatewayShellStateUrl({
     gatewayUrl,
     residentId: currentIdentity(),
-    residentScoped: residentScopedShellStatePage(),
+    residentScoped: residentScopedShellStatePage(currentShellPage()),
   });
 }
 
@@ -4026,7 +4018,7 @@ function gatewayShellEventsUrl({ afterVersion = null } = {}) {
   return buildGatewayShellEventsUrl({
     gatewayUrl,
     residentId: currentIdentity(),
-    residentScoped: residentScopedShellStatePage(),
+    residentScoped: residentScopedShellStatePage(currentShellPage()),
     afterVersion,
   });
 }
@@ -6286,24 +6278,6 @@ function renderTimeline() {
   followTimelineToLatest = false;
 }
 
-function translateClientDisplayName(value) {
-  switch ((value || "").toLowerCase()) {
-    case "mobile web":
-      return "移动网页";
-    default:
-      return value || "未知终端";
-  }
-}
-
-function translateRoutePrefix(value) {
-  switch (value) {
-    case "/app":
-      return "主入口";
-    default:
-      return value || "默认入口";
-  }
-}
-
 function renderGovernance() {
   if (
     !cityListEl &&
@@ -7218,7 +7192,7 @@ function updateComposerState() {
     hasDraftText: Boolean(draftText),
     isSendingMessage,
     hasGateway: Boolean(gatewayUrl),
-    hasIdentity: userShellProjection() ? !isVisitorIdentity() : Boolean(currentIdentity()),
+    hasIdentity: userShellProjection() ? !isVisitorIdentity(currentIdentity()) : Boolean(currentIdentity()),
     requiresIdentity: userShellProjection(),
     gatewayUnavailable: gatewayUnavailableForComposer(),
   });

@@ -46,6 +46,47 @@ export function formatDateTime(timestampMs) {
   return new Date(timestampMs).toLocaleString();
 }
 
+const DAY_MS = 86400000;
+
+export function formatDateLabel(timestampMs, referenceMs) {
+  const date = new Date(timestampMs);
+  const ref = referenceMs ? new Date(referenceMs) : new Date();
+  const today = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate()).getTime();
+  const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const diff = today - msgDay;
+
+  if (diff <= 0) return "今天";
+  if (diff <= DAY_MS) return "昨天";
+  if (diff <= 2 * DAY_MS) return "前天";
+  if (diff <= 7 * DAY_MS) {
+    const days = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+    return days[date.getDay()];
+  }
+  return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+export function createDateSeparator(prevTimestampMs, currentTimestampMs) {
+  if (!prevTimestampMs || !currentTimestampMs) return null;
+  const prevDay = new Date(new Date(prevTimestampMs).getFullYear(), new Date(prevTimestampMs).getMonth(), new Date(prevTimestampMs).getDate()).getTime();
+  const currDay = new Date(new Date(currentTimestampMs).getFullYear(), new Date(currentTimestampMs).getMonth(), new Date(currentTimestampMs).getDate()).getTime();
+  if (prevDay === currDay) return null;
+  return { label: formatDateLabel(currentTimestampMs), timestampMs: currentTimestampMs };
+}
+
+export function findReplyTarget(message, allMessages) {
+  const replyId = message?.reply_to_message_id;
+  if (!replyId || !Array.isArray(allMessages)) return null;
+  return allMessages.find(m => messageStableId(m) === String(replyId)) || null;
+}
+
+export function buildReplyPreview(message, allMessages) {
+  const target = findReplyTarget(message, allMessages);
+  if (!target) return null;
+  const sender = target.sender || "";
+  const text = (target.text || target.body?.plain_text || "").substring(0, 80);
+  return { sender, text: text + (text.length >= 80 ? "…" : ""), messageId: String(target.message_id || target.id || "") };
+}
+
 export function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",

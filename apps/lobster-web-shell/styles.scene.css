@@ -1,0 +1,1685 @@
+/* 2026-04-24 scene-first pixel city revision
+   The generated pixel art is the product surface; HUD controls should frame it,
+   not cover it with large glass cards. */
+body[data-shell-page="hub"][data-shell-variant="public-square"] {
+  min-height: 100vh;
+  overflow: hidden;
+  background: #120d08;
+  color: #fff2c9;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    url("assets/pixel/chinese-modern-city/backgrounds/hub_full.avif") center / cover no-repeat,
+    #120d08;
+  image-rendering: pixelated;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"]::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(7, 5, 4, 0.08), rgba(7, 5, 4, 0) 34%, rgba(7, 5, 4, 0.26)),
+    radial-gradient(circle at 50% 46%, rgba(255, 210, 120, 0.10), transparent 48%);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .city-hub-shell {
+  width: min(100vw, 1640px);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 12px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  overflow: hidden;
+  background: none;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hud {
+  min-height: 50px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background:
+    linear-gradient(90deg, rgba(34, 22, 11, 0.86), rgba(60, 38, 17, 0.72)),
+    url("assets/pixel/chinese-modern-city/ui/hud_top_bar.avif") center / cover no-repeat;
+  border: 2px solid #f1c978;
+  box-shadow: 0 0 0 3px rgba(28, 16, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-layout {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: var(--im-scene-rail-width, 220px) minmax(0, 1fr);
+  align-items: stretch;
+  gap: 10px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail {
+  min-width: 0;
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  background:
+    url("assets/pixel/chinese-modern-city/ui/hud_left_nav.avif") center / cover no-repeat,
+    rgba(229, 202, 136, 0.90);
+  border: 2px solid #2b1c11;
+  box-shadow: 0 0 0 3px rgba(246, 219, 151, 0.55), 0 8px 0 rgba(0, 0, 0, 0.28);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail-head,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-rail-note {
+  display: none;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tab {
+  min-height: 56px;
+  padding: 6px 4px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: #21140b;
+  background: rgba(255, 239, 178, 0.72);
+  border: 2px solid rgba(40, 25, 13, 0.84);
+  box-shadow: inset 0 -3px 0 rgba(78, 45, 20, 0.26);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tab.is-active {
+  color: #fff4c9;
+  background: #8d3d1b;
+  border-color: #fff1aa;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tab span {
+  font-size: 24px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-stage {
+  position: relative;
+  min-height: calc(100vh - 86px);
+  overflow: hidden;
+  background:
+    url("assets/pixel/chinese-modern-city/backgrounds/hub_full.avif") center / cover no-repeat,
+    #21150c;
+  border: 3px solid #27190f;
+  box-shadow: 0 0 0 3px #f1c978, 0 12px 0 rgba(0, 0, 0, 0.34);
+  image-rendering: pixelated;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.04), rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.22)),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0) 18%, rgba(0, 0, 0, 0) 74%, rgba(0, 0, 0, 0.18));
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hero {
+  position: absolute;
+  inset: 12px 12px auto 12px;
+  z-index: 2;
+  padding: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-copy {
+  width: min(390px, 42vw);
+  padding: 10px 12px;
+  background: rgba(18, 11, 7, 0.62);
+  border: 2px solid rgba(255, 229, 149, 0.88);
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.28);
+  pointer-events: auto;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-copy h1 {
+  margin: 4px 0;
+  font-size: 30px;
+  line-height: 1.05;
+  text-shadow: 2px 2px 0 #281205;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-copy p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-meta {
+  margin-top: 8px;
+  gap: 6px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-meta span {
+  background: rgba(255, 236, 164, 0.82);
+  color: #28170b;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-preview {
+  width: 226px;
+  pointer-events: auto;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-preview-frame {
+  min-height: 118px;
+  padding: 7px;
+  background:
+    url("assets/pixel/chinese-modern-city/backgrounds/hub_mid_scene_band.avif") center / cover no-repeat,
+    #1e130b;
+  border: 2px solid rgba(255, 231, 151, 0.88);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-preview-frame::before,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-preview-frame::after {
+  display: none;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-strip {
+  position: absolute;
+  left: 14px;
+  bottom: 108px;
+  z-index: 3;
+  width: min(520px, 46%);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  overflow: visible;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-panel {
+  min-height: 82px;
+  padding: 10px 12px;
+  background: rgba(18, 11, 7, 0.66);
+  border: 2px solid rgba(255, 224, 143, 0.86);
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.24);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-panel p {
+  font-size: 14px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-chat {
+  position: absolute;
+  right: 14px;
+  bottom: 96px;
+  z-index: 4;
+  width: min(560px, 47%);
+  max-height: 38vh;
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-log {
+  max-height: 38vh;
+  padding: 4px 2px 8px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-log .message {
+  width: fit-content;
+  max-width: 88%;
+  padding: 10px 12px;
+  color: #fff6df;
+  background: rgba(20, 12, 8, 0.78);
+  border: 2px solid rgba(255, 224, 143, 0.82);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.28);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-log .message--own {
+  margin-left: auto;
+  background: rgba(92, 43, 21, 0.82);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 12px;
+  z-index: 5;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  background:
+    url("assets/pixel/chinese-modern-city/ui/chat_composer_bar.avif") center / cover no-repeat,
+    rgba(44, 27, 12, 0.90);
+  border: 3px solid #f2c879;
+  box-shadow: 0 0 0 3px rgba(33, 19, 10, 0.94), 0 7px 0 rgba(0, 0, 0, 0.32);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tool {
+  min-width: 48px;
+  min-height: 42px;
+  background: rgba(255, 233, 168, 0.84);
+  border: 2px solid #321d0d;
+  color: #2a1709;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-field {
+  min-height: 44px;
+  padding: 6px 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  background: rgba(255, 244, 208, 0.88);
+  border: 2px solid #2f1d0f;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-field-label {
+  color: #5f3313;
+  background: transparent;
+  border: 0;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer textarea {
+  min-height: 30px;
+  padding: 4px 0;
+  color: #241409;
+  background: transparent;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer #composer-send {
+  min-width: 86px;
+  min-height: 44px;
+  color: #fff3cc;
+  background: #963f19;
+  border: 2px solid #ffd987;
+}
+
+@media (max-width: 820px) {
+  body[data-shell-page="hub"][data-shell-variant="public-square"] {
+    overflow: hidden;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"]::before {
+    background:
+      url("assets/pixel/chinese-modern-city/backgrounds/hub_mobile_9x16.avif") center / cover no-repeat,
+      #120d08;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .city-hub-shell {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hud {
+    min-height: 44px;
+    padding: 7px 9px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-layout {
+    display: block;
+    min-height: 0;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail {
+    position: absolute;
+    top: 58px;
+    left: 8px;
+    z-index: 7;
+    width: 78px;
+    max-height: calc(100vh - 156px);
+    padding: 7px 5px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tab {
+    min-height: 46px;
+    font-size: 12px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tab span {
+    font-size: 20px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-stage {
+    min-height: calc(100vh - 68px);
+    background:
+      url("assets/pixel/chinese-modern-city/backgrounds/hub_mobile_9x16.avif") center / cover no-repeat,
+      #21150c;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hero {
+    inset: 8px 8px auto 78px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-copy {
+    width: auto;
+    max-width: none;
+    padding: 8px 9px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-copy h1 {
+    font-size: 22px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-copy p,
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-meta,
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-preview,
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-strip {
+    display: none;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-chat {
+    left: 76px;
+    right: 8px;
+    bottom: 82px;
+    width: auto;
+    max-height: 36vh;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-log {
+    max-height: 36vh;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-log .message {
+    max-width: 100%;
+    padding: 8px 9px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tool {
+    display: none;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-field {
+    min-height: 42px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-field-label {
+    display: none;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer textarea {
+    min-height: 34px;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   SFC / 像素住宅聊天壳 - user 页专用
+   参考原型：docs/mockups/sfc-canvas-draft.html
+   气质：16-bit RPG、木质边框、像素画布、暖色室内、深色底聊天条
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* SFC 主题激活时，压掉现代玻璃控制台风格 */
+body[data-sfc-theme] {
+  --sfc-bg: #141014;
+  --sfc-panel: #221920;
+  --sfc-panel-2: #2d222b;
+  --sfc-line: #e7d8b0;
+  --sfc-text: #f6efdc;
+  --sfc-muted: #b8a98b;
+  --sfc-gold: #f3c96c;
+  --sfc-green: #9ac47c;
+  --sfc-cyan: #87d0df;
+  --sfc-rose: #d96b83;
+  --sfc-wood-1: #8c5d33;
+  --sfc-wood-2: #5e3721;
+  --sfc-ink: #0d0b10;
+  --sfc-wood-light: #cfa07a;
+  --sfc-cream: #fff3dc;
+  color-scheme: dark;
+  background: 
+    radial-gradient(circle at top, rgba(243, 201, 108, 0.08), transparent 30%),
+    linear-gradient(180deg, #100d12 0%, #151118 48%, #0e0c10 100%);
+}
+
+/* SFC 壳层容器 */
+
+/* 薄状态条 - 游戏 HUD，不是大 topbar */
+
+.hud-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.hud-title {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--sfc-gold);
+  font-family: "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.hud-right {
+  display: flex;
+  gap: 8px;
+}
+
+.hud-pill {
+  border: 1px solid rgba(231, 216, 176, 0.28);
+  background: rgba(45, 34, 43, 0.72);
+  color: var(--sfc-muted);
+  padding: 4px 10px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.hud-rail-toggle {
+  display: none;
+}
+
+/* SFC 主布局：左窄栏 + 中央房间 + 底部聊天 */
+
+/* 左侧窄功能栏 - 木框/旧终端感 */
+
+.rail-title {
+  color: #1b1510;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.rail-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+}
+
+/* 会话按钮 - 像素风格 */
+.rail-list .room-button,
+.room-section-list .room-button {
+  border: 1px solid rgba(24, 18, 14, 0.16);
+  background: rgba(255, 247, 224, 0.22);
+  color: #18120e;
+  padding: 8px 10px;
+  border-radius: 0;
+  font-size: 13px;
+  display: block;
+  text-align: left;
+  min-height: auto;
+  box-shadow: none;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.rail-list .room-button:hover,
+.room-section-list .room-button:hover {
+  background: rgba(255, 239, 193, 0.7);
+  border-color: rgba(24, 18, 14, 0.24);
+}
+
+.rail-list .room-button.active,
+.room-section-list .room-button.active {
+  background: rgba(255, 239, 193, 0.88);
+  font-weight: 700;
+  border-color: rgba(24, 18, 14, 0.28);
+}
+
+.rail-list .room-button .room-avatar,
+.room-section-list .room-button .room-avatar,
+.rail-list .room-button .room-kicker,
+.room-section-list .room-button .room-kicker,
+.rail-list .room-button .room-badges,
+.room-section-list .room-button .room-badges,
+.rail-list .room-button .room-inline-preview-card,
+.room-section-list .room-button .room-inline-preview-card,
+.rail-list .room-button .room-inline-actions,
+.room-section-list .room-button .room-inline-actions,
+.rail-list .room-button .room-inline-progress,
+.room-section-list .room-button .room-inline-progress,
+.rail-list .room-button .room-top-meta,
+.room-section-list .room-button .room-top-meta,
+.rail-list .room-button .room-activity,
+.room-section-list .room-button .room-activity,
+.rail-list .room-button .room-preview,
+.room-section-list .room-button .room-preview,
+.rail-list .room-button .room-preview-shell,
+.room-section-list .room-button .room-preview-shell,
+.rail-list .room-button .room-tag-row,
+.room-section-list .room-button .room-tag-row {
+  display: none;
+}
+
+.rail-list .room-button .room-content,
+.room-section-list .room-button .room-content {
+  display: block;
+}
+
+.rail-list .room-button .room-name,
+.room-section-list .room-button .room-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #18120e;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rail-list .room-button .room-preview,
+.rail-list .room-button .room-sub,
+.room-section-list .room-button .room-preview,
+.room-section-list .room-button .room-sub {
+  color: #4a3a28;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.rail-list .room-button.active .room-name,
+.room-section-list .room-button.active .room-name {
+  color: #0c0908;
+}
+
+/* 中央房间场景 - 视觉重心 */
+
+.stage-canvas-wrap {
+  position: relative;
+  flex: 1 1 200px;
+  min-height: 200px;
+  max-height: 280px;
+  padding: 10px;
+  background:
+    /* 近处路面 */
+    linear-gradient(180deg, transparent 0%, transparent 65%, rgba(20, 14, 10, 0.5) 65%, rgba(20, 14, 10, 0.8) 100%),
+    /* 建筑轮廓层 */
+    linear-gradient(180deg, transparent 0%, transparent 35%, rgba(15, 12, 22, 0.6) 35%, rgba(15, 12, 22, 0.6) 55%, transparent 55%),
+    /* 网格线 */
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 20px,
+      rgba(101, 67, 33, 0.12) 20px,
+      rgba(101, 67, 33, 0.12) 21px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 20px,
+      rgba(101, 67, 33, 0.08) 20px,
+      rgba(101, 67, 33, 0.08) 21px
+    ),
+    /* 夜空 */
+    linear-gradient(180deg, #0d1018 0%, #1a1420 40%, #241a12 70%, #1a120e 100%);
+  overflow: hidden;
+}
+
+.stage-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background:
+    linear-gradient(135deg, rgba(210, 179, 111, 0.15) 0%, transparent 40%),
+    linear-gradient(180deg, #3d2e22 0%, #1a1410 100%);
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border: 3px solid rgba(231, 216, 176, 0.35);
+  box-shadow:
+    inset 0 0 50px rgba(0, 0, 0, 0.4),
+    0 0 20px rgba(210, 179, 111, 0.06);
+  position: relative;
+}
+
+
+/* ── 像素家具：参考图中的房间元素 ── */
+.pixel-furniture {
+  position: absolute;
+  pointer-events: none;
+}
+
+/* 电脑桌（左侧） */
+.pixel-desk {
+  bottom: 18%;
+  left: 8%;
+  width: 64px;
+  height: 52px;
+  background: #5c4033;
+  border: 2px solid rgba(101, 67, 33, 0.6);
+  box-shadow: inset 0 4px 0 rgba(139, 90, 43, 0.3);
+}
+
+.pixel-desk::before {
+  content: "";
+  position: absolute;
+  bottom: -12px;
+  left: 4px;
+  width: 8px;
+  height: 12px;
+  background: #4a3328;
+}
+
+.pixel-desk::after {
+  content: "";
+  position: absolute;
+  bottom: -12px;
+  right: 4px;
+  width: 8px;
+  height: 12px;
+  background: #4a3328;
+}
+
+.pixel-monitor {
+  position: absolute;
+  top: -18px;
+  left: 8px;
+  width: 44px;
+  height: 28px;
+  background: #1a1a2e;
+  border: 2px solid #3d3d5c;
+  box-shadow: inset 0 0 8px rgba(100, 200, 255, 0.15);
+}
+
+.pixel-monitor::after {
+  content: "";
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 12px;
+  height: 8px;
+  background: #3d3d5c;
+}
+
+.pixel-keyboard {
+  position: absolute;
+  top: 16px;
+  left: 10px;
+  width: 40px;
+  height: 8px;
+  background: #2a2a3e;
+  border: 1px solid #3d3d5c;
+}
+
+/* 沙发（中间偏右） */
+.pixel-sofa {
+  bottom: 16%;
+  right: 18%;
+  width: 80px;
+  height: 44px;
+  background: #8b6914;
+  border: 2px solid rgba(139, 90, 43, 0.5);
+  border-radius: 8px 8px 0 0;
+  box-shadow: inset 0 6px 0 rgba(160, 120, 50, 0.3);
+}
+
+.pixel-sofa::before {
+  content: "";
+  position: absolute;
+  top: -20px;
+  left: 4px;
+  width: 68px;
+  height: 20px;
+  background: #7a5c12;
+  border: 2px solid rgba(139, 90, 43, 0.4);
+  border-radius: 6px 6px 0 0;
+}
+
+/* 龙虾角色（沙发上） */
+.pixel-lobster {
+  position: absolute;
+  top: -36px;
+  left: 20px;
+  width: 36px;
+  height: 28px;
+  background: #c44;
+  border: 2px solid #a33;
+  border-radius: 50% 50% 40% 40%;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.15);
+}
+
+.pixel-lobster::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 4px;
+  width: 10px;
+  height: 12px;
+  background: #c44;
+  border: 2px solid #a33;
+  border-radius: 50%;
+}
+
+.pixel-lobster::after {
+  content: "";
+  position: absolute;
+  top: -8px;
+  right: 4px;
+  width: 10px;
+  height: 12px;
+  background: #c44;
+  border: 2px solid #a33;
+  border-radius: 50%;
+}
+
+/* 咖啡桌（沙发前） */
+.pixel-coffee-table {
+  bottom: 10%;
+  right: 24%;
+  width: 44px;
+  height: 32px;
+  background: #6b4226;
+  border: 2px solid rgba(101, 67, 33, 0.5);
+  box-shadow: inset 0 3px 0 rgba(139, 90, 43, 0.3);
+}
+
+.pixel-coffee-table::before {
+  content: "";
+  position: absolute;
+  bottom: -10px;
+  left: 4px;
+  width: 6px;
+  height: 10px;
+  background: #5a3620;
+}
+
+.pixel-coffee-table::after {
+  content: "";
+  position: absolute;
+  bottom: -10px;
+  right: 4px;
+  width: 6px;
+  height: 10px;
+  background: #5a3620;
+}
+
+.pixel-cup {
+  position: absolute;
+  top: 6px;
+  left: 14px;
+  width: 12px;
+  height: 10px;
+  background: #e8e0d0;
+  border: 1px solid #c8c0b0;
+}
+
+.pixel-cup::after {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 2px;
+  width: 6px;
+  height: 6px;
+  background: rgba(255, 220, 150, 0.4);
+  border-radius: 50%;
+}
+
+/* 植物（右侧） */
+.pixel-plant {
+  bottom: 16%;
+  right: 6%;
+  width: 24px;
+  height: 40px;
+  background: #4a7c3f;
+  border: 2px solid rgba(60, 100, 50, 0.5);
+  border-radius: 40% 40% 0 0;
+}
+
+.pixel-plant::before {
+  content: "";
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 12px;
+  background: #8b4513;
+  border: 1px solid #6b3510;
+}
+
+/* 书架（左侧靠后） */
+.pixel-bookshelf {
+  bottom: 32%;
+  left: 4%;
+  width: 36px;
+  height: 56px;
+  background: #5c4033;
+  border: 2px solid rgba(101, 67, 33, 0.5);
+}
+
+.pixel-bookshelf::before {
+  content: "";
+  position: absolute;
+  top: 16px;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  background: rgba(101, 67, 33, 0.4);
+  box-shadow: 0 14px 0 rgba(101, 67, 33, 0.4), 0 28px 0 rgba(101, 67, 33, 0.4);
+}
+
+/* 住宅页像素房间装饰 */
+.pixel-room-decor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.pixel-room-floor {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 40%;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(139, 90, 43, 0.2),
+      rgba(139, 90, 43, 0.2) 10px,
+      rgba(160, 110, 55, 0.25) 10px,
+      rgba(160, 110, 55, 0.25) 20px
+    );
+}
+
+/* ── 迷你像素家具（user 页场景条）── */
+.pixel-room-furniture {
+  position: absolute;
+  pointer-events: none;
+}
+
+.pixel-mini-desk {
+  bottom: 8px;
+  left: 12%;
+  width: 32px;
+  height: 24px;
+  background: #5c4033;
+  border: 1px solid rgba(101, 67, 33, 0.5);
+}
+
+.pixel-mini-monitor {
+  position: absolute;
+  top: -10px;
+  left: 4px;
+  width: 22px;
+  height: 12px;
+  background: #1a1a2e;
+  border: 1px solid #3d3d5c;
+}
+
+.pixel-mini-sofa {
+  bottom: 8px;
+  right: 20%;
+  width: 36px;
+  height: 18px;
+  background: #8b6914;
+  border: 1px solid rgba(139, 90, 43, 0.4);
+  border-radius: 4px 4px 0 0;
+}
+
+.pixel-mini-sofa::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  left: 2px;
+  width: 30px;
+  height: 8px;
+  background: #7a5c12;
+  border: 1px solid rgba(139, 90, 43, 0.3);
+  border-radius: 3px 3px 0 0;
+}
+
+.pixel-mini-plant {
+  bottom: 8px;
+  right: 6%;
+  width: 14px;
+  height: 22px;
+  background: #4a7c3f;
+  border: 1px solid rgba(60, 100, 50, 0.4);
+  border-radius: 50% 50% 0 0;
+}
+
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   2026-04-24 Hub Polish
+   只作用于 index.html 的公共广场页，不影响 user/admin
+   策略：
+   - 顶部只保留小型 scene plate
+   - 大图只用于 band / preview，不直接充当整页背景
+   - rail 收回导航层
+   - composer 收成聊天 action bar
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] {
+  --hub-bg: #0f0c0b;
+  --hub-panel: #17110f;
+  --hub-panel-soft: #2a211b;
+  --hub-panel-warm: #3e3026;
+  --hub-line: rgba(223, 192, 123, 0.18);
+  --hub-line-strong: rgba(223, 192, 123, 0.42);
+  --hub-gold: #e0c27b;
+  --hub-gold-soft: #ae8f5e;
+  --hub-ink: #f3ead6;
+  --hub-muted: #a38a67;
+  --hub-accent: #b96b42;
+  --hub-accent-deep: #86472b;
+  --hub-teal: #55b8a2;
+  background:
+    radial-gradient(circle at top left, rgba(185, 107, 66, 0.08), transparent 22%),
+    linear-gradient(180deg, #15100e 0%, #0f0c0b 100%);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"]::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.012) 0,
+      rgba(255, 255, 255, 0.012) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    radial-gradient(circle at top right, rgba(85, 184, 162, 0.08), transparent 24%);
+  pointer-events: none;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .app.city-hub-shell {
+  position: relative;
+  z-index: 1;
+  width: min(1440px, 100%);
+  margin: 0 auto;
+  padding: 14px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hud {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border: 1px solid var(--hub-line);
+  background:
+    linear-gradient(180deg, rgba(38, 29, 24, 0.94), rgba(18, 14, 13, 0.98));
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 18px 30px rgba(0, 0, 0, 0.28);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hud::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(15, 12, 11, 0.86), rgba(15, 12, 11, 0.44)),
+    url('./assets/pixel/chinese-modern-city/ui/hud_top_bar.avif');
+  background-size: auto 100%, cover;
+  background-position: left center, center;
+  opacity: 0.3;
+  pointer-events: none;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hud > * {
+  position: relative;
+  z-index: 1;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .hub-hud-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .hub-hud-kicker {
+  font-size: 13px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: rgba(224, 194, 123, 0.72);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hud .hud-title {
+  color: var(--hub-ink);
+  font-size: 32px;
+  line-height: 0.95;
+  letter-spacing: 1.4px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .hub-hud-chip,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hud .hud-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--hub-line);
+  background: rgba(21, 17, 16, 0.82);
+  font-size: 19px;
+  color: var(--hub-gold);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .hub-hud-chip {
+  color: var(--hub-teal);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-layout {
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 14px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 10px 8px;
+  border: 2px solid #f1c978;
+  background:
+    linear-gradient(180deg, rgba(45, 28, 15, 0.96), rgba(24, 14, 8, 0.98)),
+    repeating-linear-gradient(90deg, rgba(255, 230, 150, 0.07) 0 1px, transparent 1px 22px);
+  color: #fff2c9;
+  box-shadow: 0 0 0 3px rgba(28, 16, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32);
+  overflow: auto;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail::after {
+  content: '';
+  margin-top: auto;
+  height: 138px;
+  border: 1px solid rgba(24, 18, 14, 0.14);
+  background:
+    linear-gradient(180deg, rgba(24, 18, 14, 0.12), rgba(24, 18, 14, 0.72)),
+    url('./assets/pixel/chinese-modern-city/ui/hud_left_nav.avif');
+  background-size: cover;
+  background-position: center bottom;
+  opacity: 0.72;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-shortcuts {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-shortcut {
+  min-height: 32px;
+  border: 1px solid rgba(24, 18, 14, 0.16);
+  background: rgba(255, 247, 224, 0.2);
+  color: #201912;
+  font-size: 18px;
+  letter-spacing: 0.8px;
+  cursor: pointer;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-shortcut.is-active {
+  background: rgba(255, 239, 193, 0.88);
+  color: #18120e;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .rail-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin-bottom: 0;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .rail-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 2px solid rgba(241, 201, 120, 0.62);
+  background: rgba(255, 242, 201, 0.08);
+  color: #fff2c9;
+  font-size: 18px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .rail-item-meta {
+  color: rgba(255, 242, 201, 0.58);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .rail-section {
+  margin-top: 0;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .rail-section-title {
+  color: rgba(255, 242, 201, 0.62);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-list,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-section-list {
+  padding: 0;
+  gap: 5px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-section,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-section-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-section-header,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-digest,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-avatar,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-kicker,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-badges,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-preview,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-sub,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-status-line,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-tag-row,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-activity,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-top-meta {
+  display: none !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-button {
+  display: block;
+  width: 100%;
+  padding: 8px 9px;
+  border: 2px solid rgba(241, 201, 120, 0.52);
+  background: rgba(255, 242, 201, 0.08);
+  color: #fff2c9;
+  font-size: 18px;
+  text-align: left;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-button:hover,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-button.active {
+  background: rgba(255, 239, 193, 0.38);
+  border-color: rgba(24, 18, 14, 0.18);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-content,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-topline,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-title-stack {
+  display: block;
+  min-width: 0;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 10px;
+  border: 1px solid var(--hub-line);
+  background:
+    linear-gradient(180deg, rgba(23, 17, 15, 0.96), rgba(15, 12, 11, 0.98));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 22px 42px rgba(0, 0, 0, 0.3);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(280px, 0.82fr);
+  gap: 12px;
+  min-height: 0;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--hub-line);
+  background:
+    linear-gradient(145deg, rgba(39, 29, 24, 0.92), rgba(20, 15, 13, 0.96));
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-kicker {
+  margin: 0;
+  font-size: 16px;
+  color: var(--hub-gold);
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-title {
+  margin: 0;
+  font-size: clamp(34px, 4.4vw, 54px);
+  line-height: 0.95;
+  color: var(--hub-ink);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-blurb {
+  max-width: 34rem;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.58;
+  color: rgba(243, 234, 214, 0.82);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(223, 192, 123, 0.14);
+  background: rgba(19, 15, 14, 0.72);
+  font-size: 15px;
+  color: var(--hub-muted);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-preview-badge {
+  align-self: flex-start;
+  padding: 1px 8px;
+  border: 1px solid rgba(223, 192, 123, 0.2);
+  background: rgba(18, 14, 13, 0.88);
+  color: var(--hub-gold);
+  font-size: 16px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-preview-frame {
+  position: relative;
+  flex: 1;
+  min-height: 170px;
+  padding: 8px;
+  border: 1px solid var(--hub-line);
+  background:
+    linear-gradient(180deg, rgba(15, 12, 11, 0.36), rgba(15, 12, 11, 0.82)),
+    url('./assets/pixel/chinese-modern-city/backgrounds/hub_top_scene_band.avif');
+  background-size: cover;
+  background-position: center;
+  image-rendering: pixelated;
+  overflow: hidden;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-preview-frame::after {
+  content: '';
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  width: 98px;
+  height: 58px;
+  border: 1px solid rgba(223, 192, 123, 0.18);
+  background:
+    linear-gradient(180deg, rgba(15, 12, 11, 0.12), rgba(15, 12, 11, 0.52)),
+    url('./assets/pixel/chinese-modern-city/backgrounds/hub_mid_scene_band.avif');
+  background-size: cover;
+  background-position: center;
+  pointer-events: none;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-preview-frame .stage-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: transparent !important;
+  image-rendering: pixelated;
+  position: relative;
+  z-index: 1;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-panel {
+  min-height: 86px;
+  padding: 10px 12px;
+  border: 1px solid var(--hub-line);
+  background:
+    linear-gradient(180deg, rgba(20, 15, 14, 0.84), rgba(20, 15, 14, 0.96)),
+    url('./assets/pixel/chinese-modern-city/ui/ui_general_button_strip.avif');
+  background-size: auto 100%, cover;
+  background-position: center;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-panel strong {
+  display: block;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  font-size: 16px;
+  color: var(--hub-ink);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-panel p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: rgba(243, 234, 214, 0.74);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-panel-kicker {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 7px;
+  border: 1px solid rgba(223, 192, 123, 0.14);
+  background: rgba(15, 12, 11, 0.82);
+  color: var(--hub-gold);
+  font-size: 14px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-chat {
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px 16px;
+  border: 1px solid rgba(223, 192, 123, 0.12);
+  background:
+    linear-gradient(180deg, rgba(14, 11, 10, 0.72), rgba(14, 11, 10, 0.94));
+  overflow: auto;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-log {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-log .message {
+  max-width: 72%;
+  padding: 10px 12px;
+  border-radius: 0;
+  background: rgba(35, 26, 22, 0.84);
+  border: 1px solid rgba(223, 192, 123, 0.12);
+  box-shadow: none;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-log .message.self {
+  margin-left: auto;
+  background: rgba(43, 31, 30, 0.9);
+  border-color: rgba(85, 184, 162, 0.22);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-log .message[data-message-kind="system"] {
+  max-width: 100%;
+  background: rgba(18, 14, 13, 0.92);
+  border-color: rgba(223, 192, 123, 0.18);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: stretch;
+  padding: 0;
+  background: transparent;
+  border-top: none;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tool {
+  min-width: 58px;
+  border: 1px solid rgba(223, 192, 123, 0.18);
+  background:
+    linear-gradient(180deg, rgba(34, 26, 22, 0.94), rgba(20, 15, 13, 0.98));
+  color: var(--hub-gold);
+  font-size: 18px;
+  cursor: pointer;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tool:hover {
+  color: var(--hub-teal);
+  border-color: rgba(85, 184, 162, 0.3);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid rgba(223, 192, 123, 0.16);
+  background:
+    linear-gradient(180deg, rgba(18, 14, 13, 0.9), rgba(18, 14, 13, 0.98)),
+    url('./assets/pixel/chinese-modern-city/ui/chat_composer_bar.avif');
+  background-size: auto 100%, cover;
+  background-position: center;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-field-label {
+  align-self: flex-start;
+  padding: 2px 10px;
+  border: 1px solid rgba(223, 192, 123, 0.14);
+  background: rgba(13, 10, 9, 0.68);
+  color: var(--hub-muted);
+  font-size: 17px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer textarea {
+  min-height: 50px;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--hub-ink);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer textarea::placeholder {
+  color: rgba(163, 138, 103, 0.66);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer #composer-send {
+  min-width: 108px;
+  border: 1px solid rgba(185, 107, 66, 0.36);
+  background: linear-gradient(180deg, #b96b42 0%, #86472b 100%);
+  color: var(--hub-ink);
+  font-family: var(--font-pixel);
+  font-size: 22px;
+  letter-spacing: 1px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer #composer-send:disabled,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer textarea:disabled,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tool:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 960px) {
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-layout {
+    grid-template-columns: 136px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hero {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-strip {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(220px, 38%);
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-log .message {
+    max-width: 84%;
+  }
+}
+
+@media (max-width: 720px) {
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .app.city-hub-shell {
+    padding: 8px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hud {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    padding: 8px 10px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .hub-hud-chip {
+    display: none;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hud .hud-title {
+    font-size: 24px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-layout {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail {
+    position: fixed;
+    top: 58px;
+    left: 8px;
+    bottom: 8px;
+    width: 186px;
+    z-index: 40;
+    transform: translateX(-108%);
+    transition: transform 160ms ease;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.42);
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail.open {
+    transform: translateX(0);
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-stage {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-copy {
+    gap: 8px;
+    padding: 12px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .square-title {
+    font-size: 34px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .square-blurb {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-meta {
+    gap: 6px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-meta span {
+    min-height: 22px;
+    padding: 0 7px;
+    font-size: 14px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-preview-frame {
+    min-height: 108px;
+    padding: 7px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-preview-frame::after {
+    width: 72px;
+    height: 40px;
+    right: 7px;
+    bottom: 7px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-strip {
+    grid-auto-columns: 76%;
+    gap: 6px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .square-panel {
+    min-height: 78px;
+    padding: 9px 10px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-chat {
+    padding: 8px 8px 10px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-log {
+    gap: 8px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-log .message {
+    max-width: 100%;
+    padding: 9px 10px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer {
+    grid-template-columns: 1fr auto;
+    gap: 6px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tool {
+    min-height: 36px;
+    font-size: 16px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tool:nth-child(1),
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tool:nth-child(2) {
+    grid-column: span 1;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-field {
+    grid-column: 1 / -1;
+    gap: 6px;
+    padding: 7px 8px 8px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-field-label {
+    padding: 1px 8px;
+    font-size: 15px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer textarea {
+    min-height: 38px;
+    font-size: 15px;
+  }
+
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer #composer-send {
+    min-width: 72px;
+    font-size: 18px;
+  }
+}

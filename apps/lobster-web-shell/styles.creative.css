@@ -1895,3 +1895,451 @@ body[data-room-ownership="visitor"] .creative-hud-ownership-badge--visitor {
   background: rgba(241, 201, 120, 0.18);
   border: 1px solid rgba(241, 201, 120, 0.3);
 }
+
+
+/* === SFC Creative Shell Layout (extracted from styles.css) === */
+.sfc-shell {
+  max-width: 1520px;
+  margin: 0 auto;
+  padding: 14px 14px 18px;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.sfc-hud {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 8px 14px;
+  border: 2px solid rgba(231, 216, 176, 0.42);
+  background: rgba(34, 25, 32, 0.85);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+}
+.sfc-layout {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 0;
+  min-height: 0;
+  flex: 1;
+  border: 2px solid rgba(231, 216, 176, 0.52);
+  background: rgba(15, 12, 17, 0.92);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+.sfc-rail {
+  border-right: 2px solid rgba(231, 216, 176, 0.36);
+  background:
+    linear-gradient(180deg, rgba(240, 222, 180, 0.06), transparent 14%),
+    linear-gradient(180deg, #84755f 0%, #6f5d48 100%);
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sfc-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: #0a0810;
+  min-height: 0;
+}
+.sfc-city-shell .stage-canvas {
+  background:
+    radial-gradient(ellipse at 80% 20%, rgba(210, 179, 111, 0.22) 0%, transparent 55%),
+    linear-gradient(180deg, #4a3728 0%, #2a1e17 60%, #1a120e 100%);
+}
+.sfc-chat-bar {
+  border-top: 3px solid rgba(101, 67, 33, 0.45);
+  background:
+    linear-gradient(180deg, rgba(20, 14, 10, 0.95) 0%, rgba(15, 10, 8, 0.98) 100%);
+  padding: 12px 14px 8px;
+  min-height: 120px;
+  max-height: 320px;
+  overflow: auto;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 90, 43, 0.3) transparent;
+}
+.sfc-chat-bar {
+  border-top: 3px solid rgba(101, 67, 33, 0.45);
+  background:
+    linear-gradient(180deg, rgba(20, 14, 10, 0.95) 0%, rgba(15, 10, 8, 0.98) 100%);
+  padding: 12px 14px 8px;
+  min-height: 100px;
+  max-height: 220px;
+  overflow: auto;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(139, 90, 43, 0.3) transparent;
+}
+.sfc-composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(15, 10, 8, 0.85);
+  border-top: 1px solid rgba(101, 67, 33, 0.35);
+  flex-shrink: 0;
+}
+.sfc-composer textarea {
+  border: 1px solid rgba(101, 67, 33, 0.5);
+  padding: 7px 10px;
+  color: #e8dcc8;
+  background: rgba(20, 14, 10, 0.7);
+  font-size: 14px;
+  border-radius: 0;
+  resize: none;
+  min-height: 36px;
+  font-family: inherit;
+  touch-action: manipulation;
+  line-height: 1.4;
+}
+.sfc-composer textarea::placeholder {
+  color: rgba(160, 128, 96, 0.55);
+}
+.sfc-composer textarea:focus {
+  outline: 1px solid rgba(212, 168, 83, 0.5);
+  outline-offset: 0;
+  border-color: rgba(212, 168, 83, 0.4);
+}
+.sfc-composer button {
+  border: 1px solid rgba(101, 67, 33, 0.5);
+  padding: 7px 14px;
+  background: rgba(196, 92, 58, 0.85);
+  color: #f0d878;
+  font-weight: 600;
+  font-size: 13px;
+  border-radius: 0;
+  cursor: pointer;
+  transition: background 120ms ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  font-family: var(--font-pixel);
+  letter-spacing: 1px;
+}
+.sfc-composer button:hover {
+  background: rgba(196, 92, 58, 1);
+}
+.sfc-composer button:active {
+  background: rgba(180, 80, 48, 1);
+}
+.sfc-composer button:focus {
+  outline: 1px solid rgba(212, 168, 83, 0.5);
+}
+@media (max-width: 720px) {
+  .sfc-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sfc-rail {
+    position: fixed;
+    left: 0;
+    top: 40px;
+    bottom: 0;
+    width: 180px;
+    z-index: 90;
+    transform: translateX(-100%);
+    transition: transform 200ms ease;
+    display: flex;
+    flex-direction: column;
+    background:
+      linear-gradient(180deg, rgba(240, 222, 180, 0.06), transparent 14%),
+      linear-gradient(180deg, #2d222b 0%, #221920 100%);
+    border-right: 2px solid rgba(231, 216, 176, 0.36);
+  }
+
+  .sfc-rail.open {
+    transform: translateX(0);
+  }
+
+  .hud-rail-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid rgba(231, 216, 176, 0.36);
+    background: rgba(45, 34, 43, 0.72);
+    color: var(--sfc-gold);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .sfc-shell {
+    padding: 8px 8px 12px;
+  }
+
+  .sfc-hud {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    margin-bottom: 0;
+    padding: 6px 10px;
+  }
+
+  .stage-canvas-wrap {
+    min-height: 140px;
+    padding: 6px;
+  }
+
+  /* Hub 移动端精简 */
+  .sfc-layout.sfc-city-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .sfc-city-stage {
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .sfc-city-stage .stage-canvas-wrap {
+    flex: 0 0 100px !important;
+    height: auto !important;
+    min-height: 90px !important;
+    max-height: 130px !important;
+    padding: 5px !important;
+    overflow: hidden !important;
+    background:
+      linear-gradient(180deg, rgba(10,8,12,0.6) 0%, transparent 40%),
+      linear-gradient(0deg, rgba(10,8,12,0.85) 0%, transparent 45%),
+      url('./assets/pixel/chinese-modern-city/backgrounds/hub_mobile_9x16.avif') !important;
+    background-size: 100% 100%, 100% 100%, cover !important;
+    background-position: center, center, center !important;
+    image-rendering: pixelated;
+  }
+
+  .sfc-city-stage .stage-canvas-wrap canvas,
+  .sfc-city-stage .stage-canvas-wrap .pixel-scene-decor {
+    max-height: 90px !important;
+  }
+
+  .sfc-city-stage .pixel-city-label {
+    display: none !important;
+  }
+
+  .sfc-city-chat {
+    flex: 1 1 auto;
+    min-height: 160px;
+    max-height: none;
+    padding: 8px 10px;
+  }
+
+  .chat-log .message {
+    max-width: 86%;
+    padding: 6px 9px;
+    margin: 0 2px;
+  }
+
+  .chat-log .message-body {
+    font-size: 15px;
+  }
+
+  .sfc-composer {
+    padding: 5px 8px;
+    gap: 4px;
+    border-top: 1px solid rgba(101, 67, 33, 0.25);
+  }
+
+  .sfc-composer textarea {
+    min-height: 32px;
+    padding: 6px 8px;
+    font-size: 15px;
+    border: 1px solid rgba(101, 67, 33, 0.4);
+  }
+
+  .sfc-composer button {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .composer-context,
+  .composer-hero,
+  .composer-tip,
+  .composer-status,
+  .composer-hints,
+  .composer-meta,
+  .caretaker-status-line,
+  .chat-priority-badge {
+    display: none !important;
+  }
+
+  .conversation-overview {
+    margin: 0 8px 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+  }
+
+  .conversation-overview .overview-header {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .conversation-overview .overview-title {
+    font-size: 14px;
+  }
+
+  .conversation-overview .overview-context,
+  .conversation-overview .overview-preview-card {
+    display: none;
+  }
+
+  .conversation-overview {
+    display: none;
+  }
+
+  .thread-status-rail {
+    display: none;
+  }
+
+  .stage-canvas-wrap {
+    min-height: 180px;
+  }
+}
+.sfc-city-shell .sfc-hud .hud-title {
+  color: var(--sfc-gold);
+}
+.sfc-city-layout {
+  grid-template-columns: 128px minmax(0, 1fr);
+}
+.sfc-city-rail {
+  background:
+    linear-gradient(180deg, rgba(240, 222, 180, 0.05), transparent 12%),
+    linear-gradient(180deg, #7a6b58 0%, #5e4d3a 100%);
+  padding: 10px 8px;
+}
+.sfc-city-rail .rail-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.sfc-city-rail .rail-item {
+  display: block;
+  padding: 5px 8px;
+  border: 1px solid rgba(24, 18, 14, 0.14);
+  background: rgba(255, 247, 224, 0.18);
+  color: #18120e;
+  text-decoration: none;
+  font-size: 12px;
+  transition: background 100ms ease;
+}
+.sfc-city-rail .rail-item:hover {
+  background: rgba(255, 239, 193, 0.6);
+}
+.sfc-city-rail .room-section-list {
+  padding: 0;
+  gap: 3px;
+}
+.sfc-city-rail .room-section-list .room-button {
+  display: block;
+  padding: 3px 6px;
+  border-radius: 2px;
+  background: rgba(255, 247, 224, 0.1);
+  border: 1px solid rgba(24, 18, 14, 0.12);
+  margin-bottom: 0;
+  font-size: 11px;
+}
+.sfc-city-rail .room-section-list .room-button:hover {
+  background: rgba(255, 239, 193, 0.35);
+}
+.sfc-city-rail .room-section-list .room-button .room-content {
+  gap: 0;
+  min-width: 0;
+}
+.sfc-city-rail .room-section-list .room-button .room-name {
+  font-size: 11px;
+  font-weight: 500;
+  color: #18120e;
+}
+.sfc-city-rail .room-section-list .room-button .room-content,
+.sfc-city-rail .room-section-list .room-button .room-topline,
+.sfc-city-rail .room-section-list .room-button .room-title-stack {
+  display: block;
+  gap: 0;
+  min-height: 0;
+}
+.sfc-city-rail .room-section-list .room-button .room-top-meta,
+.sfc-city-rail .room-section-list .room-button .room-kicker,
+.sfc-city-rail .room-section-list .room-button .room-activity,
+.sfc-city-rail .room-section-list .room-button .room-badges,
+.sfc-city-rail .room-section-list .room-button .room-sub,
+.sfc-city-rail .room-section-list .room-button .room-status-line,
+.sfc-city-rail .room-section-list .room-button .room-preview,
+.sfc-city-rail .room-section-list .room-button .room-tag-row {
+  display: none !important;
+}
+.sfc-city-rail .room-section-header,
+.sfc-city-rail .room-digest {
+  display: none !important;
+}
+.sfc-city-rail .room-section {
+  gap: 3px;
+}
+.sfc-city-stage .stage-canvas-wrap {
+  min-height: 240px;
+  background:
+    linear-gradient(180deg, rgba(10,8,12,0.55) 0%, transparent 40%),
+    linear-gradient(0deg, rgba(10,8,12,0.8) 0%, transparent 45%),
+    url('./assets/pixel/chinese-modern-city/backgrounds/hub_desktop_16x9.avif');
+  background-size: 100% 100%, 100% 100%, cover;
+  background-position: center, center, center;
+  image-rendering: pixelated;
+}
+.sfc-city-stage .stage-canvas {
+  background: transparent !important;
+}
+.sfc-city-chat {
+  min-height: 160px;
+  max-height: 320px;
+}
+.sfc-city-composer {
+  background: rgba(15, 10, 8, 0.7);
+  border-top: 1px solid rgba(101, 67, 33, 0.25);
+  max-height: 80px;
+  overflow: hidden;
+}
+body[data-chat-style="wechat"] .sfc-shell {
+  padding: 0;
+  max-width: none;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+body[data-chat-style="wechat"] .sfc-hud {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  margin-bottom: 0;
+}
+body[data-chat-style="wechat"] .sfc-layout {
+  display: none;
+}
+body[data-chat-style="wechat"] .sfc-layout,
+body[data-chat-style="wechat"] .sfc-rail,
+body[data-chat-style="wechat"] .sfc-stage,
+body[data-chat-style="wechat"] .sfc-chat-bar,
+body[data-chat-style="wechat"] .sfc-composer:not(.wechat-composer) {
+  display: none !important;
+}
+body[data-shell-page="hub"][data-shell-variant="public-square"] .hub-hud-kicker,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .hub-hud-chip,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-kicker,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-meta span,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-preview-badge,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-panel-kicker,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-shortcut,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tool,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-field-label,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .sfc-city-rail .room-button,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .rail-item {
+  font-family: var(--font-pixel);
+}

@@ -6,6 +6,9 @@
 <title>龙虾聊天 · 场景编辑器</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="./styles.tokens.css?v=20260607-scene-editor">
+<link rel="stylesheet" href="./styles.base.css?v=20260612-css-split">
+<link rel="stylesheet" href="./styles.scene.css?v=20260612-css-split">
+<link rel="stylesheet" href="./styles.chat.css?v=20260612-css-split">
 <link rel="stylesheet" href="./styles.css?v=20260525-h5-shell-fix-v2">
 <link rel="stylesheet" href="./styles.pixel-map.css?v=20260525-h5-shell-fix-v2">
 <style>
@@ -42,6 +45,17 @@ body { margin:0; background:var(--editor-bg); color:var(--editor-text); font-fam
 .editor-toolbar button { padding:8px 16px; background:var(--editor-panel); color:var(--editor-accent); border:1px solid rgba(241,201,120,0.3); border-radius:6px; cursor:pointer; font-size:12px; }
 .editor-toolbar button:hover { background:rgba(241,201,120,0.15); }
 .editor-status { position:absolute; bottom:12px; left:12px; font-size:11px; color:#888; }
+/* Export modal */
+.editor-modal-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:100; display:flex; align-items:center; justify-content:center; }
+.editor-modal { background:var(--editor-panel); border:1px solid rgba(241,201,120,0.3); border-radius:8px; width:80%; max-width:800px; max-height:80vh; display:flex; flex-direction:column; }
+.editor-modal-header { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid rgba(241,201,120,0.15); }
+.editor-modal-header h3 { margin:0; color:var(--editor-accent); font-size:15px; }
+.editor-modal-actions { display:flex; gap:8px; }
+.editor-modal-actions button { background:rgba(241,201,120,0.15); color:var(--editor-accent); border:1px solid rgba(241,201,120,0.3); border-radius:6px; padding:6px 12px; cursor:pointer; font-size:12px; }
+.editor-modal-actions button:hover { background:rgba(241,201,120,0.25); }
+.editor-modal-actions button.primary { background:var(--editor-accent); color:#1a1410; font-weight:600; }
+.editor-modal-body { padding:16px; overflow-y:auto; flex:1; }
+.editor-modal-body textarea { width:100%; height:400px; background:#0d0a08; color:var(--editor-text); border:1px solid rgba(241,201,120,0.2); border-radius:6px; padding:12px; font-family:'SF Mono','Menlo','Courier New',monospace; font-size:12px; resize:vertical; box-sizing:border-box; }
 </style>
 </head>
 <body>
@@ -66,6 +80,7 @@ body { margin:0; background:var(--editor-bg); color:var(--editor-text); font-fam
       <button id="previewBtn" class="secondary" style="flex:1;">👁 预览</button>
       <button id="resetBtn" class="danger" style="flex:1;">↩ 重置</button>
     </div>
+    <button id="exportBtn" class="secondary">📤 导出场景配置</button>
     <div id="hotspot-props" class="prop-group" style="display:none;">
       <label style="font-weight:600;color:var(--editor-accent);margin-bottom:8px;">🎯 热点属性</label>
       <label>标签名</label>
@@ -91,6 +106,21 @@ body { margin:0; background:var(--editor-bg); color:var(--editor-text); font-fam
       <button id="fitBtn">📐 适应</button>
     </div>
     <div class="editor-status" id="coordDisplay">坐标: -</div>
+  </div>
+</div>
+
+<div id="exportModal" class="editor-modal-overlay" style="display:none;">
+  <div class="editor-modal" onclick="event.stopPropagation()">
+    <div class="editor-modal-header">
+      <h3>场景配置 (JSON)</h3>
+      <div class="editor-modal-actions">
+        <button id="copyJsonBtn" class="primary">📋 复制</button>
+        <button id="closeModalBtn">✕ 关闭</button>
+      </div>
+    </div>
+    <div class="editor-modal-body">
+      <textarea id="jsonOutput" readonly spellcheck="false" wrap="off"></textarea>
+    </div>
   </div>
 </div>
 
@@ -386,6 +416,47 @@ $('previewBtn').onclick = function() { var d = $('dayUrl').value.trim(); if (d) 
 $('zoomIn').onclick = function() { scale = Math.min(3, scale + 0.25); img.style.transform = 'scale(' + scale + ')'; };
 $('zoomOut').onclick = function() { scale = Math.max(0.25, scale - 0.25); img.style.transform = 'scale(' + scale + ')'; };
 $('fitBtn').onclick = function() { scale = 1; img.style.transform = 'scale(1)'; };
+
+// Export scene config as JSON
+$('exportBtn').onclick = function() {
+  var config = {
+    room_id: $('roomId').value.trim(),
+    image_layer: {
+      day_image_url: $('dayUrl').value.trim() || null,
+      night_image_url: $('nightUrl').value.trim() || null
+    },
+    hotspots: hotspots.map(function(h) {
+      return {
+        hotspot_id: h.hotspot_id,
+        label: h.label,
+        interaction_hint: h.interaction_hint,
+        sprite_hint: h.sprite_hint,
+        x_permyriad: h.x_permyriad,
+        y_permyriad: h.y_permyriad,
+        width_permyriad: h.width_permyriad,
+        height_permyriad: h.height_permyriad
+      };
+    })
+  };
+  $('jsonOutput').value = JSON.stringify(config, null, 2);
+  $('exportModal').style.display = 'flex';
+  status('已生成场景配置 JSON', false);
+};
+
+$('closeModalBtn').onclick = function() { $('exportModal').style.display = 'none'; };
+$('exportModal').onclick = function() { $('exportModal').style.display = 'none'; };
+
+$('copyJsonBtn').onclick = function() {
+  var ta = $('jsonOutput');
+  ta.select();
+  ta.setSelectionRange(0, 999999);
+  navigator.clipboard.writeText(ta.value).then(function() {
+    status('已复制到剪贴板', false);
+  }).catch(function() {
+    document.execCommand('copy');
+    status('已复制 (fallback)', false);
+  });
+};
 
 // Set default background from time of day
 var hour = new Date().getHours();

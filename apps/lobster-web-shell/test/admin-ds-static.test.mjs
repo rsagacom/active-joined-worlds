@@ -370,6 +370,30 @@ test("admin-ds.js normalizeGatewayResidents 处理 is_banned 字段", async () =
   assert.match(js, /status:\s*banned\s*\?\s*'banned'/, "banned 状态应在 online/offline 之前判断");
 });
 
+// ====== Freeze/Unfreeze 管理功能校验 ======
+
+test("admin-ds.js 包含 freezeRoom 和 unfreezeRoom 函数", async () => {
+  const js = await readShellModule("admin-ds.js");
+  assert.match(js, /async function freezeRoom\(/, "应定义 freezeRoom 函数");
+  assert.match(js, /async function unfreezeRoom\(/, "应定义 unfreezeRoom 函数");
+});
+
+test("admin-ds.js freezeRoom/unfreezeRoom 调用正确的 Gateway 端点", async () => {
+  const js = await readShellModule("admin-ds.js");
+  assert.match(js, /\/v1\/admin\/rooms\/freeze/, "应调用 /v1/admin/rooms/freeze 端点");
+  assert.match(js, /\/v1\/admin\/rooms\/unfreeze/, "应调用 /v1/admin/rooms/unfreeze 端点");
+});
+
+test("admin-ds.js freeze/unfreeze 支持按钮加载状态", async () => {
+  const js = await readShellModule("admin-ds.js");
+  assert.match(js, /freezeRoom\(room\.id,\s*freezeBtn\)/, "房间行 freeze 按钮应传递 btn 元素");
+  assert.match(js, /unfreezeRoom\(room\.id,\s*unfreezeBtn\)/, "房间行 unfreeze 按钮应传递 btn 元素");
+  assert.match(js, /setBtnLoading\(btn,\s*true\)/, "调用时应进入 loading 状态");
+  assert.match(js, /处理中/, "loading 时应显示处理中文本");
+  assert.match(js, /ds-btn-success-tick/, "成功时应添加 success-tick 样式");
+  assert.match(js, /ds-btn-error-flash/, "失败时应添加 error-flash 样式");
+});
+
 // ====== Debug 开关 ======
 
 test("admin-ds.js 启动日志默认关闭，仅 ?debug=1 或 ?debug=true 时输出", async () => {

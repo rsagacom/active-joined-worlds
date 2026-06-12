@@ -967,7 +967,7 @@ test("pixel scene chrome uses shared dark rail and local time of day", async () 
   const pixelCss = await readShellModule("styles.pixel-map.css");
   const worldCss = await readShellModule("styles.world-entry.css");
   const squareCss = await readShellModule("styles.world-square.css");
-  const baseCss = await readShellModule("styles.css");
+  const baseCss = await readShellModule("styles.css") + "\n" + await readShellModule("styles.scene.css");
 
   assert.match(source, /applyLocalTimeOfDayState,[\s\S]*from "\.\/shell-shared\.js";/);
   assert.match(sharedSource, /function localTimeOfDay\(date = new Date\(\)\)/);
@@ -998,7 +998,7 @@ test("pixel scene chrome uses shared dark rail and local time of day", async () 
 
 test("scene pages keep one desktop rail width and stretch the stage frame", async () => {
   const pixelCss = await readShellModule("styles.pixel-map.css");
-  const publicCss = await readShellModule("styles.css");
+  const publicCss = await readShellModule("styles.css") + "\n" + await readShellModule("styles.scene.css");
   const worldCss = await readShellModule("styles.world-square.css");
 
   assert.match(

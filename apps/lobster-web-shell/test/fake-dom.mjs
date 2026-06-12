@@ -11,6 +11,7 @@ export const APP_LOCAL_IMPORT_PATHS = Object.freeze([
   "./shell-dom-helpers.js",
   "./shell-errors.js",
   "./shell-gateway.js",
+  "./shell-identity.js",
   "./shell-labels.js",
   "./shell-message-state.js",
   "./shell-message-render.js",
@@ -23,6 +24,7 @@ export const APP_LOCAL_IMPORT_PATHS = Object.freeze([
   "./shell-state-normalize.js",
   "./shell-scene-runtime.js",
   "./shell-auth.js",
+  "./shell-avatar.js",
   "./shell-room-profiles.js",
   "./shell-role-permissions.js",
   "./shell-shared.js",
@@ -523,6 +525,10 @@ class FakeDocument {
   dispatchEvent(event) {
     const handlers = this._listeners.get(event.type) || [];
     for (const handler of handlers) handler.call(this, event);
+  }
+
+  getElementById(id) {
+    return this._byId.get(id) || null;
   }
 
   _indexById(id, element) {

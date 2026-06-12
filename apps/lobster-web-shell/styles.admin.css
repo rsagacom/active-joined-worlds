@@ -1,0 +1,2537 @@
+/* styles.admin.css -- Admin shell overrides extracted from styles.css */
+/* Generated 2026-06-08 */
+
+/* === Admin CSS Custom Properties === */
+
+/* === Admin Workspace & Navigation === */
+
+/* === Admin Shell Overrides === */
+
+
+body[data-shell-page="admin"] .hero-callout-admin {
+  display: block;
+  border-color: rgba(126, 253, 199, 0.22);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 252, 247, 0.94) 0%,
+    rgba(249, 253, 251, 0.92) 100%
+  );
+}
+
+body[data-shell-page="admin"] .hero-callout-user {
+  display: none;
+}
+
+/* Admin page: unified accent-based design */
+body[data-shell-page="admin"] .topbar {
+  background:
+    radial-gradient(
+      circle at top left,
+      rgba(126, 253, 199, 0.08) 0,
+      transparent 32%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(18, 22, 38, 0.94) 0%,
+      rgba(12, 15, 28, 0.92) 100%
+    );
+  border: 1px solid rgba(126, 253, 199, 0.14);
+}
+
+body[data-shell-page="admin"] .status-cluster {
+  display: flex;
+}
+
+body[data-shell-page="admin"] .governance {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.96) 0%,
+    rgba(244, 239, 224, 0.95) 100%
+  );
+  border: 1px solid rgba(20, 93, 77, 0.35);
+  box-shadow: 0 28px 44px rgba(12, 47, 39, 0.2);
+}
+
+body[data-shell-page="admin"] .governance .governance-details {
+  border-radius: 16px;
+  padding: 12px;
+  border: 1px dashed rgba(24, 105, 91, 0.35);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+body[data-shell-page="admin"] .governance .governance-details summary {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+body[data-shell-page="admin"] .conversation-tools {
+  display: flex;
+}
+
+body[data-shell-page="admin"] .thread-status-rail {
+  margin-top: 0;
+}
+
+body[data-shell-page="admin"] .identity-row {
+  display: grid;
+}
+
+body[data-shell-page="admin"] .room-toolbar .segmented-control {
+  display: inline-flex;
+}
+
+body[data-shell-page="admin"] .room-toolbar .toolbar-note {
+  display: block;
+  font-size: 11px;
+}
+
+body[data-shell-page="admin"] .room-section-header {
+  padding-top: 4px;
+  padding-bottom: 2px;
+}
+
+body[data-shell-page="admin"] .conversation-overview {
+  border-color: rgba(255, 196, 110, 0.16);
+  background: linear-gradient(
+    180deg,
+    rgba(27, 31, 36, 0.98) 0%,
+    rgba(16, 19, 24, 0.98) 100%
+  );
+  box-shadow: 0 16px 34px rgba(11, 16, 22, 0.36);
+  color: rgba(255, 245, 226, 0.96);
+}
+
+body[data-shell-page="admin"] .conversation-overview .overview-title, body[data-shell-page="admin"] .conversation-overview .overview-summary {
+  color: #fff4dc;
+}
+
+body[data-shell-page="admin"] .conversation-overview .pill-muted {
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 244, 221, 0.82);
+}
+
+body[data-shell-page="admin"] .conversation-overview .pill-accent {
+  background: rgba(255, 196, 110, 0.12);
+  color: #ffd89e;
+}
+
+body[data-shell-page="admin"] .conversation-overview .pill-warm {
+  background: rgba(255, 176, 116, 0.12);
+  color: #ffd0a0;
+}
+
+body[data-shell-page="admin"] .conversation-overview .pill-danger {
+  background: rgba(173, 77, 62, 0.18);
+  color: #ffcfcb;
+}
+
+body[data-shell-page="admin"] .timeline-divider {
+  background: rgba(126, 80, 18, 0.12);
+  color: rgba(126, 80, 18, 0.88);
+}
+
+body[data-shell-page="admin"] .timeline {
+  gap: 12px;
+}
+
+body[data-shell-page="admin"] .message {
+  border-color: rgba(120, 93, 36, 0.2);
+  background: rgba(20, 24, 31, 0.92);
+}
+
+body[data-shell-page="admin"] .message-header {
+  color: rgba(255, 219, 162, 0.72);
+}
+
+body[data-shell-page="admin"] .message-sender {
+  color: #ffe6bb;
+}
+
+body[data-shell-page="admin"] .message-role {
+  background: rgba(255, 196, 110, 0.12);
+  color: rgba(255, 219, 162, 0.9);
+}
+
+body[data-shell-page="admin"] .message-time {
+  color: rgba(255, 219, 162, 0.5);
+}
+
+body[data-shell-page="admin"] .message-body {
+  color: rgba(255, 246, 228, 0.94);
+}
+
+body[data-shell-page="admin"] .message.self {
+  border-color: rgba(176, 129, 53, 0.42);
+  background: linear-gradient(
+    180deg,
+    rgba(182, 133, 57, 0.28) 0%,
+    rgba(58, 41, 22, 0.98) 100%
+  );
+}
+
+body[data-shell-page="admin"] .message.self .message-header, body[data-shell-page="admin"] .message.self .message-sender, body[data-shell-page="admin"] .message.self .message-time, body[data-shell-page="admin"] .message.self .message-body {
+  color: rgba(255, 248, 237, 0.96);
+}
+
+body[data-shell-page="admin"] .message.self .message-role {
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 248, 237, 0.86);
+}
+
+body[data-shell-page="admin"] .message-pending {
+  border-style: dashed;
+  box-shadow: inset 0 0 0 1px rgba(255, 209, 148, 0.12);
+}
+
+body[data-shell-page="admin"] .message-pending-failed {
+  border-color: rgba(161, 58, 54, 0.34);
+}
+
+body[data-shell-page="admin"] .composer-context-item {
+  border-color: rgba(255, 196, 110, 0.16);
+  background: rgba(34, 27, 18, 0.42);
+}
+
+body[data-shell-page="admin"] .composer-tip {
+  border-color: rgba(255, 196, 110, 0.26);
+  background: rgba(255, 248, 232, 0.08);
+  color: rgba(255, 232, 197, 0.84);
+}
+
+body[data-shell-page="admin"] .composer-meta-item {
+  border-color: rgba(255, 196, 110, 0.14);
+  background: rgba(38, 28, 16, 0.4);
+}
+
+body[data-shell-page="admin"] .composer-meta-label {
+  color: rgba(255, 212, 146, 0.72);
+}
+
+body[data-shell-page="admin"] .composer-meta-value {
+  color: rgba(255, 244, 221, 0.98);
+}
+
+body[data-shell-page="admin"] .conversation-tools {
+  display: flex;
+}
+
+body[data-shell-page="admin"] .timeline {
+  background: rgba(4, 8, 16, 0.9);
+  border-color: rgba(66, 78, 90, 0.4);
+}
+
+body[data-shell-page="admin"] .message {
+  background: rgba(17, 24, 33, 0.8);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+body[data-shell-page="admin"] .message-role-self {
+  background: rgba(201, 144, 57, 0.18);
+  color: rgba(255, 226, 181, 0.9);
+}
+
+body[data-shell-page="admin"] .composer {
+  background: rgba(14, 20, 28, 0.92);
+  border-color: rgba(24, 105, 91, 0.4);
+  color: #fff;
+}
+
+body[data-shell-page="admin"] .composer {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 254, 249, 0.98) 0%,
+    rgba(249, 242, 228, 0.97) 100%
+  );
+  border-color: rgba(201, 144, 57, 0.2);
+  color: var(--ink);
+}
+
+body[data-shell-page="admin"] .composer-hero {
+  border-color: rgba(201, 144, 57, 0.24);
+  background: linear-gradient(
+    180deg,
+    rgba(36, 27, 16, 0.92) 0%,
+    rgba(17, 20, 26, 0.96) 100%
+  );
+}
+
+body[data-shell-page="admin"] .composer-hero-kicker {
+  color: rgba(255, 209, 148, 0.68);
+}
+
+body[data-shell-page="admin"] .composer-hero-title {
+  color: #fff5dc;
+}
+
+body[data-shell-page="admin"] .composer-hero-note {
+  color: rgba(83, 71, 58, 0.82);
+}
+
+body[data-shell-page="admin"] .chat-detail {
+  background:
+    radial-gradient(
+      circle at top left,
+      rgba(240, 232, 210, 0.22) 0,
+      transparent 24%
+    ),
+    linear-gradient(180deg, #fffefb 0%, #faf4e8 100%);
+}
+
+body[data-shell-page="admin"] .composer-hints-admin {
+  display: flex;
+}
+
+body[data-shell-page="admin"] .composer-row button {
+  background: linear-gradient(
+    180deg,
+    rgba(201, 144, 57, 1) 0%,
+    rgba(88, 52, 15, 1) 100%
+  );
+}
+
+body[data-shell-page="admin"] .composer-row {
+  grid-template-columns: minmax(0, 1fr) 118px;
+  gap: 12px;
+}
+
+body[data-shell-page="admin"] .composer-row textarea {
+  min-height: 98px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(201, 144, 57, 0.18);
+  color: var(--ink);
+  box-shadow:
+    inset 0 4px 14px rgba(201, 144, 57, 0.08),
+    0 10px 22px rgba(37, 26, 14, 0.04);
+}
+
+body[data-shell-page="admin"] .composer-row textarea::placeholder {
+  color: rgba(111, 101, 87, 0.52);
+}
+
+body[data-shell-page="admin"] .composer-row textarea:focus {
+  outline-color: rgba(201, 144, 57, 0.42);
+}
+
+body[data-shell-page="admin"] .composer-row button {
+  min-width: 118px;
+  border-radius: 16px;
+  letter-spacing: 0.1em;
+}
+
+body[data-shell-page="admin"] .composer-status {
+  border-color: rgba(120, 93, 36, 0.22);
+}
+
+body[data-shell-page="admin"] .composer[data-draft-state="blocked"] .composer-row textarea:disabled {
+  background: rgba(21, 24, 30, 0.86);
+  border-color: rgba(201, 144, 57, 0.24);
+  color: rgba(242, 232, 214, 0.82);
+}
+
+body[data-shell-page="admin"] .composer-tip {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+body[data-shell-page="admin"] .composer-hints span {
+  background: rgba(201, 144, 57, 0.08);
+  border-color: rgba(201, 144, 57, 0.16);
+}
+
+body[data-shell-page="admin"][data-workspace="chat"] .guide-panel {
+  display: block;
+  background: linear-gradient(
+    180deg,
+    rgba(251, 243, 227, 0.98) 0%,
+    rgba(244, 234, 212, 0.98) 100%
+  );
+  border: 1px solid rgba(255, 196, 110, 0.18);
+  box-shadow: 0 16px 30px rgba(11, 16, 22, 0.12);
+}
+
+body[data-shell-page="admin"][data-workspace="chat"] .guide-panel .guide-list {
+  color: rgba(34, 27, 18, 0.82);
+}
+
+body[data-shell-page="admin"][data-workspace="chat"] .governance {
+  display: block;
+  position: sticky;
+  top: 112px;
+  align-self: start;
+  max-height: calc(100vh - 126px);
+  overflow: auto;
+  background: linear-gradient(
+    180deg,
+    rgba(248, 243, 230, 0.97) 0%,
+    rgba(241, 233, 217, 0.97) 100%
+  );
+  border: 1px solid rgba(120, 93, 36, 0.22);
+}
+
+body[data-shell-page="admin"][data-workspace="chat"] .rooms {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 252, 245, 0.98) 0%,
+    rgba(247, 240, 224, 0.98) 100%
+  );
+  border: 1px solid rgba(120, 93, 36, 0.14);
+  border-left: 4px solid rgba(120, 93, 36, 0.35);
+  box-shadow: 0 22px 40px rgba(24, 105, 91, 0.2);
+}
+
+body[data-shell-page="admin"][data-workspace="chat"] .conversation {
+  background: linear-gradient(
+    180deg,
+    rgba(28, 30, 35, 0.94) 0%,
+    rgba(16, 18, 24, 0.98) 100%
+  );
+  border-left: 4px solid rgba(24, 105, 91, 0.3);
+}
+
+body[data-shell-page="admin"][data-workspace="chat"] .composer {
+  border-color: rgba(24, 105, 91, 0.28);
+  box-shadow: 0 18px 34px rgba(24, 105, 91, 0.16);
+  background: rgba(12, 18, 24, 0.96);
+}
+
+body[data-shell-page="admin"] .composer-context-item {
+  border-color: rgba(120, 93, 36, 0.16);
+  background: rgba(35, 27, 16, 0.38);
+}
+
+body[data-shell-page="admin"] .conversation-overview {
+  border-color: rgba(120, 93, 36, 0.18);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 251, 242, 0.98) 0%,
+    rgba(245, 235, 214, 0.98) 100%
+  );
+}
+
+body[data-shell-page="admin"] .room-button.active {
+  border-color: rgba(120, 93, 36, 0.26);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 247, 228, 1) 0%,
+    rgba(248, 236, 207, 1) 100%
+  );
+}
+
+body[data-shell-page="admin"] .composer-meta {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+body[data-shell-page="admin"] {
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(255, 216, 146, 0.12) 0,
+      transparent 28%
+    ),
+    radial-gradient(
+      circle at 14% 10%,
+      rgba(38, 160, 132, 0.08) 0,
+      transparent 24%
+    ),
+    linear-gradient(180deg, #f3ebdb 0%, #e6dcc6 100%);
+}
+
+body[data-shell-page="admin"] .topbar {
+  border-color: rgba(120, 93, 36, 0.2);
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(255, 230, 180, 0.16) 0,
+      transparent 28%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 251, 242, 0.98) 0%,
+      rgba(244, 236, 220, 0.96) 100%
+    );
+}
+
+body[data-shell-page="admin"] .badge {
+  background: rgba(255, 250, 241, 0.94);
+}
+
+body[data-shell-page="admin"] .panel {
+  border-color: rgba(120, 93, 36, 0.18);
+}
+
+body[data-shell-page="admin"] .conversation {
+  border: 1px solid rgba(120, 93, 36, 0.2);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 252, 246, 0.98) 0%,
+    rgba(240, 232, 215, 0.96) 100%
+  );
+  box-shadow: 0 24px 48px rgba(63, 40, 10, 0.1);
+}
+
+body[data-shell-page="admin"] .timeline {
+  background: linear-gradient(
+    180deg,
+    rgba(23, 28, 33, 0.96) 0%,
+    rgba(14, 18, 22, 0.98) 100%
+  );
+  border-color: rgba(255, 196, 110, 0.16);
+}
+
+body[data-shell-page="admin"] .message {
+  background: linear-gradient(
+    180deg,
+    rgba(34, 28, 22, 0.96) 0%,
+    rgba(24, 20, 17, 0.98) 100%
+  );
+  border-color: rgba(255, 196, 110, 0.14);
+}
+
+body[data-shell-page="admin"] .message.self {
+  border-color: rgba(201, 144, 57, 0.34);
+  background: linear-gradient(
+    180deg,
+    rgba(194, 143, 68, 0.24) 0%,
+    rgba(49, 36, 21, 0.96) 100%
+  );
+}
+
+body[data-shell-page="admin"] .message-header, body[data-shell-page="admin"] .message-time {
+  color: rgba(255, 219, 162, 0.64);
+}
+
+body[data-shell-page="admin"] .message-sender {
+  color: #fff1d2;
+}
+
+body[data-shell-page="admin"] .message-body {
+  color: rgba(255, 247, 232, 0.96);
+}
+
+body[data-shell-page="admin"] .room-button.active {
+  border-color: rgba(120, 93, 36, 0.28);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 246, 224, 1) 0%,
+    rgba(247, 233, 201, 1) 100%
+  );
+}
+
+body[data-shell-page="admin"] .composer {
+  background: linear-gradient(
+    180deg,
+    rgba(33, 27, 21, 0.97) 0%,
+    rgba(20, 16, 13, 0.98) 100%
+  );
+  border-color: rgba(255, 196, 110, 0.16);
+}
+
+body[data-shell-page="admin"] .composer-hero {
+  border-color: rgba(255, 196, 110, 0.18);
+  background: linear-gradient(
+    180deg,
+    rgba(36, 27, 17, 0.96) 0%,
+    rgba(20, 23, 29, 0.98) 100%
+  );
+}
+
+body[data-shell-page="admin"] .composer-hero-note {
+  color: rgba(83, 71, 58, 0.82);
+}
+
+body[data-shell-page="admin"] .composer-row textarea {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(201, 144, 57, 0.18);
+  color: var(--ink);
+  box-shadow:
+    inset 0 4px 14px rgba(201, 144, 57, 0.08),
+    0 10px 22px rgba(37, 26, 14, 0.04);
+}
+
+body[data-shell-page="admin"] .composer-row button {
+  background: linear-gradient(
+    180deg,
+    rgba(201, 144, 57, 1) 0%,
+    rgba(88, 52, 15, 1) 100%
+  );
+}
+
+body[data-shell-page="admin"] .chat-detail {
+  border-color: rgba(120, 93, 36, 0.18);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 251, 244, 0.98) 0%,
+    rgba(244, 236, 220, 0.96) 100%
+  );
+}
+
+body[data-shell-page="admin"][data-workspace="chat"] .conversation {
+  background: linear-gradient(
+    180deg,
+    rgba(40, 34, 28, 0.97) 0%,
+    rgba(23, 18, 15, 0.99) 100%
+  );
+  border: 1px solid rgba(255, 196, 110, 0.16);
+  border-left: 4px solid rgba(201, 144, 57, 0.28);
+  box-shadow: 0 26px 52px rgba(56, 36, 12, 0.18);
+}
+
+body[data-shell-page="admin"] .timeline {
+  background: linear-gradient(
+    180deg,
+    rgba(31, 25, 20, 0.96) 0%,
+    rgba(20, 16, 13, 0.98) 100%
+  );
+  border-color: rgba(255, 196, 110, 0.14);
+}
+
+body[data-shell-page="admin"] .message {
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
+}
+
+body[data-shell-page="admin"] .glance-card {
+  border-color: rgba(201, 144, 57, 0.2);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 253, 247, 0.98) 0%,
+    rgba(248, 238, 214, 0.96) 100%
+  );
+}
+
+body[data-shell-page="admin"] .glance-label {
+  background: rgba(201, 144, 57, 0.14);
+  color: rgba(126, 77, 8, 0.88);
+}
+
+/* Admin: standard backend theme variables */
+body[data-shell-page="admin"] {
+  --admin-sidebar-bg: #141414;
+  --admin-sidebar-text: rgba(255,255,255,0.65);
+  --admin-sidebar-active: #1890ff;
+  --admin-sidebar-hover: rgba(255,255,255,0.05);
+  --admin-content-bg: #f0f2f5;
+  --admin-panel-bg: #ffffff;
+  --admin-border: #e8e8e8;
+  --admin-text: #333333;
+  --admin-text-secondary: #666666;
+  --admin-text-muted: #999999;
+  --admin-accent: #1890ff;
+  --admin-success: #52c41a;
+  --admin-warning: #faad14;
+  --admin-danger: #f5222d;
+}
+
+body[data-shell-page="admin"] .panel-shell-header-detail {
+  border-bottom-color: rgba(201, 144, 57, 0.18);
+}
+
+body[data-shell-page="admin"] .panel-kicker {
+  color: rgba(146, 96, 23, 0.74);
+}
+
+body[data-shell-page="admin"] .governance, body[data-shell-page="admin"] .auth {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 252, 246, 0.96) 0%,
+    rgba(242, 232, 209, 0.94) 100%
+  );
+}
+
+body[data-shell-page="admin"] .room-button::after {
+  background: rgba(201, 144, 57, 0.34);
+}
+
+body[data-shell-page="admin"] .room-preview {
+  color: rgba(52, 40, 26, 0.9);
+}
+
+body[data-shell-page="admin"] .conversation-stage {
+  border-color: rgba(201, 144, 57, 0.14);
+}
+
+body[data-shell-page="admin"] .conversation-stage-title, body[data-shell-page="admin"] .conversation-stage-note {
+  color: #f8ecd1;
+}
+
+body[data-shell-page="admin"] .stage-chip {
+  border-color: rgba(201, 144, 57, 0.24);
+  background: rgba(56, 43, 25, 0.7);
+  color: rgba(255, 225, 173, 0.92);
+}
+
+body[data-shell-page="admin"] .conversation-stage {
+  border-bottom: 1px solid rgba(201, 144, 57, 0.12);
+}
+
+body[data-shell-page="admin"] .conversation-stage-title {
+  color: #231a12;
+}
+
+body[data-shell-page="admin"] .conversation-stage-note {
+  color: rgba(83, 71, 58, 0.84);
+}
+
+body[data-shell-page="admin"] .timeline-divider {
+  background: rgba(255, 196, 110, 0.12);
+  color: rgba(255, 225, 173, 0.82);
+}
+
+body[data-shell-page="admin"] .chat-detail-hero, body[data-shell-page="admin"] .chat-detail-section {
+  background: rgba(255, 252, 246, 0.98);
+}
+
+body[data-shell-page="admin"] .governance-details, body[data-shell-page="admin"] .auth-details {
+  border-color: rgba(201, 144, 57, 0.18);
+  background: rgba(255, 251, 245, 0.8);
+}
+
+body[data-shell-page="admin"] .topbar {
+  border-color: rgba(201, 144, 57, 0.18);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 251, 242, 0.98) 0%,
+    rgba(244, 236, 220, 0.96) 100%
+  );
+}
+
+body[data-shell-page="admin"] .glance-card {
+  border-color: rgba(201, 144, 57, 0.2);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 253, 247, 0.98) 0%,
+    rgba(248, 238, 214, 0.96) 100%
+  );
+}
+
+body[data-shell-page="admin"] .status-cluster {
+  border-top-color: rgba(201, 144, 57, 0.2);
+}
+
+body[data-shell-page="admin"] .layout {
+  grid-template-columns: 220px minmax(0, 1fr) minmax(264px, 304px);
+  border: 1px solid rgba(201, 144, 57, 0.12);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 252, 245, 0.96) 0%,
+    rgba(244, 236, 220, 0.92) 100%
+  );
+}
+
+body[data-shell-page="admin"] .panel {
+  border-color: rgba(201, 144, 57, 0.18);
+}
+
+body[data-shell-page="admin"] .rooms {
+  border-left: 4px solid rgba(201, 144, 57, 0.34);
+}
+
+body[data-shell-page="admin"] .room-digest {
+  border-color: rgba(201, 144, 57, 0.16);
+}
+
+body[data-shell-page="admin"] .room-button::after {
+  background: rgba(201, 144, 57, 0.34);
+}
+
+body[data-shell-page="admin"] .room-button.active {
+  border-color: rgba(201, 144, 57, 0.24);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 246, 224, 1) 0%,
+    rgba(247, 233, 201, 1) 100%
+  );
+}
+
+body[data-shell-page="admin"] .room-button.room-button-unread {
+  border-color: rgba(201, 144, 57, 0.18);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 251, 238, 1) 0%,
+    rgba(248, 241, 214, 1) 100%
+  );
+}
+
+body[data-shell-page="admin"] .room-preview {
+  color: rgba(52, 40, 26, 0.9);
+}
+
+body[data-shell-page="admin"] .conversation {
+  border-color: rgba(201, 144, 57, 0.16);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 251, 243, 0.98) 0%,
+    rgba(246, 236, 217, 0.96) 100%
+  );
+}
+
+body[data-shell-page="admin"] .conversation-stage {
+  border-color: rgba(201, 144, 57, 0.16);
+  background: rgba(255, 251, 243, 0.92);
+}
+
+body[data-shell-page="admin"] .stage-chip {
+  border-color: rgba(201, 144, 57, 0.18);
+}
+
+body[data-shell-page="admin"] .conversation-callout {
+  border-color: rgba(201, 144, 57, 0.16);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 252, 245, 0.98) 0%,
+    rgba(248, 239, 217, 0.96) 100%
+  );
+}
+
+body[data-shell-page="admin"] .chat-priority-badge {
+  background: rgba(201, 144, 57, 0.08);
+  border-color: rgba(201, 144, 57, 0.16);
+  color: rgba(146, 96, 23, 0.82);
+}
+
+body[data-shell-page="admin"] .chat-quick-links button {
+  border-color: rgba(201, 144, 57, 0.18);
+}
+
+body[data-shell-page="admin"] .thread-status-item {
+  border-color: rgba(201, 144, 57, 0.14);
+}
+
+body[data-shell-page="admin"] .conversation-tools select, body[data-shell-page="admin"] .conversation-tools button {
+  border-color: rgba(201, 144, 57, 0.18);
+}
+
+body[data-shell-page="admin"] .timeline {
+  background: linear-gradient(
+    180deg,
+    rgba(255, 251, 245, 0.98) 0%,
+    rgba(247, 239, 222, 0.96) 100%
+  );
+  border-color: rgba(201, 144, 57, 0.16);
+}
+
+body[data-shell-page="admin"] .message {
+  border-color: rgba(201, 144, 57, 0.14);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 253, 247, 0.99) 0%,
+    rgba(248, 239, 218, 0.98) 100%
+  );
+}
+
+body[data-shell-page="admin"] .message.self {
+  border-color: rgba(201, 144, 57, 0.2);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 243, 216, 1) 0%,
+    rgba(245, 225, 184, 1) 100%
+  );
+}
+
+body[data-shell-page="admin"] .message-role {
+  background: rgba(201, 144, 57, 0.1);
+  color: rgba(146, 96, 23, 0.82);
+}
+
+body[data-shell-page="admin"] .timeline-divider {
+  background: rgba(201, 144, 57, 0.08);
+  color: rgba(146, 96, 23, 0.82);
+}
+
+body[data-shell-page="admin"] .composer {
+  border-color: rgba(201, 144, 57, 0.16);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 252, 245, 0.98) 0%,
+    rgba(248, 240, 221, 0.97) 100%
+  );
+}
+
+body[data-shell-page="admin"] .composer-hero {
+  border-color: rgba(201, 144, 57, 0.16);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 252, 245, 0.98) 0%,
+    rgba(248, 239, 217, 0.96) 100%
+  );
+}
+
+body[data-shell-page="admin"] .composer-context-item, body[data-shell-page="admin"] .composer-meta-item {
+  border-color: rgba(201, 144, 57, 0.16);
+}
+
+body[data-shell-page="admin"] .composer-row textarea {
+  border-color: rgba(201, 144, 57, 0.18);
+}
+
+body[data-shell-page="admin"] .composer-row textarea:focus-visible {
+  outline-color: rgba(201, 144, 57, 0.45);
+  border-color: rgba(201, 144, 57, 0.36);
+  box-shadow:
+    inset 0 2px 10px rgba(44, 28, 12, 0.05),
+    0 0 0 4px rgba(201, 144, 57, 0.08);
+}
+
+body[data-shell-page="admin"] .composer-row button {
+  background: linear-gradient(
+    180deg,
+    rgba(201, 144, 57, 1) 0%,
+    rgba(88, 52, 15, 1) 100%
+  );
+}
+
+body[data-shell-page="admin"] .chat-detail-hero, body[data-shell-page="admin"] .chat-detail-section {
+  border-color: rgba(201, 144, 57, 0.16);
+}
+
+body[data-shell-page="admin"] .conversation-stage {
+  border-color: rgba(201, 144, 57, 0.14);
+  background:
+    radial-gradient(circle at top right, rgba(255, 216, 146, 0.1) 0, transparent 34%),
+    linear-gradient(180deg, rgba(255, 253, 247, 0.98) 0%, rgba(244, 236, 220, 0.98) 100%);
+}
+
+body[data-shell-page="admin"] .conversation-stage-title {
+  font-size: 22px;
+}
+
+body[data-shell-page="admin"] .composer {
+  background: linear-gradient(180deg, rgba(255, 253, 247, 0.98) 0%, rgba(245, 237, 220, 0.98) 100%);
+}
+
+body[data-shell-page="admin"] .governance-summary, body[data-shell-page="admin"] .governance-status {
+  padding-bottom: 10px;
+}
+
+body[data-shell-page="admin"] .governance-details summary {
+  padding: 7px 12px;
+}
+
+body[data-shell-page="admin"] .governance-roadmap {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+body[data-shell-page="admin"] .roadmap-step {
+  border-radius: 999px;
+  padding: 4px 9px;
+}
+
+body[data-shell-page="admin"] .guide-panel {
+  display: none !important;
+}
+
+body[data-shell-page="admin"] .governance {
+  position: sticky;
+  top: 112px;
+  align-self: start;
+  max-height: calc(100vh - 126px);
+  overflow: auto;
+}
+
+body[data-shell-page="admin"] .governance-details {
+  display: block !important;
+}
+
+body[data-shell-page="admin"] .governance-roadmap {
+  display: flex;
+}
+
+body[data-shell-page="admin"] .roadmap-step {
+  border-color: rgba(201, 144, 57, 0.18);
+  background: rgba(255, 251, 242, 0.96);
+  color: rgba(126, 77, 8, 0.88);
+}
+
+body[data-shell-page="admin"] {
+  background:
+    radial-gradient(circle at top right, rgba(255, 216, 146, 0.16) 0, transparent 24%),
+    radial-gradient(circle at 14% 10%, rgba(63, 176, 147, 0.05) 0, transparent 22%),
+    linear-gradient(180deg, #f2ead9 0%, #e6dac2 100%);
+}
+
+body[data-shell-page="admin"] .topbar, body[data-shell-page="admin"] .layout, body[data-shell-page="admin"] .panel, body[data-shell-page="admin"] .conversation, body[data-shell-page="admin"] .timeline, body[data-shell-page="admin"] .composer {
+  border-color: rgba(120, 93, 36, 0.16);
+}
+
+body[data-shell-page="admin"] .topbar {
+  background:
+    radial-gradient(circle at top right, rgba(255, 216, 146, 0.16) 0, transparent 24%),
+    linear-gradient(180deg, rgba(255, 253, 247, 0.98) 0%, rgba(245, 237, 220, 0.96) 100%);
+  box-shadow: 0 20px 42px rgba(55, 34, 11, 0.12);
+}
+
+body[data-shell-page="admin"] .layout {
+  background:
+    radial-gradient(circle at top right, rgba(255, 216, 146, 0.11) 0, transparent 26%),
+    linear-gradient(180deg, rgba(255, 253, 247, 0.98) 0%, rgba(245, 238, 224, 0.96) 100%);
+}
+
+body[data-shell-page="admin"] .conversation {
+  background: linear-gradient(180deg, rgba(255, 252, 246, 0.98) 0%, rgba(244, 235, 218, 0.96) 100%);
+}
+
+body[data-shell-page="admin"] .timeline {
+  background: rgba(255, 255, 252, 0.76);
+}
+
+body[data-shell-page="admin"] .conversation-tools, body[data-shell-page="admin"] .room-toolbar {
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
+body[data-shell-page="admin"] .governance-roadmap {
+  gap: 0;
+  flex-wrap: nowrap;
+  padding: 8px 12px;
+  margin: 0 0 10px;
+  border-radius: 14px;
+  background: rgba(255, 251, 242, 0.6);
+  border: 1.5px solid rgba(201, 144, 57, 0.14);
+}
+
+body[data-shell-page="admin"] .roadmap-step {
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-weight: 600;
+  color: rgba(126, 77, 8, 0.55);
+  border: 0;
+  background: transparent;
+}
+
+body[data-shell-page="admin"] .roadmap-step + .roadmap-step {
+  position: relative;
+  margin-left: 4px;
+  padding-left: 16px;
+}
+
+body[data-shell-page="admin"] .roadmap-step + .roadmap-step::before {
+  content: "→";
+  position: absolute;
+  left: 0;
+  font-size: 10px;
+  color: rgba(201, 144, 57, 0.3);
+}
+
+body[data-shell-page="admin"] .governance-block {
+  padding: 0 14px 8px;
+}
+
+body[data-shell-page="admin"] .governance > details.governance-block:nth-of-type(1) > summary::before { content: "1"; }
+body[data-shell-page="admin"] .governance > details.governance-block:nth-of-type(2) > summary::before { content: "2"; }
+body[data-shell-page="admin"] .governance > details.governance-block:nth-of-type(3) > summary::before { content: "3"; }
+body[data-shell-page="admin"] .governance > details.governance-block:nth-of-type(4) > summary::before { content: "4"; }
+body[data-shell-page="admin"] .governance > details.governance-block:nth-of-type(5) > summary::before { content: "5"; }
+body[data-shell-page="admin"] .governance > details.governance-block:nth-of-type(6) > summary::before { content: "6"; }
+
+body[data-shell-page="admin"] .composer-hero {
+  padding: 10px 12px;
+}
+
+body[data-shell-page="admin"] .composer-row textarea {
+  border-color: rgba(120, 93, 36, 0.18);
+  box-shadow:
+    inset 0 4px 14px rgba(120, 93, 36, 0.06),
+    0 10px 22px rgba(37, 26, 14, 0.04);
+}
+
+body[data-shell-page="admin"] .composer-row button {
+  background: linear-gradient(180deg, rgba(201, 144, 57, 1) 0%, rgba(104, 63, 18, 1) 100%);
+}
+
+body[data-shell-page="admin"] .conversation-overview .pill-muted {
+  background: rgba(120, 93, 36, 0.08);
+}
+
+body[data-shell-page="admin"] .conversation-overview .pill-accent {
+  background: rgba(201, 144, 57, 0.14);
+}
+
+body[data-shell-page="admin"] .conversation-overview .pill-warm {
+  background: rgba(231, 166, 82, 0.12);
+}
+
+body[data-shell-page="admin"] .conversation-overview .pill-danger {
+  background: rgba(161, 58, 54, 0.16);
+}
+
+body[data-shell-page="admin"] .conversation-stage {
+  border-color: rgba(201, 144, 57, 0.14);
+  background:
+    radial-gradient(circle at top right, rgba(255, 216, 146, 0.1) 0, transparent 34%),
+    linear-gradient(180deg, rgba(255, 253, 247, 0.98) 0%, rgba(244, 236, 220, 0.98) 100%);
+}
+
+body[data-shell-page="admin"] .conversation-stage-title {
+  font-size: 22px;
+}
+
+body[data-shell-page="admin"] .governance-summary, body[data-shell-page="admin"] .governance-status {
+  padding-bottom: 10px;
+}
+
+body[data-shell-page="admin"] .governance-details summary {
+  padding: 7px 12px;
+}
+
+body[data-shell-page="admin"] .governance-roadmap {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+body[data-shell-page="admin"] .roadmap-step {
+  border-radius: 999px;
+  padding: 4px 9px;
+}
+
+body[data-shell-page="admin"] .guide-panel {
+  display: none !important;
+}
+
+body[data-shell-page="admin"] .governance {
+  position: sticky;
+  top: 112px;
+  align-self: start;
+  max-height: calc(100vh - 126px);
+  overflow: auto;
+}
+
+body[data-shell-page="admin"] .governance > .governance-block {
+  display: block !important;
+  opacity: 1;
+  background: transparent;
+  border-top: 1px solid rgba(217, 204, 183, 0.34);
+  margin-top: 0;
+  padding: 12px 16px 10px;
+}
+
+body[data-shell-page="admin"] .governance > .governance-block:first-of-type {
+  border-top: 0;
+  margin-top: 4px;
+}
+
+body[data-shell-page="admin"] .governance-details {
+  display: block !important;
+  margin: 8px 16px 12px;
+}
+
+body[data-shell-page="admin"] .governance-details summary {
+  text-transform: none;
+  letter-spacing: 0.06em;
+  font-size: 12px;
+}
+
+body[data-shell-page="admin"] .governance-roadmap {
+  display: flex;
+  margin: 4px 16px 8px;
+  padding: 8px 16px 10px;
+}
+
+body[data-shell-page="admin"] .governance-summary, body[data-shell-page="admin"] .governance-status {
+  color: rgba(29, 26, 23, 0.68);
+}
+
+body[data-shell-page="admin"] .governance {
+  max-height: calc(100vh - 126px);
+  overflow: auto;
+}
+
+body[data-shell-page="admin"] .layout-admin-shell {
+  gap: 12px;
+}
+
+body[data-shell-page="admin"] .conversation-stage {
+  margin: 0 12px 10px;
+  padding: 18px 16px 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(201, 144, 57, 0.14);
+  background:
+    radial-gradient(circle at top right, rgba(255, 216, 146, 0.1) 0, transparent 34%),
+    linear-gradient(180deg, rgba(255, 253, 247, 0.98) 0%, rgba(244, 236, 220, 0.98) 100%);
+  box-shadow: 0 10px 22px rgba(37, 26, 14, 0.04);
+}
+
+body[data-shell-page="admin"] .conversation-stage-side {
+  display: flex;
+}
+
+body[data-shell-page="admin"] .conversation-tools {
+  margin: 0 12px 8px;
+  padding: 0 12px 8px;
+  gap: 6px;
+}
+
+body[data-shell-page="admin"] .timeline {
+  margin: 0 12px 0;
+  padding: 12px;
+  border-radius: 16px;
+}
+
+body[data-shell-page="admin"] .composer {
+  margin: 10px 12px 12px;
+  padding: 10px 12px 12px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 253, 247, 0.98) 0%, rgba(245, 237, 220, 0.98) 100%) !important;
+}
+
+body[data-shell-page="admin"] .composer-row textarea {
+  min-height: 68px;
+}
+
+body[data-shell-page="admin"] .composer-row button {
+  background: linear-gradient(180deg, rgba(201, 144, 57, 1) 0%, rgba(104, 63, 18, 1) 100%);
+}
+
+body[data-shell-page="admin"] .guide-panel {
+  display: none !important;
+}
+
+body[data-shell-page="admin"] .governance {
+  position: sticky;
+  top: 112px;
+  align-self: start;
+  max-height: calc(100vh - 126px);
+  overflow: auto;
+}
+
+body[data-shell-page="admin"] .conversation-stage {
+  margin: 0 12px 10px;
+  padding: 18px 16px 12px;
+  border-radius: 18px;
+  border: 1px solid rgba(201, 144, 57, 0.14);
+  background:
+    radial-gradient(circle at top right, rgba(255, 216, 146, 0.1) 0, transparent 34%),
+    linear-gradient(180deg, rgba(255, 253, 247, 0.98) 0%, rgba(244, 236, 220, 0.98) 100%);
+}
+
+body[data-shell-page="admin"] .conversation-stage-side {
+  display: flex !important;
+}
+
+body[data-shell-page="admin"] .conversation-tools {
+  display: flex !important;
+  margin: 0 12px 8px;
+  padding: 0 12px 8px;
+  gap: 6px;
+}
+
+body[data-shell-page="admin"] .layout-admin-shell {
+  gap: 12px !important;
+}
+
+body[data-shell-page="admin"] .timeline-divider {
+  color: rgba(201, 144, 57, 0.72);
+  background: rgba(56, 43, 25, 0.3);
+  border-radius: 12px;
+  margin: 4px 0;
+}
+
+body[data-shell-page="admin"] .room-button:focus-visible, body[data-shell-page="admin"] .composer-row textarea:focus-visible, body[data-shell-page="admin"] .composer-row button:focus-visible {
+  outline-color: rgba(201, 144, 57, 0.5);
+}
+
+body[data-shell-page="admin"] .composer-row textarea:focus {
+  border-color: rgba(201, 144, 57, 0.45);
+  box-shadow:
+    0 0 0 3px rgba(201, 144, 57, 0.08),
+    0 12px 28px rgba(201, 144, 57, 0.12);
+}
+
+body[data-shell-page="admin"] .timeline-empty-card {
+  border-color: rgba(201, 144, 57, 0.2);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 252, 245, 0.5) 0%,
+    rgba(255, 255, 255, 0.7) 100%
+  );
+}
+
+body[data-shell-page="admin"] .timeline-empty-action {
+  color: rgba(201, 144, 57, 0.7);
+}
+
+body[data-shell-page="admin"] .timeline-typing-dot {
+  background: rgba(201, 144, 57, 0.5);
+}
+
+body[data-shell-page="admin"] .chat-pane-toggle {
+  border-color: rgba(201, 144, 57, 0.2);
+  color: rgba(201, 144, 57, 0.85);
+  box-shadow: 0 6px 16px rgba(201, 144, 57, 0.1);
+}
+
+/* ═════════════════════════════════════════════════════════════════════════════
+   2026-04-25 Admin Visual Polish
+   Warm pixel-city consistency for admin.html without changing layout structure.
+   ═════════════════════════════════════════════════════════════════════════════ */
+
+body[data-shell-page="admin"] {
+  background:
+    radial-gradient(circle at top left, rgba(185, 107, 66, 0.06), transparent 22%),
+    linear-gradient(180deg, #120d08 0%, #090706 100%);
+}
+
+body[data-shell-page="admin"] .topbar {
+  background:
+    linear-gradient(180deg, rgba(63, 40, 20, 0.96), rgba(29, 18, 10, 0.98)),
+    repeating-linear-gradient(90deg, rgba(255, 230, 150, 0.08) 0 1px, transparent 1px 24px);
+  border: 2px solid #f1c978;
+  box-shadow: 0 0 0 3px rgba(28, 16, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32);
+}
+
+body[data-shell-page="admin"] .eyebrow {
+  color: #9f8561;
+}
+
+body[data-shell-page="admin"] h1 {
+  color: #fff2c9;
+  text-shadow: 2px 2px 0 #281205;
+}
+
+body[data-shell-page="admin"] .hero-note {
+  color: rgba(255, 242, 201, 0.78);
+}
+
+body[data-shell-page="admin"] .badge {
+  color: #fff2c9;
+  background: rgba(92, 43, 21, 0.82);
+  border: 2px solid rgba(247, 210, 118, 0.55);
+}
+
+body[data-shell-page="admin"] .layout {
+  gap: 10px;
+}
+
+body[data-shell-page="admin"] .panel {
+  background: rgba(18, 11, 7, 0.72);
+  border: 2px solid rgba(247, 210, 118, 0.35);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.28);
+}
+
+body[data-shell-page="admin"] .panel-shell-header {
+  background: rgba(42, 24, 12, 0.58);
+  border-bottom: 2px solid rgba(247, 210, 118, 0.35);
+}
+
+body[data-shell-page="admin"] .panel-kicker {
+  color: #9f8561;
+}
+
+body[data-shell-page="admin"] .panel-shell-title {
+  color: #fff2c9;
+}
+
+body[data-shell-page="admin"] .panel-title {
+  color: rgba(255, 242, 201, 0.78);
+  border-bottom: 1px solid rgba(247, 210, 118, 0.22);
+}
+
+body[data-shell-page="admin"] .governance-summary {
+  color: rgba(255, 242, 201, 0.78);
+}
+
+body[data-shell-page="admin"] .governance-status {
+  color: #9f8561;
+}
+
+body[data-shell-page="admin"] .roadmap-step {
+  color: #2a1709;
+  background: rgba(255, 239, 178, 0.72);
+  border: 2px solid rgba(40, 25, 13, 0.84);
+}
+
+body[data-shell-page="admin"] .governance-block summary, body[data-shell-page="admin"] .governance-details summary, body[data-shell-page="admin"] .auth-details summary {
+  color: #fff2c9;
+  background: rgba(42, 24, 12, 0.58);
+  border: 2px solid rgba(247, 210, 118, 0.35);
+}
+
+body[data-shell-page="admin"] .inline-form input, body[data-shell-page="admin"] .inline-form textarea, body[data-shell-page="admin"] .inline-form select {
+  background: rgba(20, 15, 18, 0.85);
+  color: rgba(246, 239, 220, 0.94);
+  border: 1px solid rgba(231, 216, 176, 0.32);
+}
+
+body[data-shell-page="admin"] .inline-form button[type="submit"] {
+  color: #2a1709;
+  background: linear-gradient(180deg, #f1d59d, #cb9758);
+  border: 2px solid #4a2b1a;
+}
+
+body[data-shell-page="admin"] .inline-form button.secondary {
+  color: #fff2c9;
+  background: rgba(92, 43, 21, 0.82);
+  border: 2px solid rgba(247, 210, 118, 0.55);
+}
+
+/* Admin governance area high-contrast overrides */
+body[data-shell-page="admin"] .governance-area-title {
+  color: #fff2c9;
+}
+
+body[data-shell-page="admin"] .governance-area-body .action-desc {
+  color: rgba(255, 242, 201, 0.82);
+}
+
+body[data-shell-page="admin"] .governance-area-body .section-label {
+  color: rgba(255, 242, 201, 0.65);
+}
+
+body[data-shell-page="admin"] .governance-area-body .city-list {
+  color: rgba(255, 242, 201, 0.78);
+}
+
+body[data-shell-page="admin"] .action-btn {
+  background: linear-gradient(180deg, #f1d59d, #cb9758);
+  color: #2a1709;
+  border-color: rgba(40, 25, 13, 0.84);
+}
+
+body[data-shell-page="admin"] .action-btn:disabled {
+  opacity: 0.45;
+  background: rgba(60, 50, 40, 0.6);
+  color: rgba(255, 242, 201, 0.5);
+  border-color: rgba(247, 210, 118, 0.25);
+}
+
+body[data-shell-page="admin"] .action-btn.secondary {
+  background: rgba(92, 43, 21, 0.82);
+  color: #fff2c9;
+  border-color: rgba(247, 210, 118, 0.55);
+}
+
+body[data-shell-page="admin"] .action-status-available {
+  background: rgba(126, 253, 199, 0.15);
+  color: #7efdc7;
+  border-color: rgba(126, 253, 199, 0.4);
+}
+
+body[data-shell-page="admin"] .action-status-pending {
+  background: rgba(255, 100, 80, 0.12);
+  color: #ff8a75;
+  border-color: rgba(255, 100, 80, 0.35);
+}
+
+body[data-shell-page="admin"] .action-status-readonly {
+  background: rgba(255, 242, 201, 0.1);
+  color: rgba(255, 242, 201, 0.72);
+  border-color: rgba(255, 242, 201, 0.25);
+}
+
+body[data-shell-page="admin"] .action-status-gateway {
+  background: rgba(126, 180, 253, 0.18);
+  color: #e6f0ff;
+  border-color: rgba(126, 180, 253, 0.5);
+}
+
+body[data-shell-page="admin"] .governance-more summary {
+  background: rgba(42, 24, 12, 0.58);
+  color: #fff2c9;
+  border-color: rgba(247, 210, 118, 0.35);
+}
+
+body[data-shell-page="admin"] .governance-more[open] summary {
+  background: rgba(24, 105, 91, 0.25);
+  color: #7efdc7;
+  border-color: rgba(126, 253, 199, 0.45);
+}
+
+body[data-shell-page="admin"] .conversation-stage {
+  background: rgba(18, 11, 7, 0.42);
+  border: 2px solid rgba(247, 210, 118, 0.35);
+}
+
+body[data-shell-page="admin"] .conversation-stage-title {
+  color: #fff2c9;
+}
+
+body[data-shell-page="admin"] .conversation-stage-note {
+  color: rgba(255, 242, 201, 0.72);
+}
+
+body[data-shell-page="admin"] .stage-chip {
+  color: #2a1709;
+  background: rgba(255, 239, 178, 0.72);
+  border: 1px solid rgba(40, 25, 13, 0.84);
+}
+
+body[data-shell-page="admin"] .timeline {
+  background: transparent;
+}
+
+body[data-shell-page="admin"] .timeline .message {
+  color: #17110b;
+  background: rgba(255, 245, 221, 0.94);
+  border: 2px solid rgba(96, 61, 28, 0.72);
+  border-radius: 12px;
+}
+
+body[data-shell-page="admin"] .timeline .message.self {
+  color: #14100b;
+  background: rgba(255, 221, 137, 0.96);
+  border-color: rgba(88, 49, 17, 0.88);
+}
+
+body[data-shell-page="admin"] .composer {
+  background:
+    linear-gradient(180deg, rgba(255, 236, 171, 0.96), rgba(214, 165, 84, 0.94)),
+    repeating-linear-gradient(90deg, rgba(46, 28, 13, 0.10) 0 2px, transparent 2px 28px);
+  border: 3px solid #f2c879;
+  box-shadow: 0 0 0 3px rgba(33, 19, 10, 0.94), 0 7px 0 rgba(0, 0, 0, 0.32);
+}
+
+body[data-shell-page="admin"] .composer textarea {
+  color: #14100b;
+  caret-color: #14100b;
+  background: rgba(255, 244, 208, 0.88);
+  border: 2px solid #2f1d0f;
+}
+
+body[data-shell-page="admin"] .composer textarea::placeholder {
+  color: rgba(36, 20, 9, 0.44);
+}
+
+body[data-shell-page="admin"] .composer #composer-send {
+  color: #fff3cc;
+  background: #963f19;
+  border: 2px solid #ffd987;
+}
+
+body[data-shell-page="admin"] .chat-detail {
+  background: rgba(18, 11, 7, 0.72);
+  border: 2px solid rgba(247, 210, 118, 0.35);
+}
+
+body[data-shell-page="admin"] .chat-detail-summary-title {
+  color: #fff2c9;
+}
+
+body[data-shell-page="admin"] .chat-detail-summary-copy {
+  color: rgba(255, 242, 201, 0.72);
+}
+
+body[data-shell-page="admin"] .chat-detail-card-shell {
+  background: rgba(42, 24, 12, 0.58);
+  border: 2px solid rgba(247, 210, 118, 0.35);
+}
+
+body[data-shell-page="admin"] .chat-detail-card-title {
+  color: #fff2c9;
+}
+
+body[data-shell-page="admin"] .chat-detail-card-avatar {
+  color: #fff5ce;
+  background: linear-gradient(180deg, #d88a2d, #945016);
+  border: 2px solid rgba(255, 231, 166, 0.88);
+}
+
+body[data-shell-page="admin"] .chat-detail-card-meta-label {
+  color: #9f8561;
+}
+
+body[data-shell-page="admin"] .chat-detail-card-meta-value {
+  color: rgba(255, 242, 201, 0.82);
+}
+
+body[data-shell-page="admin"] .chat-detail-card-actions button {
+  color: #2a1709;
+  background: linear-gradient(180deg, #f1d59d, #cb9758);
+  border: 2px solid #4a2b1a;
+}
+
+body[data-shell-page="admin"] .room-button {
+  color: rgba(255, 242, 201, 0.88);
+  background: rgba(42, 24, 12, 0.42);
+  border: 1px solid rgba(247, 210, 118, 0.28);
+}
+
+body[data-shell-page="admin"] .room-button.active {
+  color: #fff2c9;
+  background: rgba(141, 61, 27, 0.72);
+  border-color: rgba(255, 241, 170, 0.72);
+}
+
+body[data-shell-page="admin"] .room-avatar {
+  color: #fff5ce;
+  background: linear-gradient(180deg, #d88a2d, #945016);
+  border: 2px solid rgba(255, 231, 166, 0.88);
+}
+
+body[data-shell-page="admin"] .room-kicker {
+  color: #9f8561;
+}
+
+body[data-shell-page="admin"] .room-sub {
+  color: rgba(255, 242, 201, 0.62);
+}
+
+body[data-shell-page="admin"] .room-status-line {
+  color: #9f8561;
+}
+
+body[data-shell-page="admin"] .section-label {
+  color: #fff2c9;
+}
+
+body[data-shell-page="admin"] .governance.surface-hidden, body[data-shell-page="admin"] .auth.surface-hidden, body[data-shell-page="admin"] .chat-detail.surface-hidden {
+  display: none !important;
+}
+
+body[data-shell-page="admin"] .governance:not(.surface-hidden), body[data-shell-page="admin"] .auth:not(.surface-hidden), body[data-shell-page="admin"] .chat-detail:not(.surface-hidden) {
+  display: block !important;
+}
+
+body[data-shell-page="admin"] .governance:not(.surface-hidden), body[data-shell-page="admin"] .auth:not(.surface-hidden) {
+  position: sticky;
+  top: 112px;
+  align-self: start;
+  max-height: calc(100vh - 126px);
+  overflow: auto;
+}
+
+body[data-shell-page="admin"] .governance .panel-shell-note {
+  display: block;
+  color: rgba(255, 242, 201, 0.76);
+}
+
+body[data-shell-page="admin"] .governance .panel-shell-header {
+  align-items: flex-start;
+}
+
+body[data-shell-page="admin"] .governance > .governance-block > summary, body[data-shell-page="admin"] .governance-details summary, body[data-shell-page="admin"] .auth-details summary {
+  color: #fff2c9;
+  background: rgba(42, 24, 12, 0.78);
+}
+
+body[data-shell-page="admin"] .governance .city-card {
+  color: #2a1709;
+  background: linear-gradient(180deg, rgba(255, 252, 244, 0.98), rgba(248, 239, 222, 0.96));
+  border-color: rgba(82, 52, 24, 0.34);
+}
+
+body[data-shell-page="admin"] .governance .city-name {
+  color: #5a3218;
+}
+
+body[data-shell-page="admin"] .governance .city-slug, body[data-shell-page="admin"] .governance .city-sub, body[data-shell-page="admin"] .governance .city-role, body[data-shell-page="admin"] .governance .city-room-list {
+  color: rgba(62, 39, 20, 0.78);
+}
+
+/* 2026-04-26 admin audit patch: fold governance columns before mobile overflow. */
+@media (max-width: 960px) {
+  body[data-shell-page="admin"] {
+    overflow-x: hidden;
+  }
+
+  body[data-shell-page="admin"] .app {
+    width: min(100%, 100vw) !important;
+  }
+
+  body[data-shell-page="admin"] .topbar {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 12px !important;
+    margin: 10px !important;
+    padding: 14px !important;
+  }
+
+  body[data-shell-page="admin"] .topbar-main,
+  body[data-shell-page="admin"] .masthead,
+  body[data-shell-page="admin"] .hero-note,
+  body[data-shell-page="admin"] .hero-callout,
+  body[data-shell-page="admin"] .status-cluster {
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  body[data-shell-page="admin"] .status-cluster {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: flex-start !important;
+    gap: 6px !important;
+  }
+
+  body[data-shell-page="admin"] .layout-admin-shell {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 12px !important;
+    width: 100% !important;
+    padding: 0 10px 14px !important;
+    overflow-x: hidden !important;
+  }
+
+  body[data-shell-page="admin"] .sidebar-stack-admin,
+  body[data-shell-page="admin"] .shell-column-main,
+  body[data-shell-page="admin"] .conversation,
+  body[data-shell-page="admin"] .governance,
+  body[data-shell-page="admin"] .chat-detail {
+    position: static !important;
+    top: auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    min-height: auto !important;
+    max-height: none !important;
+  }
+
+  body[data-shell-page="admin"] .sidebar-stack-admin {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  body[data-shell-page="admin"][data-workspace="chat"] .sidebar-stack-admin {
+    display: none !important;
+  }
+
+  body[data-shell-page="admin"]:not([data-workspace="chat"]) .sidebar-stack-admin {
+    display: grid !important;
+  }
+
+  body[data-shell-page="admin"] .conversation-stage,
+  body[data-shell-page="admin"] .conversation-tools,
+  body[data-shell-page="admin"] .timeline,
+  body[data-shell-page="admin"] .composer {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+  }
+
+  body[data-shell-page="admin"] .governance-roadmap,
+  body[data-shell-page="admin"] .provider-actions,
+  body[data-shell-page="admin"] .chat-detail-card-actions {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  body[data-shell-page="admin"] .inline-form,
+  body[data-shell-page="admin"] .compact-form {
+    min-width: 0 !important;
+  }
+}
+
+/* ── Admin tools panel (right rail) ── */
+
+body[data-shell-page="admin"] #chat-detail-content {
+  display: none;
+}
+
+.admin-tools-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 10px 12px;
+  overflow: auto;
+}
+
+body[data-shell-page="admin"] .tool-group {
+  border-color: rgba(126, 253, 199, 0.22);
+  background: rgba(18, 11, 7, 0.42);
+}
+
+body[data-shell-page="admin"] .tool-group--primary {
+  border-style: solid;
+  border-color: rgba(247, 210, 118, 0.45);
+  background: rgba(42, 25, 14, 0.72);
+}
+
+body[data-shell-page="admin"] .tool-group-title--static::after {
+  content: none;
+}
+
+body[data-shell-page="admin"] .tool-group-title {
+  color: rgba(255, 242, 201, 0.82);
+}
+
+body[data-shell-page="admin"] .tool-group-title::after {
+  color: rgba(255, 242, 201, 0.45);
+}
+
+body[data-shell-page="admin"] .tool-group[open] .tool-group-title::after {
+  color: #7efdc7;
+}
+
+body[data-shell-page="admin"] .tool-group-body .inline-form {
+  background: transparent;
+}
+
+body[data-shell-page="admin"] .admin-conversation-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 0 0;
+}
+
+body[data-shell-page="admin"] .admin-conversation-tools select {
+  background: rgba(255, 245, 221, 0.92);
+  color: #2a1709;
+  border: 1px solid rgba(96, 61, 28, 0.72);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+body[data-shell-page="admin"] .admin-conversation-tools button {
+  background: rgba(255, 245, 221, 0.88);
+  color: #2a1709;
+  border: 1px solid rgba(96, 61, 28, 0.72);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+body[data-shell-page="admin"] .admin-conversation-tools button:hover {
+  background: rgba(255, 245, 221, 1);
+}
+
+/* Admin management shell: collapsible category navigation */
+body[data-shell-page="admin"] .layout-admin-shell {
+  grid-template-columns: minmax(200px, 240px) minmax(520px, 1fr) minmax(240px, 280px);
+  align-items: stretch;
+}
+
+body[data-shell-page="admin"] .admin-nav-shell {
+  gap: 12px;
+}
+
+
+body[data-shell-page="admin"] .admin-nav-shell[data-admin-nav="collapsed"] {
+  width: 72px;
+}
+
+body[data-shell-page="admin"] .admin-nav-shell[data-admin-nav="collapsed"] .admin-nav-panel {
+  padding-inline: 10px;
+}
+
+body[data-shell-page="admin"] .admin-nav-shell[data-admin-nav="collapsed"] .admin-nav-head {
+  justify-content: center;
+}
+
+body[data-shell-page="admin"] .admin-nav-shell[data-admin-nav="collapsed"] .admin-nav-head > div, body[data-shell-page="admin"] .admin-nav-shell[data-admin-nav="collapsed"] .admin-nav-copy, body[data-shell-page="admin"] .admin-nav-shell[data-admin-nav="collapsed"] .admin-nav-item::after, body[data-shell-page="admin"] .admin-nav-shell[data-admin-nav="collapsed"] .admin-session-queue {
+  display: none;
+}
+
+body[data-shell-page="admin"] .admin-nav-shell[data-admin-nav="collapsed"] .admin-nav-item {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  min-height: 56px;
+  padding: 8px 6px;
+  border-radius: 12px;
+}
+
+body[data-shell-page="admin"] .admin-nav-shell[data-admin-nav="collapsed"] .admin-nav-toggle {
+  writing-mode: vertical-rl;
+  padding: 8px 6px;
+}
+
+body[data-shell-page="admin"] .admin-nav-shell[data-admin-nav="collapsed"] + .conversation {
+  min-width: 0;
+}
+
+body[data-shell-page="admin"][data-admin-nav="collapsed"] .layout-admin-shell {
+  grid-template-columns: 72px minmax(480px, 1fr) minmax(280px, 340px);
+}
+
+@media (max-width: 1100px) {
+  body[data-shell-page="admin"] .layout-admin-shell,
+  body[data-shell-page="admin"][data-admin-nav="collapsed"] .layout-admin-shell {
+    grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+  }
+
+  body[data-shell-page="admin"] .admin-context-panel {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  body[data-shell-page="admin"] .layout-admin-shell,
+  body[data-shell-page="admin"][data-admin-nav="collapsed"] .layout-admin-shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-shell-page="admin"] .admin-nav-shell,
+  body[data-shell-page="admin"] .admin-nav-shell[data-admin-nav="collapsed"] {
+    width: auto;
+  }
+
+  body[data-shell-page="admin"] .admin-nav-shell[data-admin-nav="collapsed"] .admin-nav-copy,
+  body[data-shell-page="admin"] .admin-nav-shell[data-admin-nav="collapsed"] .admin-nav-item::after,
+  body[data-shell-page="admin"] .admin-nav-shell[data-admin-nav="collapsed"] .admin-session-queue {
+    display: flex;
+  }
+
+  body[data-shell-page="admin"] .admin-nav-shell[data-admin-nav="collapsed"] .admin-nav-item {
+    grid-template-columns: 34px minmax(0, 1fr);
+    justify-items: stretch;
+  }
+}
+
+/* Admin page: standard backend theme — 国内后台风格 */
+body[data-shell-page="admin"] {
+  background: var(--admin-content-bg);
+}
+
+body[data-shell-page="admin"] .topbar {
+  background: #ffffff;
+  border: 1px solid var(--admin-border);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .eyebrow {
+  color: var(--admin-text-muted);
+  letter-spacing: 0.08em;
+}
+
+body[data-shell-page="admin"] h1 {
+  color: var(--admin-text);
+  font-weight: 700;
+}
+
+body[data-shell-page="admin"] .hero-note {
+  color: var(--admin-text-secondary);
+}
+
+body[data-shell-page="admin"] .status-cluster {
+  border-top-color: var(--admin-border);
+}
+
+body[data-shell-page="admin"] .badge {
+  background: #f5f5f5;
+  border-color: var(--admin-border);
+  color: var(--admin-text-secondary);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+body[data-shell-page="admin"] .layout {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+/* Left sidebar: dark standard nav */
+body[data-shell-page="admin"] .admin-nav-shell {
+  background: var(--admin-sidebar-bg);
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .admin-nav-panel {
+  background: transparent;
+  border: none;
+  color: var(--admin-sidebar-text);
+  box-shadow: none;
+}
+
+body[data-shell-page="admin"] .admin-nav-head {
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+
+body[data-shell-page="admin"] .admin-nav-head-title .panel-kicker {
+  color: rgba(255,255,255,0.4);
+  font-size: 11px;
+}
+
+body[data-shell-page="admin"] .admin-nav-head-title .panel-shell-title {
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+body[data-shell-page="admin"] .admin-nav-toggle {
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.6);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+body[data-shell-page="admin"] .admin-nav-toggle:hover, body[data-shell-page="admin"] .admin-nav-toggle:focus-visible {
+  background: rgba(255,255,255,0.08);
+  color: #ffffff;
+  outline: none;
+}
+
+body[data-shell-page="admin"] .admin-nav-list {
+  gap: 12px;
+}
+
+body[data-shell-page="admin"] .admin-nav-module {
+  display: grid;
+  gap: 4px;
+}
+
+body[data-shell-page="admin"] .admin-nav-module-title {
+  color: rgba(255,255,255,0.64);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 8px 4px 4px;
+}
+
+body[data-shell-page="admin"] .admin-nav-module-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 4px;
+  margin: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: rgba(255,255,255,0.64);
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .admin-nav-module-toggle:hover, body[data-shell-page="admin"] .admin-nav-module-toggle:focus-visible {
+  color: #ffffff;
+  background: rgba(255,255,255,0.06);
+  outline: none;
+}
+
+body[data-shell-page="admin"] .admin-nav-module-toggle-icon {
+  font-size: 10px;
+  transition: transform 0.2s ease;
+}
+
+body[data-shell-page="admin"] .admin-nav-module[data-admin-module="advanced"] {
+  border-top: 1px solid rgba(255,255,255,0.12);
+  padding-top: 8px;
+}
+
+body[data-shell-page="admin"] .admin-nav-module[data-admin-module-expanded="false"] .admin-nav-module-items {
+  display: none;
+}
+
+body[data-shell-page="admin"] .admin-nav-module[data-admin-module-expanded="true"] .admin-nav-module-toggle-icon {
+  transform: rotate(90deg);
+}
+
+body[data-shell-page="admin"] .admin-nav-item {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--admin-sidebar-text);
+  border-radius: 4px;
+  min-height: 44px;
+  padding: 8px 12px;
+}
+
+body[data-shell-page="admin"] .admin-nav-item:hover, body[data-shell-page="admin"] .admin-nav-item:focus-visible {
+  background: var(--admin-sidebar-hover);
+  color: #ffffff;
+  outline: none;
+}
+
+body[data-shell-page="admin"] .admin-nav-item.is-active {
+  background: rgba(24,144,255,0.12);
+  color: #ffffff;
+  border-left: 3px solid var(--admin-sidebar-active);
+}
+
+body[data-shell-page="admin"] .admin-nav-item::after {
+  color: rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.08);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+
+body[data-shell-page="admin"] .admin-nav-item.is-active::after {
+  background: var(--admin-sidebar-active);
+  color: #ffffff;
+}
+
+body[data-shell-page="admin"] .admin-nav-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,0.06);
+  color: var(--admin-sidebar-text);
+}
+
+body[data-shell-page="admin"] .admin-nav-item:hover .admin-nav-icon, body[data-shell-page="admin"] .admin-nav-item.is-active .admin-nav-icon {
+  background: var(--admin-sidebar-active);
+  color: #ffffff;
+}
+
+body[data-shell-page="admin"] .admin-nav-icon svg {
+  stroke: currentColor;
+}
+
+body[data-shell-page="admin"] .admin-nav-copy strong {
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+body[data-shell-page="admin"] .admin-nav-item:not(.is-active) .admin-nav-copy strong {
+  color: var(--admin-sidebar-text);
+}
+
+body[data-shell-page="admin"] .admin-nav-copy small {
+  color: rgba(255,255,255,0.4);
+  font-size: 11px;
+}
+
+/* Session queue: white card inside dark sidebar */
+body[data-shell-page="admin"] .admin-session-queue {
+  background: #ffffff;
+  border: 1px solid var(--admin-border);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  border-radius: 4px;
+  margin-top: 12px;
+}
+
+body[data-shell-page="admin"] .admin-session-queue .panel-shell-title, body[data-shell-page="admin"] .admin-session-queue .panel-kicker {
+  color: var(--admin-text);
+}
+
+body[data-shell-page="admin"] .admin-session-queue .panel-shell-note {
+  color: var(--admin-text-secondary);
+}
+
+/* Content panels: light standard */
+body[data-shell-page="admin"] .panel, body[data-shell-page="admin"] .conversation, body[data-shell-page="admin"] .admin-context-panel, body[data-shell-page="admin"] .chat-detail {
+  background: var(--admin-panel-bg);
+  border: 1px solid var(--admin-border);
+  border-radius: 4px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  color: var(--admin-text);
+}
+
+body[data-shell-page="admin"] .conversation-stage {
+  background: #fafafa;
+  border: 1px solid var(--admin-border);
+  margin: 12px;
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .conversation-stage-title {
+  color: var(--admin-text);
+  font-weight: 600;
+}
+
+body[data-shell-page="admin"] .conversation-stage-note {
+  color: var(--admin-text-secondary);
+}
+
+body[data-shell-page="admin"] .stage-chip {
+  color: var(--admin-text-secondary);
+  background: #f5f5f5;
+  border: 1px solid var(--admin-border);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
+body[data-shell-page="admin"] .timeline {
+  background: transparent;
+}
+
+body[data-shell-page="admin"] .timeline .message {
+  color: var(--admin-text);
+  background: #fafafa;
+  border: 1px solid var(--admin-border);
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .timeline .message.self {
+  background: #e6f7ff;
+  border-color: #91d5ff;
+}
+
+/* Composer */
+body[data-shell-page="admin"] .composer {
+  background: #ffffff;
+  border: 1px solid var(--admin-border);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  margin: 12px;
+  padding: 12px;
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .composer .identity-row {
+  border-bottom: 1px solid var(--admin-border);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+body[data-shell-page="admin"] .composer .identity-row label {
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+}
+
+body[data-shell-page="admin"] .composer textarea {
+  color: var(--admin-text);
+  background: #f5f5f5;
+  border: 1px solid var(--admin-border);
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .composer textarea:focus {
+  border-color: var(--admin-accent);
+  outline: none;
+}
+
+body[data-shell-page="admin"] .composer textarea::placeholder {
+  color: var(--admin-text-muted);
+}
+
+body[data-shell-page="admin"] .composer #composer-send {
+  color: #ffffff;
+  background: var(--admin-accent);
+  border: 1px solid var(--admin-accent);
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .composer #composer-send:hover {
+  background: #40a9ff;
+}
+
+body[data-shell-page="admin"] .composer-hints-admin span {
+  color: var(--admin-text-muted);
+  font-size: 11px;
+}
+
+/* Right panel */
+body[data-shell-page="admin"] .chat-detail-summary-title {
+  color: var(--admin-text);
+}
+
+body[data-shell-page="admin"] .chat-detail-summary-copy {
+  color: var(--admin-text-secondary);
+}
+
+body[data-shell-page="admin"] .chat-detail-card-shell {
+  background: #fafafa;
+  border: 1px solid var(--admin-border);
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .chat-detail-card-title {
+  color: var(--admin-text);
+}
+
+body[data-shell-page="admin"] .chat-detail-card-avatar {
+  color: #ffffff;
+  background: var(--admin-accent);
+}
+
+body[data-shell-page="admin"] .chat-detail-card-meta-label {
+  color: var(--admin-text-secondary);
+}
+
+body[data-shell-page="admin"] .chat-detail-card-meta-value {
+  color: var(--admin-text);
+}
+
+body[data-shell-page="admin"] .chat-detail-card-actions button {
+  color: var(--admin-text);
+  background: #f5f5f5;
+  border-color: var(--admin-border);
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .chat-detail-card-actions button:hover {
+  background: #e8e8e8;
+}
+
+/* Room list */
+body[data-shell-page="admin"] .room-button {
+  color: var(--admin-text);
+  background: #ffffff;
+  border: 1px solid var(--admin-border);
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .room-button.active {
+  color: var(--admin-accent);
+  background: #e6f7ff;
+  border-color: #91d5ff;
+}
+
+body[data-shell-page="admin"] .room-avatar {
+  color: #ffffff;
+  background: var(--admin-accent);
+}
+
+body[data-shell-page="admin"] .room-kicker {
+  color: var(--admin-text-secondary);
+}
+
+body[data-shell-page="admin"] .room-sub {
+  color: var(--admin-text-muted);
+}
+
+body[data-shell-page="admin"] .room-status-line {
+  color: var(--admin-text-secondary);
+}
+
+body[data-shell-page="admin"] .section-label {
+  color: var(--admin-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+body[data-shell-page="admin"] .governance-more summary {
+  background: #fafafa;
+  color: var(--admin-text);
+  border-color: var(--admin-border);
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .governance-more[open] summary {
+  background: #f5f5f5;
+  color: var(--admin-text);
+  border-color: var(--admin-border);
+}
+
+body[data-shell-page="admin"] .panel-shell-header-detail {
+  border-bottom-color: var(--admin-border);
+}
+
+/* Tool groups */
+body[data-shell-page="admin"] .tool-group {
+  border-color: var(--admin-border);
+  background: #ffffff;
+  border-style: solid;
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .tool-group-title {
+  color: var(--admin-text);
+}
+
+body[data-shell-page="admin"] .tool-group-title::after {
+  color: var(--admin-text-muted);
+}
+
+body[data-shell-page="admin"] .tool-group[open] .tool-group-title::after {
+  color: var(--admin-accent);
+}
+
+body[data-shell-page="admin"] .action-row {
+  color: var(--admin-text-secondary);
+}
+
+body[data-shell-page="admin"] .action-desc {
+  color: var(--admin-text-secondary);
+}
+
+/* Action statuses: standard colored badges */
+body[data-shell-page="admin"] .action-status {
+  font-size: 11px;
+  border-radius: 4px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+}
+
+body[data-shell-page="admin"] .action-status-available {
+  background: #f6ffed;
+  color: #389e0d;
+  border-color: #b7eb8f;
+}
+
+body[data-shell-page="admin"] .action-status-pending {
+  background: #fffbe6;
+  color: #d48806;
+  border-color: #ffe58f;
+}
+
+body[data-shell-page="admin"] .action-status-readonly {
+  background: #f5f5f5;
+  color: #666666;
+  border-color: #d9d9d9;
+}
+
+body[data-shell-page="admin"] .action-status-gateway {
+  background: #e6f7ff;
+  color: #096dd9;
+  border-color: #91d5ff;
+}
+
+/* Admin tools summary (right panel - minimal) */
+body[data-shell-page="admin"] .admin-tools-summary {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+body[data-shell-page="admin"] .admin-summary-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+body[data-shell-page="admin"] .admin-summary-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+body[data-shell-page="admin"] .admin-summary-head .tool-group-title--static {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--admin-text);
+  letter-spacing: 0.02em;
+}
+
+body[data-shell-page="admin"] .admin-summary-head .action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+body[data-shell-page="admin"] .admin-summary-item-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--admin-text-secondary);
+}
+
+body[data-shell-page="admin"] .admin-summary-reason {
+  color: var(--admin-text-secondary);
+  font-weight: 500;
+}
+
+body[data-shell-page="admin"] .admin-summary-reason-type {
+  color: var(--admin-text);
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+body[data-shell-page="admin"] .admin-summary-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--admin-border);
+}
+
+body[data-shell-page="admin"] .admin-summary-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--admin-text-muted);
+  letter-spacing: 0.02em;
+  margin-bottom: 4px;
+}
+
+body[data-shell-page="admin"] .admin-summary-tool-card {
+  padding: 8px 0;
+}
+
+body[data-shell-page="admin"] .admin-summary-tool-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--admin-text);
+}
+
+body[data-shell-page="admin"] .admin-summary-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--admin-text);
+}
+
+body[data-shell-page="admin"] .admin-summary-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+body[data-shell-page="admin"] .admin-summary-action-row {
+  margin-top: 4px;
+}
+
+body[data-shell-page="admin"] .admin-summary-reason-row {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--admin-text-secondary);
+}
+
+body[data-shell-page="admin"] .admin-summary-reason-label {
+  font-weight: 600;
+  color: var(--admin-text);
+}
+
+body[data-shell-page="admin"] .admin-summary-reason-value {
+  color: var(--admin-text-secondary);
+}
+
+body[data-shell-page="admin"] .admin-summary-drawer-row {
+  margin-top: 4px;
+}
+
+/* Tool drawer */
+body[data-shell-page="admin"] #admin-tool-forms {
+  background: var(--admin-panel-bg);
+}
+
+body[data-shell-page="admin"] .admin-tool-drawer-head {
+  border-bottom: 1px solid var(--admin-border);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+body[data-shell-page="admin"] .admin-tool-drawer-close {
+  background: #f5f5f5;
+  color: var(--admin-text);
+  border-color: var(--admin-border);
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .admin-tool-drawer-close:hover {
+  background: #e8e8e8;
+}
+
+/* Inline forms */
+body[data-shell-page="admin"] .inline-form.compact-form input, body[data-shell-page="admin"] .inline-form.compact-form select, body[data-shell-page="admin"] .inline-form.compact-form textarea {
+  background: #ffffff;
+  border: 1px solid var(--admin-border);
+  color: var(--admin-text);
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .inline-form.compact-form input:focus, body[data-shell-page="admin"] .inline-form.compact-form select:focus, body[data-shell-page="admin"] .inline-form.compact-form textarea:focus {
+  border-color: var(--admin-accent);
+}
+
+body[data-shell-page="admin"] .admin-conversation-tools select {
+  background: #ffffff;
+  color: var(--admin-text);
+  border: 1px solid var(--admin-border);
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .admin-conversation-tools button {
+  background: #f5f5f5;
+  color: var(--admin-text);
+  border: 1px solid var(--admin-border);
+  border-radius: 4px;
+}
+
+body[data-shell-page="admin"] .admin-conversation-tools button:hover {
+  background: #e8e8e8;
+}
+
+body[data-shell-page="admin"] .action-btn.secondary {
+  background: #f5f5f5;
+  color: var(--admin-text);
+  border-color: var(--admin-border);
+}
+
+body[data-shell-page="admin"] button[disabled], body[data-shell-page="admin"] button[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

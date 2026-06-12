@@ -11,6 +11,7 @@ node_modules/
 /apps/lobster-web-shell/screenshots/
 /apps/lobster-web-shell/test-results/
 /test-results/
+/apps/lobster-web-shell/generated/state.contract.*.json
 
 # Build output
 /output/
