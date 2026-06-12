@@ -1,6 +1,421 @@
 # lobster-chat Active Work Queue
 
-Last updated: 2026-06-06
+Last updated: 2026-06-09
+
+## 2026-06-09 Codex 技术债校准与修复
+
+### Web Shell realness 回归修复
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `npm test` 的 `verify-frontend-realness.mjs` 失败：`/unified.html rail width should stay on the shared 220px token`，实测 `.world-entry-rail` 被后加载的 `.sfc-layout` 通用规则压成 160px |
+| 修复 | 调整 `unified.html` 样式加载顺序，让 `styles.creative.css` 先加载，`styles.world-entry.css` 后加载；world-entry 专属 220px rail token 重新成为最终级联结果 |
+| 验证 | `npm test` 通过：736 unit passed / 0 failed，layout passed，realness passed |
+
+### Gateway unsanction 安全/审计债收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `unsanction_resident_endpoint_records_actor_audit_event`，确认解除制裁没有写 `admin:unsanction_resident` 审计事件 |
+| 红灯 | 新增 `unsanction_resident_endpoint_rejects_oversized_body`，确认超 1MiB 请求体没有走统一 size limit |
+| 修复 | `/v1/admin/residents/unsanction` 改用 `read_request_body()`；校验 `actor_id` / `sanction_id`；可选 bearer token 与 actor 匹配；解除成功后写审计并 `notify_changed()` |
+| 验证 | `LOBSTER_DEV_AUTH_BYPASS=1 cargo test -p lobster-waku-gateway -- --test-threads=1` 通过：244 passed / 0 failed；此前 3 个 warning 清零 |
+
+### CLI export parity 补齐
+
+| 项目 | 结果 |
+|------|------|
+| 基线 | `cargo test -p lobster-tui` 通过：217 passed；`cargo test -p lobster-cli` 通过：31 unit + 11 gateway integration + 5 integration passed |
+| 红灯 | 新增 `export_command_parses_gateway_export_request`，确认 CLI 不支持 `export`：`unsupported command: export` |
+| 修复 | CLI 新增 `export --for user:... [--conversation-id ...] [--format md/jsonl/txt] [--include-public] [--json]`，对接 Gateway `/v1/export`；默认人类输出直接打印 `content`，JSON 模式输出完整响应 |
+| 防回归 | 新增 `export_command_rejects_room_actor_target` 和 `export_command_prints_export_content_by_default`，防止把 room 当居民导出、或吞掉导出正文 |
+| 验证 | `cargo test -p lobster-cli` 通过：34 unit + 11 gateway integration + 5 integration passed |
+
+### Workspace 级测试 auth 环境债收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `cargo test --workspace` 失败：Gateway 244 个测试中 22 个 admin/city 写接口用例返回 401；根因是测试默认依赖外部 `LOBSTER_DEV_AUTH_BYPASS=1`，workspace 命令没有注入该环境变量 |
+| 修复 | `GatewayRuntime` 新增实例级 `dev_auth_bypass`；测试构建默认开启，生产构建仍默认关闭；`require_admin_auth()` / capability gate 改为读取 runtime 实例，避免全局 env 污染并行测试 |
+| 防回归 | `resident_without_capability_is_denied_admin_action` 改为关闭当前 runtime 的 test bypass，并携带 Bearer header 验证 capability 拒绝；不再 `remove_var/set_var` 影响其他测试 |
+| 验证 | `cargo test -p lobster-waku-gateway` 通过：244 passed / 0 failed；`cargo test --workspace` 通过：全部 Rust workspace unit/integration/doc tests 绿 |
+
+### 根目录 npm test 入口债收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 在仓库根目录执行 `npm test` 失败：`Missing script: "test"`；但多处文档和协作提示会把 `npm test` 当作前端验收入口，容易误导 CC/DS 在错误目录得出假失败 |
+| 修复 | 根 `package.json` 新增 `test` / `test:frontend`，统一代理到 `apps/lobster-web-shell`；同步 root `package-lock.json` 元数据 |
+| 验证 | 仓库根目录 `npm test` 通过：代理执行 web-shell 736 unit passed / 0 failed，layout passed，realness passed |
+
+### Makefile Gateway 测试入口 workaround 收口
+
+| 项目 | 结果 |
+|------|------|
+| 债务 | `make test-gateway` 仍保留旧 workaround：`LOBSTER_DEV_AUTH_BYPASS=1 cargo test -p lobster-waku-gateway -- --test-threads=1`；这会掩盖 Gateway 测试是否真的能在默认并行环境下通过 |
+| 修复 | `Makefile` 的 `test-gateway` 改回标准 `cargo test -p lobster-waku-gateway`，与已修复的实例级 test bypass 保持一致 |
+| 验证 | `make test-gateway` 通过：244 passed / 0 failed；`Makefile` 中已无 `LOBSTER_DEV_AUTH_BYPASS` / `--test-threads=1` |
+
+### Clippy lint 入口收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `make lint` 失败：`core_runtime.rs` 的 `map_or(true, ...)` 触发 `clippy::unnecessary-map-or`；`http_support.rs` 的 `request.as_reader().bytes()` 触发 `clippy::unbuffered-bytes` |
+| 修复 | 搜索过滤改用 `Option::is_none_or()`；请求体读取改为一次 `take(MAX_BODY_SIZE + 1).read_to_end()`，超过 1MiB 时按原语义报错，不再额外逐字节读取 |
+| 验证 | `make lint` 通过；`unsanction_resident_endpoint_rejects_oversized_body` 与 `message_search_finds_text_in_conversation` 均通过 |
+
+### Rust fmt 入口收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `cargo fmt --check` 失败，多个 Rust 文件存在格式化差异，主要来自近期 Gateway / CLI / TUI / crypto-mls 改动 |
+| 修复 | 执行 `cargo fmt` 做机械格式化，不做语义修改 |
+| 验证 | `cargo fmt --check`、`make lint`、`make check`、`make test` 全部通过 |
+
+### Smoke 门禁基线复验
+
+| 项目 | 结果 |
+|------|------|
+| 范围 | `make smoke` 覆盖 shell 双 HTTP 冒烟与 web-shell 冒烟 |
+| 结果 | `smoke-shell-dual-http.sh` 临时启动 Gateway `127.0.0.1:8807`，`qa-a` 发送公共 shell 消息后 `qa-b` 成功收到；随后 `smoke-web-shell.sh` 跑完 web-shell 测试套件 |
+| 验证 | `make smoke` 通过，当前技术债收口后的集成 smoke 基线为绿 |
+
+### TUI edit/recall Gateway parity 补齐
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `edit_command_without_args_shows_usage_without_publishing_plain_text` / `recall_command_without_args_shows_usage_without_publishing_plain_text`，确认 TUI 会把 `/edit`、`/recall` 空命令误发布成普通正文 |
+| 合同 | 新增 `terminal_edit_command_request_matches_gateway_shell_contract` / `terminal_recall_command_request_matches_gateway_shell_contract`，锁定 TUI 调用 Gateway 的 `/v1/shell/message/edit` 与 `/v1/shell/message/recall` payload |
+| 修复 | TUI 终端新增 `/edit <消息ID> <新正文>` 与 `/recall <消息ID>`；帮助文案同步暴露；命令失败时写终端 notice，不再走普通消息发布路径 |
+| 防回归 | 新增带参数命令测试，确认 `/edit msg text` / `/recall msg` 在 Gateway 未配置时写失败 notice 且不会落入本地普通消息 publish；`/help` 同步断言列出 edit/recall |
+| 可测性 | `handle_terminal_submission_with_gateway_post()` 让 edit/recall 成功路径可通过注入 POST 函数测试，不再需要改全局 `LOBSTER_WAKU_GATEWAY_URL`；新增 success notice 测试覆盖 edit/recall 成功响应 |
+| 验证 | 聚焦红灯测试转绿；`cargo test -p lobster-tui` 通过：225 passed / 0 failed；`make check`、`cargo fmt --check` 与 `make lint` 通过 |
+
+### CLI edit/recall smoke parity 补齐
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_smoke_cli_channel_unit.py`，先确认 `smoke-cli-channel.sh` 没有 edit/recall 步骤；`test_smoke_release_gate_unit.py` 同步要求 release gate 挂载该脚本单测 |
+| 修复 | `smoke-cli-channel.sh` 在 JSON 模式后新增 edit/recall smoke：先 `send --json` 获取两条 message_id，再分别执行 `edit --actor ... --conversation-id ... --message-id ... --json` 与 `recall --actor ... --conversation-id ... --message-id ... --json` |
+| 防回归 | 脚本继续通过 `tail --json` 校验编辑后消息 `is_edited=true` 且正文为新文本，撤回后消息 `is_recalled=true` 且正文投影为 `消息已撤回`；release gate 在真实 CLI channel smoke 前先跑脚本合同单测 |
+| 验证 | `python3 scripts/test_smoke_cli_channel_unit.py`、`python3 scripts/test_smoke_release_gate_unit.py`、`bash -n scripts/smoke-cli-channel.sh scripts/smoke-release-gate.sh` 通过；`SKIP_BUILD=1 scripts/smoke-cli-channel.sh` 通过 |
+
+### make smoke 门禁覆盖面补齐
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_makefile_unit.py`，确认 `make smoke` 仍只声明并执行 shell/web smoke，没有纳入 CLI channel smoke |
+| 修复 | `Makefile` 的 `make smoke` 帮助文案改为 `CLI + shell + web smoke`；实际执行顺序新增 `python3 ./scripts/test_smoke_cli_channel_unit.py` 与 `./scripts/smoke-cli-channel.sh`，再跑原 shell dual HTTP 与 web-shell smoke |
+| 验证 | `python3 scripts/test_makefile_unit.py`、CLI/release smoke 单测、`bash -n` 通过；`make smoke` 通过，真实覆盖 CLI send/inbox/rooms/tail/follow/edit/recall、shell dual HTTP、web-shell 736 tests |
+
+### Release gate smoke 合同漂移收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `test_smoke_release_gate_unit.py` 先要求 release gate 挂载 `test_makefile_unit.py`；随后 `RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=0 SKIP_BUILD=1 scripts/smoke-release-gate.sh` 暴露 resident mainline 红灯：匿名 `/v1/cities/join` 现在先被 admin bearer gate 拒绝 |
+| 修复 | `smoke-release-gate.sh` 在 CLI smoke 单测前新增 `makefile smoke unit`；`smoke-resident-mainline.sh` 改为先完成 OTP 注册拿真实 `session_token`，再用 Bearer header 校验 unregistered join 的业务错误，并用同一 Bearer 执行 registered join |
+| 验证 | `SKIP_BUILD=1 scripts/smoke-resident-mainline.sh` 通过；`RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=0 SKIP_BUILD=1 scripts/smoke-release-gate.sh` 通过，覆盖 CLI/auth/resident/shell dual/shell direct/web/terminal smoke，provider federation 本轮显式跳过 |
+
+### Terminal smoke quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `test_smoke_release_gate_unit.py` 要求 release gate 在长耗时 `test_start_terminal.py` 前运行 `test_start_terminal_unit.py`，先确认该 quick unit 未被挂载 |
+| 修复 | `smoke-release-gate.sh` 在 `terminal smoke` 前新增 `terminal smoke unit`，让 terminal smoke 的 Python helper 合同先快速失败 |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_start_terminal_unit.py`、`bash -n scripts/smoke-release-gate.sh` 通过 |
+
+### Provider federation smoke quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_smoke_provider_federation_unit.py` 锁定 provider federation smoke 的 artifact 解包、release build、上下游 Gateway、`remote-gateway` 状态、下游发消息上游可见与清理逻辑；`test_smoke_release_gate_unit.py` 先确认 release gate 未挂载该 quick unit |
+| 修复 | `smoke-release-gate.sh` 在可选的 `provider federation smoke` 前新增 `provider federation smoke unit`，让 provider interlink 脚本合同先快速失败 |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_smoke_provider_federation_unit.py`、`bash -n scripts/smoke-release-gate.sh scripts/smoke-provider-federation.sh` 通过 |
+
+### Install server quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `test_smoke_release_gate_unit.py` 先要求 release gate 在 install layout quick unit 前挂载 `scripts/test_install_server_unit.py`，确认 `install-server.sh` 本体缺少直接合同检查 |
+| 修复 | 新增 `scripts/test_install_server_unit.py` 锁定 `install-server.sh` 的安装路径默认值、host target/artifact 校验、Rust bootstrap、systemd unit、nginx site、冲突 Gateway 清理、端口占用检查与 health/provider 探针合同；`smoke-release-gate.sh` 在 `install layout smoke unit` 前新增 `install server unit` |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_install_server_unit.py`、`python3 scripts/test_smoke_install_layout_unit.py`、`bash -n scripts/smoke-release-gate.sh scripts/install-server.sh scripts/smoke-install-layout.sh` 通过 |
+
+### Install layout smoke quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_smoke_install_layout_unit.py` 锁定 install layout smoke 的假 systemctl/nginx/curl、artifact 生成、`install-server.sh` 调用、systemd/nginx 产物与 health/provider 探针；`test_smoke_release_gate_unit.py` 先确认 release gate 未挂载该 quick unit |
+| 修复 | `smoke-release-gate.sh` 在结束前新增 `install layout smoke unit`；只跑快速脚本合同检查，完整 `smoke-install-layout.sh` 仍按发布文档单独执行 |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_smoke_install_layout_unit.py`、`bash -n scripts/smoke-release-gate.sh scripts/smoke-install-layout.sh` 通过 |
+
+### Public ingress smoke quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_smoke_public_ingress_unit.py` 锁定 public ingress smoke 的 `BASE_URL` 输入、首页标记、GET/HEAD `/health`、`/v1/provider` 与临时文件清理合同；`test_smoke_release_gate_unit.py` 先确认 release gate 未挂载该 quick unit |
+| 修复 | `smoke-release-gate.sh` 在结束前新增 `public ingress smoke unit`；只跑快速脚本合同检查，真实外部入口 smoke 仍需按 `BASE_URL=... ./scripts/smoke-public-ingress.sh` 单独执行 |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_smoke_public_ingress_unit.py`、`bash -n scripts/smoke-release-gate.sh scripts/smoke-public-ingress.sh` 通过 |
+
+### Package release quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_package_release_unit.py` 锁定 `package-release.sh` 的 dist 目录、host target、release build、source/web/gateway artifact、排除目录与缺失 gateway binary warning 合同；`test_smoke_release_gate_unit.py` 先确认 release gate 未挂载该 quick unit |
+| 修复 | `smoke-release-gate.sh` 在结束前新增 `package release unit`；只跑快速脚本合同检查，真实 `package-release.sh` 仍按发布流程单独执行 |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_package_release_unit.py`、`bash -n scripts/smoke-release-gate.sh scripts/package-release.sh` 通过 |
+
+### Preflight quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_preflight_unit.py` 锁定 `preflight.sh` 的命令依赖、target triple、内存/磁盘探测、cargo 1.85 edition-2024 floor、Linux/systemd/nginx 提示合同；`test_smoke_release_gate_unit.py` 先确认 release gate 未在真实 preflight 前挂载该 quick unit |
+| 修复 | `smoke-release-gate.sh` 在真实 `preflight` 前新增 `preflight unit`；即使 `RUN_PREFLIGHT=0` 也会保留脚本合同快速检查 |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_preflight_unit.py`、`bash -n scripts/smoke-release-gate.sh scripts/preflight.sh` 通过 |
+
+### Restart gateway quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_restart_gateway_unit.py` 锁定 `restart-gateway.sh` 的 debug gateway 构建、端口旧进程发现/停止、nohup 启动、日志路径、`/health`、shell state 与 admin summary 探针合同；`test_smoke_release_gate_unit.py` 先确认 release gate 未挂载该 quick unit |
+| 修复 | `smoke-release-gate.sh` 在结束前新增 `restart gateway unit`；只跑快速脚本合同检查，不执行真实本地 gateway 重启 |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_restart_gateway_unit.py`、`bash -n scripts/smoke-release-gate.sh scripts/restart-gateway.sh` 通过 |
+
+### Web preview quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_start_web_preview_unit.py` 锁定 `start-web-preview.sh` 的 zsh 入口、默认端口/根目录、PID/log 文件、已有 preview 复用、非 preview 端口拒绝、python http.server 启动与 readiness 检查合同；`test_smoke_release_gate_unit.py` 先确认 release gate 未挂载该 quick unit |
+| 修复 | `smoke-release-gate.sh` 在结束前新增 `web preview unit`；只跑快速脚本合同检查，不启动真实本地预览服务 |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_start_web_preview_unit.py`、`bash -n scripts/smoke-release-gate.sh`、`zsh -n scripts/start-web-preview.sh` 通过 |
+
+### Device id quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_lobster_device_id_unit.py` 锁定 `lobster-device-id.sh` 的网卡优先级、platform UUID fallback、默认 URL、已有 query 参数拼接与纯 MAC 输出合同；`test_smoke_release_gate_unit.py` 先确认 release gate 未挂载该 quick unit |
+| 修复 | `smoke-release-gate.sh` 在结束前新增 `device id unit`；只跑快速脚本合同检查，不读取真实网卡/UUID |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_lobster_device_id_unit.py`、`bash -n scripts/smoke-release-gate.sh scripts/lobster-device-id.sh` 通过 |
+
+### Web assets audit quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_audit_web_assets_unit.py` 锁定 `audit-web-assets.sh` 的 assets 目录检查、图片类型枚举、最大图片排序、256px 派生图引用统计、source/concepts 大文件扫描合同；`test_smoke_release_gate_unit.py` 先确认 release gate 未挂载该 quick unit |
+| 修复 | `smoke-release-gate.sh` 在结束前新增 `web assets audit unit`；只跑快速脚本合同检查，不执行真实 assets 扫描 |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_audit_web_assets_unit.py`、`bash -n scripts/smoke-release-gate.sh scripts/audit-web-assets.sh` 通过 |
+
+### Start terminal shell quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_start_terminal_shell_unit.py` 锁定 `start-terminal.sh` 的 TTY 防护、Gateway 复用/启动、state/log 目录、TUI build、`LOBSTER_WAKU_GATEWAY_URL` 传递与 `--mode` 参数合同；`test_smoke_release_gate_unit.py` 先确认 release gate 未在长 terminal smoke 前挂载该 quick unit |
+| 修复 | `smoke-release-gate.sh` 在 `terminal smoke` 前新增 `start terminal shell unit`；只跑快速脚本合同检查，不进入真实交互式 TUI |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_start_terminal_shell_unit.py`、`bash -n scripts/smoke-release-gate.sh scripts/start-terminal.sh` 通过 |
+
+### Preview server quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_preview_server_unit.py` 锁定 `preview-server.mjs` 的默认 root/host/port、MIME 表、路径解析、路径穿越拒绝、目录 index、404 与 HEAD 响应合同；`test_smoke_release_gate_unit.py` 先确认 release gate 未挂载该 quick unit |
+| 修复 | `smoke-release-gate.sh` 在结束前新增 `preview server unit`；只跑快速脚本合同检查，不启动真实 Node 预览服务 |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_preview_server_unit.py`、`bash -n scripts/smoke-release-gate.sh`、`node --check scripts/preview-server.mjs` 通过 |
+
+### Web dual browser smoke quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_smoke_web_dual_browser_unit.py` 锁定 `smoke-web-dual-browser.mjs` 的 Gateway/Web 双进程、Playwright 双页面、index/creative 身份 URL、edit/recall、pending retry 与进程/state 清理合同；`test_smoke_release_gate_unit.py` 先确认 release gate 未在 terminal smoke 前挂载该 quick unit |
+| 修复 | `smoke-release-gate.sh` 在 `web shell smoke` 后新增 `web dual browser smoke unit`；只跑快速脚本合同检查，不启动真实 Playwright 双浏览器 smoke |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_smoke_web_dual_browser_unit.py`、`bash -n scripts/smoke-release-gate.sh`、`node --check scripts/smoke-web-dual-browser.mjs` 通过 |
+
+### Auth registration smoke quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_smoke_auth_registration_unit.py` 锁定 `smoke-auth-registration.sh` 的 inline dev OTP、auth preflight、email OTP request/verify、auth-state 持久化、world-safety sanction 与黑名单 OTP 拦截合同；`test_smoke_release_gate_unit.py` 先确认 release gate 未在真实 auth smoke 前挂载该 quick unit |
+| 修复 | `smoke-release-gate.sh` 在 `auth registration smoke` 前新增 `auth registration smoke unit`；只跑快速脚本合同检查，不启动真实 Gateway |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_smoke_auth_registration_unit.py`、`bash -n scripts/smoke-release-gate.sh scripts/smoke-auth-registration.sh` 通过 |
+
+### Resident mainline smoke quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `test_smoke_release_gate_unit.py` 先要求 release gate 在真实 `resident mainline smoke` 前挂载 `scripts/test_smoke_resident_mainline_unit.py`，确认该 quick unit 缺失 |
+| 修复 | 新增 `scripts/test_smoke_resident_mainline_unit.py` 锁定 `smoke-resident-mainline.sh` 的 inline OTP 注册、Bearer join、未注册居民业务错误、CLI rooms/tail、TUI direct/user 脚本与 cleanup 合同；`smoke-release-gate.sh` 在真实 resident mainline smoke 前新增 `resident mainline smoke unit` |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_smoke_resident_mainline_unit.py`、`bash -n scripts/smoke-release-gate.sh scripts/smoke-resident-mainline.sh` 通过 |
+
+### Shell dual HTTP smoke quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_smoke_shell_dual_http_unit.py` 锁定 `smoke-shell-dual-http.sh` 的 Gateway 启动、初始 shell state、SSE after 订阅、公共消息发送、peer state 可见与 cleanup 合同；`test_smoke_release_gate_unit.py` 先确认 release gate 未在真实 shell dual smoke 前挂载该 quick unit |
+| 修复 | `smoke-release-gate.sh` 在 `shell dual HTTP smoke` 前新增 `shell dual HTTP smoke unit`；只跑快速脚本合同检查，不启动真实 Gateway |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_smoke_shell_dual_http_unit.py`、`bash -n scripts/smoke-release-gate.sh scripts/smoke-shell-dual-http.sh` 通过 |
+
+### Shell direct HTTP smoke quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 新增 `scripts/test_smoke_shell_direct_http_unit.py` 锁定 `smoke-shell-direct-http.sh` 的 direct open、参与者 projection、SSE after 订阅、direct 发送、edit/recall、outsider 读写拦截与 cleanup 合同；`test_smoke_release_gate_unit.py` 先确认 release gate 未在真实 shell direct smoke 前挂载该 quick unit |
+| 修复 | `smoke-release-gate.sh` 在 `shell direct HTTP smoke` 前新增 `shell direct HTTP smoke unit`；只跑快速脚本合同检查，不启动真实 Gateway |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_smoke_shell_direct_http_unit.py`、`bash -n scripts/smoke-release-gate.sh scripts/smoke-shell-direct-http.sh` 通过 |
+
+### Web shell smoke quick unit 挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `test_smoke_release_gate_unit.py` 先要求 release gate 在真实 `web shell smoke` 前挂载 `scripts/test_smoke_web_shell_unit.py`，确认该 quick unit 缺失 |
+| 修复 | 新增 `scripts/test_smoke_web_shell_unit.py` 锁定 `smoke-web-shell.sh` 从仓库根执行 `node --test --test-force-exit apps/lobster-web-shell/test/*.test.mjs`，且不依赖 root `npm test` 或 generated 目录；`smoke-release-gate.sh` 在真实 web shell smoke 前新增 `web shell smoke unit` |
+| 验证 | `python3 scripts/test_smoke_release_gate_unit.py`、`python3 scripts/test_smoke_web_shell_unit.py`、`python3 scripts/test_smoke_web_dual_browser_unit.py`、`bash -n scripts/smoke-release-gate.sh scripts/smoke-web-shell.sh`、`node --check scripts/smoke-web-dual-browser.mjs` 通过 |
+
+### Scripts quick unit coverage 护栏挂入 release gate
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `test_smoke_release_gate_unit.py` 先要求 release gate 最前置挂载 `scripts/test_scripts_quick_unit_coverage.py`；新增覆盖率测试后，它自身也先红在 release gate 未包含该护栏 |
+| 修复 | 新增 `scripts/test_scripts_quick_unit_coverage.py`，显式锁定 release/smoke/install/start 类脚本与对应 quick unit 的映射，并检查 release gate 已挂载关键 quick unit；`smoke-release-gate.sh` 在 preflight unit 前新增 `scripts quick unit coverage` |
+| 验证 | `python3 scripts/test_scripts_quick_unit_coverage.py`、`python3 scripts/test_smoke_release_gate_unit.py`、`bash -n scripts/smoke-release-gate.sh` 通过 |
+
+### SKIP_BUILD 预构建 smoke 依赖债收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `test_smoke_release_gate_unit.py` 与 CLI/auth/resident/shell HTTP quick unit 先要求 `need_cmd cargo` 必须位于 `SKIP_BUILD != 1` 构建分支内，确认现有脚本在跳过构建时仍无条件依赖 cargo |
+| 修复 | `smoke-release-gate.sh`、`smoke-cli-channel.sh`、`smoke-auth-registration.sh`、`smoke-resident-mainline.sh`、`smoke-shell-dual-http.sh`、`smoke-shell-direct-http.sh` 改为仅在实际构建时检查 cargo；`SKIP_BUILD=1` 路径保留二进制存在性校验 |
+| 验证 | 相关 quick unit、`bash -n` 通过；无 cargo 的 PATH 下执行 `RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=0 SKIP_BUILD=1 ... bash scripts/smoke-release-gate.sh` 不再报 `missing command: cargo`，而是在真实 smoke 阶段按预期报缺预构建 gateway binary |
+
+### Resident mainline 预构建二进制检查收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `test_smoke_resident_mainline_unit.py` 先要求 `smoke-resident-mainline.sh` 在创建 `STATE_ROOT` 前检查 `GATEWAY_BIN`、`CLI_BIN`、`TUI_BIN` 可执行，确认现有脚本会把缺二进制错误延迟到中段命令执行 |
+| 修复 | `smoke-resident-mainline.sh` 在构建分支后新增 gateway/cli/tui 三个预构建二进制存在性检查；`SKIP_BUILD=1` 路径能提前给出明确错误，并避免创建临时 state |
+| 验证 | `python3 scripts/test_smoke_resident_mainline_unit.py`、相关 release/smoke quick unit 与 `bash -n` 通过；无 cargo PATH 下分别构造缺 gateway、缺 cli、缺 tui，均提前返回对应 `binary not found` |
+
+### Web dual browser 预构建 Gateway 检查收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `test_smoke_web_dual_browser_unit.py` 先要求 `smoke-web-dual-browser.mjs` 在创建 `stateRoot` 前检查 `GATEWAY_BIN` 可执行，并要求入口 catch 输出简洁错误信息 |
+| 修复 | `smoke-web-dual-browser.mjs` 新增 `assertExecutable()`，在 `SKIP_BUILD=1`/构建后统一校验 gateway binary；入口失败输出改为优先打印 `error.message`，避免完整 stack/cause 污染 smoke 日志 |
+| 验证 | `python3 scripts/test_smoke_web_dual_browser_unit.py`、相关 release/web/resident quick unit、`node --check scripts/smoke-web-dual-browser.mjs` 通过；缺 `GATEWAY_BIN` 时只输出 `gateway binary not found or not executable: ...`，且不会创建 `/tmp/lobster-web-dual-browser.*` state 目录 |
+
+### Web dual browser Playwright 延迟加载收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `test_smoke_web_dual_browser_unit.py` 先要求 `smoke-web-dual-browser.mjs` 不再顶层静态 import Playwright，确认缺依赖会早于 `GATEWAY_BIN` 检查失败 |
+| 修复 | `smoke-web-dual-browser.mjs` 改为在 `assertExecutable(GATEWAY_BIN, "gateway")` 之后通过 `await import("playwright")` 延迟加载；缺预构建 gateway 时不再被 Playwright 依赖问题遮蔽 |
+| 验证 | `python3 scripts/test_smoke_web_dual_browser_unit.py`、`node --check scripts/smoke-web-dual-browser.mjs` 通过；`SKIP_BUILD=1 GATEWAY_BIN=/tmp/lobster-missing-web-gateway node scripts/smoke-web-dual-browser.mjs` 只输出 gateway 缺失错误，且未创建 `/tmp/lobster-web-dual-browser.*` state 目录 |
+
+### Provider federation 预构建路径收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `test_smoke_provider_federation_unit.py` 先要求 `smoke-provider-federation.sh` 仅在无 artifact 且需要构建时检查 cargo，并要求 `BIN_PATH` 可执行检查早于 `STATE_ROOT` 创建 |
+| 修复 | `smoke-provider-federation.sh` 将 `need_cmd cargo` 移入构建分支；artifact 解包和 gateway binary 可执行检查前置到创建 smoke state 之前；artifact 解包临时目录纳入 cleanup |
+| 验证 | `python3 scripts/test_smoke_provider_federation_unit.py`、release gate/coverage quick unit、`bash -n scripts/smoke-provider-federation.sh scripts/smoke-release-gate.sh` 通过；无 cargo PATH 下缺 `BIN_PATH` 或缺 artifact 均给出明确错误，artifact 内 gateway 不可执行时不残留 `/tmp/lobster-chat-smoke.*` |
+
+### Package release 预构建打包路径收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `test_package_release_unit.py` 先要求 `package-release.sh` 仅在实际构建时检查 cargo；no-cargo `SKIP_BUILD=1` 打包验证同时暴露 source archive 会把 `.git/fsmonitor--daemon.ipc` socket 打进 tar 的警告 |
+| 修复 | `package-release.sh` 将 `need_cmd cargo` 移入 `SKIP_BUILD != 1` 构建分支；source archive 新增 `.git` 排除，避免发布包携带 Git 历史、socket 和本地元数据 |
+| 验证 | `python3 scripts/test_package_release_unit.py`、`bash -n scripts/package-release.sh` 通过；只提供 `rustc` 不提供 `cargo` 的 PATH 下执行 `SKIP_BUILD=1 DIST_DIR=/tmp/... bash scripts/package-release.sh` 成功生成 source/web/gateway artifacts，且 source tar 内无 `.git` 路径、无 socket 警告 |
+
+### Package release host target override 收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `test_package_release_unit.py` 先要求 `package-release.sh` 支持 `HOST_TARGET_OVERRIDE`，并且只有未提供 override 时才检查 `rustc`；确认预构建打包路径仍被 rustc 环境硬依赖卡住 |
+| 修复 | `package-release.sh` 新增 `HOST_TARGET_OVERRIDE`，用于直接指定 gateway artifact target 名；未设置时继续通过 `rustc -vV` 推断 host target，保持默认构建路径不变 |
+| 验证 | `python3 scripts/test_package_release_unit.py`、`bash -n scripts/package-release.sh` 通过；无 `rustc/cargo` PATH 下执行 `SKIP_BUILD=1 HOST_TARGET_OVERRIDE=test-target DIST_DIR=/tmp/... bash scripts/package-release.sh` 成功生成 `lobster-waku-gateway-test-target.tar.gz` |
+
+### Package release archive 体积/本地缓存收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `test_package_release_unit.py` 先要求 source archive 排除 `.playwright-cli`、根/嵌套 `node_modules`，并要求 H5 shell archive 排除 `node_modules` 与 `backups`；当前项目存在 `apps/lobster-web-shell/node_modules` 约 163M、根 `node_modules` 约 14M、`.playwright-cli` 日志约 4.5M |
+| 修复 | `package-release.sh` 的 source tar 新增 `.playwright-cli`、根 `node_modules` 与任意层级 `node_modules` 排除；H5 shell tar 新增 `./node_modules` 与 `./backups` 排除；保留 `generated/`，因为静态 fallback 与测试 fixture 会引用 `generated/bootstrap.json`、`generated/state.json` 与 `generated/state.contract.json` |
+| 验证 | `python3 scripts/test_package_release_unit.py`、`bash -n scripts/package-release.sh` 通过；`SKIP_BUILD=1 HOST_TARGET_OVERRIDE=test-target DIST_DIR=/tmp/... bash scripts/package-release.sh` 实测 source tar 不含 `.git`/`.playwright-cli`/`node_modules`/`target`/`dist`，web shell tar 不含 `node_modules`/`backups` 且仍包含 `generated/*.json` |
+
+### Package release runtime artifact 边界收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | 临时打包检查发现 H5 runtime artifact 仍包含 `screenshots`、`test`、`test-results`、`.tmp` 与根层验收/截图 `.mjs` 脚本；source archive 仍包含前端截图、test-results、backups 与 `.source.html` 生成源文件 |
+| 修复 | `package-release.sh` 的 H5 shell tar 新增 `.tmp`、`test`、`test-results`、`screenshots`、根层 `*.mjs`、`.DS_Store` 与 `*.source.html` 排除；source tar 新增任意层级 `backups`、`test-results`、`screenshots`、`.tmp`、`.DS_Store` 与 `*.source.html` 排除，同时保留源码测试目录 |
+| 验证 | `python3 scripts/test_package_release_unit.py`、`bash -n scripts/package-release.sh` 通过；临时 `DIST_DIR=/tmp/...` 打包实测 source tar 不含本地生成/备份产物且保留 `apps/lobster-web-shell/test/*.mjs`，web shell tar 不含测试/截图/脚本/缓存并保留运行时页面、JS/CSS、assets 与 generated fallback |
+
+### Restart gateway 预构建入口收口
+
+| 项目 | 结果 |
+|------|------|
+| 红灯 | `test_restart_gateway_unit.py` 先要求 `restart-gateway.sh` 支持 `SKIP_BUILD` 与 `GATEWAY_BIN`，并在启动/杀进程前检查 binary 可执行；`test_makefile_unit.py` 先要求 `make dev` 不再先 release build 再调用 restart 脚本 |
+| 修复 | `restart-gateway.sh` 新增 `SKIP_BUILD`、`GATEWAY_BIN` 与 `need_cmd`，默认仍 build debug gateway；`SKIP_BUILD=1` 时直接使用传入/默认 binary 并提前报缺；`Makefile dev` 收敛为单入口 `./scripts/restart-gateway.sh`，避免 release build 后又 debug build |
+| 验证 | `python3 scripts/test_restart_gateway_unit.py`、`python3 scripts/test_makefile_unit.py`、`python3 scripts/test_smoke_release_gate_unit.py`、`bash -n scripts/restart-gateway.sh scripts/smoke-release-gate.sh` 通过；`SKIP_BUILD=1 GATEWAY_BIN=/tmp/lobster-missing-restart-gateway bash scripts/restart-gateway.sh` 提前返回 `gateway binary not found` |
+
+## 2026-06-08 DS v4 Pro Phase 5 完整推进摘要 (3 sessions)
+
+### Bug 修复 (3 项)
+
+| 项目 | 结果 |
+|------|------|
+| app.js prevMessage 重复声明 | 删除第二个 `const prevMessage`，复用第一个。node --check 通过 |
+| Rust 测试 env var 竞争 | 22 个 admin 测试因并行竞争返回 401。Makefile 添加 `--test-threads=1` |
+| 骨架头像 `room is not defined` | `room?.id` → `"timeline-skeleton"`（不在函数作用域） |
+| 搜索模式全局状态泄漏 (6 测试) | renderRooms/residentList display toggle 添加 `searchModeControlsEl` 守卫 |
+
+### Phase 5-1: 居民检索 + 个人房间入口
+
+| 交付 | 详情 |
+|------|------|
+| `enterResidentRoom(resident)` | 新 helper：优先使用 `personal_room_id` 直接导航，回退到 `openDirectSession` |
+| `renderResidentList()`/`renderResidents()` 收口 | 两处统一使用 `enterResidentRoom` |
+| `directRoomPeerOnlineStatus(room)` | 交叉引用 `governance.residents` 获取私聊对象在线状态 |
+| 房间头像在线指示器 | CSS `::after` 绿色/灰色圆点 (peer-online/peer-offline) |
+
+### Phase 5-2: 房间 layer 配置 (审查：全链路已完整)
+无需额外开发 — SceneImageLayer/HotspotLayer 合同→Gateway→Admin→前端全链路就绪。
+
+### Phase 5-3: 居民搜索 UI 分离
+
+| 交付 | 详情 |
+|------|------|
+| `searchMode` 变量 + `createSearchModeButton` + `updateSearchModeTabs` | 全部/房间/居民 三模式分段控件 |
+| 搜索模式控件 | creative/user 模式搜索框上方 `.creative-search-mode` |
+| 显示切换 | rooms-only 隐藏居民列表，residents-only 隐藏房间列表 |
+| `bindRoomSearchInput` 增强 | 输入时同步触发 resident list re-render |
+
+### 头像图片渲染 (shell-avatar.js)
+
+| 交付 | 详情 |
+|------|------|
+| `shell-avatar.js` (NEW, 45行) | djb2 hash → 20 色调色板 → 独特背景色 + 亮度自适应文字色 + 光泽渐变 |
+| 5 处渲染接入 | 房间列表、居民列表、peer 消息、self 消息、骨架占位 |
+| fake-dom 支持 | 导入映射 + 模块 URL 重写 |
+
+### 测试基线
+- JS: **737 pass, 0 fail**
+- Rust Gateway: **232 pass, 0 fail** (--test-threads=1)
+- **Total: 969 pass, 0 fail**
+
+### 改动文件汇总
+| 文件 | 行数 | 说明 |
+|------|------|------|
+| `shell-avatar.js` | +45 (NEW) | 独立头像样式模块 |
+| `app.js` | +150/-14 | Phase 5 全部功能 |
+| `styles.css` | +39 | peer-online, creative-search-mode |
+| `gateway_tests.rs` | +1 | set_var 恢复 |
+| `Makefile` | +1/-1 | --test-threads=1 |
+| `test/fake-dom.mjs` | +1 | shell-avatar.js |
+
+### 下一轮建议
+1. **TUI parity** — gateway recall/edit/send 端到端测试补齐
+2. **Codex 继续技术债** — app.js DOM spec 提取
+3. **admin-ds 增强** — 系统日志模块对接审计事件
+4. **avatars 进一步** — 支持上传/像素风生成 (需后端端点)
 
 ## 2026-06-06 Codex 技术债推进摘要
 
@@ -722,4 +1137,62 @@ http://127.0.0.1:18081/creative.html?gateway=http://127.0.0.1:8787&identity=qa-b
 http://127.0.0.1:18081/admin.html?gateway=http://127.0.0.1:8787&qa=manual
 http://127.0.0.1:18081/unified.html?gateway=http://127.0.0.1:8787&qa=manual
 http://127.0.0.1:18081/world-square.html
+```
+
+## 2026-06-11 Codex 技术债补充: start-terminal 预构建入口收口
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯契约 | 完成 | `scripts/test_start_terminal_shell_unit.py` 增加 `SKIP_BUILD`、`GATEWAY_BIN`、`TUI_BIN`、binary 可执行检查和 exec 路径断言 |
+| 启动脚本 | 完成 | `scripts/start-terminal.sh` 支持 `SKIP_BUILD=1` 走预构建 gateway/TUI，不再无条件要求 cargo |
+| Gateway 启动 | 完成 | 非复用现有健康端点时先按需构建 `lobster-waku-gateway`，再通过 `GATEWAY_BIN` 启动 |
+| TUI 启动 | 完成 | 按需构建 `lobster-tui`，最终通过 `TUI_BIN` 启动，缺失时报明确路径 |
+
+### 验证
+
+```bash
+python3 scripts/test_start_terminal_shell_unit.py
+python3 scripts/test_start_terminal_unit.py
+bash -n scripts/start-terminal.sh
+python3 scripts/test_package_release_unit.py && python3 scripts/test_scripts_quick_unit_coverage.py && python3 scripts/test_smoke_release_gate_unit.py && python3 scripts/test_smoke_provider_federation_unit.py && python3 scripts/test_smoke_web_dual_browser_unit.py && python3 scripts/test_smoke_resident_mainline_unit.py && python3 scripts/test_smoke_cli_channel_unit.py && python3 scripts/test_smoke_auth_registration_unit.py && python3 scripts/test_smoke_shell_dual_http_unit.py && python3 scripts/test_smoke_shell_direct_http_unit.py && python3 scripts/test_smoke_web_shell_unit.py && python3 scripts/test_install_server_unit.py && python3 scripts/test_preview_server_unit.py && python3 scripts/test_start_terminal_shell_unit.py && python3 scripts/test_audit_web_assets_unit.py && python3 scripts/test_lobster_device_id_unit.py && python3 scripts/test_start_web_preview_unit.py && python3 scripts/test_restart_gateway_unit.py && python3 scripts/test_preflight_unit.py && python3 scripts/test_smoke_public_ingress_unit.py && python3 scripts/test_smoke_install_layout_unit.py && python3 scripts/test_start_terminal_unit.py && python3 scripts/test_makefile_unit.py
+bash -n scripts/package-release.sh scripts/smoke-provider-federation.sh scripts/smoke-release-gate.sh scripts/smoke-resident-mainline.sh scripts/smoke-cli-channel.sh scripts/smoke-auth-registration.sh scripts/smoke-shell-dual-http.sh scripts/smoke-shell-direct-http.sh scripts/install-server.sh scripts/smoke-web-shell.sh scripts/start-terminal.sh scripts/audit-web-assets.sh scripts/lobster-device-id.sh scripts/restart-gateway.sh scripts/preflight.sh scripts/smoke-public-ingress.sh scripts/smoke-install-layout.sh
+zsh -n scripts/start-web-preview.sh
+node --check scripts/preview-server.mjs
+node --check scripts/smoke-web-dual-browser.mjs
+git diff --check
+```
+
+### 给 CC/DS 的后续建议
+
+优先继续处理不碰业务体验的大块技术债：
+
+1. 把剩余 smoke 脚本的 `SKIP_BUILD` / `*_BIN` / artifact 行为补成统一契约测试，避免 release gate 在无 Rust 工具链环境中误触发构建。
+2. 对 `apps/lobster-web-shell/app.js` 做低风险纯函数提取，每次只拆一个函数并配套 `node --test`。
+3. admin-ds 继续推进非技术债业务模块时，优先接入已有后端写接口，暂缓没有 Gateway 端点的 mock 模块。
+4. 每轮改动后固定跑快速脚本单测、语法检查、`git diff --check`，不要生成或提交 `dist/` 和 `apps/lobster-web-shell/generated/*.json`。
+
+## 2026-06-11 Codex 技术债补充: install-server 依赖顺序收口
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯契约 | 完成 | `scripts/test_install_server_unit.py` 锁定 `WEB_ARTIFACT` 路径校验必须早于 Rust 工具链检查，源码构建分支必须在 `cargo build` 前调用 `ensure_modern_rust` |
+| 安装脚本 | 完成 | `scripts/install-server.sh` 不再在 gateway artifact 路径外提前触发 Rust 工具链；只有真正从源码构建 gateway 时才执行 `ensure_modern_rust` |
+| 失败顺序 | 完成 | 缺失 `WEB_ARTIFACT` 会先明确报错，避免被 Rust bootstrap/cargo 环境问题遮蔽 |
+
+### 验证
+
+```bash
+python3 scripts/test_install_server_unit.py
+python3 scripts/test_smoke_release_gate_unit.py
+bash -n scripts/install-server.sh scripts/smoke-release-gate.sh
+python3 scripts/test_package_release_unit.py && python3 scripts/test_scripts_quick_unit_coverage.py && python3 scripts/test_smoke_release_gate_unit.py && python3 scripts/test_smoke_provider_federation_unit.py && python3 scripts/test_smoke_web_dual_browser_unit.py && python3 scripts/test_smoke_resident_mainline_unit.py && python3 scripts/test_smoke_cli_channel_unit.py && python3 scripts/test_smoke_auth_registration_unit.py && python3 scripts/test_smoke_shell_dual_http_unit.py && python3 scripts/test_smoke_shell_direct_http_unit.py && python3 scripts/test_smoke_web_shell_unit.py && python3 scripts/test_install_server_unit.py && python3 scripts/test_preview_server_unit.py && python3 scripts/test_start_terminal_shell_unit.py && python3 scripts/test_audit_web_assets_unit.py && python3 scripts/test_lobster_device_id_unit.py && python3 scripts/test_start_web_preview_unit.py && python3 scripts/test_restart_gateway_unit.py && python3 scripts/test_preflight_unit.py && python3 scripts/test_smoke_public_ingress_unit.py && python3 scripts/test_smoke_install_layout_unit.py && python3 scripts/test_start_terminal_unit.py && python3 scripts/test_makefile_unit.py
+bash -n scripts/package-release.sh scripts/smoke-provider-federation.sh scripts/smoke-release-gate.sh scripts/smoke-resident-mainline.sh scripts/smoke-cli-channel.sh scripts/smoke-auth-registration.sh scripts/smoke-shell-dual-http.sh scripts/smoke-shell-direct-http.sh scripts/install-server.sh scripts/smoke-web-shell.sh scripts/start-terminal.sh scripts/audit-web-assets.sh scripts/lobster-device-id.sh scripts/restart-gateway.sh scripts/preflight.sh scripts/smoke-public-ingress.sh scripts/smoke-install-layout.sh
+zsh -n scripts/start-web-preview.sh
+node --check scripts/preview-server.mjs
+node --check scripts/smoke-web-dual-browser.mjs
+git diff --check
 ```
