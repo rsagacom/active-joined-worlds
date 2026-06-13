@@ -43,9 +43,7 @@ body[data-shell-variant="creative-terminal"]::after {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background:
-    radial-gradient(circle at 52% 44%, rgba(255, 214, 139, 0.14), transparent 44%),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.04), transparent 42%, rgba(0, 0, 0, 0.24));
+  /* overlay removed — let the pixel art breathe without golden tint */
 }
 
 .creative-shell {

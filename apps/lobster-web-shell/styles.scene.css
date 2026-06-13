@@ -25,9 +25,7 @@ body[data-shell-page="hub"][data-shell-variant="public-square"]::after {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background:
-    linear-gradient(180deg, rgba(7, 5, 4, 0.08), rgba(7, 5, 4, 0) 34%, rgba(7, 5, 4, 0.26)),
-    radial-gradient(circle at 50% 46%, rgba(255, 210, 120, 0.10), transparent 48%);
+  /* overlay removed — let the pixel art breathe without golden tint */
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .city-hub-shell {
