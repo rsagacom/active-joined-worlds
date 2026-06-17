@@ -116,6 +116,8 @@ body { margin:0; background:var(--editor-bg); color:var(--editor-text); font-fam
     </div>
     <img id="sceneImage" src="" alt="场景预览" style="display:none;" />
     <div class="editor-toolbar">
+      <button id="undoBtn" title="撤销 (Ctrl+Z)">↶ 撤销</button>
+      <button id="redoBtn" title="重做 (Ctrl+Y)">↷ 重做</button>
       <button id="zoomIn">🔍+</button>
       <button id="zoomOut">🔍-</button>
       <button id="fitBtn">📐 适应</button>
@@ -149,6 +151,40 @@ function sceneSnapshot() {
 function markClean() { lastSavedSnapshot = sceneSnapshot(); }
 function isDirty() { return lastSavedSnapshot !== null && sceneSnapshot() !== lastSavedSnapshot; }
 window.addEventListener('beforeunload', function(e) { if (isDirty()) { e.preventDefault(); e.returnValue = ''; } });
+
+// undo/redo：结构变更（增删/拖拽/缩放/重置）前 push 快照，Ctrl+Z/Y 或工具栏按钮恢复；属性 input 不记录（太频繁）。
+let undoStack = [];
+let redoStack = [];
+let preDragSnapshot = null;
+const MAX_HISTORY = 50;
+function pushHistory(snap) {
+  undoStack.push(snap || sceneSnapshot());
+  if (undoStack.length > MAX_HISTORY) undoStack.shift();
+  redoStack = [];
+}
+function restoreSnapshot(snap) {
+  var state = JSON.parse(snap);
+  hotspots = state.hotspots || [];
+  $('dayUrl').value = state.day || '';
+  $('nightUrl').value = state.night || '';
+  var bg = document.body.dataset.timeOfDay === 'day' ? (state.day || '') : (state.night || '');
+  if (bg) { img.src = bg; img.style.display = 'block'; } else { img.removeAttribute('src'); img.style.display = 'none'; }
+  selectedHotspot = null;
+  props.style.display = 'none';
+  renderHotspots();
+}
+function undo() {
+  if (!undoStack.length) return status('没有可撤销的操作', true);
+  redoStack.push(sceneSnapshot());
+  restoreSnapshot(undoStack.pop());
+  status('已撤销', false);
+}
+function redo() {
+  if (!redoStack.length) return status('没有可重做的操作', true);
+  undoStack.push(sceneSnapshot());
+  restoreSnapshot(redoStack.pop());
+  status('已重做', false);
+}
 
 // Parse URL params
 const params = new URLSearchParams(location.search);
@@ -227,6 +263,7 @@ function makeHandle(corner) {
     e.preventDefault();
     if (selectedHotspot == null) return;
     isResizing = true;
+    preDragSnapshot = sceneSnapshot();
     resizeCorner = corner;
     var h = hotspots[selectedHotspot];
     resizeStart = { x: h.x_permyriad, y: h.y_permyriad, w: h.width_permyriad, h: h.height_permyriad };
@@ -241,6 +278,7 @@ function makeDeleteBtn(i) {
   btn.title = '删除此热点';
   btn.addEventListener('click', function(e) {
     e.stopPropagation();
+    pushHistory();
     hotspots.splice(i, 1);
     if (selectedHotspot === i) { selectedHotspot = null; props.style.display = 'none'; }
     else if (selectedHotspot > i) selectedHotspot--;
@@ -280,6 +318,7 @@ function renderHotspots() {
       if (e.target.closest('.editor-resize-handle, .editor-hotspot-delete')) return;
       e.preventDefault();
       isDragging = true;
+      preDragSnapshot = sceneSnapshot();
       selectedHotspot = i;
       var rect = stage.getBoundingClientRect();
       dragOffset.x = e.clientX - rect.left - (h.x_permyriad / 100) * rect.width;
@@ -322,7 +361,7 @@ function renderHotspotList() {
     del.className = 'hl-del';
     del.textContent = '×';
     del.title = '删除此热点';
-    del.addEventListener('click', function(e) { e.stopPropagation(); hotspots.splice(i, 1); if (selectedHotspot === i) { selectedHotspot = null; props.style.display = 'none'; } else if (selectedHotspot > i) selectedHotspot--; renderHotspots(); status('热点已删除', false); });
+    del.addEventListener('click', function(e) { e.stopPropagation(); pushHistory(); hotspots.splice(i, 1); if (selectedHotspot === i) { selectedHotspot = null; props.style.display = 'none'; } else if (selectedHotspot > i) selectedHotspot--; renderHotspots(); status('热点已删除', false); });
     li.appendChild(del);
     ul.appendChild(li);
   });
@@ -366,6 +405,7 @@ $('loadBtn').onclick = loadCurrentScene;
 
 // Add hotspot
 $('addHotspotBtn').onclick = function() {
+  pushHistory();
   hotspots.push({ hotspot_id: 'h-' + Date.now(), label: '热点' + (hotspots.length + 1), interaction_hint: "", sprite_hint: "default", x_permyriad: 2500, y_permyriad: 2500, width_permyriad: 800, height_permyriad: 600 });
   selectedHotspot = hotspots.length - 1;
   renderHotspots();
@@ -422,7 +462,10 @@ document.addEventListener('pointermove', function(e) {
   coordEl.textContent = '缩放: ' + Math.round(h.width_permyriad / 100) + '% × ' + Math.round(h.height_permyriad / 100) + '%';
 });
 
-document.addEventListener('pointerup', function() { isDragging = false; isResizing = false; resizeCorner = null; });
+document.addEventListener('pointerup', function() {
+  if ((isDragging || isResizing) && preDragSnapshot) { pushHistory(preDragSnapshot); preDragSnapshot = null; }
+  isDragging = false; isResizing = false; resizeCorner = null;
+});
 
 // Stage click → deselect
 stage.addEventListener('click', function(e) {
@@ -431,9 +474,12 @@ stage.addEventListener('click', function(e) {
 
 // Keyboard shortcuts
 document.addEventListener('keydown', function(e) {
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+  if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }
   if (e.key === 'Delete' || e.key === 'Backspace') {
     if (selectedHotspot != null && hotspots[selectedHotspot]) {
       if (e.target.tagName === 'INPUT') return; // not in input
+      pushHistory();
       hotspots.splice(selectedHotspot, 1);
       selectedHotspot = null;
       props.style.display = 'none';
@@ -483,7 +529,7 @@ $('saveBtn').onclick = async function() {
   }
 };
 
-$('resetBtn').onclick = function() { hotspots = []; selectedHotspot = null; props.style.display = 'none'; renderHotspots(); status('已重置', false); };
+$('resetBtn').onclick = function() { pushHistory(); hotspots = []; selectedHotspot = null; props.style.display = 'none'; renderHotspots(); status('已重置', false); };
 $('previewBtn').onclick = function() {
   // 切换昼夜预览：每次点击在 day/night 背景间切换，让编辑者验证两个时段的热点对齐。
   var next = document.body.dataset.timeOfDay === 'night' ? 'day' : 'night';
@@ -497,6 +543,8 @@ $('previewBtn').onclick = function() {
 $('zoomIn').onclick = function() { scale = Math.min(3, scale + 0.25); img.style.transform = 'scale(' + scale + ')'; };
 $('zoomOut').onclick = function() { scale = Math.max(0.25, scale - 0.25); img.style.transform = 'scale(' + scale + ')'; };
 $('fitBtn').onclick = function() { scale = 1; img.style.transform = 'scale(1)'; };
+$('undoBtn').onclick = undo;
+$('redoBtn').onclick = redo;
 
 // Set default background from time of day
 var hour = new Date().getHours();
