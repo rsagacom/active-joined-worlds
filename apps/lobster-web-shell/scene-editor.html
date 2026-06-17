@@ -47,6 +47,11 @@ body { margin:0; background:var(--editor-bg); color:var(--editor-text); font-fam
   .editor-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
   .editor-sidebar { border-right: none; border-bottom: 2px solid rgba(241,201,120,0.2); max-height: 42vh; }
 }
+/* 空状态引导：img 无 src 时居中提示，加载/预览设了 src 后自动隐藏（CSS :has，无需 JS） */
+.editor-empty-hint { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; color:#666; font-size:13px; pointer-events:none; padding:0 24px; }
+.editor-empty-hint p { margin:4px 0; }
+.editor-empty-hint p:first-child { font-size:20px; color:var(--editor-accent); }
+.editor-stage:has(#sceneImage[src]:not([src=""])) .editor-empty-hint { display:none; }
 </style>
 </head>
 <body>
@@ -89,6 +94,10 @@ body { margin:0; background:var(--editor-bg); color:var(--editor-text); font-fam
     <div id="status" style="margin-top:12px;font-size:11px;color:#888;"></div>
   </aside>
   <div class="editor-stage" id="stage">
+    <div class="editor-empty-hint" id="emptyHint">
+      <p>🏗️ 场景编辑器</p>
+      <p>填入白天/夜晚背景 URL，或加载当前房间场景后开始编辑热点</p>
+    </div>
     <img id="sceneImage" src="" alt="场景预览" style="display:none;" />
     <div class="editor-toolbar">
       <button id="zoomIn">🔍+</button>
