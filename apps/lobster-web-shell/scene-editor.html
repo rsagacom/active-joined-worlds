@@ -22,9 +22,9 @@ body { margin:0; background:var(--editor-bg); color:var(--editor-text); font-fam
 .editor-sidebar .prop-group { margin-top:12px; padding-top:12px; border-top:1px solid rgba(241,201,120,0.1); }
 .editor-sidebar .prop-row { display:flex; gap:8px; }
 .editor-sidebar .prop-row > * { flex:1; }
-.editor-stage { position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+.editor-stage { position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; touch-action: none; }
 .editor-stage img { max-width:100%; max-height:100%; object-fit:contain; image-rendering:pixelated; }
-.editor-hotspot { position:absolute; border:2px dashed rgba(241,201,120,0.5); background:rgba(241,201,120,0.1); cursor:move; display:flex; align-items:center; justify-content:center; min-width:40px; min-height:24px; }
+.editor-hotspot { position:absolute; border:2px dashed rgba(241,201,120,0.5); background:rgba(241,201,120,0.1); cursor:move; display:flex; align-items:center; justify-content:center; min-width:40px; min-height:24px; touch-action:none; }
 .editor-hotspot:hover { border-color:var(--editor-accent); background:rgba(241,201,120,0.2); }
 .editor-hotspot.selected { border:2px solid var(--editor-accent); background:rgba(241,201,120,0.25); box-shadow:0 0 0 2px rgba(241,201,120,0.15); }
 .editor-hotspot-label { position:absolute; top:-20px; left:50%; transform:translateX(-50%); background:#1a1410; color:var(--editor-accent); padding:2px 8px; border-radius:4px; font-size:11px; white-space:nowrap; pointer-events:none; }
@@ -42,6 +42,11 @@ body { margin:0; background:var(--editor-bg); color:var(--editor-text); font-fam
 .editor-toolbar button { padding:8px 16px; background:var(--editor-panel); color:var(--editor-accent); border:1px solid rgba(241,201,120,0.3); border-radius:6px; cursor:pointer; font-size:12px; }
 .editor-toolbar button:hover { background:rgba(241,201,120,0.15); }
 .editor-status { position:absolute; bottom:12px; left:12px; font-size:11px; color:#888; }
+/* 移动端：侧栏置顶限高滚动，舞台占满剩余高度，避免 280px 桌面侧栏在窄屏挤爆舞台。 */
+@media (max-width: 768px) {
+  .editor-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .editor-sidebar { border-right: none; border-bottom: 2px solid rgba(241,201,120,0.2); max-height: 42vh; }
+}
 </style>
 </head>
 <body>
@@ -175,7 +180,7 @@ function applyPropChanges() {
 function makeHandle(corner) {
   var handle = document.createElement('div');
   handle.className = 'editor-resize-handle editor-resize-handle--' + corner;
-  handle.addEventListener('mousedown', function(e) {
+  handle.addEventListener('pointerdown', function(e) {
     e.stopPropagation();
     e.preventDefault();
     if (selectedHotspot == null) return;
@@ -229,7 +234,7 @@ function renderHotspots() {
     el.appendChild(makeDeleteBtn(i));
 
     // Drag
-    el.addEventListener('mousedown', function(e) {
+    el.addEventListener('pointerdown', function(e) {
       if (e.target.closest('.editor-resize-handle, .editor-hotspot-delete')) return;
       e.preventDefault();
       isDragging = true;
@@ -285,7 +290,7 @@ $('addHotspotBtn').onclick = function() {
 };
 
 // Drag (move) — global
-document.addEventListener('mousemove', function(e) {
+document.addEventListener('pointermove', function(e) {
   if (!isDragging || selectedHotspot == null) return;
   var rect = stage.getBoundingClientRect();
   var h = hotspots[selectedHotspot];
@@ -298,7 +303,7 @@ document.addEventListener('mousemove', function(e) {
 });
 
 // Resize — global
-document.addEventListener('mousemove', function(e) {
+document.addEventListener('pointermove', function(e) {
   if (!isResizing || selectedHotspot == null || !resizeCorner) return;
   var rect = stage.getBoundingClientRect();
   var h = hotspots[selectedHotspot];
@@ -334,7 +339,7 @@ document.addEventListener('mousemove', function(e) {
   coordEl.textContent = '缩放: ' + Math.round(h.width_permyriad / 100) + '% × ' + Math.round(h.height_permyriad / 100) + '%';
 });
 
-document.addEventListener('mouseup', function() { isDragging = false; isResizing = false; resizeCorner = null; });
+document.addEventListener('pointerup', function() { isDragging = false; isResizing = false; resizeCorner = null; });
 
 // Stage click → deselect
 stage.addEventListener('click', function(e) {
