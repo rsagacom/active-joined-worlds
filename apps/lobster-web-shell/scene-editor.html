@@ -68,7 +68,7 @@ body { margin:0; background:var(--editor-bg); color:var(--editor-text); font-fam
     <button id="addHotspotBtn" class="secondary">➕ 添加热点</button>
     <button id="saveBtn">💾 保存场景</button>
     <div style="margin-top:8px;display:flex;gap:8px;">
-      <button id="previewBtn" class="secondary" style="flex:1;">👁 预览</button>
+      <button id="previewBtn" class="secondary" style="flex:1;">👁 预览昼夜</button>
       <button id="resetBtn" class="danger" style="flex:1;">↩ 重置</button>
     </div>
     <div id="hotspot-props" class="prop-group" style="display:none;">
@@ -387,7 +387,16 @@ $('saveBtn').onclick = async function() {
 };
 
 $('resetBtn').onclick = function() { hotspots = []; selectedHotspot = null; props.style.display = 'none'; renderHotspots(); status('已重置', false); };
-$('previewBtn').onclick = function() { var d = $('dayUrl').value.trim(); if (d) { img.src = d; img.style.display = 'block'; } };
+$('previewBtn').onclick = function() {
+  // 切换昼夜预览：每次点击在 day/night 背景间切换，让编辑者验证两个时段的热点对齐。
+  var next = document.body.dataset.timeOfDay === 'night' ? 'day' : 'night';
+  var url = (next === 'day' ? $('dayUrl').value.trim() : $('nightUrl').value.trim());
+  if (!url) { status((next === 'day' ? '白天' : '夜晚') + '背景 URL 未填', true); return; }
+  document.body.dataset.timeOfDay = next;
+  img.src = url;
+  img.style.display = 'block';
+  status('预览 ' + (next === 'day' ? '白天' : '夜晚') + ' 背景', false);
+};
 $('zoomIn').onclick = function() { scale = Math.min(3, scale + 0.25); img.style.transform = 'scale(' + scale + ')'; };
 $('zoomOut').onclick = function() { scale = Math.max(0.25, scale - 0.25); img.style.transform = 'scale(' + scale + ')'; };
 $('fitBtn').onclick = function() { scale = 1; img.style.transform = 'scale(1)'; };
