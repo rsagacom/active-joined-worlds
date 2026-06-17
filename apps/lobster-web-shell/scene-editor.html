@@ -42,6 +42,18 @@ body { margin:0; background:var(--editor-bg); color:var(--editor-text); font-fam
 .editor-toolbar button { padding:8px 16px; background:var(--editor-panel); color:var(--editor-accent); border:1px solid rgba(241,201,120,0.3); border-radius:6px; cursor:pointer; font-size:12px; }
 .editor-toolbar button:hover { background:rgba(241,201,120,0.15); }
 .editor-status { position:absolute; bottom:12px; left:12px; font-size:11px; color:#888; }
+/* 热点列表：侧栏内多热点管理，点击选中、× 删除，弥补只能舞台点击选中的缺口。 */
+.hotspot-list-wrap { margin-top:12px; padding-top:12px; border-top:1px solid rgba(241,201,120,0.1); }
+.hotspot-list-wrap > label { display:block; font-size:12px; color:#999; margin-bottom:6px; }
+.editor-hotspot-list { list-style:none; margin:0; padding:0; max-height:200px; overflow-y:auto; }
+.editor-hotspot-list li { display:flex; align-items:center; gap:6px; padding:6px 8px; margin-bottom:4px; background:rgba(241,201,120,0.05); border:1px solid rgba(241,201,120,0.15); border-radius:6px; cursor:pointer; font-size:12px; }
+.editor-hotspot-list li:hover { background:rgba(241,201,120,0.12); }
+.editor-hotspot-list li.selected { border-color:var(--editor-accent); background:rgba(241,201,120,0.18); }
+.editor-hotspot-list li .hl-label { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.editor-hotspot-list li .hl-del { width:18px; height:18px; background:rgba(255,80,80,0.15); color:#ff6060; border:0; border-radius:50%; font-size:11px; line-height:18px; text-align:center; cursor:pointer; padding:0; flex:none; }
+.editor-hotspot-list li .hl-del:hover { background:#ff3030; color:#fff; }
+.editor-hotspot-list .hl-empty { color:#666; font-size:11px; padding:8px; text-align:center; cursor:default; }
+.editor-hotspot-list .hl-empty:hover { background:transparent; }
 /* 移动端：侧栏置顶限高滚动，舞台占满剩余高度，避免 280px 桌面侧栏在窄屏挤爆舞台。 */
 @media (max-width: 768px) {
   .editor-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
@@ -90,6 +102,10 @@ body { margin:0; background:var(--editor-bg); color:var(--editor-text); font-fam
         <div><label>宽%</label><input id="prop-w" type="number" min="1" max="100" step="0.5" /></div>
         <div><label>高%</label><input id="prop-h" type="number" min="1" max="100" step="0.5" /></div>
       </div>
+    </div>
+    <div class="hotspot-list-wrap">
+      <label>📋 热点列表（<span id="hotspot-count">0</span>）</label>
+      <ul id="hotspot-list" class="editor-hotspot-list"></ul>
     </div>
     <div id="status" style="margin-top:12px;font-size:11px;color:#888;"></div>
   </aside>
@@ -277,6 +293,39 @@ function renderHotspots() {
     if (selectedHotspot === i) el.classList.add('selected');
   });
   if (selectedHotspot != null) updatePropsPanel();
+  renderHotspotList();
+}
+
+// 热点列表：侧栏多热点管理，点击选中、× 删除（弥补只能舞台点击选中的缺口）
+function renderHotspotList() {
+  var ul = $('hotspot-list');
+  var countEl = $('hotspot-count');
+  if (!ul) return;
+  if (countEl) countEl.textContent = hotspots.length;
+  ul.innerHTML = '';
+  if (!hotspots.length) {
+    var empty = document.createElement('li');
+    empty.className = 'hl-empty';
+    empty.textContent = '暂无热点，点「添加热点」开始';
+    ul.appendChild(empty);
+    return;
+  }
+  hotspots.forEach(function(h, i) {
+    var li = document.createElement('li');
+    if (selectedHotspot === i) li.classList.add('selected');
+    var label = document.createElement('span');
+    label.className = 'hl-label';
+    label.textContent = (i + 1) + '. ' + (h.label || ('热点' + (i + 1)));
+    li.appendChild(label);
+    li.addEventListener('click', function(e) { if (e.target.classList.contains('hl-del')) return; selectHotspot(i); renderHotspotList(); });
+    var del = document.createElement('button');
+    del.className = 'hl-del';
+    del.textContent = '×';
+    del.title = '删除此热点';
+    del.addEventListener('click', function(e) { e.stopPropagation(); hotspots.splice(i, 1); if (selectedHotspot === i) { selectedHotspot = null; props.style.display = 'none'; } else if (selectedHotspot > i) selectedHotspot--; renderHotspots(); status('热点已删除', false); });
+    li.appendChild(del);
+    ul.appendChild(li);
+  });
 }
 
 // Load — 抽成函数，供 loadBtn 与页面自动加载复用
@@ -459,6 +508,7 @@ document.body.dataset.timeOfDay = (hour >= 6 && hour < 18) ? 'day' : 'night';
 if ($('roomId').value.trim() && $('gatewayUrl').value.trim()) {
   loadCurrentScene();
 }
+renderHotspotList(); // 渲染初始空列表（"暂无热点"提示 + 计数 0），让编辑者一进来就看到列表区
 markClean(); // 初始基线：自动加载若成功会在其成功路径再次 markClean 更新为加载内容
 </script>
 </body>
