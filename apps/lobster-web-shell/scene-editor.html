@@ -136,11 +136,20 @@ function status(msg, isError) { statusEl.textContent = msg; statusEl.style.color
 
 async function api(path, method, body) {
   const gw = $('gatewayUrl').value.trim().replace(/\/+$/, '');
+  if (!gw) throw new Error('未配置 Gateway 地址');
   const token = $('sessionToken').value.trim();
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = 'Bearer ' + token;
   const res = await fetch(gw + path, { method, headers, body: body ? JSON.stringify(body) : undefined });
-  return res.json();
+  // 统一检查 HTTP 状态码：非 2xx 抛带状态码的错误，让加载/保存的 catch 给出准确反馈，
+  // 不再依赖响应体里可能缺失的 error 字段（401/403/404/500 一律走异常路径）。
+  var data = null;
+  try { data = await res.json(); } catch (_) { /* 非 JSON 响应体（如纯文本错误页） */ }
+  if (!res.ok) {
+    var msg = (data && (data.error || data.message)) || ('HTTP ' + res.status);
+    var err = new Error(msg); err.status = res.status; throw err;
+  }
+  return data;
 }
 
 function selectHotspot(i) {
@@ -262,10 +271,12 @@ function renderHotspots() {
   if (selectedHotspot != null) updatePropsPanel();
 }
 
-// Load
-$('loadBtn').onclick = async function() {
+// Load — 抽成函数，供 loadBtn 与页面自动加载复用
+async function loadCurrentScene() {
   var room = $('roomId').value.trim();
   if (!room) return status('请输入房间 ID', true);
+  var btn = $('loadBtn'); var orig = btn.textContent;
+  btn.disabled = true; btn.textContent = '📥 加载中...';
   status('加载中...');
   try {
     var data = await api('/v1/shell/state?room_id=' + encodeURIComponent(room), 'GET');
@@ -287,8 +298,13 @@ $('loadBtn').onclick = async function() {
     } else {
       status('未找到房间场景数据，将创建新场景', false);
     }
-  } catch (e) { status('加载失败: ' + e.message, true); }
-};
+  } catch (e) {
+    status('加载失败: ' + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = orig;
+  }
+}
+$('loadBtn').onclick = loadCurrentScene;
 
 // Add hotspot
 $('addHotspotBtn').onclick = function() {
@@ -375,8 +391,10 @@ document.addEventListener('keydown', function(e) {
   }
 });
 
-// Save
+// Save — 防抖（保存中禁用）+ 加载态 + 成功强反馈（按钮短暂变 ✓）
 $('saveBtn').onclick = async function() {
+  var btn = $('saveBtn');
+  if (btn.disabled) return; // 防抖：保存进行中忽略重复点击，避免重复提交
   var room = $('roomId').value.trim();
   if (!room) return status('请输入房间 ID', true);
   var dayUrl = $('dayUrl').value.trim();
@@ -387,12 +405,23 @@ $('saveBtn').onclick = async function() {
     image_layer: { layer_id: 'user-custom', preset: 'custom', asset_hint: 'custom', aspect_ratio_permyriad: 5625, owner_editable: true, day_image_url: dayUrl || null, night_image_url: nightUrl || null },
     hotspot_layer: hotspots.length ? { layer_id: 'user-hotspots', coordinate_system: 'scene-permyriad', owner_editable: true, hotspots: hotspots } : null
   };
+  var orig = btn.textContent;
+  btn.disabled = true; btn.textContent = '💾 保存中...';
   status('保存中...');
   try {
     var res = await api('/v1/shell/scene', 'POST', payload);
-    if (res.error) status('保存失败: ' + res.error, true);
-    else status('✅ 已保存 (' + hotspots.length + ' 个热点)', false);
-  } catch (e) { status('保存失败: ' + e.message, true); }
+    if (res && res.error) {
+      status('保存失败: ' + res.error, true);
+    } else {
+      status('✅ 已保存 (' + hotspots.length + ' 个热点)', false);
+      btn.textContent = '✓ 已保存';
+      setTimeout(function() { btn.textContent = orig; }, 1200);
+    }
+  } catch (e) {
+    status('保存失败: ' + e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
 };
 
 $('resetBtn').onclick = function() { hotspots = []; selectedHotspot = null; props.style.display = 'none'; renderHotspots(); status('已重置', false); };
@@ -413,6 +442,13 @@ $('fitBtn').onclick = function() { scale = 1; img.style.transform = 'scale(1)'; 
 // Set default background from time of day
 var hour = new Date().getHours();
 document.body.dataset.timeOfDay = (hour >= 6 && hour < 18) ? 'day' : 'night';
+
+// 若从 shell 跳转带了 room（+gateway），自动加载当前房间场景，省去手动点"加载"，
+// 闭合 P1 编辑入口→编辑器的体验环（Bug A 修复后链接已带 activeRoomId + token）。
+// realness 静态测试 URL 不带 room，不会触发此加载；gateway 不可达时 catch 给反馈，不抛异常。
+if ($('roomId').value.trim() && $('gatewayUrl').value.trim()) {
+  loadCurrentScene();
+}
 </script>
 </body>
 </html>
