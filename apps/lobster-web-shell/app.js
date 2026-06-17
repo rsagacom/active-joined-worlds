@@ -18,6 +18,11 @@ import {
   localizedRuntimeError,
 } from "./shell-errors.js";
 import {
+  downloadContent,
+  exportFileExtension,
+  exportMimeType,
+} from "./shell-export-utils.js";
+import {
   gatewayJsonHeaders,
   gatewayQueryParam,
   gatewayShellEventsUrl as buildGatewayShellEventsUrl,
@@ -49,15 +54,21 @@ import {
 } from "./shell-message-state.js";
 import {
   buildReplyPreview,
-  createDateSeparator,
   escapeHtml,
   formatDateTime,
   isSystemSender,
   messageAvatarTone,
   messageRoleLabel,
+  timelineDividerSpecsForMessage,
+  timelineMessageFlowSpec,
+  timelineMessageRowSpec,
+  timelinePendingMessageRowSpec,
+  timelineTypingIndicatorSpec,
   messageStableId,
   messageThreadKind,
+  timelineMetaChips,
 } from "./shell-message-render.js";
+import { buildSearchResultItemHtml } from "./shell-message-search.js";
 import {
   quickActionContextCopy,
   quickActionDefaultSendLabel,
@@ -74,9 +85,8 @@ import {
   quickActionSummary,
   quickActionTone,
   buildRoomQuickActionPillDomSpec,
+  buildRoomInlineActionsModel,
   buildRoomInlineActionDomSpec,
-  buildRoomInlineActionsRailDomSpec,
-  buildRoomInlineProgressRenderDomSpec,
   nextQuickActionState,
 } from "./shell-quick-action-labels.js";
 import {
@@ -149,6 +159,11 @@ import {
   mergeRoomWithContract,
   synthesizeRoomsFromContracts,
 } from "./shell-state-normalize.js";
+import {
+  localPreviewMessagesForEmptyRoom as buildLocalPreviewMessagesForEmptyRoom,
+  shouldRenderTimelineSkeletonRows as shouldRenderTimelineSkeletonRowsForContext,
+  timelineNoRoomEmptyStateSpec,
+} from "./shell-timeline-empty-state.js";
 import {
   initSceneRuntime,
 } from "./shell-scene-runtime.js";
@@ -239,7 +254,12 @@ import {
   roomKind as _roomKind,
   roomThreadHeadline as _roomThreadHeadline,
 } from "./shell-room-rail.js";
-import { isVisitorIdentity, residentScopedShellStatePage, translateClientDisplayName, translateRoutePrefix } from "./shell-identity.js";
+import {
+  isVisitorIdentity,
+  residentScopedShellStatePage,
+  translateClientDisplayName,
+  translateRoutePrefix,
+} from "./shell-identity.js";
 
 const DEFAULT_BOOTSTRAP = {
   host: {
@@ -755,53 +775,54 @@ function syncUserRoomProjection(room, visual) {
   syncUserDetailCard(room, visual, projection);
 }
 
-function userDetailCardProjection(room, visual, projection) {
-  if (!room || !visual?.stage) {
-    return {
-      variant: "idle",
-      motif: "idle",
-      kicker: "角色卡",
-      title: "当前房间角色卡",
-      monogram: "房",
-      meta: [{ label: "状态", value: "等待打开一个会话" }],
-      actions: [],
-    };
-  }
+function userDetailCardIdleProjection() {
+  return {
+    variant: "idle",
+    motif: "idle",
+    kicker: "角色卡",
+    title: "当前房间角色卡",
+    monogram: "房",
+    meta: [{ label: "状态", value: "等待打开一个会话" }],
+    actions: [],
+  };
+}
 
-  const detailCard = detailCardProfile(room);
-  const caretaker = caretakerProfile(room);
-  const monogram = visual.portrait?.visual?.monogram || (projection?.variant === "city" ? "巡" : "房");
-  const status = caretaker?.status || roomChatStatusSummary(room);
-  if (detailCard) {
-    return {
-      variant: projection?.variant || (visual.stage.variant === "home" ? "home" : "city"),
-      motif: projection?.motif || (visual.stage.visual?.motif || "watchtower"),
-      kicker: detailCard.kicker || (projection?.variant === "city" ? "公共频道 / 角色卡" : "住宅私聊 / 角色卡"),
-      title: detailCard.title || "当前房间角色卡",
-      monogram: detailCard.monogram || monogram,
-      meta: Array.isArray(detailCard.meta) && detailCard.meta.length
-        ? detailCard.meta
-        : [{ label: "状态", value: status }],
-      actions: Array.isArray(detailCard.actions) ? detailCard.actions : [],
-    };
-  }
-  if (projection?.variant === "city") {
-    return {
-      variant: "city",
-      motif: projection.motif,
-      kicker: "公共频道 / 角色卡",
-      title: caretaker ? `${caretaker.name} / 频道状态` : "公共频道 / 当前状态",
-      monogram,
-      meta: [
-        { label: "角色", value: caretaker?.role_label || "公共频道向导" },
-        { label: "称号", value: caretaker?.name || room.thread_headline || room.title || "未知会话" },
-        { label: "当前", value: roomAudienceLabel(room) },
-        { label: "状态", value: status },
-      ],
-      actions: ["私聊", "委托", "交易"],
-    };
-  }
+function userDetailCardMonogram(visual, projection) {
+  return visual.portrait?.visual?.monogram || (projection?.variant === "city" ? "巡" : "房");
+}
 
+function userDetailCardCustomProjection(room, visual, projection, detailCard, monogram, status) {
+  return {
+    variant: projection?.variant || (visual.stage.variant === "home" ? "home" : "city"),
+    motif: projection?.motif || (visual.stage.visual?.motif || "watchtower"),
+    kicker: detailCard.kicker || (projection?.variant === "city" ? "公共频道 / 角色卡" : "住宅私聊 / 角色卡"),
+    title: detailCard.title || "当前房间角色卡",
+    monogram: detailCard.monogram || monogram,
+    meta: Array.isArray(detailCard.meta) && detailCard.meta.length
+      ? detailCard.meta
+      : [{ label: "状态", value: status }],
+    actions: Array.isArray(detailCard.actions) ? detailCard.actions : [],
+  };
+}
+
+function userDetailCardCityProjection(room, projection, caretaker, monogram, status) {
+  return {
+    variant: "city",
+    motif: projection.motif,
+    kicker: "公共频道 / 角色卡",
+    title: caretaker ? `${caretaker.name} / 频道状态` : "公共频道 / 当前状态",
+    monogram,
+    meta: [
+      { label: "角色", value: caretaker?.role_label || "公共频道向导" },
+      { label: "称号", value: caretaker?.name || room.thread_headline || room.title || "未知会话" },
+      { label: "当前", value: roomAudienceLabel(room) },
+      { label: "状态", value: status },
+    ],
+    actions: ["私聊", "委托", "交易"],
+  };
+}
+
+function userDetailCardHomeProjection(room, projection, caretaker, monogram, status) {
   return {
     variant: "home",
     motif: projection?.motif || "courtyard",
@@ -816,6 +837,17 @@ function userDetailCardProjection(room, visual, projection) {
     ],
     actions: ["续聊", "整理", "留条"],
   };
+}
+
+function userDetailCardProjection(room, visual, projection) {
+  if (!room || !visual?.stage) return userDetailCardIdleProjection();
+  const detailCard = detailCardProfile(room);
+  const caretaker = caretakerProfile(room);
+  const monogram = userDetailCardMonogram(visual, projection);
+  const status = caretaker?.status || roomChatStatusSummary(room);
+  if (detailCard) return userDetailCardCustomProjection(room, visual, projection, detailCard, monogram, status);
+  if (projection?.variant === "city") return userDetailCardCityProjection(room, projection, caretaker, monogram, status);
+  return userDetailCardHomeProjection(room, projection, caretaker, monogram, status);
 }
 
 
@@ -837,17 +869,7 @@ function seedComposerFromQuickAction(action, template = quickActionTemplate(acti
   focusComposerInput({ force: true });
 }
 
-function syncUserDetailCard(room, visual, projection) {
-  if (currentShellPage() !== "user") return;
-  const card = userDetailCardProjection(room, visual, projection);
-  const quickAction = latestRoomQuickAction(room);
-  const quickState = latestRoomQuickState(room);
-  const preview = resolveRoomQuickPreview(room, quickAction);
-  const previewState = preview?.state || "";
-  const previewSnapshotIndex = preview?.snapshotIndex ?? null;
-  const previewHistory = preview?.history || [];
-  const previewStructured = preview?.structured || null;
-
+function applyUserDetailCardShellState(card) {
   setDatasetFlag(chatDetailCardShellEl, "roomVariant", card.variant);
   setDatasetFlag(chatDetailCardShellEl, "roomMotif", card.motif);
   setDatasetFlag(chatDetailCardActionsEl, "roomVariant", card.variant);
@@ -870,87 +892,119 @@ function syncUserDetailCard(room, visual, projection) {
       chatDetailCardMetaEl.appendChild(createChatDetailCardMetaRow(item.label, item.value));
     }
   }
-  if (chatDetailCardShellEl) {
-    for (const node of Array.from(chatDetailCardShellEl.querySelectorAll(".chat-detail-card-workflow"))) {
-      node.remove();
-    }
-    for (const node of Array.from(chatDetailCardShellEl.querySelectorAll(".chat-detail-card-preview"))) {
-      node.remove();
-    }
-    const workflow = createWorkflowProgress(quickAction, quickState, {
-      className: "chat-detail-card-workflow",
-      title: quickAction ? `${quickAction}阶段` : "",
-      stages: workflowProfile(room)?.steps,
-      onStageClick: (stage) => {
-        previewRoomQuickStage(room?.id || activeRoomId, quickAction, stage.label);
-        seedComposerFromQuickAction(quickAction, quickActionWorkflowTemplate(quickAction, stage.label), { force: true });
-      },
-    });
-    if (workflow) {
-      if (chatDetailCardActionsEl?.parentNode === chatDetailCardShellEl) {
-        chatDetailCardShellEl.insertBefore(workflow, chatDetailCardActionsEl);
-      } else {
-        chatDetailCardShellEl.appendChild(workflow);
-      }
-    }
-    const previewCard = createQuickActionPreviewCard(quickAction, previewState, previewStructured, {
-      className: "chat-detail-card-preview",
-      maxFields: 2,
-      roomId: room?.id || activeRoomId,
-      historyLabel: preview?.historyLabel || "",
-      fieldView: roomQuickPreviewCardFieldView(
+}
+
+function clearUserDetailCardTransientNodes() {
+  if (!chatDetailCardShellEl) return;
+  for (const node of Array.from(chatDetailCardShellEl.querySelectorAll(".chat-detail-card-workflow"))) {
+    node.remove();
+  }
+  for (const node of Array.from(chatDetailCardShellEl.querySelectorAll(".chat-detail-card-preview"))) {
+    node.remove();
+  }
+}
+
+function insertUserDetailCardTransientNode(node) {
+  if (!node || !chatDetailCardShellEl) return;
+  if (chatDetailCardActionsEl?.parentNode === chatDetailCardShellEl) {
+    chatDetailCardShellEl.insertBefore(node, chatDetailCardActionsEl);
+    return;
+  }
+  chatDetailCardShellEl.appendChild(node);
+}
+
+function createUserDetailCardWorkflowNode(room, quickAction, quickState) {
+  return createWorkflowProgress(quickAction, quickState, {
+    className: "chat-detail-card-workflow",
+    title: quickAction ? `${quickAction}阶段` : "",
+    stages: workflowProfile(room)?.steps,
+    onStageClick: (stage) => {
+      previewRoomQuickStage(room?.id || activeRoomId, quickAction, stage.label);
+      seedComposerFromQuickAction(quickAction, quickActionWorkflowTemplate(quickAction, stage.label), { force: true });
+    },
+  });
+}
+
+function createUserDetailCardPreviewNode(room, quickAction, preview) {
+  const previewState = preview?.state || "";
+  const previewSnapshotIndex = preview?.snapshotIndex ?? null;
+  const previewStructured = preview?.structured || null;
+  return createQuickActionPreviewCard(quickAction, previewState, previewStructured, {
+    className: "chat-detail-card-preview",
+    maxFields: 2,
+    roomId: room?.id || activeRoomId,
+    historyLabel: preview?.historyLabel || "",
+    fieldView: roomQuickPreviewCardFieldView(
+      room?.id || activeRoomId,
+      quickAction,
+      previewState,
+      previewSnapshotIndex,
+    ),
+    history: preview?.history || [],
+    selectedHistoryIndex: previewSnapshotIndex,
+    onHistoryClick: (_snapshot, index) => {
+      previewRoomQuickStage(room?.id || activeRoomId, quickAction, previewState, index);
+    },
+    onFieldViewChange: (viewId) => {
+      setRoomQuickPreviewCardFieldView(
         room?.id || activeRoomId,
         quickAction,
         previewState,
         previewSnapshotIndex,
-      ),
-      history: previewHistory,
-      selectedHistoryIndex: previewSnapshotIndex,
-      onHistoryClick: (_snapshot, index) => {
-        previewRoomQuickStage(room?.id || activeRoomId, quickAction, previewState, index);
-      },
-      onFieldViewChange: (viewId) => {
-        setRoomQuickPreviewCardFieldView(
-          room?.id || activeRoomId,
-          quickAction,
-          previewState,
-          previewSnapshotIndex,
-          viewId,
-        );
-      },
-    });
-    if (previewCard) {
-      if (chatDetailCardActionsEl?.parentNode === chatDetailCardShellEl) {
-        chatDetailCardShellEl.insertBefore(previewCard, chatDetailCardActionsEl);
-      } else {
-        chatDetailCardShellEl.appendChild(previewCard);
-      }
-    }
+        viewId,
+      );
+    },
+  });
+}
+
+function renderUserDetailCardDynamicSections(room, quickAction, quickState, preview) {
+  if (!chatDetailCardShellEl) return;
+  clearUserDetailCardTransientNodes();
+  const workflow = createUserDetailCardWorkflowNode(room, quickAction, quickState);
+  insertUserDetailCardTransientNode(workflow);
+  const previewCard = createUserDetailCardPreviewNode(room, quickAction, preview);
+  insertUserDetailCardTransientNode(previewCard);
+}
+
+function createUserDetailCardActionButton(action) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "chat-detail-card-action";
+  button.dataset.cardAction = action;
+  button.setAttribute("aria-pressed", "false");
+  button.textContent = action;
+  button.addEventListener("click", () => {
+    seedComposerFromQuickAction(action);
+  });
+  return button;
+}
+
+function renderUserDetailCardActions(room, card) {
+  if (!chatDetailCardActionsEl) return;
+  clearChildren(chatDetailCardActionsEl);
+  for (const action of card.actions) {
+    chatDetailCardActionsEl.appendChild(createUserDetailCardActionButton(action));
   }
-  if (chatDetailCardActionsEl) {
-    clearChildren(chatDetailCardActionsEl);
-    for (const action of card.actions) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "chat-detail-card-action";
-      button.dataset.cardAction = action;
-      button.setAttribute("aria-pressed", "false");
-      button.textContent = action;
-      button.addEventListener("click", () => {
-        seedComposerFromQuickAction(action);
-      });
-      chatDetailCardActionsEl.appendChild(button);
-    }
-    appendRoomQuickActionOverviewButton(chatDetailCardActionsEl, room, {
-      className: "chat-detail-card-action chat-detail-card-action-workflow",
-      dataset: { cardWorkflowAction: "true" },
-    });
-    appendRoomQuickStateAdvanceButton(chatDetailCardActionsEl, room, {
-      className: "chat-detail-card-action chat-detail-card-action-advance",
-      dataset: { cardStateAdvance: "true" },
-    });
-    syncUserQuickActionButtons(room?.id || activeRoomId);
-  }
+  appendRoomQuickActionOverviewButton(chatDetailCardActionsEl, room, {
+    className: "chat-detail-card-action chat-detail-card-action-workflow",
+    dataset: { cardWorkflowAction: "true" },
+  });
+  appendRoomQuickStateAdvanceButton(chatDetailCardActionsEl, room, {
+    className: "chat-detail-card-action chat-detail-card-action-advance",
+    dataset: { cardStateAdvance: "true" },
+  });
+  syncUserQuickActionButtons(room?.id || activeRoomId);
+}
+
+function syncUserDetailCard(room, visual, projection) {
+  if (currentShellPage() !== "user") return;
+  const card = userDetailCardProjection(room, visual, projection);
+  const quickAction = latestRoomQuickAction(room);
+  const quickState = latestRoomQuickState(room);
+  const preview = resolveRoomQuickPreview(room, quickAction);
+  applyUserDetailCardShellState(card);
+  renderUserDetailCardDynamicSections(room, quickAction, quickState, preview);
+  renderUserDetailCardActions(room, card);
 }
 
 
@@ -1373,33 +1427,48 @@ function userShellProjection() {
 
 function defaultActiveRoomId(rooms = []) { return _defaultActiveRoomId(rooms); }
 
-function applyShellMode() {
+function shellModeViewState() {
   shellMode = resolveShellMode();
   const shellPage = currentShellPage();
   const compactShell = shellPage === "user" || shellPage === "admin";
   const config = shellModeConfig(shellMode);
-  document.body.dataset.shellMode = shellMode;
-  document.body.dataset.chromeDensity = compactShell ? "compact" : "full";
-  updateShellEntryCards(shellMode);
+  return { shellMode, shellPage, compactShell, config };
+}
+
+function applyShellModeBodyDataset(viewState) {
+  document.body.dataset.shellMode = viewState.shellMode;
+  document.body.dataset.chromeDensity = viewState.compactShell ? "compact" : "full";
+}
+
+function updateShellModeBadge(viewState) {
   if (shellModeBadgeEl) {
     shellModeBadgeEl.textContent =
-      shellPage === "hub"
+      viewState.shellPage === "hub"
         ? "入口：聊天入口"
-        : `入口：${translateShellMode(shellMode)}`;
-    shellModeBadgeEl.classList.toggle("shell-hidden", compactShell);
+        : `入口：${translateShellMode(viewState.shellMode)}`;
+    shellModeBadgeEl.classList.toggle("shell-hidden", viewState.compactShell);
   }
-  if (shellPage !== "hub" && shellPage !== "world-entry") {
-    document.title = `龙虾聊天 · ${translateShellMode(shellMode)}`;
+}
+
+function updateShellModeDocumentTitle(viewState) {
+  if (viewState.shellPage !== "hub" && viewState.shellPage !== "world-entry") {
+    document.title = `龙虾聊天 · ${translateShellMode(viewState.shellMode)}`;
   }
+}
+
+function updateShellModeMasthead(viewState) {
   if (mastheadEyebrowEl) {
-    mastheadEyebrowEl.textContent = shellPage === "hub" ? "龙虾聊天" : config.eyebrow;
+    mastheadEyebrowEl.textContent = viewState.shellPage === "hub" ? "龙虾聊天" : viewState.config.eyebrow;
   }
   if (mastheadTitleEl) {
-    mastheadTitleEl.textContent = shellPage === "hub" ? "选一个房间开始" : config.title;
+    mastheadTitleEl.textContent = viewState.shellPage === "hub" ? "选一个房间开始" : viewState.config.title;
   }
   if (heroNoteEl) {
-    heroNoteEl.textContent = config.hero;
+    heroNoteEl.textContent = viewState.config.hero;
   }
+}
+
+function renderShellModeGuide(config) {
   if (modeGuideEl) {
     clearChildren(modeGuideEl);
     for (const item of config.guide) {
@@ -1409,20 +1478,39 @@ function applyShellMode() {
       modeGuideEl.appendChild(div);
     }
   }
+}
+
+function toggleShellModeEntryGrid(shellPage) {
   if (entryGridEl) {
     entryGridEl.classList.toggle("shell-hidden", shellPage !== "hub");
   }
+}
+
+function toggleShellModeStatusChrome(compactShell) {
   transportStateEl?.classList.toggle("shell-hidden", compactShell);
   storageStateEl?.classList.toggle("shell-hidden", compactShell);
   gatewayStateEl?.classList.toggle("shell-hidden", compactShell);
   providerStateEl?.classList.toggle("shell-hidden", compactShell);
   worldStateEl?.classList.toggle("shell-hidden", compactShell);
+}
 
-  const hideAdmin = shellMode === "user";
+function toggleAdminShellRoleVisibility(hideAdmin) {
   for (const element of document.querySelectorAll("[data-shell-role='admin']")) {
     element.classList.toggle("shell-hidden", hideAdmin);
   }
+}
 
+function applyShellMode() {
+  const viewState = shellModeViewState();
+  applyShellModeBodyDataset(viewState);
+  updateShellEntryCards(viewState.shellMode);
+  updateShellModeBadge(viewState);
+  updateShellModeDocumentTitle(viewState);
+  updateShellModeMasthead(viewState);
+  renderShellModeGuide(viewState.config);
+  toggleShellModeEntryGrid(viewState.shellPage);
+  toggleShellModeStatusChrome(viewState.compactShell);
+  toggleAdminShellRoleVisibility(viewState.shellMode === "user");
   updatePanelTitles();
   ensureConversationCallout();
   updateConversationCallout();
@@ -2116,55 +2204,84 @@ function createQuickActionPreviewSummaryLine(preview, options = {}) {
   return line;
 }
 
-function createQuickActionPreviewCard(action, previewState = "", structured = null, options = {}) {
-  if (!action || !previewState || !structured) return null;
-  const previewCardModel = buildQuickActionPreviewCardModel(action, previewState, structured, {
-    ...options,
-    followUpCopy: quickActionFollowUpCopy(action, previewState),
+function attachQuickActionPreviewMetaPillAction(pill, title, onActivate) {
+  if (!pill || typeof onActivate !== "function") return;
+  const clickableDomSpec = quickActionPreviewClickableDomSpec(title);
+  clickableDomSpec.classNames.forEach((className) => pill.classList.add(className));
+  pill.tabIndex = clickableDomSpec.tabIndex;
+  Object.entries(clickableDomSpec.attributes || {}).forEach(([key, value]) => {
+    if (key === "title") {
+      pill.title = value;
+    }
+    pill.setAttribute(key, value);
   });
-  if (!previewCardModel) return null;
-  const { history, activeStructured } = previewCardModel;
-  if (!activeStructured) return null;
-  const previewRenderDomSpec = buildQuickActionPreviewCardRenderDomSpec({
-    action,
-    previewState,
-    previewCardModel,
-    className: options.className || "",
-    title: options.title || "",
-    historyLabel: options.historyLabel || "",
-    historyTitle: options.historyTitle || "",
-    followUpCopy: quickActionFollowUpCopy(action, previewState),
-    maxFields: options.maxFields,
+  pill.addEventListener("click", () => {
+    onActivate();
   });
-  if (!previewRenderDomSpec) return null;
-  const attachPreviewMetaPillAction = (pill, title, onActivate) => {
-    if (!pill || typeof onActivate !== "function") return;
-    const clickableDomSpec = quickActionPreviewClickableDomSpec(title);
-    clickableDomSpec.classNames.forEach((className) => pill.classList.add(className));
-    pill.tabIndex = clickableDomSpec.tabIndex;
-    Object.entries(clickableDomSpec.attributes || {}).forEach(([key, value]) => {
-      if (key === "title") {
-        pill.title = value;
-      }
-      pill.setAttribute(key, value);
-    });
-    pill.addEventListener("click", () => {
+  pill.addEventListener("keydown", (event) => {
+    if (quickActionPreviewKeyActivates(event.key)) {
+      event.preventDefault();
       onActivate();
-    });
-    pill.addEventListener("keydown", (event) => {
-      if (quickActionPreviewKeyActivates(event.key)) {
-        event.preventDefault();
-        onActivate();
-      }
-    });
-  };
-
-  const card = document.createElement("section");
-  card.className = previewRenderDomSpec.card.classNames.join(" ");
-  Object.entries(previewRenderDomSpec.card.dataset || {}).forEach(([key, value]) => {
-    setDatasetFlag(card, key, value);
+    }
   });
+}
 
+function createQuickActionPreviewPillNode(pillSpec, history, options) {
+  const pill = pillSpec.className ? document.createElement("span") : createPill(pillSpec.text, pillSpec.tone);
+  if (pillSpec.className) pill.className = pillSpec.className;
+  Object.entries(pillSpec.dataset || {}).forEach(([key, value]) => {
+    setDatasetFlag(pill, key, value);
+  });
+  pill.textContent = pillSpec.text;
+  const pillActionTarget = pillSpec.actionTarget;
+  if (pillActionTarget?.kind === "history") {
+    attachQuickActionPreviewMetaPillAction(
+      pill,
+      pillActionTarget.title,
+      typeof options.onHistoryClick === "function"
+        ? () => {
+            options.onHistoryClick(history[pillActionTarget.snapshotIndex], pillActionTarget.snapshotIndex);
+          }
+        : null,
+    );
+  }
+  if (pillActionTarget?.kind === "field-view") {
+    attachQuickActionPreviewMetaPillAction(
+      pill,
+      pillActionTarget.title,
+      typeof options.onFieldViewChange === "function"
+        ? () => {
+            options.onFieldViewChange(pillActionTarget.fieldView);
+          }
+        : null,
+    );
+  }
+  return pill;
+}
+
+function createQuickActionPreviewPillGroupLabelNode(labelSpec) {
+  const label = document.createElement("span");
+  label.className = labelSpec.className;
+  Object.entries(labelSpec.dataset || {}).forEach(([key, value]) => {
+    setDatasetFlag(label, key, value);
+  });
+  label.textContent = labelSpec.text;
+  return label;
+}
+
+function createQuickActionPreviewPillGroupNode(groupSpec, history, options) {
+  const group = document.createElement("div");
+  group.className = groupSpec.className;
+  Object.entries(groupSpec.dataset || {}).forEach(([key, value]) => {
+    setDatasetFlag(group, key, value);
+  });
+  groupSpec.pills.forEach((pillSpec) => {
+    group.appendChild(createQuickActionPreviewPillNode(pillSpec, history, options));
+  });
+  return group;
+}
+
+function appendQuickActionPreviewHeader(card, previewRenderDomSpec, history, options) {
   const header = document.createElement("div");
   header.className = previewRenderDomSpec.header.headerClassName;
 
@@ -2176,95 +2293,41 @@ function createQuickActionPreviewCard(action, previewState = "", structured = nu
 
   const pills = document.createElement("div");
   pills.className = previewRenderDomSpec.pillsWrapperClassName;
-  const renderPillSpec = (pillSpec) => {
-    const pill = pillSpec.className ? document.createElement("span") : createPill(pillSpec.text, pillSpec.tone);
-    if (pillSpec.className) pill.className = pillSpec.className;
-    Object.entries(pillSpec.dataset || {}).forEach(([key, value]) => {
-      setDatasetFlag(pill, key, value);
-    });
-    pill.textContent = pillSpec.text;
-    const pillActionTarget = pillSpec.actionTarget;
-    if (pillActionTarget?.kind === "history") {
-      attachPreviewMetaPillAction(
-        pill,
-        pillActionTarget.title,
-        typeof options.onHistoryClick === "function"
-          ? () => {
-              options.onHistoryClick(history[pillActionTarget.snapshotIndex], pillActionTarget.snapshotIndex);
-            }
-          : null,
-      );
-    }
-    if (pillActionTarget?.kind === "field-view") {
-      attachPreviewMetaPillAction(
-        pill,
-        pillActionTarget.title,
-        typeof options.onFieldViewChange === "function"
-          ? () => {
-              options.onFieldViewChange(pillActionTarget.fieldView);
-            }
-          : null,
-      );
-    }
-    return pill;
-  };
-  const renderPillGroupLabel = (labelSpec) => {
-    const label = document.createElement("span");
-    label.className = labelSpec.className;
-    Object.entries(labelSpec.dataset || {}).forEach(([key, value]) => {
-      setDatasetFlag(label, key, value);
-    });
-    label.textContent = labelSpec.text;
-    return label;
-  };
-  const renderPillGroup = (groupSpec) => {
-    const group = document.createElement("div");
-    group.className = groupSpec.className;
-    Object.entries(groupSpec.dataset || {}).forEach(([key, value]) => {
-      setDatasetFlag(group, key, value);
-    });
-    groupSpec.pills.forEach((pillSpec) => {
-      group.appendChild(renderPillSpec(pillSpec));
-    });
-    return group;
-  };
   previewRenderDomSpec.pillSections.forEach((sectionSpec) => {
-    pills.appendChild(renderPillGroupLabel(sectionSpec.label));
-    pills.appendChild(renderPillGroup(sectionSpec.group));
+    pills.appendChild(createQuickActionPreviewPillGroupLabelNode(sectionSpec.label));
+    pills.appendChild(createQuickActionPreviewPillGroupNode(sectionSpec.group, history, options));
   });
 
   header.appendChild(pills);
   card.appendChild(header);
+}
 
-  const copyDomSpec = previewRenderDomSpec.copy;
-  if (copyDomSpec) {
-    card.appendChild(createLine(copyDomSpec.className, copyDomSpec.text));
-  }
-
-  const renderControlButton = (buttonDomSpec) => {
-    const button = document.createElement("button");
-    button.type = buttonDomSpec.type;
-    button.className = buttonDomSpec.className;
-    Object.entries(buttonDomSpec.dataset || {}).forEach(([key, value]) => {
-      setDatasetFlag(button, key, value);
+function createQuickActionPreviewControlButtonNode(buttonDomSpec, history, options) {
+  const button = document.createElement("button");
+  button.type = buttonDomSpec.type;
+  button.className = buttonDomSpec.className;
+  Object.entries(buttonDomSpec.dataset || {}).forEach(([key, value]) => {
+    setDatasetFlag(button, key, value);
+  });
+  button.textContent = buttonDomSpec.text;
+  button.title = buttonDomSpec.title;
+  const target = buttonDomSpec.actionTarget;
+  if (target?.kind === "history" && typeof options.onHistoryClick === "function") {
+    button.addEventListener("click", () => {
+      options.onHistoryClick(history[target.snapshotIndex], target.snapshotIndex);
     });
-    button.textContent = buttonDomSpec.text;
-    button.title = buttonDomSpec.title;
-    const target = buttonDomSpec.actionTarget;
-    if (target?.kind === "history" && typeof options.onHistoryClick === "function") {
-      button.addEventListener("click", () => {
-        options.onHistoryClick(history[target.snapshotIndex], target.snapshotIndex);
-      });
-    }
-    if (target?.kind === "field-view") {
-      button.addEventListener("click", () => {
-        if (typeof options.onFieldViewChange === "function") {
-          options.onFieldViewChange(target.fieldView);
-        }
-      });
-    }
-    return button;
-  };
+  }
+  if (target?.kind === "field-view") {
+    button.addEventListener("click", () => {
+      if (typeof options.onFieldViewChange === "function") {
+        options.onFieldViewChange(target.fieldView);
+      }
+    });
+  }
+  return button;
+}
+
+function appendQuickActionPreviewControlPanels(card, previewRenderDomSpec, history, options) {
   previewRenderDomSpec.controlPanels.forEach((panelSpec) => {
     const panel = document.createElement("div");
     panel.className = panelSpec.wrapper.className;
@@ -2275,7 +2338,9 @@ function createQuickActionPreviewCard(action, previewState = "", structured = nu
     if (panelSpec.labelLine) {
       panel.appendChild(createLine(panelSpec.labelLine.className, panelSpec.labelLine.text));
     }
-    const buttonNodes = panelSpec.buttons.map((buttonDomSpec) => renderControlButton(buttonDomSpec));
+    const buttonNodes = panelSpec.buttons.map((buttonDomSpec) =>
+      createQuickActionPreviewControlButtonNode(buttonDomSpec, history, options),
+    );
     if (panelSpec.buttonsClassName) {
       const buttons = document.createElement("div");
       buttons.className = panelSpec.buttonsClassName;
@@ -2286,9 +2351,10 @@ function createQuickActionPreviewCard(action, previewState = "", structured = nu
     }
     card.appendChild(panel);
   });
+}
 
-  const sheetRenderDomSpec = previewRenderDomSpec.sheet;
-  if (!sheetRenderDomSpec) return card;
+function createQuickActionPreviewSheetNode(sheetRenderDomSpec) {
+  if (!sheetRenderDomSpec) return null;
   const sheet = document.createElement("div");
   sheet.className = sheetRenderDomSpec.wrapperClassName;
   for (const childSpec of sheetRenderDomSpec.children) {
@@ -2314,7 +2380,48 @@ function createQuickActionPreviewCard(action, previewState = "", structured = nu
       sheet.appendChild(notes);
     }
   }
+  return sheet;
+}
 
+function createQuickActionPreviewCard(action, previewState = "", structured = null, options = {}) {
+  if (!action || !previewState || !structured) return null;
+  const previewCardModel = buildQuickActionPreviewCardModel(action, previewState, structured, {
+    ...options,
+    followUpCopy: quickActionFollowUpCopy(action, previewState),
+  });
+  if (!previewCardModel) return null;
+  const { history, activeStructured } = previewCardModel;
+  if (!activeStructured) return null;
+  const previewRenderDomSpec = buildQuickActionPreviewCardRenderDomSpec({
+    action,
+    previewState,
+    previewCardModel,
+    className: options.className || "",
+    title: options.title || "",
+    historyLabel: options.historyLabel || "",
+    historyTitle: options.historyTitle || "",
+    followUpCopy: quickActionFollowUpCopy(action, previewState),
+    maxFields: options.maxFields,
+  });
+  if (!previewRenderDomSpec) return null;
+
+  const card = document.createElement("section");
+  card.className = previewRenderDomSpec.card.classNames.join(" ");
+  Object.entries(previewRenderDomSpec.card.dataset || {}).forEach(([key, value]) => {
+    setDatasetFlag(card, key, value);
+  });
+
+  appendQuickActionPreviewHeader(card, previewRenderDomSpec, history, options);
+
+  const copyDomSpec = previewRenderDomSpec.copy;
+  if (copyDomSpec) {
+    card.appendChild(createLine(copyDomSpec.className, copyDomSpec.text));
+  }
+
+  appendQuickActionPreviewControlPanels(card, previewRenderDomSpec, history, options);
+
+  const sheet = createQuickActionPreviewSheetNode(previewRenderDomSpec.sheet);
+  if (!sheet) return card;
   card.appendChild(sheet);
   return card;
 }
@@ -2413,25 +2520,204 @@ function createRoomQuickPreviewPill(room) {
   return pill;
 }
 
-function createRoomInlineActions(room) {
-  const action = latestRoomQuickAction(room);
-  const state = latestRoomQuickState(room);
-  if (!room?.id || room.id !== activeRoomId || !action) return null;
-
-  const primarySpec = inlineActionProfile(room, "primary");
-  const secondarySpec = inlineActionProfile(room, "secondary");
-  const primaryLabel = primarySpec?.label || quickActionOverviewCtaLabel(action, state);
-  const secondaryLabel = secondarySpec?.label || quickActionAdvanceLabel(action, state);
-  if (!primaryLabel && !secondaryLabel) return null;
-
-  const railDomSpec = buildRoomInlineActionsRailDomSpec(action);
-  const rail = document.createElement("div");
-  rail.className = railDomSpec.className;
-  Object.entries(railDomSpec.dataset || {}).forEach(([key, value]) => {
-    setDatasetFlag(rail, key, value);
+function applyInlineClickableDomSpec(node, clickableSpec) {
+  if (!node || !clickableSpec) return;
+  (clickableSpec.classNames || []).forEach((className) => {
+    if (className) node.classList.add(className);
   });
+  if (Number.isInteger(clickableSpec.tabIndex)) {
+    node.tabIndex = clickableSpec.tabIndex;
+  }
+  Object.entries(clickableSpec.attributes || {}).forEach(([key, value]) => {
+    if (value) node.setAttribute(key, String(value));
+  });
+}
 
-  const progressDomSpec = buildRoomInlineProgressRenderDomSpec(action, state);
+function createInlineCardContainerNode(containerSpec) {
+  const container = document.createElement("div");
+  container.className = containerSpec.className;
+  if (containerSpec.hidden !== undefined) {
+    container.hidden = containerSpec.hidden;
+  }
+  if (containerSpec.ariaHidden !== undefined) {
+    container.setAttribute("aria-hidden", containerSpec.ariaHidden);
+  }
+  return container;
+}
+
+function createInlineCardSimpleChildNode(childSpec) {
+  const child = document.createElement(childSpec.type || "div");
+  child.className = childSpec.className;
+  child.textContent = childSpec.text || "";
+  return child;
+}
+
+function createInlineCardButtonNode(buttonSpec) {
+  const button = document.createElement(buttonSpec.type || "button");
+  button.type = buttonSpec.buttonType || "button";
+  Object.entries(buttonSpec.dataset || {}).forEach(([key, value]) => {
+    button.dataset[key] = String(value);
+  });
+  button.textContent = buttonSpec.text;
+  if (buttonSpec.title) {
+    button.title = buttonSpec.title;
+  }
+  if (buttonSpec.ariaLabel) {
+    button.setAttribute("aria-label", buttonSpec.ariaLabel);
+  }
+  applyInlineClickableDomSpec(button, buttonSpec.clickable);
+  return button;
+}
+
+function attachInlineMetaPillAction(pill, clickableSpec, onActivate) {
+  if (!pill || typeof onActivate !== "function") return;
+  applyInlineClickableDomSpec(pill, clickableSpec);
+  pill.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onActivate();
+  });
+  pill.addEventListener("keydown", (event) => {
+    if (quickActionPreviewKeyActivates(event.key)) {
+      event.preventDefault();
+      event.stopPropagation();
+      onActivate();
+    }
+  });
+}
+
+function createInlineMetaChildNode(childSpec, attachInlineMetaModelAction) {
+  const node = document.createElement(childSpec.type || "span");
+  node.className = childSpec.className;
+  Object.entries(childSpec.dataset || {}).forEach(([key, value]) => {
+    node.dataset[key] = String(value);
+  });
+  node.textContent = childSpec.text || "";
+  if (childSpec.actionTarget) {
+    attachInlineMetaModelAction(node, {
+      ...childSpec.actionTarget,
+      clickable: childSpec.clickable,
+    });
+  }
+  (childSpec.children || []).forEach((nestedSpec) => {
+    node.appendChild(createInlineMetaChildNode(nestedSpec, attachInlineMetaModelAction));
+  });
+  return node;
+}
+
+function appendInlineCardHeader(inlineCard, childModel) {
+  (childModel.children || []).forEach((childSpec) => {
+    inlineCard.appendChild(createInlineCardSimpleChildNode(childSpec));
+  });
+}
+
+function appendInlineCardMeta(inlineCard, childModel, attachInlineMetaModelAction) {
+  const inlineMetaDomModel = childModel.model;
+  if (!inlineMetaDomModel) return;
+  const inlineMeta = createInlineCardContainerNode(inlineMetaDomModel);
+  inlineMetaDomModel.sections.forEach((section) => {
+    (section.children || []).forEach((childSpec) => {
+      inlineMeta.appendChild(createInlineMetaChildNode(childSpec, attachInlineMetaModelAction));
+    });
+  });
+  inlineCard.appendChild(inlineMeta);
+}
+
+function appendInlineCardActions(inlineCard, childModel, inlineActionHandlers) {
+  const inlineActionDomModel = childModel.model;
+  if (!inlineActionDomModel) return;
+  const inlineActions = createInlineCardContainerNode(inlineActionDomModel);
+  (inlineActionDomModel.children || []).forEach((buttonSpec) => {
+    const target = buttonSpec.actionTarget;
+    const handler = inlineActionHandlers[target?.type];
+    if (typeof handler !== "function") return;
+    const button = createInlineCardButtonNode(buttonSpec);
+    button.addEventListener("click", handler);
+    inlineActions.appendChild(button);
+  });
+  inlineCard.appendChild(inlineActions);
+}
+
+function appendInlineCardFieldRows(inlineCard, childModel) {
+  const inlineFieldRowsDomModel = childModel.model;
+  if (!inlineFieldRowsDomModel) return;
+  const fieldList = createInlineCardContainerNode(inlineFieldRowsDomModel);
+  for (const rowSpec of inlineFieldRowsDomModel.rows) {
+    const row = createInlineCardContainerNode(rowSpec);
+    (rowSpec.children || []).forEach((childSpec) => {
+      row.appendChild(createInlineCardSimpleChildNode(childSpec));
+    });
+    fieldList.appendChild(row);
+  }
+  inlineCard.appendChild(fieldList);
+}
+
+function appendInlineCardControls(inlineCard, childModel, onInlineCardControlAction) {
+  const inlineControlsDomModel = childModel.model;
+  if (!inlineControlsDomModel) return;
+  inlineControlsDomModel.groups.forEach((group) => {
+    const container = createInlineCardContainerNode(group);
+    (group.children || []).forEach((buttonSpec) => {
+      const button = createInlineCardButtonNode(buttonSpec);
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onInlineCardControlAction(buttonSpec.actionTarget);
+      });
+      container.appendChild(button);
+    });
+    inlineCard.appendChild(container);
+  });
+}
+
+function createInlineHintNode(inlineHintDomModel, applyInlineHintClickable) {
+  if (!inlineHintDomModel) return null;
+  const hint = document.createElement("div");
+  hint.className = inlineHintDomModel.className;
+  for (const [key, value] of Object.entries(inlineHintDomModel.dataset)) {
+    hint.dataset[key] = value;
+  }
+  for (const part of inlineHintDomModel.parts) {
+    if (part.kind === "separator") {
+      hint.append(part.label);
+      continue;
+    }
+    const node = document.createElement("span");
+    node.className = part.className;
+    node.textContent = part.label;
+    if (part.title) {
+      node.title = part.title;
+    }
+    applyInlineHintClickable(node, part);
+    hint.appendChild(node);
+  }
+  return hint;
+}
+
+function bindInlineHintAction(node, target, room, preview, inlineHintHandlers) {
+  const handler = inlineHintHandlers[target?.type];
+  if (typeof handler === "function") {
+    node.addEventListener("click", handler);
+  }
+  if (target?.type === "history") {
+    node.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      previewRoomQuickStage(room.id, preview.action, preview.state, target.snapshotIndex);
+    });
+  }
+}
+
+function createInlineHintClickableApplier(room, preview, inlineHintHandlers) {
+  return (node, part) => {
+    if (!part?.actionTarget) return;
+    applyInlineClickableDomSpec(node, part.clickable);
+    bindInlineHintAction(node, part.actionTarget, room, preview, inlineHintHandlers);
+  };
+}
+
+function createRoomInlineProgressNode(progressDomSpec) {
+  if (!progressDomSpec) return null;
   const progress = document.createElement(progressDomSpec.type || "div");
   progress.className = progressDomSpec.className;
   Object.entries(progressDomSpec.dataset || {}).forEach(([key, value]) => {
@@ -2448,6 +2734,12 @@ function createRoomInlineActions(room) {
     child.textContent = childSpec.text;
     progress.appendChild(child);
   });
+  return progress;
+}
+
+function appendRoomInlineProgressNode(rail, room, action, state, progressDomSpec) {
+  const progress = createRoomInlineProgressNode(progressDomSpec);
+  if (!progress) return null;
   progress.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -2461,314 +2753,95 @@ function createRoomInlineActions(room) {
     );
   });
   rail.appendChild(progress);
-  const preview = resolveRoomQuickPreview(room, action);
-  const previewView = preview
-    ? resolveQuickActionPreviewView(
-        preview,
-        roomQuickPreviewFieldView(room.id, preview.action, preview.state, preview.snapshotIndex),
-      )
-    : null;
-  const inlinePanelModel = buildQuickActionInlinePreviewPanelModel({
-    preview,
-    resolvedPreviewView: previewView,
-    selectedFieldView: preview
-      ? roomQuickPreviewFieldView(room.id, preview.action, preview.state, preview.snapshotIndex)
-      : "",
-    maxFields: 2,
-  });
-  if (inlinePanelModel) {
-    const activatePreviewSnapshot = (event) => {
-      event?.preventDefault?.();
-      event?.stopPropagation?.();
-      previewRoomQuickStage(room.id, preview.action, preview.state, preview.snapshotIndex);
-      const previewDraft =
-        quickActionStructuredDraft(preview.structured, preview.action) ||
-        quickActionWorkflowTemplate(preview.action, preview.state);
-      seedComposerFromQuickAction(preview.action, previewDraft, { force: true });
-    };
-    const activatePreviewWorkflow = (event) => {
-      event?.preventDefault?.();
-      event?.stopPropagation?.();
-      previewRoomQuickStage(room.id, preview.action, preview.state, preview.snapshotIndex);
-      seedComposerFromQuickAction(
-        preview.action,
-        quickActionWorkflowTemplate(preview.action, preview.state),
-        { force: true },
-      );
-    };
-    const inlinePanelRenderDomModel =
-      buildQuickActionInlinePreviewPanelRenderDomModel(inlinePanelModel, quickActionIntensity(action));
-    if (!inlinePanelRenderDomModel) return rail;
-    const inlineHintDomModel = inlinePanelRenderDomModel.hint;
-    const bindInlineHintAction = (node, target) => {
-      if (target?.type === "workflow") {
-        node.addEventListener("click", activatePreviewWorkflow);
-      }
-      if (target?.type === "snapshot") {
-        node.addEventListener("click", activatePreviewSnapshot);
-      }
-      if (target?.type === "history") {
-        node.addEventListener("click", (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          previewRoomQuickStage(room.id, preview.action, preview.state, target.snapshotIndex);
-        });
-      }
-    };
-    const applyInlineClickableDomSpec = (node, clickableSpec) => {
-      if (!node || !clickableSpec) return;
-      (clickableSpec.classNames || []).forEach((className) => {
-        if (className) node.classList.add(className);
-      });
-      if (Number.isInteger(clickableSpec.tabIndex)) {
-        node.tabIndex = clickableSpec.tabIndex;
-      }
-      Object.entries(clickableSpec.attributes || {}).forEach(([key, value]) => {
-        if (value) node.setAttribute(key, String(value));
-      });
-    };
-    const applyInlineHintClickable = (node, part) => {
-      if (!part?.actionTarget) return;
-      applyInlineClickableDomSpec(node, part.clickable);
-      bindInlineHintAction(node, part.actionTarget);
-    };
+  return progress;
+}
 
-    if (inlineHintDomModel) {
-      const hint = document.createElement("div");
-      hint.className = inlineHintDomModel.className;
-      for (const [key, value] of Object.entries(inlineHintDomModel.dataset)) {
-        hint.dataset[key] = value;
-      }
-      for (const part of inlineHintDomModel.parts) {
-        if (part.kind === "separator") {
-          hint.append(part.label);
-          continue;
-        }
-        const node = document.createElement("span");
-        node.className = part.className;
-        node.textContent = part.label;
-        if (part.title) {
-          node.title = part.title;
-        }
-        applyInlineHintClickable(node, part);
-        hint.appendChild(node);
-      }
-
-      rail.appendChild(hint);
-    }
-
-    const {
-      card: inlineCardDomModel,
-      children: inlineCardChildren,
-    } = inlinePanelRenderDomModel.card;
-    const inlineCard = document.createElement("div");
-    inlineCard.className = inlineCardDomModel.className;
-    Object.entries(inlineCardDomModel.dataset || {}).forEach(([key, value]) => {
-      inlineCard.dataset[key] = String(value);
-    });
-    const attachInlineMetaPillAction = (pill, clickableSpec, onActivate) => {
-      if (!pill || typeof onActivate !== "function") return;
-      applyInlineClickableDomSpec(pill, clickableSpec);
-      pill.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onActivate();
-      });
-      pill.addEventListener("keydown", (event) => {
-        if (quickActionPreviewKeyActivates(event.key)) {
-          event.preventDefault();
-          event.stopPropagation();
-          onActivate();
-        }
-      });
-    };
-    const attachInlineMetaModelAction = (pill, target) => {
-      if (target?.type === "history") {
-        attachInlineMetaPillAction(pill, target.clickable, () => {
-          previewRoomQuickStage(room.id, preview.action, preview.state, target.snapshotIndex);
-        });
-      }
-      if (target?.type === "field-view") {
-        attachInlineMetaPillAction(pill, target.clickable, () => {
-          setRoomQuickPreviewFieldView(
-            room.id,
-            preview.action,
-            preview.state,
-            preview.snapshotIndex,
-            target.fieldView,
-          );
-        });
-      }
-    };
-    const createInlineMetaChildNode = (childSpec) => {
-      const node = document.createElement(childSpec.type || "span");
-      node.className = childSpec.className;
-      Object.entries(childSpec.dataset || {}).forEach(([key, value]) => {
-        node.dataset[key] = String(value);
-      });
-      node.textContent = childSpec.text || "";
-      if (childSpec.actionTarget) {
-        attachInlineMetaModelAction(node, {
-          ...childSpec.actionTarget,
-          clickable: childSpec.clickable,
-        });
-      }
-      (childSpec.children || []).forEach((nestedSpec) => {
-        node.appendChild(createInlineMetaChildNode(nestedSpec));
-      });
-      return node;
-    };
-    const createInlineCardContainerNode = (containerSpec) => {
-      const container = document.createElement("div");
-      container.className = containerSpec.className;
-      if (containerSpec.hidden !== undefined) {
-        container.hidden = containerSpec.hidden;
-      }
-      if (containerSpec.ariaHidden !== undefined) {
-        container.setAttribute("aria-hidden", containerSpec.ariaHidden);
-      }
-      return container;
-    };
-    const createInlineCardSimpleChildNode = (childSpec) => {
-      const child = document.createElement(childSpec.type || "div");
-      child.className = childSpec.className;
-      child.textContent = childSpec.text || "";
-      return child;
-    };
-    const createInlineCardButtonNode = (buttonSpec) => {
-      const button = document.createElement(buttonSpec.type || "button");
-      button.type = buttonSpec.buttonType || "button";
-      Object.entries(buttonSpec.dataset || {}).forEach(([key, value]) => {
-        button.dataset[key] = String(value);
-      });
-      button.textContent = buttonSpec.text;
-      if (buttonSpec.title) {
-        button.title = buttonSpec.title;
-      }
-      if (buttonSpec.ariaLabel) {
-        button.setAttribute("aria-label", buttonSpec.ariaLabel);
-      }
-      applyInlineClickableDomSpec(button, buttonSpec.clickable);
-      return button;
-    };
-    const renderInlineCardHeader = (childModel) => {
-      (childModel.children || []).forEach((childSpec) => {
-        inlineCard.appendChild(createInlineCardSimpleChildNode(childSpec));
-      });
-    };
-    const renderInlineCardMeta = (childModel) => {
-      const inlineMetaDomModel = childModel.model;
-      if (!inlineMetaDomModel) return;
-      const inlineMeta = createInlineCardContainerNode(inlineMetaDomModel);
-      inlineMetaDomModel.sections.forEach((section) => {
-        (section.children || []).forEach((childSpec) => {
-          inlineMeta.appendChild(createInlineMetaChildNode(childSpec));
-        });
-      });
-      inlineCard.appendChild(inlineMeta);
-    };
-    const renderInlineCardControls = (childModel) => {
-      const inlineControlsDomModel = childModel.model;
-      if (!inlineControlsDomModel) return;
-      inlineControlsDomModel.groups.forEach((group) => {
-        const container = createInlineCardContainerNode(group);
-        (group.children || []).forEach((buttonSpec) => {
-          const button = createInlineCardButtonNode(buttonSpec);
-          button.addEventListener("click", (event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            const target = buttonSpec.actionTarget;
-            if (target?.type === "history") {
-              previewRoomQuickStage(room.id, preview.action, preview.state, target.snapshotIndex);
-            }
-            if (target?.type === "field-view") {
-              setRoomQuickPreviewFieldView(
-                room.id,
-                preview.action,
-                preview.state,
-                preview.snapshotIndex,
-                target.fieldView,
-              );
-            }
-          });
-          container.appendChild(button);
-        });
-        inlineCard.appendChild(container);
-      });
-    };
-    const renderInlineCardFieldRows = (childModel) => {
-      const inlineFieldRowsDomModel = childModel.model;
-      if (!inlineFieldRowsDomModel) return;
-      const fieldList = createInlineCardContainerNode(inlineFieldRowsDomModel);
-      for (const rowSpec of inlineFieldRowsDomModel.rows) {
-        const row = createInlineCardContainerNode(rowSpec);
-        (rowSpec.children || []).forEach((childSpec) => {
-          row.appendChild(createInlineCardSimpleChildNode(childSpec));
-        });
-        fieldList.appendChild(row);
-      }
-      inlineCard.appendChild(fieldList);
-    };
-    const renderInlineCardActions = (childModel) => {
-      const inlineActionDomModel = childModel.model;
-      if (!inlineActionDomModel) return;
-      const inlineActions = createInlineCardContainerNode(inlineActionDomModel);
-      const inlineActionHandlers = {
-        snapshot: activatePreviewSnapshot,
-        workflow: activatePreviewWorkflow,
-      };
-      (inlineActionDomModel.children || []).forEach((buttonSpec) => {
-        const target = buttonSpec.actionTarget;
-        const handler = inlineActionHandlers[target?.type];
-        if (typeof handler !== "function") return;
-        const button = createInlineCardButtonNode(buttonSpec);
-        button.addEventListener("click", handler);
-        inlineActions.appendChild(button);
-      });
-      inlineCard.appendChild(inlineActions);
-    };
-    const inlineCardChildRenderers = {
-      header: renderInlineCardHeader,
-      meta: renderInlineCardMeta,
-      controls: renderInlineCardControls,
-      fieldRows: renderInlineCardFieldRows,
-      actions: renderInlineCardActions,
-    };
-    Object.entries(inlineCardDomModel.datasetFlags || {}).forEach(([key, value]) => {
-      setDatasetFlag(inlineCard, key, value);
-    });
-    (inlineCardChildren || []).forEach((childModel) => {
-      const renderChild = inlineCardChildRenderers[childModel.kind];
-      if (typeof renderChild === "function") renderChild(childModel);
-    });
-    rail.appendChild(inlineCard);
+function activateInlineCardPreviewTarget(room, preview, target) {
+  if (target?.type === "history") {
+    previewRoomQuickStage(room.id, preview.action, preview.state, target.snapshotIndex);
   }
+  if (target?.type === "field-view") {
+    setRoomQuickPreviewFieldView(
+      room.id,
+      preview.action,
+      preview.state,
+      preview.snapshotIndex,
+      target.fieldView,
+    );
+  }
+}
 
-
-  const appendAction = (label, role, onClick) => {
-    const actionDomSpec = buildRoomInlineActionDomSpec(action, label, role);
-    if (!actionDomSpec) return;
-    const actionNode = document.createElement(actionDomSpec.type || "span");
-    actionNode.className = actionDomSpec.className;
-    Object.entries(actionDomSpec.dataset || {}).forEach(([key, value]) => {
-      setDatasetFlag(actionNode, key, value);
-    });
-    actionNode.textContent = actionDomSpec.text;
-    if (Number.isInteger(actionDomSpec.tabIndex)) {
-      actionNode.tabIndex = actionDomSpec.tabIndex;
+function appendRoomInlinePreviewCard(rail, room, preview, inlinePanelRenderDomModel, inlineActionHandlers) {
+  const {
+    card: inlineCardDomModel,
+    children: inlineCardChildren,
+  } = inlinePanelRenderDomModel.card;
+  const inlineCard = document.createElement("div");
+  inlineCard.className = inlineCardDomModel.className;
+  Object.entries(inlineCardDomModel.dataset || {}).forEach(([key, value]) => {
+    inlineCard.dataset[key] = String(value);
+  });
+  const attachInlineMetaModelAction = (pill, target) => {
+    if (target?.type === "history" || target?.type === "field-view") {
+      attachInlineMetaPillAction(pill, target.clickable, () => {
+        activateInlineCardPreviewTarget(room, preview, target);
+      });
     }
-    Object.entries(actionDomSpec.attributes || {}).forEach(([key, value]) => {
-      if (value) actionNode.setAttribute(key, String(value));
-    });
-    actionNode.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      onClick();
-    });
-    rail.appendChild(actionNode);
   };
+  const handleInlineCardControlAction = (target) => {
+    activateInlineCardPreviewTarget(room, preview, target);
+  };
+  const inlineCardChildRenderers = {
+    header: (childModel) => appendInlineCardHeader(inlineCard, childModel),
+    meta: (childModel) => appendInlineCardMeta(inlineCard, childModel, attachInlineMetaModelAction),
+    controls: (childModel) => appendInlineCardControls(inlineCard, childModel, handleInlineCardControlAction),
+    fieldRows: (childModel) => appendInlineCardFieldRows(inlineCard, childModel),
+    actions: (childModel) => appendInlineCardActions(inlineCard, childModel, inlineActionHandlers),
+  };
+  Object.entries(inlineCardDomModel.datasetFlags || {}).forEach(([key, value]) => {
+    setDatasetFlag(inlineCard, key, value);
+  });
+  (inlineCardChildren || []).forEach((childModel) => {
+    const renderChild = inlineCardChildRenderers[childModel.kind];
+    if (typeof renderChild === "function") renderChild(childModel);
+  });
+  rail.appendChild(inlineCard);
+  return inlineCard;
+}
 
-  appendAction(primaryLabel, "primary", () => {
+function createRoomInlineActionNode(action, label, role, onActivate) {
+  const actionDomSpec = buildRoomInlineActionDomSpec(action, label, role);
+  if (!actionDomSpec) return null;
+  const actionNode = document.createElement(actionDomSpec.type || "span");
+  actionNode.className = actionDomSpec.className;
+  Object.entries(actionDomSpec.dataset || {}).forEach(([key, value]) => {
+    setDatasetFlag(actionNode, key, value);
+  });
+  actionNode.textContent = actionDomSpec.text;
+  if (Number.isInteger(actionDomSpec.tabIndex)) {
+    actionNode.tabIndex = actionDomSpec.tabIndex;
+  }
+  Object.entries(actionDomSpec.attributes || {}).forEach(([key, value]) => {
+    if (value) actionNode.setAttribute(key, String(value));
+  });
+  actionNode.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof onActivate === "function") onActivate();
+  });
+  return actionNode;
+}
+
+function appendRoomInlineActionNodes(rail, room, inlineActionsModel) {
+  const {
+    action,
+    state,
+    primarySpec,
+    secondarySpec,
+    primaryLabel,
+    secondaryLabel,
+  } = inlineActionsModel;
+  const primaryActionNode = createRoomInlineActionNode(action, primaryLabel, "primary", () => {
     const nextAction = primarySpec?.action || action;
     seedComposerFromQuickAction(
       nextAction,
@@ -2776,8 +2849,9 @@ function createRoomInlineActions(room) {
       { force: true },
     );
   });
+  if (primaryActionNode) rail.appendChild(primaryActionNode);
 
-  appendAction(secondaryLabel, "secondary", () => {
+  const secondaryActionNode = createRoomInlineActionNode(action, secondaryLabel, "secondary", () => {
     if (secondarySpec?.next_state) {
       const nextAction = secondarySpec.action || action;
       setRoomQuickAction(room.id, nextAction);
@@ -2790,81 +2864,214 @@ function createRoomInlineActions(room) {
     }
     advanceRoomQuickState(room.id);
   });
+  if (secondaryActionNode) rail.appendChild(secondaryActionNode);
+}
 
+function createRoomInlineRailNode(railDomSpec) {
+  const rail = document.createElement("div");
+  rail.className = railDomSpec.className;
+  Object.entries(railDomSpec.dataset || {}).forEach(([key, value]) => {
+    setDatasetFlag(rail, key, value);
+  });
   return rail;
 }
 
-function createRoomPreviewNode(room) {
-  const preview = resolveRoomQuickPreview(room);
+function roomInlinePreviewContext(room, action) {
+  const preview = resolveRoomQuickPreview(room, action);
+  const selectedFieldView = preview
+    ? roomQuickPreviewFieldView(room.id, preview.action, preview.state, preview.snapshotIndex)
+    : "";
   const previewView = preview
-    ? resolveQuickActionPreviewView(
-        preview,
-        roomQuickPreviewFieldView(room.id, preview.action, preview.state, preview.snapshotIndex),
-      )
+    ? resolveQuickActionPreviewView(preview, selectedFieldView)
     : null;
-  const field = previewView?.primaryField;
-  if (!preview || !previewView || !field) {
-    return createLine("room-preview", roomPreview(room));
-  }
+  return {
+    preview,
+    previewView,
+    selectedFieldView,
+    inlinePanelModel: buildQuickActionInlinePreviewPanelModel({
+      preview,
+      resolvedPreviewView: previewView,
+      selectedFieldView,
+      maxFields: 2,
+    }),
+  };
+}
 
-  const shell = document.createElement("div");
-  shell.className = "room-preview-shell is-interactive";
-  shell.dataset.previewState = preview.state;
-  shell.dataset.previewRound = preview.historyLabel || "";
-  shell.title = "点击回到当前预览快照并继续填写";
-  const activatePreview = (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (room.id !== activeRoomId) {
-      focusRoom(room.id);
-      renderRooms();
-      renderTimeline();
-    }
+function createRoomInlinePreviewHandlers(room, preview) {
+  const activatePreviewSnapshot = (event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
     previewRoomQuickStage(room.id, preview.action, preview.state, preview.snapshotIndex);
     const previewDraft =
       quickActionStructuredDraft(preview.structured, preview.action) ||
       quickActionWorkflowTemplate(preview.action, preview.state);
     seedComposerFromQuickAction(preview.action, previewDraft, { force: true });
   };
-  shell.addEventListener("click", activatePreview);
+  const activatePreviewWorkflow = (event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    previewRoomQuickStage(room.id, preview.action, preview.state, preview.snapshotIndex);
+    seedComposerFromQuickAction(
+      preview.action,
+      quickActionWorkflowTemplate(preview.action, preview.state),
+      { force: true },
+    );
+  };
+  return {
+    snapshot: activatePreviewSnapshot,
+    workflow: activatePreviewWorkflow,
+  };
+}
 
-  if (Array.isArray(preview.history) && preview.history.length > 1) {
-    const history = document.createElement("div");
-    history.className = "room-preview-history";
-    preview.history.forEach((snapshot, index) => {
-      const chip = document.createElement("span");
-      chip.className = "room-preview-history-chip";
-      chip.dataset.selected = index === preview.snapshotIndex ? "true" : "false";
-      chip.dataset.snapshotIndex = String(index);
-      chip.dataset.snapshotRole = index === preview.history.length - 1 ? "latest" : "history";
-      chip.textContent = quickActionPreviewHistoryLabel(snapshot, index, preview.history.length);
-      chip.title = quickActionPreviewHistoryDescription(snapshot, index, preview.history.length);
-      chip.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (room.id !== activeRoomId) {
-          focusRoom(room.id);
-          renderTimeline();
-        }
-        previewRoomQuickStage(room.id, preview.action, preview.state, index);
-      });
-      history.appendChild(chip);
-    });
-    shell.appendChild(history);
+function appendRoomInlinePreviewPanel(rail, room, action) {
+  const previewContext = roomInlinePreviewContext(room, action);
+  const { preview, inlinePanelModel } = previewContext;
+  if (!inlinePanelModel) return true;
+  const inlineActionHandlers = createRoomInlinePreviewHandlers(room, preview);
+  const inlinePanelRenderDomModel =
+    buildQuickActionInlinePreviewPanelRenderDomModel(inlinePanelModel, quickActionIntensity(action));
+  if (!inlinePanelRenderDomModel) return false;
+
+  const inlineHintDomModel = inlinePanelRenderDomModel.hint;
+  const applyInlineHintClickable = createInlineHintClickableApplier(room, preview, inlineActionHandlers);
+  const hint = createInlineHintNode(inlineHintDomModel, applyInlineHintClickable);
+  if (hint) rail.appendChild(hint);
+  appendRoomInlinePreviewCard(rail, room, preview, inlinePanelRenderDomModel, inlineActionHandlers);
+  return true;
+}
+
+function createRoomInlineActions(room) {
+  const inlineActionsModel = buildRoomInlineActionsModel({
+    roomId: room?.id,
+    activeRoomId,
+    action: latestRoomQuickAction(room),
+    state: latestRoomQuickState(room),
+    primarySpec: inlineActionProfile(room, "primary"),
+    secondarySpec: inlineActionProfile(room, "secondary"),
+  });
+  if (!inlineActionsModel) return null;
+  const {
+    action,
+    state,
+    railDomSpec,
+    progressDomSpec,
+  } = inlineActionsModel;
+  const rail = createRoomInlineRailNode(railDomSpec);
+  const progress = appendRoomInlineProgressNode(rail, room, action, state, progressDomSpec);
+  if (!progress) return null;
+  if (!appendRoomInlinePreviewPanel(rail, room, action)) return rail;
+  appendRoomInlineActionNodes(rail, room, inlineActionsModel);
+  return rail;
+}
+
+function roomPreviewContext(room) {
+  const preview = resolveRoomQuickPreview(room);
+  const selectedFieldView = preview
+    ? roomQuickPreviewFieldView(room.id, preview.action, preview.state, preview.snapshotIndex)
+    : "";
+  const previewView = preview
+    ? resolveQuickActionPreviewView(preview, selectedFieldView)
+    : null;
+  return {
+    preview,
+    previewView,
+    field: previewView?.primaryField,
+  };
+}
+
+function createRoomPreviewFallbackNode(room) {
+  return createLine("room-preview", roomPreview(room));
+}
+
+function activateRoomPreviewSnapshot(room, preview, event) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (room.id !== activeRoomId) {
+    focusRoom(room.id);
+    renderRooms();
+    renderTimeline();
   }
+  previewRoomQuickStage(room.id, preview.action, preview.state, preview.snapshotIndex);
+  const previewDraft =
+    quickActionStructuredDraft(preview.structured, preview.action) ||
+    quickActionWorkflowTemplate(preview.action, preview.state);
+  seedComposerFromQuickAction(preview.action, previewDraft, { force: true });
+}
 
+function activateRoomPreviewHistorySnapshot(room, preview, index, event) {
+  event.preventDefault();
+  event.stopPropagation();
+  if (room.id !== activeRoomId) {
+    focusRoom(room.id);
+    renderTimeline();
+  }
+  previewRoomQuickStage(room.id, preview.action, preview.state, index);
+}
+
+function createRoomPreviewShellNode(preview, onActivate) {
+  const shell = document.createElement("div");
+  shell.className = "room-preview-shell is-interactive";
+  shell.dataset.previewState = preview.state;
+  shell.dataset.previewRound = preview.historyLabel || "";
+  shell.title = "点击回到当前预览快照并继续填写";
+  shell.addEventListener("click", onActivate);
+  return shell;
+}
+
+function createRoomPreviewHistoryChipNode(room, preview, snapshot, index) {
+  const chip = document.createElement("span");
+  chip.className = "room-preview-history-chip";
+  chip.dataset.selected = index === preview.snapshotIndex ? "true" : "false";
+  chip.dataset.snapshotIndex = String(index);
+  chip.dataset.snapshotRole = index === preview.history.length - 1 ? "latest" : "history";
+  chip.textContent = quickActionPreviewHistoryLabel(snapshot, index, preview.history.length);
+  chip.title = quickActionPreviewHistoryDescription(snapshot, index, preview.history.length);
+  chip.addEventListener("click", (event) => {
+    activateRoomPreviewHistorySnapshot(room, preview, index, event);
+  });
+  return chip;
+}
+
+function appendRoomPreviewHistoryNodes(shell, room, preview) {
+  if (!Array.isArray(preview.history) || preview.history.length <= 1) return;
+  const history = document.createElement("div");
+  history.className = "room-preview-history";
+  preview.history.forEach((snapshot, index) => {
+    history.appendChild(createRoomPreviewHistoryChipNode(room, preview, snapshot, index));
+  });
+  shell.appendChild(history);
+}
+
+function createRoomPreviewStageNode(field, previewView, onActivate) {
   const stage = document.createElement("div");
   stage.className = "room-preview-stage";
   stage.textContent = field.label || previewView.state || "预览";
-  stage.addEventListener("click", activatePreview);
-  shell.appendChild(stage);
+  stage.addEventListener("click", onActivate);
+  return stage;
+}
 
+function createRoomPreviewSummaryNode(room, field, onActivate) {
   const summary = document.createElement("div");
   summary.className = "room-preview";
   summary.textContent = field.value || field.label || roomPreview(room);
-  summary.addEventListener("click", activatePreview);
-  shell.appendChild(summary);
+  summary.addEventListener("click", onActivate);
+  return summary;
+}
 
+function appendRoomPreviewFieldNodes(shell, room, previewView, field, onActivate) {
+  shell.appendChild(createRoomPreviewStageNode(field, previewView, onActivate));
+  shell.appendChild(createRoomPreviewSummaryNode(room, field, onActivate));
+}
+
+function createRoomPreviewNode(room) {
+  const context = roomPreviewContext(room);
+  if (!context.preview || !context.previewView || !context.field) return createRoomPreviewFallbackNode(room);
+  const activatePreview = (event) => {
+    activateRoomPreviewSnapshot(room, context.preview, event);
+  };
+  const shell = createRoomPreviewShellNode(context.preview, activatePreview);
+  appendRoomPreviewHistoryNodes(shell, room, context.preview);
+  appendRoomPreviewFieldNodes(shell, room, context.previewView, context.field, activatePreview);
   return shell;
 }
 
@@ -3053,10 +3260,7 @@ function updateSearchModeTabs() {
   }
 }
 
-function ensureWorkspaceChrome() {
-  const userProjection = currentShellPage() === "user";
-  const hubProjection = currentShellPage() === "hub";
-
+function syncWorkspaceNavigationChrome(userProjection, hubProjection) {
   if ((userProjection || hubProjection) && workspaceNavEl) {
     workspaceNavEl.remove();
     workspaceNavEl = null;
@@ -3064,152 +3268,216 @@ function ensureWorkspaceChrome() {
   }
 
   if (!userProjection && !hubProjection && !workspaceNavEl && appShellEl && topbarEl) {
-    workspaceNavEl = document.createElement("nav");
-    workspaceNavEl.className =
-      currentShellPage() === "unified" ? "workspace-switcher panel" : "workspace-switcher";
-    workspaceNavEl.setAttribute("aria-label", "工作区切换");
-    topbarEl.insertAdjacentElement("afterend", workspaceNavEl);
+    workspaceNavEl = createWorkspaceNavElement();
   }
 
-  if (workspaceNavEl) {
-    workspaceNavEl.replaceChildren();
-    workspaceTabs = availableWorkspacesForShellMode(shellMode).map((workspace) => {
-      const button = createWorkspaceButton(workspace);
-      workspaceNavEl.appendChild(button);
-      return button;
-    });
+  renderWorkspaceNavigationTabs();
+}
+
+function createWorkspaceNavElement() {
+  const nav = document.createElement("nav");
+  nav.className = currentShellPage() === "unified"
+    ? "workspace-switcher panel"
+    : "workspace-switcher";
+  nav.setAttribute("aria-label", "工作区切换");
+  topbarEl.insertAdjacentElement("afterend", nav);
+  return nav;
+}
+
+function renderWorkspaceNavigationTabs() {
+  if (!workspaceNavEl) return;
+  workspaceNavEl.replaceChildren();
+  workspaceTabs = availableWorkspacesForShellMode(shellMode).map((workspace) => {
+    const button = createWorkspaceButton(workspace);
+    workspaceNavEl.appendChild(button);
+    return button;
+  });
+}
+
+function createRoomSearchInput(config) {
+  const input = document.createElement("input");
+  if (config.id) input.id = config.id;
+  input.type = config.type || "search";
+  input.className = config.className;
+  input.placeholder = config.placeholder;
+  input.autocomplete = "off";
+  return input;
+}
+
+function ensureUserRoomSearchControls(userProjection) {
+  if (!userProjection || roomSearchInputEl || !roomListEl) return;
+  roomSearchInputEl = createRoomSearchInput({
+    id: "room-search-input",
+    className: "creative-rail-search",
+    placeholder: "搜索居民、房间或最近消息",
+  });
+  roomListEl.insertAdjacentElement("beforebegin", roomSearchInputEl);
+  ensureSearchModeControls();
+}
+
+function ensureSearchModeControls() {
+  if (searchModeControlsEl || !roomSearchInputEl) return;
+  searchModeControlsEl = document.createElement("div");
+  searchModeControlsEl.className = "segmented-control creative-search-mode";
+  searchModeSegments = [
+    createSearchModeButton("all", "全部"),
+    createSearchModeButton("rooms", "房间"),
+    createSearchModeButton("residents", "居民"),
+  ];
+  for (const seg of searchModeSegments) {
+    searchModeControlsEl.appendChild(seg);
   }
+  roomSearchInputEl.insertAdjacentElement("beforebegin", searchModeControlsEl);
+  updateSearchModeTabs();
+}
 
-  if (userProjection && !roomSearchInputEl && roomListEl) {
-    roomSearchInputEl = document.createElement("input");
-    roomSearchInputEl.id = "room-search-input";
-    roomSearchInputEl.type = "search";
-    roomSearchInputEl.className = "creative-rail-search";
-    roomSearchInputEl.placeholder = "搜索居民、房间或最近消息";
-    roomSearchInputEl.autocomplete = "off";
-    roomListEl.insertAdjacentElement("beforebegin", roomSearchInputEl);
+function ensureRoomToolbarChrome(userProjection) {
+  if (userProjection || roomSearchInputEl || !roomsPanelEl || !roomListEl) return;
+  roomListEl.insertAdjacentElement("beforebegin", createRoomToolbar());
+}
 
-    // Search mode segmented control (creative/user page only)
-    if (!searchModeControlsEl) {
-      searchModeControlsEl = document.createElement("div");
-      searchModeControlsEl.className = "segmented-control creative-search-mode";
-      searchModeSegments = [
-        createSearchModeButton("all", "全部"),
-        createSearchModeButton("rooms", "房间"),
-        createSearchModeButton("residents", "居民"),
-      ];
-      for (const seg of searchModeSegments) {
-        searchModeControlsEl.appendChild(seg);
-      }
-      roomSearchInputEl.insertAdjacentElement("beforebegin", searchModeControlsEl);
-      updateSearchModeTabs();
-    }
-  }
+function createRoomToolbar() {
+  const toolbar = document.createElement("div");
+  toolbar.className = "panel-toolbar room-toolbar";
 
+  roomSearchInputEl = createRoomSearchInput({
+    className: "search-input",
+    placeholder: "搜索频道、私信或最近发言",
+  });
   bindRoomSearchInput();
 
-  if (!userProjection && !roomSearchInputEl && roomsPanelEl && roomListEl) {
-    const toolbar = document.createElement("div");
-    toolbar.className = "panel-toolbar room-toolbar";
+  roomToolbarNoteEl = document.createElement("div");
+  roomToolbarNoteEl.className = "toolbar-note";
 
-    roomSearchInputEl = document.createElement("input");
-    roomSearchInputEl.type = "search";
-    roomSearchInputEl.className = "search-input";
-    roomSearchInputEl.placeholder = "搜索频道、私信或最近发言";
-    roomSearchInputEl.autocomplete = "off";
-    bindRoomSearchInput();
+  toolbar.appendChild(roomSearchInputEl);
+  toolbar.appendChild(createRoomFilterSegments());
+  toolbar.appendChild(roomToolbarNoteEl);
+  return toolbar;
+}
 
-    const segments = document.createElement("div");
-    segments.className = "segmented-control";
-    roomFilterButtons = [
-      createRoomFilterButton("all", "全部"),
-      createRoomFilterButton("direct", "私信"),
-      createRoomFilterButton("public", "频道"),
-    ];
-    for (const button of roomFilterButtons) {
-      segments.appendChild(button);
-    }
+function createRoomFilterSegments() {
+  const segments = document.createElement("div");
+  segments.className = "segmented-control";
+  roomFilterButtons = [
+    createRoomFilterButton("all", "全部"),
+    createRoomFilterButton("direct", "私信"),
+    createRoomFilterButton("public", "频道"),
+  ];
+  for (const button of roomFilterButtons) {
+    segments.appendChild(button);
+  }
+  return segments;
+}
 
-    roomToolbarNoteEl = document.createElement("div");
-    roomToolbarNoteEl.className = "toolbar-note";
+function ensureConversationOverviewChrome() {
+  if (conversationOverviewEl || !conversationPanelEl || !metaEl) return;
+  conversationOverviewEl = document.createElement("section");
+  conversationOverviewEl.className = "conversation-overview";
+  metaEl.insertAdjacentElement("beforebegin", conversationOverviewEl);
+}
 
-    toolbar.appendChild(roomSearchInputEl);
-    toolbar.appendChild(segments);
-    toolbar.appendChild(roomToolbarNoteEl);
-    roomListEl.insertAdjacentElement("beforebegin", toolbar);
+function ensureComposerStatusChrome() {
+  if (composerStatusEl || !composerFormEl) return;
+  composerStatusEl = document.createElement("div");
+  composerStatusEl.className = "composer-status composer-status-muted";
+  const composerRow = composerFormEl.querySelector(".composer-row");
+  if (composerRow) {
+    composerRow.insertAdjacentElement("beforebegin", composerStatusEl);
+  } else {
+    composerFormEl.appendChild(composerStatusEl);
   }
+}
 
-  if (!conversationOverviewEl && conversationPanelEl && metaEl) {
-    conversationOverviewEl = document.createElement("section");
-    conversationOverviewEl.className = "conversation-overview";
-    metaEl.insertAdjacentElement("beforebegin", conversationOverviewEl);
+function ensureComposerHeroChrome(userProjection) {
+  if (userProjection || composerHeroEl || !composerFormEl) return;
+  composerHeroEl = document.createElement("div");
+  composerHeroEl.className = "composer-hero";
+  const composerRow = composerFormEl.querySelector(".composer-row");
+  const anchor = composerStatusEl || composerRow;
+  if (anchor) {
+    anchor.insertAdjacentElement("afterend", composerHeroEl);
+  } else {
+    composerFormEl.appendChild(composerHeroEl);
   }
+}
 
-  if (!composerStatusEl && composerFormEl) {
-    composerStatusEl = document.createElement("div");
-    composerStatusEl.className = "composer-status composer-status-muted";
-    const composerRow = composerFormEl.querySelector(".composer-row");
-    if (composerRow) {
-      composerRow.insertAdjacentElement("beforebegin", composerStatusEl);
-    } else {
-      composerFormEl.appendChild(composerStatusEl);
-    }
+function ensureComposerContextChrome(userProjection) {
+  if (userProjection || composerContextEl || !composerFormEl) return;
+  composerContextEl = document.createElement("div");
+  composerContextEl.className = "composer-context";
+  const anchor = composerHeroEl || composerStatusEl || composerFormEl.querySelector(".composer-row");
+  if (anchor) {
+    anchor.insertAdjacentElement("afterend", composerContextEl);
+  } else {
+    composerFormEl.appendChild(composerContextEl);
   }
-  if (!userProjection && !composerHeroEl && composerFormEl) {
-    composerHeroEl = document.createElement("div");
-    composerHeroEl.className = "composer-hero";
-    const composerRow = composerFormEl.querySelector(".composer-row");
-    const anchor = composerStatusEl || composerRow;
-    if (anchor) {
-      anchor.insertAdjacentElement("afterend", composerHeroEl);
-    } else {
-      composerFormEl.appendChild(composerHeroEl);
-    }
-  }
-  if (!userProjection && !composerContextEl && composerFormEl) {
-    composerContextEl = document.createElement("div");
-    composerContextEl.className = "composer-context";
-    const anchor = composerHeroEl || composerStatusEl || composerFormEl.querySelector(".composer-row");
-    if (anchor) {
-      anchor.insertAdjacentElement("afterend", composerContextEl);
-    } else {
-      composerFormEl.appendChild(composerContextEl);
-    }
-  }
-  if (!userProjection && !roomDigestEl && roomListEl) {
-    roomDigestEl = document.createElement("div");
-    roomDigestEl.className = "room-digest";
-    roomListEl.insertAdjacentElement("beforebegin", roomDigestEl);
-  }
-  if (!userProjection && !threadStatusRailEl && timelineEl) {
-    threadStatusRailEl = document.createElement("div");
-    threadStatusRailEl.className = "thread-status-rail";
-    timelineEl.insertAdjacentElement("beforebegin", threadStatusRailEl);
-  }
-  if (!userProjection && !composerMetaEl && composerFormEl) {
-    composerMetaEl = document.createElement("div");
-    composerMetaEl.className = "composer-meta";
-    composerFormEl.appendChild(composerMetaEl);
-  }
+}
+
+function ensureRoomDigestChrome(userProjection) {
+  if (userProjection || roomDigestEl || !roomListEl) return;
+  roomDigestEl = document.createElement("div");
+  roomDigestEl.className = "room-digest";
+  roomListEl.insertAdjacentElement("beforebegin", roomDigestEl);
+}
+
+function ensureThreadStatusRailChrome(userProjection) {
+  if (userProjection || threadStatusRailEl || !timelineEl) return;
+  threadStatusRailEl = document.createElement("div");
+  threadStatusRailEl.className = "thread-status-rail";
+  timelineEl.insertAdjacentElement("beforebegin", threadStatusRailEl);
+}
+
+function ensureComposerMetaChrome(userProjection) {
+  if (userProjection || composerMetaEl || !composerFormEl) return;
+  composerMetaEl = document.createElement("div");
+  composerMetaEl.className = "composer-meta";
+  composerFormEl.appendChild(composerMetaEl);
+}
+
+function ensureRoomViewToggleChrome(userProjection) {
+  if (userProjection || roomViewToggleButtonEl || !conversationPanelEl) return;
+  roomViewToggleButtonEl = document.createElement("button");
+  roomViewToggleButtonEl.type = "button";
+  roomViewToggleButtonEl.className = "secondary conversation-toggle";
+  roomViewToggleButtonEl.addEventListener("click", handleRoomViewToggleClick);
+  conversationPanelEl.insertAdjacentElement("afterbegin", roomViewToggleButtonEl);
+}
+
+function handleRoomViewToggleClick() {
+  syncChatPaneMode("list");
+  applyWorkspace();
+}
+
+function ensureWorkspaceAuxiliaryChrome(userProjection) {
+  ensureConversationOverviewChrome();
+  ensureComposerStatusChrome();
+  ensureComposerHeroChrome(userProjection);
+  ensureComposerContextChrome(userProjection);
+  ensureRoomDigestChrome(userProjection);
+  ensureThreadStatusRailChrome(userProjection);
+  ensureComposerMetaChrome(userProjection);
   ensureComposerTip();
   ensureComposerKeyBindings();
+  ensureRoomViewToggleChrome(userProjection);
+}
 
-  if (!userProjection && !roomViewToggleButtonEl && conversationPanelEl) {
-    roomViewToggleButtonEl = document.createElement("button");
-    roomViewToggleButtonEl.type = "button";
-    roomViewToggleButtonEl.className = "secondary conversation-toggle";
-    roomViewToggleButtonEl.addEventListener("click", () => {
-      syncChatPaneMode("list");
-      applyWorkspace();
-    });
-    conversationPanelEl.insertAdjacentElement("afterbegin", roomViewToggleButtonEl);
-  }
+function ensureNonUserCaretakerChrome(userProjection) {
+  if (userProjection) return;
+  ensureCaretakerPanel();
+  ensureCaretakerBadge();
+}
 
+function ensureWorkspaceChrome() {
+  const userProjection = currentShellPage() === "user";
+  const hubProjection = currentShellPage() === "hub";
+
+  syncWorkspaceNavigationChrome(userProjection, hubProjection);
+  ensureUserRoomSearchControls(userProjection);
+  bindRoomSearchInput();
+  ensureRoomToolbarChrome(userProjection);
+  ensureWorkspaceAuxiliaryChrome(userProjection);
   updateRoomToolbarState();
-  if (!userProjection) {
-    ensureCaretakerPanel();
-    ensureCaretakerBadge();
-  }
+  ensureNonUserCaretakerChrome(userProjection);
 }
 
 function bindRoomSearchInput() {
@@ -3272,18 +3540,14 @@ function ensureCaretakerPanel() {
   renderCaretakerPanel();
 }
 
-function renderCaretakerPanel() {
-  if (!caretakerPanelEl) return;
-  clearChildren(caretakerPanelEl);
-
+function createCaretakerPanelTitleNode() {
   const panelTitle = document.createElement("div");
   panelTitle.className = "panel-title";
   panelTitle.textContent = "OpenClaw 管家 · 小狗";
-  caretakerPanelEl.appendChild(panelTitle);
+  return panelTitle;
+}
 
-  const body = document.createElement("div");
-  body.className = "caretaker-body";
-
+function createCaretakerPanelHeaderNode() {
   const header = document.createElement("div");
   header.className = "caretaker-header";
   const headerNames = document.createElement("div");
@@ -3300,35 +3564,45 @@ function renderCaretakerPanel() {
   badge.textContent = CARETAKER_PROFILE.highlight;
   header.appendChild(headerNames);
   header.appendChild(badge);
-  body.appendChild(header);
+  return header;
+}
 
+function createCaretakerPanelSummaryNode() {
   const summary = document.createElement("p");
   summary.className = "caretaker-summary";
   summary.textContent = CARETAKER_PROFILE.summary;
-  body.appendChild(summary);
+  return summary;
+}
 
+function createCaretakerMessageNode(item) {
+  const msg = document.createElement("div");
+  msg.className = "caretaker-message";
+  const msgTitle = document.createElement("div");
+  msgTitle.className = "caretaker-message-title";
+  const titleSpan = document.createElement("span");
+  titleSpan.textContent = item.title;
+  const timeSpan = document.createElement("span");
+  timeSpan.className = "caretaker-message-time";
+  timeSpan.textContent = item.time;
+  msgTitle.appendChild(titleSpan);
+  msgTitle.appendChild(timeSpan);
+  const detail = document.createElement("p");
+  detail.textContent = item.detail;
+  msg.appendChild(msgTitle);
+  msg.appendChild(detail);
+  return msg;
+}
+
+function createCaretakerMessagesNode() {
   const messages = document.createElement("div");
   messages.className = "caretaker-messages";
   for (const item of CARETAKER_MESSAGES) {
-    const msg = document.createElement("div");
-    msg.className = "caretaker-message";
-    const msgTitle = document.createElement("div");
-    msgTitle.className = "caretaker-message-title";
-    const titleSpan = document.createElement("span");
-    titleSpan.textContent = item.title;
-    const timeSpan = document.createElement("span");
-    timeSpan.className = "caretaker-message-time";
-    timeSpan.textContent = item.time;
-    msgTitle.appendChild(titleSpan);
-    msgTitle.appendChild(timeSpan);
-    const detail = document.createElement("p");
-    detail.textContent = item.detail;
-    msg.appendChild(msgTitle);
-    msg.appendChild(detail);
-    messages.appendChild(msg);
+    messages.appendChild(createCaretakerMessageNode(item));
   }
-  body.appendChild(messages);
+  return messages;
+}
 
+function createCaretakerRulesNode() {
   const rules = document.createElement("div");
   rules.className = "caretaker-rules";
   const rulesTitle = document.createElement("div");
@@ -3342,7 +3616,20 @@ function renderCaretakerPanel() {
   }
   rules.appendChild(rulesTitle);
   rules.appendChild(ruleList);
-  body.appendChild(rules);
+  return rules;
+}
+
+function renderCaretakerPanel() {
+  if (!caretakerPanelEl) return;
+  clearChildren(caretakerPanelEl);
+
+  caretakerPanelEl.appendChild(createCaretakerPanelTitleNode());
+  const body = document.createElement("div");
+  body.className = "caretaker-body";
+  body.appendChild(createCaretakerPanelHeaderNode());
+  body.appendChild(createCaretakerPanelSummaryNode());
+  body.appendChild(createCaretakerMessagesNode());
+  body.appendChild(createCaretakerRulesNode());
 
   caretakerPanelEl.appendChild(body);
 }
@@ -3499,7 +3786,7 @@ function ensureConversationCallout() {
   if (!conversationCalloutEl) {
     conversationCalloutEl = document.createElement("div");
     conversationCalloutEl.className = "conversation-callout";
-    if (timelineEl) {
+    if (timelineEl && timelineEl.parentElement === conversationPanelEl) {
       conversationPanelEl.insertBefore(conversationCalloutEl, timelineEl);
     } else {
       conversationPanelEl.appendChild(conversationCalloutEl);
@@ -3508,82 +3795,107 @@ function ensureConversationCallout() {
   updateConversationCallout();
 }
 
+function updateConversationCalloutStageTitle(room) {
+  if (!roomStageTitleEl) return;
+  roomStageTitleEl.textContent = room
+    ? roomThreadHeadline(room)
+    : "房间内聊天主界面";
+}
+
+function conversationCalloutUserModel(room, caretaker) {
+  const roomCopy = room
+    ? `${roomThreadHeadline(room)} · ${roomAudienceLabel(room)}`
+    : "先从左侧点一个会话，房间里的消息流和输入区就会跟上。";
+  const caretakerCopy = caretaker
+    ? `${caretaker.name} 在线 · ${caretaker.auto_reply}`
+    : "OpenClaw 小狗管家会在房间里接住访客留言。";
+  const autoReply = caretaker?.auto_reply || "小狗会在房间里自动回复访客。";
+  const pendingVisitors = caretaker ? caretakerPendingCount(room) : 0;
+  const visitorNote = pendingVisitors > 0
+    ? `有 ${pendingVisitors} 条访客提醒在排队，先把当前房间聊顺。`
+    : "目前没有排队访客，继续像在房间里聊天即可。";
+  return {
+    variant: "user",
+    title: "房间内聊天主界面",
+    paragraphs: [
+      { text: roomCopy },
+      { text: caretakerCopy },
+      { text: `${autoReply} · ${visitorNote}`, className: "conversation-callout-note" },
+    ],
+  };
+}
+
+function conversationCalloutAdminModel(room) {
+  const roomCopy = room
+    ? `${roomThreadHeadline(room)} · ${roomAudienceLabel(room)} · ${roomRouteLabel(room)}`
+    : "先在左边选一个会话，右边的补充信息会跟着切换。";
+  const governanceNote = room
+    ? `${roomChatStatusSummary(room)} · ${roomQueueSummary(room)}`
+    : "左侧选功能分类，中间处理消息，右侧显示当前对象和工具。";
+  return {
+    variant: "admin",
+    title: "管理后台",
+    paragraphs: [
+      { text: roomCopy },
+      {
+        text: `左侧选功能分类，中间处理消息，右侧显示当前对象和工具 · ${governanceNote}`,
+        className: "conversation-callout-note",
+      },
+    ],
+  };
+}
+
+function conversationCalloutUnifiedModel(room) {
+  const roomCopy = room
+    ? roomThreadHeadline(room)
+    : "中间保留聊天，边上按顺序摆世界、城市、公告、安全和身份。";
+  const roomContext = room
+    ? roomContextSummary(room)
+    : "左侧入口按需展开即可，消息流始终是主位。";
+  return {
+    variant: "unified",
+    title: "城市外世界页",
+    paragraphs: [
+      { text: roomCopy },
+      { text: roomContext, className: "conversation-callout-note" },
+    ],
+  };
+}
+
+function conversationCalloutModel(room, caretaker) {
+  if (shellMode === "user") return conversationCalloutUserModel(room, caretaker);
+  if (shellMode === "admin") return conversationCalloutAdminModel(room);
+  return conversationCalloutUnifiedModel(room);
+}
+
+function createConversationCalloutParagraphNode(paragraph) {
+  const node = document.createElement("p");
+  if (paragraph.className) {
+    node.className = paragraph.className;
+  }
+  node.textContent = paragraph.text;
+  return node;
+}
+
+function renderConversationCalloutContent(model) {
+  conversationCalloutEl.dataset.variant = model.variant;
+  clearChildren(conversationCalloutEl);
+  const title = document.createElement("strong");
+  title.textContent = model.title;
+  conversationCalloutEl.appendChild(title);
+  for (const paragraph of model.paragraphs) {
+    conversationCalloutEl.appendChild(createConversationCalloutParagraphNode(paragraph));
+  }
+}
+
 function updateConversationCallout() {
   if (currentShellPage() === "user" || !conversationCalloutEl) return;
   conversationCalloutEl.style.display = currentWorkspace === "chat" ? "" : "none";
   const room = state.rooms.find((item) => item.id === activeRoomId);
   const caretaker = caretakerProfile(room);
-  if (roomStageTitleEl) {
-    roomStageTitleEl.textContent = room
-      ? roomThreadHeadline(room)
-      : "房间内聊天主界面";
-  }
-  if (shellMode === "user") {
-    conversationCalloutEl.dataset.variant = "user";
-    const roomCopy = room
-      ? `${roomThreadHeadline(room)} · ${roomAudienceLabel(room)}`
-      : "先从左侧点一个会话，房间里的消息流和输入区就会跟上。";
-    const caretakerCopy = caretaker
-      ? `${caretaker.name} 在线 · ${caretaker.auto_reply}`
-      : "OpenClaw 小狗管家会在房间里接住访客留言。";
-    const autoReply = caretaker?.auto_reply || "小狗会在房间里自动回复访客。";
-    const pendingVisitors = caretaker ? caretakerPendingCount(room) : 0;
-    const visitorNote = pendingVisitors > 0
-      ? `有 ${pendingVisitors} 条访客提醒在排队，先把当前房间聊顺。`
-      : "目前没有排队访客，继续像在房间里聊天即可。";
-    clearChildren(conversationCalloutEl);
-    const strong1 = document.createElement("strong");
-    strong1.textContent = "房间内聊天主界面";
-    conversationCalloutEl.appendChild(strong1);
-    const p1a = document.createElement("p");
-    p1a.textContent = roomCopy;
-    conversationCalloutEl.appendChild(p1a);
-    const p1b = document.createElement("p");
-    p1b.textContent = caretakerCopy;
-    conversationCalloutEl.appendChild(p1b);
-    const p1c = document.createElement("p");
-    p1c.className = "conversation-callout-note";
-    p1c.textContent = `${autoReply} · ${visitorNote}`;
-    conversationCalloutEl.appendChild(p1c);
-  } else if (shellMode === "admin") {
-    conversationCalloutEl.dataset.variant = "admin";
-    const roomCopy = room
-      ? `${roomThreadHeadline(room)} · ${roomAudienceLabel(room)} · ${roomRouteLabel(room)}`
-      : "先在左边选一个会话，右边的补充信息会跟着切换。";
-    const governanceNote = room
-      ? `${roomChatStatusSummary(room)} · ${roomQueueSummary(room)}`
-      : "左侧选功能分类，中间处理消息，右侧显示当前对象和工具。";
-    clearChildren(conversationCalloutEl);
-    const strong2 = document.createElement("strong");
-    strong2.textContent = "管理后台";
-    conversationCalloutEl.appendChild(strong2);
-    const p2a = document.createElement("p");
-    p2a.textContent = roomCopy;
-    conversationCalloutEl.appendChild(p2a);
-    const p2b = document.createElement("p");
-    p2b.className = "conversation-callout-note";
-    p2b.textContent = `左侧选功能分类，中间处理消息，右侧显示当前对象和工具 · ${governanceNote}`;
-    conversationCalloutEl.appendChild(p2b);
-  } else {
-    conversationCalloutEl.dataset.variant = "unified";
-    const roomCopy = room
-      ? roomThreadHeadline(room)
-      : "中间保留聊天，边上按顺序摆世界、城市、公告、安全和身份。";
-    const roomContext = room
-      ? roomContextSummary(room)
-      : "左侧入口按需展开即可，消息流始终是主位。";
-    clearChildren(conversationCalloutEl);
-    const strong3 = document.createElement("strong");
-    strong3.textContent = "城市外世界页";
-    conversationCalloutEl.appendChild(strong3);
-    const p3a = document.createElement("p");
-    p3a.textContent = roomCopy;
-    conversationCalloutEl.appendChild(p3a);
-    const p3b = document.createElement("p");
-    p3b.className = "conversation-callout-note";
-    p3b.textContent = roomContext;
-    conversationCalloutEl.appendChild(p3b);
-  }
+  updateConversationCalloutStageTitle(room);
+  const model = conversationCalloutModel(room, caretaker);
+  renderConversationCalloutContent(model);
 }
 
 function syncRoomStageCanvas(room) {
@@ -3748,75 +4060,93 @@ function renderComposerHero(room) {
   composerHeroEl.appendChild(chips);
 }
 
+function composerContextInputStatusItem(room) {
+  return {
+    label: "输入",
+    value: isSendingMessage ? "发送中" : roomSendErrors[room.id] ? "待重发" : "可发送",
+    tone: roomSendErrors[room.id] ? "danger" : isSendingMessage ? "warm" : "accent",
+  };
+}
+
+function composerContextUserRoomItems(room) {
+  return [
+    {
+      label: "发送到",
+      value: roomThreadHeadline(room) || room.participant_label || room.title,
+      tone: "accent",
+    },
+    composerContextInputStatusItem(room),
+  ];
+}
+
+function composerContextRoomItems(room, shellPage) {
+  if (shellPage === "user") return composerContextUserRoomItems(room);
+  return [
+    {
+      label: shellPage === "admin" ? "线程" : "会话标题",
+      value: roomThreadHeadline(room),
+      tone: "accent",
+    },
+    {
+      label: shellPage === "admin" ? "当前对象" : "聊天对象",
+      value: roomAudienceLabel(room),
+      tone: "accent",
+    },
+    {
+      label: shellPage === "admin" ? "消息去向" : "投递路线",
+      value: roomRouteLabel(room),
+      tone: roomSendErrors[room.id] ? "danger" : "muted",
+    },
+    {
+      label: "聊天状态",
+      value: roomChatStatusSummary(room),
+      tone: roomSendErrors[room.id] ? "danger" : visiblePendingEchoCount(room) ? "warm" : "accent",
+    },
+    {
+      label: "队列",
+      value: roomQueueSummary(room),
+      tone: caretakerPendingCount(room) > 0 || unreadCount(room) > 0 ? "warm" : "muted",
+    },
+    composerContextInputStatusItem(room),
+  ];
+}
+
+function composerContextEmptyItems(shellPage) {
+  return [
+    {
+      label: shellPage === "admin" ? "线程" : "会话标题",
+      value: gatewayUrl ? "先打开一个会话" : "等待网关",
+      tone: "muted",
+    },
+  ];
+}
+
+function composerContextItems(room, shellPage) {
+  return room ? composerContextRoomItems(room, shellPage) : composerContextEmptyItems(shellPage);
+}
+
+function createComposerContextItemNode(item) {
+  const block = document.createElement("div");
+  block.className = "composer-context-item";
+  block.appendChild(createLine("composer-context-label", item.label));
+  const value = document.createElement("div");
+  value.className = `composer-context-value composer-context-value-${item.tone}`;
+  value.textContent = item.value;
+  block.appendChild(value);
+  return block;
+}
+
+function renderComposerContextItems(items) {
+  clearChildren(composerContextEl);
+  for (const item of items) {
+    composerContextEl.appendChild(createComposerContextItemNode(item));
+  }
+}
+
 function updateComposerContext(room) {
   if (currentShellPage() === "user" || !composerContextEl) return;
   const shellPage = currentShellPage();
-  clearChildren(composerContextEl);
-
-  const items = room
-    ? shellPage === "user"
-      ? [
-          {
-            label: "发送到",
-            value: roomThreadHeadline(room) || room.participant_label || room.title,
-            tone: "accent",
-          },
-          {
-            label: "状态",
-            value: isSendingMessage ? "发送中" : roomSendErrors[room.id] ? "待重发" : "可发送",
-            tone: roomSendErrors[room.id] ? "danger" : isSendingMessage ? "warm" : "accent",
-          },
-        ]
-      : [
-          {
-            label: shellPage === "admin" ? "线程" : "会话标题",
-            value: roomThreadHeadline(room),
-            tone: "accent",
-          },
-          {
-            label: shellPage === "admin" ? "当前对象" : "聊天对象",
-            value: roomAudienceLabel(room),
-            tone: "accent",
-          },
-          {
-            label: shellPage === "admin" ? "消息去向" : "投递路线",
-            value: roomRouteLabel(room),
-            tone: roomSendErrors[room.id] ? "danger" : "muted",
-          },
-          {
-            label: "聊天状态",
-            value: roomChatStatusSummary(room),
-            tone: roomSendErrors[room.id] ? "danger" : visiblePendingEchoCount(room) ? "warm" : "accent",
-          },
-          {
-            label: "队列",
-            value: roomQueueSummary(room),
-            tone: caretakerPendingCount(room) > 0 || unreadCount(room) > 0 ? "warm" : "muted",
-          },
-          {
-            label: "输入",
-            value: isSendingMessage ? "发送中" : roomSendErrors[room.id] ? "待重发" : "可发送",
-            tone: roomSendErrors[room.id] ? "danger" : isSendingMessage ? "warm" : "accent",
-          },
-        ]
-    : [
-        {
-          label: shellPage === "admin" ? "线程" : "会话标题",
-          value: gatewayUrl ? "先打开一个会话" : "等待网关",
-          tone: "muted",
-        },
-      ];
-
-  for (const item of items) {
-    const block = document.createElement("div");
-    block.className = "composer-context-item";
-    block.appendChild(createLine("composer-context-label", item.label));
-    const value = document.createElement("div");
-    value.className = `composer-context-value composer-context-value-${item.tone}`;
-    value.textContent = item.value;
-    block.appendChild(value);
-    composerContextEl.appendChild(block);
-  }
+  renderComposerContextItems(composerContextItems(room, shellPage));
 }
 
 function updateComposerTip() {
@@ -3901,23 +4231,35 @@ function toggleElements(elements, hidden) {
   }
 }
 
-function applyWorkspace() {
-  ensureWorkspaceChrome();
-  document.body.dataset.workspace = currentWorkspace;
-  syncChatFocusWithWorkspace();
-  document.body.dataset.chatPane = currentWorkspace === "chat" ? chatPaneMode : "split";
+function workspaceViewState() {
   const shellPage = currentShellPage();
   const isUserShell = shellPage === "user";
   const isAdminShell = shellPage === "admin";
-  const inlineChatDetail = currentWorkspace === "chat" && isUserShell;
-  const showChatGovernanceRail = currentWorkspace === "governance";
-  document.body.dataset.chatDetailMode = inlineChatDetail ? "inline" : "sidebar";
+  return {
+    shellPage,
+    isUserShell,
+    isAdminShell,
+    inlineChatDetail: currentWorkspace === "chat" && isUserShell,
+    showChatGovernanceRail: currentWorkspace === "governance",
+    worldView: currentWorkspace === "world",
+    governanceView: currentWorkspace === "governance",
+    userEdgeDrawerVisible: isUserShell,
+  };
+}
+
+function applyWorkspaceBodyState(viewState) {
+  document.body.dataset.workspace = currentWorkspace;
+  syncChatFocusWithWorkspace();
+  document.body.dataset.chatPane = currentWorkspace === "chat" ? chatPaneMode : "split";
+  document.body.dataset.chatDetailMode = viewState.inlineChatDetail ? "inline" : "sidebar";
   document.body.dataset.workspaceFocus = currentWorkspace === "chat" ? "chat" : currentWorkspace;
   layoutEl?.classList.toggle("layout-single", currentWorkspace !== "chat");
   layoutEl?.classList.toggle("layout-chat", currentWorkspace === "chat");
-  layoutEl?.classList.toggle("layout-chat-inline-detail", inlineChatDetail);
+  layoutEl?.classList.toggle("layout-chat-inline-detail", viewState.inlineChatDetail);
   document.body.classList.toggle("chat-primary", currentWorkspace === "chat");
+}
 
+function syncWorkspaceTabState() {
   for (const button of workspaceTabs) {
     const isActive = button.dataset.workspace === currentWorkspace;
     button.classList.toggle("active", isActive);
@@ -3927,30 +4269,35 @@ function applyWorkspace() {
       button.removeAttribute("aria-current");
     }
   }
+}
 
-  const worldView = currentWorkspace === "world";
-  const governanceView = currentWorkspace === "governance";
-  const userEdgeDrawerVisible = currentShellPage() === "user";
-
-  guidePanelEl?.classList.toggle("surface-hidden", currentWorkspace === "chat" && !isAdminShell);
+function applyWorkspacePanelVisibility(viewState) {
+  guidePanelEl?.classList.toggle("surface-hidden", currentWorkspace === "chat" && !viewState.isAdminShell);
   governancePanelEl?.classList.toggle(
     "surface-hidden",
-    !(userEdgeDrawerVisible || worldView || governanceView || showChatGovernanceRail),
+    !(
+      viewState.userEdgeDrawerVisible ||
+      viewState.worldView ||
+      viewState.governanceView ||
+      viewState.showChatGovernanceRail
+    ),
   );
   caretakerPanelEl?.classList.toggle(
     "surface-hidden",
-    currentShellPage() === "user" || currentWorkspace !== "chat",
+    viewState.isUserShell || currentWorkspace !== "chat",
   );
   authPanelEl?.classList.toggle("surface-hidden", currentWorkspace !== "auth");
   roomsPanelEl?.classList.toggle("surface-hidden", currentWorkspace !== "chat");
   conversationPanelEl?.classList.toggle("surface-hidden", currentWorkspace !== "chat");
-  chatDetailPanelEl?.classList.toggle("surface-hidden", currentWorkspace !== "chat" || inlineChatDetail);
+  chatDetailPanelEl?.classList.toggle("surface-hidden", currentWorkspace !== "chat" || viewState.inlineChatDetail);
   roomViewToggleButtonEl?.classList.toggle("surface-hidden", currentWorkspace !== "chat");
 
-  toggleElements(governanceBrowseBlocks, !(worldView || governanceView || showChatGovernanceRail));
-  toggleElements(worldActionForms, !(worldView || showChatGovernanceRail));
-  toggleElements(governanceAdminForms, !(governanceView || showChatGovernanceRail));
+  toggleElements(governanceBrowseBlocks, !(viewState.worldView || viewState.governanceView || viewState.showChatGovernanceRail));
+  toggleElements(worldActionForms, !(viewState.worldView || viewState.showChatGovernanceRail));
+  toggleElements(governanceAdminForms, !(viewState.governanceView || viewState.showChatGovernanceRail));
+}
 
+function applyWorkspaceChromeEnhancements() {
   ensureChatFocusToggle();
   ensureChatPriorityBadge();
   ensureChatQuickLinks();
@@ -3962,6 +4309,15 @@ function applyWorkspace() {
   ensureModeBanner();
   updateModeBanner();
   ensureChatPaneToggle();
+}
+
+function applyWorkspace() {
+  ensureWorkspaceChrome();
+  const viewState = workspaceViewState();
+  applyWorkspaceBodyState(viewState);
+  syncWorkspaceTabState();
+  applyWorkspacePanelVisibility(viewState);
+  applyWorkspaceChromeEnhancements();
 }
 
 function updatePanelTitles() {
@@ -4073,34 +4429,36 @@ function createMessageQuickStateChip(action, state = "") {
   return chip;
 }
 
-function createMessageBodyNode(message, options = {}) {
-  const structured = parseStructuredQuickActionMessage(message);
-  const action = typeof message?.quick_action === "string" ? message.quick_action.trim() : "";
-  const quickState = typeof options.quickState === "string" ? options.quickState : "";
+function createMessageBodyShell(structured, action) {
   const body = document.createElement("div");
   body.className = structured ? "message-body message-body-structured" : "message-body";
   if (action) {
     body.dataset.quickAction = action;
     body.dataset.actionIntensity = quickActionIntensity(action);
   }
+  return body;
+}
+
+function applyMessageBodyTerminalState(body, message) {
   if (message?.is_recalled) {
     body.classList.add("message-body-recalled");
     body.textContent = "消息已撤回";
-    return body;
+    return true;
   }
   if (message?.moderation_status === 'blocked') {
     body.classList.add("message-body-recalled");
     body.textContent = "消息已屏蔽";
-    return body;
+    return true;
   }
-  if (!structured) {
-    body.textContent = message.text;
-    return body;
-  }
+  return false;
+}
 
-  const sheet = document.createElement("div");
-  sheet.className = "message-quick-sheet";
+function appendPlainMessageBodyText(body, message) {
+  body.textContent = message.text;
+  return body;
+}
 
+function appendMessageQuickSheetFields(sheet, structured) {
   for (const field of structured.fields) {
     const row = document.createElement("div");
     row.className = "message-quick-sheet-row";
@@ -4117,14 +4475,18 @@ function createMessageBodyNode(message, options = {}) {
     row.appendChild(value);
     sheet.appendChild(row);
   }
+}
 
+function appendMessageQuickSheetNotes(sheet, structured) {
   if (structured.notes.length) {
     const notes = document.createElement("div");
     notes.className = "message-quick-sheet-notes";
     notes.textContent = structured.notes.join("\n");
     sheet.appendChild(notes);
   }
+}
 
+function appendMessageQuickSheetFollowUp(sheet, action, quickState) {
   const followUpLabel = quickActionFollowUpLabel(action, quickState);
   const followUpCopy = quickActionFollowUpCopy(action, quickState);
   if (followUpLabel && followUpCopy) {
@@ -4140,9 +4502,27 @@ function createMessageBodyNode(message, options = {}) {
     followUp.appendChild(copy);
     sheet.appendChild(followUp);
   }
+}
+
+function appendStructuredMessageBodySheet(body, structured, action, quickState) {
+  const sheet = document.createElement("div");
+  sheet.className = "message-quick-sheet";
+  appendMessageQuickSheetFields(sheet, structured);
+  appendMessageQuickSheetNotes(sheet, structured);
+  appendMessageQuickSheetFollowUp(sheet, action, quickState);
 
   body.appendChild(sheet);
   return body;
+}
+
+function createMessageBodyNode(message, options = {}) {
+  const structured = parseStructuredQuickActionMessage(message);
+  const action = typeof message?.quick_action === "string" ? message.quick_action.trim() : "";
+  const quickState = typeof options.quickState === "string" ? options.quickState : "";
+  const body = createMessageBodyShell(structured, action);
+  if (applyMessageBodyTerminalState(body, message)) return body;
+  if (!structured) return appendPlainMessageBodyText(body, message);
+  return appendStructuredMessageBodySheet(body, structured, action, quickState);
 }
 
 function roomDisplayPeer(room) { return _roomDisplayPeer(room); }
@@ -4370,24 +4750,28 @@ function renderConversationMetaChips(room, chips = []) {
   metaEl.appendChild(row);
 }
 
-function renderRoomDigest(rooms) {
-  if (!roomDigestEl) return;
-  clearChildren(roomDigestEl);
-  const shellPage = currentShellPage();
-  const activeRoom = activeRoomId ? state.rooms.find((room) => room.id === activeRoomId) : null;
-  const directCount = state.rooms.filter((room) => roomKind(room) === "direct").length;
-  const publicCount = state.rooms.filter((room) => roomKind(room) === "public").length;
-  const systemCount = state.rooms.filter((room) => roomKind(room) === "system").length;
-  const unreadTotal = state.rooms.reduce((sum, room) => sum + unreadCount(room), 0);
-  const draftTotal = state.rooms.reduce((sum, room) => sum + Number(roomHasDraft(room.id)), 0);
-  const followUpCount = state.rooms.reduce((sum, room) => sum + Number(roomFollowUpCount(room) > 0), 0);
-  const caretakerQueue = state.rooms.reduce((sum, room) => sum + caretakerPendingCount(room), 0);
-  const notificationTotal = state.rooms.reduce((sum, room) => sum + caretakerNotificationCount(room), 0);
+function roomDigestMetrics() {
+  return {
+    activeRoom: activeRoomId ? state.rooms.find((room) => room.id === activeRoomId) : null,
+    directCount: state.rooms.filter((room) => roomKind(room) === "direct").length,
+    publicCount: state.rooms.filter((room) => roomKind(room) === "public").length,
+    systemCount: state.rooms.filter((room) => roomKind(room) === "system").length,
+    unreadTotal: state.rooms.reduce((sum, room) => sum + unreadCount(room), 0),
+    draftTotal: state.rooms.reduce((sum, room) => sum + Number(roomHasDraft(room.id)), 0),
+    followUpCount: state.rooms.reduce((sum, room) => sum + Number(roomFollowUpCount(room) > 0), 0),
+    caretakerQueue: state.rooms.reduce((sum, room) => sum + caretakerPendingCount(room), 0),
+    notificationTotal: state.rooms.reduce((sum, room) => sum + caretakerNotificationCount(room), 0),
+  };
+}
+
+function createRoomDigestTitleNode(rooms) {
   const title = document.createElement("div");
   title.className = "room-digest-title";
   title.textContent = rooms.length ? `最近会话 · ${rooms.length}` : "最近会话 · 暂无";
-  roomDigestEl.appendChild(title);
+  return title;
+}
 
+function createRoomDigestCopyNode(activeRoom, shellPage) {
   const copy = document.createElement("div");
   copy.className = "room-digest-copy";
   copy.textContent =
@@ -4398,77 +4782,88 @@ function renderRoomDigest(rooms) {
       : shellPage === "admin"
         ? "先看未读和待跟进，再继续聊天。"
         : "先看最近消息，更多入口按需再打开。";
-  roomDigestEl.appendChild(copy);
-
-  const chips = document.createElement("div");
-  chips.className = "room-digest-chips";
-  if (shellPage === "admin") {
-    chips.appendChild(createPill(`${followUpCount} 个待跟进`, followUpCount > 0 ? "warm" : "muted"));
-    chips.appendChild(createPill(`${caretakerQueue} 条访客提醒`, caretakerQueue > 0 ? "warm" : "accent"));
-    chips.appendChild(createPill(`${notificationTotal} 条提醒`, notificationTotal > 0 ? "accent" : "muted"));
-    chips.appendChild(createPill(`${publicCount} 个频道 · ${directCount} 个私信`, "muted"));
-    if (systemCount > 0) {
-      chips.appendChild(createPill(`${systemCount} 个系统项`, "muted"));
-    }
-  } else {
-    chips.appendChild(createPill(`${unreadTotal} 条未读`, unreadTotal > 0 ? "warm" : "muted"));
-    chips.appendChild(createPill(`${draftTotal} 条草稿`, draftTotal > 0 ? "accent" : "muted"));
-    chips.appendChild(createPill(`${directCount} 个私信 · ${publicCount} 个群聊`, "muted"));
-    if (caretakerQueue > 0) {
-      chips.appendChild(createPill(`${caretakerQueue} 条小狗留言`, "accent"));
-    }
-  }
-  if (activeRoom) {
-    chips.appendChild(createPill(roomThreadHeadline(activeRoom), "muted"));
-    if (shellPage !== "user") {
-      chips.appendChild(
-        createPill(
-          roomChatStatusSummary(activeRoom),
-          roomSendErrors[activeRoom.id] ? "danger" : pendingEchoesForRoom(activeRoom.id).length ? "warm" : "accent",
-        ),
-      );
-      chips.appendChild(
-        createPill(
-          roomQueueSummary(activeRoom),
-          caretakerPendingCount(activeRoom) > 0 || unreadCount(activeRoom) > 0 ? "warm" : "muted",
-        ),
-      );
-    }
-    chips.appendChild(
-      createPill(
-        shellPage === "admin"
-          ? `当前会话 ${roomThreadHeadline(activeRoom)}`
-          : `当前 ${roomThreadHeadline(activeRoom)}`,
-        "muted",
-      ),
-    );
-    if (caretakerProfile(activeRoom)) {
-      chips.appendChild(
-        createPill(
-          `${caretakerProfile(activeRoom).name} 在岗 · ${caretakerPendingCount(activeRoom)} 条代办`,
-          caretakerPendingCount(activeRoom) > 0 ? "warm" : "accent",
-        ),
-      );
-    }
-  }
-  roomDigestEl.appendChild(chips);
+  return copy;
 }
 
-function renderThreadStatusRail(room) {
-  if (!threadStatusRailEl) return;
-  clearChildren(threadStatusRailEl);
-  const shellPage = currentShellPage();
-  if (!room) {
-    threadStatusRailEl.classList.add("surface-hidden");
+function appendRoomDigestBaseChips(chips, shellPage, metrics) {
+  if (shellPage === "admin") {
+    chips.appendChild(createPill(`${metrics.followUpCount} 个待跟进`, metrics.followUpCount > 0 ? "warm" : "muted"));
+    chips.appendChild(createPill(`${metrics.caretakerQueue} 条访客提醒`, metrics.caretakerQueue > 0 ? "warm" : "accent"));
+    chips.appendChild(createPill(`${metrics.notificationTotal} 条提醒`, metrics.notificationTotal > 0 ? "accent" : "muted"));
+    chips.appendChild(createPill(`${metrics.publicCount} 个频道 · ${metrics.directCount} 个私信`, "muted"));
+    if (metrics.systemCount > 0) {
+      chips.appendChild(createPill(`${metrics.systemCount} 个系统项`, "muted"));
+    }
     return;
   }
-  if (shellPage === "user") {
-    threadStatusRailEl.classList.add("surface-hidden");
-    return;
+  chips.appendChild(createPill(`${metrics.unreadTotal} 条未读`, metrics.unreadTotal > 0 ? "warm" : "muted"));
+  chips.appendChild(createPill(`${metrics.draftTotal} 条草稿`, metrics.draftTotal > 0 ? "accent" : "muted"));
+  chips.appendChild(createPill(`${metrics.directCount} 个私信 · ${metrics.publicCount} 个群聊`, "muted"));
+  if (metrics.caretakerQueue > 0) {
+    chips.appendChild(createPill(`${metrics.caretakerQueue} 条小狗留言`, "accent"));
   }
-  threadStatusRailEl.classList.remove("surface-hidden");
+}
 
-  const items = [
+function appendRoomDigestActiveRoomChips(chips, activeRoom, shellPage) {
+  if (!activeRoom) return;
+  chips.appendChild(createPill(roomThreadHeadline(activeRoom), "muted"));
+  if (shellPage !== "user") {
+    chips.appendChild(
+      createPill(
+        roomChatStatusSummary(activeRoom),
+        roomSendErrors[activeRoom.id] ? "danger" : pendingEchoesForRoom(activeRoom.id).length ? "warm" : "accent",
+      ),
+    );
+    chips.appendChild(
+      createPill(
+        roomQueueSummary(activeRoom),
+        caretakerPendingCount(activeRoom) > 0 || unreadCount(activeRoom) > 0 ? "warm" : "muted",
+      ),
+    );
+  }
+  chips.appendChild(
+    createPill(
+      shellPage === "admin"
+        ? `当前会话 ${roomThreadHeadline(activeRoom)}`
+        : `当前 ${roomThreadHeadline(activeRoom)}`,
+      "muted",
+    ),
+  );
+  const caretaker = caretakerProfile(activeRoom);
+  if (caretaker) {
+    chips.appendChild(
+      createPill(
+        `${caretaker.name} 在岗 · ${caretakerPendingCount(activeRoom)} 条代办`,
+        caretakerPendingCount(activeRoom) > 0 ? "warm" : "accent",
+      ),
+    );
+  }
+}
+
+function createRoomDigestChipsNode(shellPage, metrics) {
+  const chips = document.createElement("div");
+  chips.className = "room-digest-chips";
+  appendRoomDigestBaseChips(chips, shellPage, metrics);
+  appendRoomDigestActiveRoomChips(chips, metrics.activeRoom, shellPage);
+  return chips;
+}
+
+function renderRoomDigest(rooms) {
+  if (!roomDigestEl) return;
+  clearChildren(roomDigestEl);
+  const shellPage = currentShellPage();
+  const metrics = roomDigestMetrics();
+  roomDigestEl.appendChild(createRoomDigestTitleNode(rooms));
+  roomDigestEl.appendChild(createRoomDigestCopyNode(metrics.activeRoom, shellPage));
+  roomDigestEl.appendChild(createRoomDigestChipsNode(shellPage, metrics));
+}
+
+function shouldHideThreadStatusRail(room, shellPage) {
+  return !room || shellPage === "user";
+}
+
+function threadStatusBaseItems(room, shellPage) {
+  return [
     {
       label: shellPage === "admin" ? "线程" : "会话标题",
       value: roomThreadHeadline(room),
@@ -4493,97 +4888,152 @@ function renderThreadStatusRail(room) {
       tone: roomSendErrors[room.id] ? "danger" : isSendingMessage ? "warm" : "accent",
     },
   ];
-  if (roomHasDraft(room.id)) {
-    items.push({
-      label: "草稿",
-      value: `${draftForRoom(room.id).trim().length} 字`,
-      tone: "accent",
-    });
-  }
-  if (caretakerProfile(room)) {
-    items.push({
-      label: caretakerProfile(room).role_label || "房间管家",
-      value: `${caretakerProfile(room).name} · ${caretakerStatusLine(room)}`,
-      tone: caretakerPendingCount(room) > 0 ? "warm" : "accent",
-    });
-    if (caretakerNotificationCount(room) > 0) {
-      items.push({
-        label: "提醒",
-        value: `${caretakerNotificationCount(room)} 条给主人`,
-        tone: "muted",
-      });
-    }
-  }
+}
 
-  for (const item of items) {
-    const chip = document.createElement("div");
-    chip.className = `thread-status-item thread-status-item-${item.tone}`;
-    chip.appendChild(createLine("thread-status-label", item.label));
-    chip.appendChild(createLine("thread-status-value", item.value));
-    threadStatusRailEl.appendChild(chip);
+function appendThreadStatusDraftItem(items, room) {
+  if (!roomHasDraft(room.id)) return;
+  items.push({
+    label: "草稿",
+    value: `${draftForRoom(room.id).trim().length} 字`,
+    tone: "accent",
+  });
+}
+
+function appendThreadStatusCaretakerItems(items, room) {
+  const caretaker = caretakerProfile(room);
+  if (!caretaker) return;
+  items.push({
+    label: caretaker.role_label || "房间管家",
+    value: `${caretaker.name} · ${caretakerStatusLine(room)}`,
+    tone: caretakerPendingCount(room) > 0 ? "warm" : "accent",
+  });
+  if (caretakerNotificationCount(room) > 0) {
+    items.push({
+      label: "提醒",
+      value: `${caretakerNotificationCount(room)} 条给主人`,
+      tone: "muted",
+    });
   }
 }
 
-function renderComposerMeta(room) {
-  if (!composerMetaEl) return;
-  clearChildren(composerMetaEl);
-  const shellPage = currentShellPage();
-  const baseStatus = composerMetaBaseStatus(
+function threadStatusRailItems(room, shellPage) {
+  const items = threadStatusBaseItems(room, shellPage);
+  appendThreadStatusDraftItem(items, room);
+  appendThreadStatusCaretakerItems(items, room);
+  return items;
+}
+
+function composerMetaStatusForRoom(room) {
+  return composerMetaBaseStatus(
     room,
     room ? roomSendErrors[room.id] : null,
     isSendingMessage,
     room ? roomHasDraft(room.id) : false,
   );
+}
+
+function composerMetaUserItems(room, baseStatus) {
+  return [
+    { label: "当前会话", value: room ? roomThreadHeadline(room) : "未选择会话" },
+    { label: "聊天对象", value: room ? roomAudienceLabel(room) : "等待会话" },
+    { label: "同步", value: room ? roomSyncLabel() : gatewayUrl ? "等待会话" : "等待网关" },
+    { label: "状态", value: baseStatus },
+  ];
+}
+
+function composerMetaNonUserItems(room, shellPage, baseStatus) {
+  return [
+    {
+      label: shellPage === "admin" ? "线程" : "会话标题",
+      value: room ? roomThreadHeadline(room) : "未选择会话",
+    },
+    {
+      label: shellPage === "admin" ? "当前对象" : "聊天对象",
+      value: room ? roomAudienceLabel(room) : gatewayUrl ? "等待会话" : "等待网关",
+    },
+    {
+      label: shellPage === "admin" ? "消息去向" : "路由",
+      value: room ? roomRouteLabel(room) : gatewayUrl ? "等待会话" : "等待网关",
+    },
+    {
+      label: "聊天状态",
+      value: room ? roomChatStatusSummary(room) : baseStatus,
+    },
+    {
+      label: "队列",
+      value: room ? roomQueueSummary(room) : "等待会话",
+    },
+    {
+      label: shellPage === "admin" ? "当前身份" : "身份",
+      value: currentIdentity() || "访客",
+    },
+    { label: "输入", value: baseStatus },
+  ];
+}
+
+function appendComposerMetaCaretakerItem(items, room, shellPage) {
+  const caretaker = room ? caretakerProfile(room) : null;
+  if (!caretaker) return;
+  items.push({
+    label: shellPage === "admin" ? "巡检/管家" : "管家",
+    value: `${caretaker.name} · ${caretaker.auto_reply}`,
+  });
+}
+
+function composerMetaItems(room, shellPage) {
+  const baseStatus = composerMetaStatusForRoom(room);
   const items =
     shellPage === "user"
-      ? [
-          { label: "当前会话", value: room ? roomThreadHeadline(room) : "未选择会话" },
-          { label: "聊天对象", value: room ? roomAudienceLabel(room) : "等待会话" },
-          { label: "同步", value: room ? roomSyncLabel() : gatewayUrl ? "等待会话" : "等待网关" },
-          { label: "状态", value: baseStatus },
-        ]
-      : [
-          {
-            label: shellPage === "admin" ? "线程" : "会话标题",
-            value: room ? roomThreadHeadline(room) : "未选择会话",
-          },
-          {
-            label: shellPage === "admin" ? "当前对象" : "聊天对象",
-            value: room ? roomAudienceLabel(room) : gatewayUrl ? "等待会话" : "等待网关",
-          },
-          {
-            label: shellPage === "admin" ? "消息去向" : "路由",
-            value: room ? roomRouteLabel(room) : gatewayUrl ? "等待会话" : "等待网关",
-          },
-          {
-            label: "聊天状态",
-            value: room ? roomChatStatusSummary(room) : baseStatus,
-          },
-          {
-            label: "队列",
-            value: room ? roomQueueSummary(room) : "等待会话",
-          },
-          {
-            label: shellPage === "admin" ? "当前身份" : "身份",
-            value: currentIdentity() || "访客",
-          },
-          { label: "输入", value: baseStatus },
-        ];
-  if (room && caretakerProfile(room)) {
-    items.push({
-      label: shellPage === "admin" ? "巡检/管家" : "管家",
-      value: `${caretakerProfile(room).name} · ${caretakerProfile(room).auto_reply}`,
-    });
-  }
+      ? composerMetaUserItems(room, baseStatus)
+      : composerMetaNonUserItems(room, shellPage, baseStatus);
+  appendComposerMetaCaretakerItem(items, room, shellPage);
   const quickHint = composerMetaQuickHint(shellMode);
   items.push({ label: "快捷", value: quickHint, tone: "muted" });
+  return items;
+}
+
+function createComposerMetaItemNode(item) {
+  const block = document.createElement("div");
+  block.className = "composer-meta-item";
+  block.appendChild(createLine("composer-meta-label", item.label));
+  block.appendChild(createLine("composer-meta-value", item.value));
+  return block;
+}
+
+function renderComposerMetaItems(items) {
+  clearChildren(composerMetaEl);
   for (const item of items) {
-    const block = document.createElement("div");
-    block.className = "composer-meta-item";
-    block.appendChild(createLine("composer-meta-label", item.label));
-    block.appendChild(createLine("composer-meta-value", item.value));
-    composerMetaEl.appendChild(block);
+    composerMetaEl.appendChild(createComposerMetaItemNode(item));
   }
+}
+
+function createThreadStatusItemNode(item) {
+  const chip = document.createElement("div");
+  chip.className = `thread-status-item thread-status-item-${item.tone}`;
+  chip.appendChild(createLine("thread-status-label", item.label));
+  chip.appendChild(createLine("thread-status-value", item.value));
+  return chip;
+}
+
+function renderThreadStatusRail(room) {
+  if (!threadStatusRailEl) return;
+  clearChildren(threadStatusRailEl);
+  const shellPage = currentShellPage();
+  if (shouldHideThreadStatusRail(room, shellPage)) {
+    threadStatusRailEl.classList.add("surface-hidden");
+    return;
+  }
+  threadStatusRailEl.classList.remove("surface-hidden");
+
+  for (const item of threadStatusRailItems(room, shellPage)) {
+    threadStatusRailEl.appendChild(createThreadStatusItemNode(item));
+  }
+}
+
+function renderComposerMeta(room) {
+  if (!composerMetaEl) return;
+  const shellPage = currentShellPage();
+  renderComposerMetaItems(composerMetaItems(room, shellPage));
 }
 
 function gatewayConnectionStatus() {
@@ -4737,26 +5187,13 @@ function confirmResidentRoomJump(room) {
 // joinOrFallback moved to shell-payload.js
 
 function localPreviewMessagesForEmptyRoom(room) {
-  if (!room || gatewayUrl || currentShellPage() !== "hub") return [];
-  if (document.body?.dataset?.shellVariant !== "creative-terminal") return [];
-  if (roomKind(room) !== "direct") return [];
-  return [
-    {
-      sender: "rsaga",
-      timestamp: "10:14",
-      text: "这里按住宅私聊显示，对方消息在左边，自己的回复在右边。",
-    },
-    {
-      sender: currentIdentity(),
-      timestamp: "10:15",
-      text: "收到。住宅页保留房间画面，文字对话层可以点击空白临时清屏。",
-    },
-    {
-      sender: "rsaga",
-      timestamp: "10:16",
-      text: "楼梯热点通往主城，热点只显示小标签，不再盖住场景。",
-    },
-  ];
+  return buildLocalPreviewMessagesForEmptyRoom({
+    room,
+    gatewayUrl,
+    shellPage: currentShellPage(),
+    shellVariant: document.body?.dataset?.shellVariant || "",
+    currentIdentity: currentIdentity(),
+  });
 }
 
 function actorIsWorldSteward() {
@@ -4961,86 +5398,106 @@ async function loadProviderState() {
   return false;
 }
 
+function worldEntryRouteListElement() {
+  return document.querySelector(".world-route-list");
+}
+
+async function fetchWorldEntryPayload() {
+  const response = await fetch(`${gatewayUrl}/v1/world-entry`);
+  if (!response.ok) return null;
+  const payload = await response.json();
+  const routes = Array.isArray(payload?.routes) ? payload.routes : [];
+  if (routes.length === 0) return null;
+  return { ...payload, routes };
+}
+
+function syncWorldEntryHud(payload) {
+  const hudTitle = document.querySelector(".world-entry-hud .hud-title");
+  const stationChip = document.querySelector(".world-entry-hud-chip");
+  const hudStatus = document.querySelector("#hud-status");
+  if (hudTitle && payload.title) {
+    hudTitle.textContent = payload.title;
+  }
+  if (stationChip && payload.station_label) {
+    stationChip.textContent = payload.station_label;
+  }
+  if (hudStatus && payload.source_summary) {
+    hudStatus.textContent = payload.source_summary;
+  }
+}
+
+function createWorldSquareRouteOptionNode() {
+  const option = document.createElement("a");
+  option.className = "world-route-option world-route-option-square";
+  option.setAttribute("href", "./world-square.html");
+
+  const title = document.createElement("strong");
+  title.textContent = "世界广场";
+  option.appendChild(title);
+
+  const desc = document.createElement("span");
+  desc.textContent = "打开之前绘制的世界广场完整素材，作为公共广场入口。";
+  option.appendChild(desc);
+
+  const status = document.createElement("span");
+  status.className = "world-route-status";
+  status.textContent = "概念图 · 公共广场";
+  option.appendChild(status);
+  return option;
+}
+
+function createWorldEntryRouteOptionNode(route) {
+  const option = document.createElement("a");
+  option.className = "world-route-option";
+  if (route.is_current) {
+    option.classList.add("is-current");
+  }
+  option.setAttribute("href", route.href || "#");
+
+  const title = document.createElement("strong");
+  title.textContent = route.title || "";
+  option.appendChild(title);
+
+  if (route.description) {
+    const desc = document.createElement("span");
+    desc.textContent = route.description;
+    option.appendChild(desc);
+  }
+
+  if (route.status_label) {
+    const status = document.createElement("span");
+    status.className = "world-route-status";
+    status.textContent = route.is_current ? `当前主城 · ${route.status_label}` : route.status_label;
+    option.appendChild(status);
+  } else if (route.is_current) {
+    const status = document.createElement("span");
+    status.className = "world-route-status";
+    status.textContent = "当前主城";
+    option.appendChild(status);
+  }
+  return option;
+}
+
+function renderWorldEntryRoutes(routeList, routes) {
+  routeList.replaceChildren();
+  routeList.appendChild(createWorldSquareRouteOptionNode());
+  for (const route of routes) {
+    routeList.appendChild(createWorldEntryRouteOptionNode(route));
+  }
+}
+
 async function loadWorldEntry() {
   const shellPage = currentShellPage();
   if (shellPage !== "world-entry") return false;
-  const routeList = document.querySelector(".world-route-list");
+  const routeList = worldEntryRouteListElement();
   if (!routeList) return false;
   if (!gatewayUrl) return false;
 
   try {
-    const response = await fetch(`${gatewayUrl}/v1/world-entry`);
-    if (!response.ok) return false;
-    const payload = await response.json();
-    const routes = Array.isArray(payload?.routes) ? payload.routes : [];
-    if (routes.length === 0) return false;
-
-    const hudTitle = document.querySelector(".world-entry-hud .hud-title");
-    const stationChip = document.querySelector(".world-entry-hud-chip");
-    const hudStatus = document.querySelector("#hud-status");
-    if (hudTitle && payload.title) {
-      hudTitle.textContent = payload.title;
-    }
-    if (stationChip && payload.station_label) {
-      stationChip.textContent = payload.station_label;
-    }
-    if (hudStatus && payload.source_summary) {
-      hudStatus.textContent = payload.source_summary;
-    }
-
-    routeList.replaceChildren();
-    {
-      const option = document.createElement("a");
-      option.className = "world-route-option world-route-option-square";
-      option.setAttribute("href", "./world-square.html");
-
-      const title = document.createElement("strong");
-      title.textContent = "世界广场";
-      option.appendChild(title);
-
-      const desc = document.createElement("span");
-      desc.textContent = "打开之前绘制的世界广场完整素材，作为公共广场入口。";
-      option.appendChild(desc);
-
-      const status = document.createElement("span");
-      status.className = "world-route-status";
-      status.textContent = "概念图 · 公共广场";
-      option.appendChild(status);
-
-      routeList.appendChild(option);
-    }
-    for (const route of routes) {
-      const option = document.createElement("a");
-      option.className = "world-route-option";
-      if (route.is_current) {
-        option.classList.add("is-current");
-      }
-      option.setAttribute("href", route.href || "#");
-
-      const title = document.createElement("strong");
-      title.textContent = route.title || "";
-      option.appendChild(title);
-
-      if (route.description) {
-        const desc = document.createElement("span");
-        desc.textContent = route.description;
-        option.appendChild(desc);
-      }
-
-      if (route.status_label) {
-        const status = document.createElement("span");
-        status.className = "world-route-status";
-        status.textContent = route.is_current ? `当前主城 · ${route.status_label}` : route.status_label;
-        option.appendChild(status);
-      } else if (route.is_current) {
-        const status = document.createElement("span");
-        status.className = "world-route-status";
-        status.textContent = "当前主城";
-        option.appendChild(status);
-      }
-
-      routeList.appendChild(option);
-    }
+    const payload = await fetchWorldEntryPayload();
+    if (!payload) return false;
+    syncWorldEntryHud(payload);
+    renderWorldEntryRoutes(routeList, payload.routes);
     return true;
   } catch {
     return false;
@@ -5160,12 +5617,188 @@ function persistAuthDraft() {
   return persistAuthDraftMod();
 }
 
-function renderRooms() {
-  if (!roomListEl) return;
-  // Hide rooms when search mode is residents-only (only when search tabs exist)
-  if (searchModeControlsEl) {
+function updateRoomListSearchVisibility() {
+  if (searchModeControlsEl && roomListEl) {
     roomListEl.style.display = searchMode === "residents" ? "none" : "";
   }
+}
+
+function updateRoomListToolbarNote(rooms, stats, activeVisible, shellPage) {
+  if (!roomToolbarNoteEl) return;
+  const pieces = roomToolbarNoteSpec({
+    shellPage,
+    visibleCount: rooms.length,
+    totalCount: state.rooms.length,
+    roomFilter,
+    roomSearch,
+    stats,
+    activeVisible,
+    activeRoomId,
+    syncLabel: roomSyncLabel(),
+    roomKindLabel: translateRoomKind(roomFilter),
+  });
+  roomToolbarNoteEl.textContent = pieces.join(" · ");
+}
+
+function createRoomListEmptyNode() {
+  const empty = document.createElement("li");
+  empty.className = "empty-note";
+  empty.textContent = roomEmptyStateSpec(gatewayUrl);
+  return empty;
+}
+
+function createRoomAvatarNode(room, kind, shellPage, headline) {
+  const spec = roomAvatarSpec({ room, kind, shellPage, headline });
+  const avatar = document.createElement("div");
+  avatar.className = spec.className;
+  const peerStatus = directRoomPeerOnlineStatus(room);
+  if (peerStatus) {
+    avatar.classList.add("peer-" + peerStatus);
+    const statusLabel = peerStatus === "online" ? " (在线)" : " (离线)";
+    avatar.setAttribute("aria-label", (spec.ariaLabel || spec.title || "") + statusLabel);
+  }
+  avatar.textContent = spec.text;
+  applyAvatarStyle(avatar, room.id);
+  if (spec.isResidentRoomEntry) {
+    avatar.dataset.residentRoomEntry = room.id;
+    avatar.title = spec.title;
+    avatar.setAttribute("aria-label", spec.ariaLabel);
+    avatar.addEventListener("click", (event) => {
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      confirmResidentRoomJump(room);
+    });
+  }
+  return avatar;
+}
+
+function createRoomTopLineNode(room, kind, shellPage, unread) {
+  const top = document.createElement("div");
+  top.className = "room-topline";
+  const titleStack = document.createElement("div");
+  titleStack.className = "room-title-stack";
+  const titleSpec = roomTitleStackSpec(room, roomAudienceLabel(room));
+  titleStack.appendChild(createLine("room-name", titleSpec.name));
+  titleStack.appendChild(createLine("room-kicker", titleSpec.kicker));
+  top.appendChild(titleStack);
+  if (room.id !== activeRoomId) {
+    const unreadBadge = createRoomUnreadBadgeNode(unread);
+    if (unreadBadge) top.appendChild(unreadBadge);
+  }
+
+  const metaSpec = roomTopMetaSpec({
+    room,
+    kind,
+    kindPillLabel: translateRoomKindForShellPage(kind, shellPage),
+    activeRoomId,
+    unread,
+    shellPage,
+  });
+  const metaStack = document.createElement("div");
+  metaStack.className = "room-top-meta";
+  metaStack.appendChild(createLine("room-activity", metaSpec.activityLine));
+  const summaryBadges = document.createElement("div");
+  summaryBadges.className = "room-badges";
+  summaryBadges.appendChild(createPill(metaSpec.kindPill.label, metaSpec.kindPill.tone));
+  if (metaSpec.statusPill) {
+    summaryBadges.appendChild(createPill(metaSpec.statusPill.label, metaSpec.statusPill.tone));
+  }
+  metaStack.appendChild(summaryBadges);
+  top.appendChild(metaStack);
+  return top;
+}
+
+function createRoomTagRowNode(room) {
+  const tagRow = document.createElement("div");
+  tagRow.className = "room-tag-row";
+  const roomActionPill = createRoomQuickActionPill(room);
+  if (roomActionPill) {
+    tagRow.appendChild(roomActionPill);
+  }
+  const roomPreviewPill = createRoomQuickPreviewPill(room);
+  if (roomPreviewPill) {
+    tagRow.appendChild(roomPreviewPill);
+  }
+  if (roomHasDraft(room.id)) {
+    tagRow.appendChild(createPill("草稿", "accent"));
+  }
+  if (visiblePendingEchoCount(room)) {
+    tagRow.appendChild(createPill("待同步", roomSendErrors[room.id] ? "danger" : "warm"));
+  }
+  if (roomSendErrors[room.id]) {
+    tagRow.appendChild(createPill("待重发", "danger"));
+  }
+  if (caretakerProfile(room)) {
+    tagRow.appendChild(
+      createPill(
+        `${caretakerProfile(room).name} · ${caretakerPendingCount(room)} 条代办`,
+        caretakerPendingCount(room) > 0 ? "warm" : "accent",
+      ),
+    );
+  }
+  if (room.scene_banner) {
+    tagRow.appendChild(createPill(room.scene_banner, "warm"));
+  }
+  return tagRow;
+}
+
+function createRoomListItemNode(room, shellPage) {
+  const kind = roomKind(room);
+  const unread = unreadCount(room);
+  const item = document.createElement("li");
+  const button = document.createElement("button");
+  const btnSpec = roomButtonClassSpec({ roomId: room.id, activeRoomId, unread, kind });
+  button.className = btnSpec.className;
+  button.dataset.roomKind = btnSpec.datasetKind;
+  button.addEventListener("click", () => {
+    focusRoom(room.id);
+    renderRooms();
+    renderTimeline();
+  });
+
+  const headline = roomThreadHeadline(room);
+  const avatar = createRoomAvatarNode(room, kind, shellPage, headline);
+  const content = document.createElement("div");
+  content.className = "room-content";
+  content.appendChild(createRoomTopLineNode(room, kind, shellPage, unread));
+  content.appendChild(createRoomPreviewNode(room));
+  content.appendChild(createRoomTagRowNode(room));
+  const roomInlineActions = createRoomInlineActions(room);
+  if (roomInlineActions) {
+    content.appendChild(roomInlineActions);
+  }
+  content.appendChild(createLine("room-sub", roomSummaryLine(room)));
+  content.appendChild(createLine("room-status-line", roomStatusLine(room)));
+
+  button.appendChild(avatar);
+  button.appendChild(content);
+  item.appendChild(button);
+  return item;
+}
+
+function createRoomSectionNode(group, shellPage) {
+  const section = document.createElement("li");
+  section.className = "room-section";
+
+  const header = document.createElement("div");
+  header.className = "room-section-header";
+  header.appendChild(createLine("room-section-title", group.title));
+  header.appendChild(createLine("room-section-hint", `${group.hint} · ${group.rooms.length} 条`));
+  section.appendChild(header);
+
+  const list = document.createElement("ul");
+  list.className = "room-section-list";
+  for (const room of group.rooms) {
+    list.appendChild(createRoomListItemNode(room, shellPage));
+  }
+
+  section.appendChild(list);
+  return section;
+}
+
+function renderRooms() {
+  if (!roomListEl) return;
+  updateRoomListSearchVisibility();
   clearChildren(roomListEl);
   const rooms = filteredRooms();
   const shellPage = currentShellPage();
@@ -5179,190 +5812,22 @@ function renderRooms() {
     roomSendErrors,
   );
   renderRoomDigest(rooms);
-
-  if (roomToolbarNoteEl) {
-    const pieces = roomToolbarNoteSpec({
-      shellPage,
-      visibleCount: rooms.length,
-      totalCount: state.rooms.length,
-      roomFilter,
-      roomSearch,
-      stats,
-      activeVisible,
-      activeRoomId,
-      syncLabel: roomSyncLabel(),
-      roomKindLabel: translateRoomKind(roomFilter),
-    });
-    roomToolbarNoteEl.textContent = pieces.join(" · ");
-  }
+  updateRoomListToolbarNote(rooms, stats, activeVisible, shellPage);
 
   if (!rooms.length) {
-    const empty = document.createElement("li");
-    empty.className = "empty-note";
-    empty.textContent = roomEmptyStateSpec(gatewayUrl);
-    roomListEl.appendChild(empty);
+    roomListEl.appendChild(createRoomListEmptyNode());
     return;
   }
 
   const groups = roomGroupBlueprints(shellPage, rooms);
 
   for (const group of groups) {
-    const section = document.createElement("li");
-    section.className = "room-section";
-
-    const header = document.createElement("div");
-    header.className = "room-section-header";
-    header.appendChild(createLine("room-section-title", group.title));
-    header.appendChild(createLine("room-section-hint", `${group.hint} · ${group.rooms.length} 条`));
-    section.appendChild(header);
-
-    const list = document.createElement("ul");
-    list.className = "room-section-list";
-
-    for (const room of group.rooms) {
-      const kind = roomKind(room);
-      const preview = roomPreview(room);
-      const unread = unreadCount(room);
-      const item = document.createElement("li");
-      const button = document.createElement("button");
-      const btnSpec = roomButtonClassSpec({ roomId: room.id, activeRoomId, unread, kind });
-      button.className = btnSpec.className;
-      button.dataset.roomKind = btnSpec.datasetKind;
-      button.addEventListener("click", () => {
-        focusRoom(room.id);
-        renderRooms();
-        renderTimeline();
-      });
-
-      const headline = roomThreadHeadline(room);
-      const spec = roomAvatarSpec({ room, kind, shellPage, headline });
-      const avatar = document.createElement("div");
-      avatar.className = spec.className;
-      const peerStatus = directRoomPeerOnlineStatus(room);
-      if (peerStatus) {
-        avatar.classList.add("peer-" + peerStatus);
-        var statusLabel = peerStatus === "online" ? " (在线)" : " (离线)";
-        avatar.setAttribute("aria-label", (spec.ariaLabel || spec.title || "") + statusLabel);
-      }
-      avatar.textContent = spec.text;
-      applyAvatarStyle(avatar, room.id);
-      if (spec.isResidentRoomEntry) {
-        avatar.dataset.residentRoomEntry = room.id;
-        avatar.title = spec.title;
-        avatar.setAttribute("aria-label", spec.ariaLabel);
-        avatar.addEventListener("click", (event) => {
-          event.preventDefault?.();
-          event.stopPropagation?.();
-          confirmResidentRoomJump(room);
-        });
-      }
-
-      const content = document.createElement("div");
-      content.className = "room-content";
-
-      const top = document.createElement("div");
-      top.className = "room-topline";
-      const titleStack = document.createElement("div");
-      titleStack.className = "room-title-stack";
-      const titleSpec = roomTitleStackSpec(room, roomAudienceLabel(room));
-      titleStack.appendChild(createLine("room-name", titleSpec.name));
-      titleStack.appendChild(createLine("room-kicker", titleSpec.kicker));
-      top.appendChild(titleStack);
-      if (room.id !== activeRoomId) {
-        const unreadBadge = createRoomUnreadBadgeNode(unread);
-        if (unreadBadge) top.appendChild(unreadBadge);
-      }
-
-      const metaSpec = roomTopMetaSpec({
-        room, kind,
-        kindPillLabel: translateRoomKindForShellPage(kind, shellPage),
-        activeRoomId, unread, shellPage,
-      });
-      const metaStack = document.createElement("div");
-      metaStack.className = "room-top-meta";
-      metaStack.appendChild(createLine("room-activity", metaSpec.activityLine));
-      const summaryBadges = document.createElement("div");
-      summaryBadges.className = "room-badges";
-      summaryBadges.appendChild(createPill(metaSpec.kindPill.label, metaSpec.kindPill.tone));
-      if (metaSpec.statusPill) {
-        summaryBadges.appendChild(createPill(metaSpec.statusPill.label, metaSpec.statusPill.tone));
-      }
-      metaStack.appendChild(summaryBadges);
-      top.appendChild(metaStack);
-
-      content.appendChild(top);
-      content.appendChild(createRoomPreviewNode(room));
-      const tagRow = document.createElement("div");
-      tagRow.className = "room-tag-row";
-      const roomActionPill = createRoomQuickActionPill(room);
-      if (roomActionPill) {
-        tagRow.appendChild(roomActionPill);
-      }
-      const roomPreviewPill = createRoomQuickPreviewPill(room);
-      if (roomPreviewPill) {
-        tagRow.appendChild(roomPreviewPill);
-      }
-      if (roomHasDraft(room.id)) {
-        tagRow.appendChild(createPill("草稿", "accent"));
-      }
-      if (visiblePendingEchoCount(room)) {
-        tagRow.appendChild(createPill("待同步", roomSendErrors[room.id] ? "danger" : "warm"));
-      }
-      if (roomSendErrors[room.id]) {
-        tagRow.appendChild(createPill("待重发", "danger"));
-      }
-      if (caretakerProfile(room)) {
-        tagRow.appendChild(
-          createPill(
-            `${caretakerProfile(room).name} · ${caretakerPendingCount(room)} 条代办`,
-            caretakerPendingCount(room) > 0 ? "warm" : "accent",
-          ),
-        );
-      }
-      if (room.scene_banner) {
-        tagRow.appendChild(createPill(room.scene_banner, "warm"));
-      }
-      content.appendChild(tagRow);
-      const roomInlineActions = createRoomInlineActions(room);
-      if (roomInlineActions) {
-        content.appendChild(roomInlineActions);
-      }
-      content.appendChild(createLine("room-sub", roomSummaryLine(room)));
-      content.appendChild(createLine("room-status-line", roomStatusLine(room)));
-
-      button.appendChild(avatar);
-      button.appendChild(content);
-      item.appendChild(button);
-      list.appendChild(item);
-    }
-
-    section.appendChild(list);
-    roomListEl.appendChild(section);
+    roomListEl.appendChild(createRoomSectionNode(group, shellPage));
   }
   ensureRoomQuickActions();
 }
 
-function renderConversationOverview() {
-  if (!conversationOverviewEl) return;
-  clearChildren(conversationOverviewEl);
-  const shellPage = currentShellPage();
-  const compactChatShell = shellPage === "user" || shellPage === "admin";
-
-  const room = state.rooms.find((item) => item.id === activeRoomId);
-  if (!room) {
-    conversationOverviewEl.appendChild(createLine("overview-title", "还没有打开聊天"));
-    conversationOverviewEl.appendChild(
-      createLine(
-        "overview-summary",
-        gatewayUrl
-          ? "先去群聊页打开一个群聊，或者直接发起私信，聊天区就会进入可发送状态。"
-          : "当前在离线预览态，只显示样例会话；连接网关后会接入真实消息流。",
-      ),
-    );
-    updateConversationCallout();
-    return;
-  }
-
+function createConversationOverviewHeaderNode(room, shellPage, compactChatShell) {
   const header = document.createElement("div");
   header.className = "overview-header";
 
@@ -5404,117 +5869,127 @@ function renderConversationOverview() {
     );
   }
   header.appendChild(badgeWrap);
-  conversationOverviewEl.appendChild(header);
+  return header;
+}
 
-  if (shellPage === "user") {
-    const previewAction = latestRoomQuickAction(room);
-    const preview = resolveRoomQuickPreview(room, previewAction);
-    conversationOverviewEl.appendChild(createLine("overview-summary", roomOverviewSummary(room)));
-    if (preview) {
-      const previewFieldView = roomQuickPreviewFieldView(
-        room.id,
-        preview.action,
-        preview.state,
-        preview.snapshotIndex,
-      );
-      const previewSummaryLine = createQuickActionPreviewSummaryLine(preview, {
-        className: "overview-summary overview-summary-preview quick-action-preview-summary",
-        includePrefix: true,
-        fieldView: previewFieldView,
-      });
-      if (previewSummaryLine) {
-        conversationOverviewEl.appendChild(previewSummaryLine);
-      }
-      const previewCard = createQuickActionPreviewCard(preview.action, preview.state, preview.structured, {
-        className: "overview-preview-card",
-        maxFields: 3,
-        roomId: room.id,
-        fieldView: previewFieldView,
-        historyLabel: preview.historyLabel || "",
-        history: preview.history,
-        selectedHistoryIndex: preview.snapshotIndex,
-        onHistoryClick: (_snapshot, index) => {
-          previewRoomQuickStage(room.id, preview.action, preview.state, index);
-        },
-        onFieldViewChange: (viewId) => {
-          setRoomQuickPreviewFieldView(room.id, preview.action, preview.state, preview.snapshotIndex, viewId);
-        },
-      });
-      if (previewCard) {
-        conversationOverviewEl.appendChild(previewCard);
-      }
-    }
-
-    const userStatus = document.createElement("div");
-    userStatus.className = "overview-status";
-    userStatus.appendChild(createPill(roomSyncLabel(), refreshInProgress ? "warm" : "accent"));
-    const unread = unreadCount(room);
-    userStatus.appendChild(createPill(unread > 0 ? `${unread} 条未读` : "已读", unread > 0 ? "warm" : "muted"));
-    const roomActionPill = createRoomQuickActionPill(room);
-    if (roomActionPill) {
-      userStatus.appendChild(roomActionPill);
-    }
-    if (caretakerProfile(room)) {
-      userStatus.appendChild(
-        createPill(`${caretakerProfile(room).name} 在线`, caretakerPendingCount(room) > 0 ? "warm" : "accent"),
-      );
-    }
-    if (roomHasDraft(room.id)) {
-      userStatus.appendChild(createPill("草稿已保存", "accent"));
-    }
-    if (roomSendErrors[room.id]) {
-      userStatus.appendChild(createPill("发送失败", "danger"));
-    }
-    if (isSendingMessage) {
-      userStatus.appendChild(createPill("发送中", "warm"));
-    }
-    conversationOverviewEl.appendChild(userStatus);
-
-    const userWorkflow = createWorkflowProgress(latestRoomQuickAction(room), latestRoomQuickState(room), {
-      className: "overview-workflow-progress",
-      title: "当前阶段",
-      stages: workflowProfile(room)?.steps,
-      onStageClick: (stage) => {
-        const action = latestRoomQuickAction(room);
-        if (!action) return;
-        previewRoomQuickStage(room.id, action, stage.label);
-        seedComposerFromQuickAction(action, quickActionWorkflowTemplate(action, stage.label), { force: true });
-      },
-    });
-    if (userWorkflow) {
-      conversationOverviewEl.appendChild(userWorkflow);
-    }
-
-    const userActions = document.createElement("div");
-    userActions.className = "overview-actions";
-
-    const refreshButton = document.createElement("button");
-    refreshButton.type = "button";
-    refreshButton.textContent = "刷新聊天";
-    refreshButton.disabled = !gatewayUrl;
-    refreshButton.addEventListener("click", async () => {
-      if (!gatewayUrl) return;
-      await refreshFromGateway();
-    });
-    userActions.appendChild(refreshButton);
-    appendRoomQuickActionOverviewButton(userActions, room);
-    appendRoomQuickStateAdvanceButton(userActions, room);
-    conversationOverviewEl.appendChild(userActions);
-
-    if (roomViewToggleButtonEl) {
-      roomViewToggleButtonEl.textContent = chatPaneMode === "list" ? "返回会话" : "会话列表";
-    }
-    updateConversationCallout();
-    return;
-  }
-
-  conversationOverviewEl.appendChild(
-    createLine(
-      "overview-summary",
-      shellPage === "admin" ? `当前窗口重点：${roomOverviewSummary(room)}` : roomOverviewSummary(room),
-    ),
+function appendUserConversationQuickPreview(room, preview) {
+  if (!preview) return;
+  const previewFieldView = roomQuickPreviewFieldView(
+    room.id,
+    preview.action,
+    preview.state,
+    preview.snapshotIndex,
   );
+  const previewSummaryLine = createQuickActionPreviewSummaryLine(preview, {
+    className: "overview-summary overview-summary-preview quick-action-preview-summary",
+    includePrefix: true,
+    fieldView: previewFieldView,
+  });
+  if (previewSummaryLine) {
+    conversationOverviewEl.appendChild(previewSummaryLine);
+  }
+  const previewCard = createQuickActionPreviewCard(preview.action, preview.state, preview.structured, {
+    className: "overview-preview-card",
+    maxFields: 3,
+    roomId: room.id,
+    fieldView: previewFieldView,
+    historyLabel: preview.historyLabel || "",
+    history: preview.history,
+    selectedHistoryIndex: preview.snapshotIndex,
+    onHistoryClick: (_snapshot, index) => {
+      previewRoomQuickStage(room.id, preview.action, preview.state, index);
+    },
+    onFieldViewChange: (viewId) => {
+      setRoomQuickPreviewFieldView(room.id, preview.action, preview.state, preview.snapshotIndex, viewId);
+    },
+  });
+  if (previewCard) {
+    conversationOverviewEl.appendChild(previewCard);
+  }
+}
 
+function createUserConversationStatusNode(room) {
+  const userStatus = document.createElement("div");
+  userStatus.className = "overview-status";
+  userStatus.appendChild(createPill(roomSyncLabel(), refreshInProgress ? "warm" : "accent"));
+  const unread = unreadCount(room);
+  userStatus.appendChild(createPill(unread > 0 ? `${unread} 条未读` : "已读", unread > 0 ? "warm" : "muted"));
+  const roomActionPill = createRoomQuickActionPill(room);
+  if (roomActionPill) {
+    userStatus.appendChild(roomActionPill);
+  }
+  const caretaker = caretakerProfile(room);
+  if (caretaker) {
+    userStatus.appendChild(
+      createPill(`${caretaker.name} 在线`, caretakerPendingCount(room) > 0 ? "warm" : "accent"),
+    );
+  }
+  if (roomHasDraft(room.id)) {
+    userStatus.appendChild(createPill("草稿已保存", "accent"));
+  }
+  if (roomSendErrors[room.id]) {
+    userStatus.appendChild(createPill("发送失败", "danger"));
+  }
+  if (isSendingMessage) {
+    userStatus.appendChild(createPill("发送中", "warm"));
+  }
+  return userStatus;
+}
+
+function createUserConversationWorkflowNode(room) {
+  return createWorkflowProgress(latestRoomQuickAction(room), latestRoomQuickState(room), {
+    className: "overview-workflow-progress",
+    title: "当前阶段",
+    stages: workflowProfile(room)?.steps,
+    onStageClick: (stage) => {
+      const action = latestRoomQuickAction(room);
+      if (!action) return;
+      previewRoomQuickStage(room.id, action, stage.label);
+      seedComposerFromQuickAction(action, quickActionWorkflowTemplate(action, stage.label), { force: true });
+    },
+  });
+}
+
+function createUserConversationActionsNode(room) {
+  const userActions = document.createElement("div");
+  userActions.className = "overview-actions";
+
+  const refreshButton = document.createElement("button");
+  refreshButton.type = "button";
+  refreshButton.textContent = "刷新聊天";
+  refreshButton.disabled = !gatewayUrl;
+  refreshButton.addEventListener("click", async () => {
+    if (!gatewayUrl) return;
+    await refreshFromGateway();
+  });
+  userActions.appendChild(refreshButton);
+  appendRoomQuickActionOverviewButton(userActions, room);
+  appendRoomQuickStateAdvanceButton(userActions, room);
+  return userActions;
+}
+
+function syncRoomViewToggleButton() {
+  if (roomViewToggleButtonEl) {
+    roomViewToggleButtonEl.textContent = chatPaneMode === "list" ? "返回会话" : "会话列表";
+  }
+}
+
+function appendUserConversationOverview(room) {
+  const previewAction = latestRoomQuickAction(room);
+  const preview = resolveRoomQuickPreview(room, previewAction);
+  conversationOverviewEl.appendChild(createLine("overview-summary", roomOverviewSummary(room)));
+  appendUserConversationQuickPreview(room, preview);
+  conversationOverviewEl.appendChild(createUserConversationStatusNode(room));
+  const userWorkflow = createUserConversationWorkflowNode(room);
+  if (userWorkflow) {
+    conversationOverviewEl.appendChild(userWorkflow);
+  }
+  conversationOverviewEl.appendChild(createUserConversationActionsNode(room));
+  syncRoomViewToggleButton();
+  updateConversationCallout();
+}
+
+function createConversationOverviewContextNode(room, shellPage) {
   const context = document.createElement("div");
   context.className = "overview-context";
   context.appendChild(
@@ -5525,10 +6000,20 @@ function renderConversationOverview() {
   );
   context.appendChild(createLine("overview-context-copy", roomContextSummary(room)));
   context.appendChild(createLine("overview-context-copy", roomStatusLine(room)));
-  conversationOverviewEl.appendChild(context);
+  return context;
+}
 
+function createConversationOverviewStatusNode(room, shellPage, compactChatShell) {
   const status = document.createElement("div");
   status.className = "overview-status";
+  appendConversationOverviewBaseStatusPills(status, room, compactChatShell);
+  appendConversationOverviewRoomStatePills(status, room);
+  appendConversationOverviewCaretakerStatusPill(status, room);
+  appendConversationOverviewRuntimeStatusPills(status, room);
+  return status;
+}
+
+function appendConversationOverviewBaseStatusPills(status, room, compactChatShell) {
   status.appendChild(
     createPill(
       roomChatStatusSummary(room),
@@ -5548,6 +6033,9 @@ function renderConversationOverview() {
   }
   const unread = unreadCount(room);
   status.appendChild(createPill(unread > 0 ? `${unread} 条未读` : "已读", unread > 0 ? "warm" : "muted"));
+}
+
+function appendConversationOverviewRoomStatePills(status, room) {
   const roomActionPill = createRoomQuickActionPill(room);
   if (roomActionPill) {
     status.appendChild(roomActionPill);
@@ -5555,14 +6043,21 @@ function renderConversationOverview() {
   if (roomHasDraft(room.id)) {
     status.appendChild(createPill(`${draftForRoom(room.id).trim().length} 字草稿`, "accent"));
   }
-  if (caretakerProfile(room)) {
+}
+
+function appendConversationOverviewCaretakerStatusPill(status, room) {
+  const caretaker = caretakerProfile(room);
+  if (caretaker) {
     status.appendChild(
       createPill(
-        `${caretakerProfile(room).status} · ${caretakerPendingCount(room)} 条访客提醒`,
+        `${caretaker.status} · ${caretakerPendingCount(room)} 条访客提醒`,
         caretakerPendingCount(room) > 0 ? "warm" : "accent",
       ),
     );
   }
+}
+
+function appendConversationOverviewRuntimeStatusPills(status, room) {
   if (isSendingMessage) {
     status.appendChild(createPill("发送中", "warm"));
   }
@@ -5572,11 +6067,9 @@ function renderConversationOverview() {
   if (lastRefreshErrorMessage) {
     status.appendChild(createPill("回退快照", "warm"));
   }
-  conversationOverviewEl.appendChild(status);
+}
 
-  const actions = document.createElement("div");
-  actions.className = "overview-actions";
-
+function createConversationOverviewRefreshButton(shellPage) {
   const refreshButton = document.createElement("button");
   refreshButton.type = "button";
   refreshButton.textContent = shellPage === "admin" ? "刷新会话" : "刷新聊天";
@@ -5585,8 +6078,10 @@ function renderConversationOverview() {
     if (!gatewayUrl) return;
     await refreshFromGateway();
   });
-  actions.appendChild(refreshButton);
+  return refreshButton;
+}
 
+function createConversationOverviewExportButton(shellPage) {
   const exportButton = document.createElement("button");
   exportButton.type = "button";
   exportButton.textContent = shellPage === "admin" ? "导出会话" : "导出聊天";
@@ -5594,23 +6089,27 @@ function renderConversationOverview() {
   exportButton.addEventListener("click", () => {
     void exportCurrentConversation(shellPage === "admin" ? "导出会话失败" : "导出聊天失败");
   });
-  actions.appendChild(exportButton);
-  appendRoomQuickActionOverviewButton(actions, room);
-  appendRoomQuickStateAdvanceButton(actions, room);
+  return exportButton;
+}
 
+function createConversationOverviewWorldButton(room, shellPage) {
+  const worldButton = document.createElement("button");
+  worldButton.type = "button";
+  worldButton.textContent =
+    shellPage === "admin"
+      ? roomKind(room) === "direct"
+        ? "转到频道"
+        : "去找居民"
+      : roomKind(room) === "direct"
+        ? "去找频道"
+        : "去找人";
+  worldButton.addEventListener("click", () => setWorkspace("world"));
+  return worldButton;
+}
+
+function appendConversationOverviewNavigationButtons(actions, room, shellPage) {
   if (shellPage !== "user") {
-    const worldButton = document.createElement("button");
-    worldButton.type = "button";
-    worldButton.textContent =
-      shellPage === "admin"
-        ? roomKind(room) === "direct"
-          ? "转到频道"
-          : "去找居民"
-        : roomKind(room) === "direct"
-          ? "去找频道"
-          : "去找人";
-    worldButton.addEventListener("click", () => setWorkspace("world"));
-    actions.appendChild(worldButton);
+    actions.appendChild(createConversationOverviewWorldButton(room, shellPage));
   }
 
   if (shellMode !== "user") {
@@ -5620,7 +6119,49 @@ function renderConversationOverview() {
     governanceButton.addEventListener("click", () => setWorkspace("governance"));
     actions.appendChild(governanceButton);
   }
+}
 
+function createConversationOverviewActionsNode(room, shellPage) {
+  const actions = document.createElement("div");
+  actions.className = "overview-actions";
+
+  actions.appendChild(createConversationOverviewRefreshButton(shellPage));
+  actions.appendChild(createConversationOverviewExportButton(shellPage));
+  appendRoomQuickActionOverviewButton(actions, room);
+  appendRoomQuickStateAdvanceButton(actions, room);
+  appendConversationOverviewNavigationButtons(actions, room, shellPage);
+
+  return actions;
+}
+
+function renderConversationOverviewEmptyState() {
+  conversationOverviewEl.appendChild(createLine("overview-title", "还没有打开聊天"));
+  conversationOverviewEl.appendChild(
+    createLine(
+      "overview-summary",
+      gatewayUrl
+        ? "先去群聊页打开一个群聊，或者直接发起私信，聊天区就会进入可发送状态。"
+        : "当前在离线预览态，只显示样例会话；连接网关后会接入真实消息流。",
+    ),
+  );
+  updateConversationCallout();
+}
+
+function appendNonUserConversationOverview(room, shellPage, compactChatShell) {
+  conversationOverviewEl.appendChild(
+    createLine(
+      "overview-summary",
+      shellPage === "admin" ? `当前窗口重点：${roomOverviewSummary(room)}` : roomOverviewSummary(room),
+    ),
+  );
+
+  const context = createConversationOverviewContextNode(room, shellPage);
+  conversationOverviewEl.appendChild(context);
+
+  const status = createConversationOverviewStatusNode(room, shellPage, compactChatShell);
+  conversationOverviewEl.appendChild(status);
+
+  const actions = createConversationOverviewActionsNode(room, shellPage);
   conversationOverviewEl.appendChild(actions);
 
   if (roomViewToggleButtonEl) {
@@ -5629,31 +6170,30 @@ function renderConversationOverview() {
   updateConversationCallout();
 }
 
-function renderChatDetailPanel() {
+function renderConversationOverview() {
+  if (!conversationOverviewEl) return;
+  clearChildren(conversationOverviewEl);
   const shellPage = currentShellPage();
-  if (currentShellPage() === "user") {
-    ensureUserSceneChrome();
-  }
-  if (!chatDetailContentEl) return;
-  clearChildren(chatDetailContentEl);
+  const compactChatShell = shellPage === "user" || shellPage === "admin";
 
   const room = state.rooms.find((item) => item.id === activeRoomId);
   if (!room) {
-    const empty = createDetailSection(
-      "当前房间卡片",
-      gatewayUrl
-        ? "先从左侧打开一个会话，底部会显示房间卡片、状态和快捷动作。"
-        : "连接网关后，这里会展示房间卡片、状态和快捷操作。",
-    );
-    chatDetailContentEl.appendChild(empty);
+    renderConversationOverviewEmptyState();
     return;
   }
 
-  const publicRoom = publicRoomRecordForConversation(room.id);
-  const cityState = cityStateForConversation(room.id);
-  const directoryCity = publicRoom ? worldDirectoryCity(publicRoom.city_id) : null;
-  const membership = publicRoom ? membershipForCity(publicRoom.city_id) : null;
+  const header = createConversationOverviewHeaderNode(room, shellPage, compactChatShell);
+  conversationOverviewEl.appendChild(header);
 
+  if (shellPage === "user") {
+    appendUserConversationOverview(room);
+    return;
+  }
+
+  appendNonUserConversationOverview(room, shellPage, compactChatShell);
+}
+
+function createChatDetailHeroNode(room, shellPage) {
   const hero = document.createElement("section");
   hero.className = "chat-detail-hero";
   hero.appendChild(createLine("chat-detail-title", roomThreadHeadline(room)));
@@ -5663,7 +6203,7 @@ function renderChatDetailPanel() {
   pills.className = "chat-detail-pills";
   pills.appendChild(
     createPill(
-      translateRoomKindForShellPage(roomKind(room), currentShellPage()),
+      translateRoomKindForShellPage(roomKind(room), shellPage),
       roomKind(room) === "direct" ? "accent" : "warm",
     ),
   );
@@ -5682,60 +6222,93 @@ function renderChatDetailPanel() {
     pills.appendChild(createPill(`${caretakerProfile(room).name} 在岗`, "accent"));
   }
   hero.appendChild(pills);
-  chatDetailContentEl.appendChild(hero);
+  return hero;
+}
 
-  const runtime = createDetailSection("聊天状态");
-  if (shellPage !== "user") {
-    runtime.appendChild(
-      createDetailRow(shellPage === "admin" ? "线程" : "会话标题", roomThreadHeadline(room)),
-    );
-    runtime.appendChild(createDetailRow("聊天状态", roomChatStatusSummary(room)));
-    runtime.appendChild(createDetailRow("队列", roomQueueSummary(room)));
-  }
+function appendChatRuntimeShellRows(runtime, room, shellPage) {
+  if (shellPage === "user") return;
+  runtime.appendChild(
+    createDetailRow(shellPage === "admin" ? "线程" : "会话标题", roomThreadHeadline(room)),
+  );
+  runtime.appendChild(createDetailRow("聊天状态", roomChatStatusSummary(room)));
+  runtime.appendChild(createDetailRow("队列", roomQueueSummary(room)));
+}
+
+function appendChatRuntimeSyncRows(runtime, room) {
   runtime.appendChild(createDetailRow("同步", roomSyncLabel()));
   runtime.appendChild(createDetailRow("消息数", `${room.messages?.length || 0} 条`));
-  if (latestRoomQuickAction(room)) {
-    const latestAction = latestRoomQuickAction(room);
-    const preview = resolveRoomQuickPreview(room, latestAction);
-    runtime.appendChild(
-      createDetailRow("最近动作", `${latestAction} · ${quickActionStatusCopy(latestAction)}`),
-    );
-    runtime.appendChild(
-      createDetailRow("动作状态", `${quickActionFollowUpLabel(latestAction, latestRoomQuickState(room))} · ${quickActionFollowUpCopy(latestAction, latestRoomQuickState(room))}`),
-    );
-    if (preview) {
-      const previewFieldView = roomQuickPreviewFieldView(
-        room.id,
-        preview.action,
-        preview.state,
-        preview.snapshotIndex,
-      );
-      const previewSummaryLine = createQuickActionPreviewSummaryLine(preview, {
-        tagName: "span",
-        className: "quick-action-preview-summary-line",
-        fieldView: previewFieldView,
-      });
-      runtime.appendChild(createDetailRow("阶段预览", previewSummaryLine || preview.detailText));
-      const previewCard = createQuickActionPreviewCard(preview.action, preview.state, preview.structured, {
-        className: "chat-detail-preview-card",
-        maxFields: 3,
-        roomId: room.id,
-        fieldView: previewFieldView,
-        historyLabel: preview.historyLabel || "",
-        history: preview.history,
-        selectedHistoryIndex: preview.snapshotIndex,
-        onHistoryClick: (_snapshot, index) => {
-          previewRoomQuickStage(room.id, preview.action, preview.state, index);
-        },
-        onFieldViewChange: (viewId) => {
-          setRoomQuickPreviewFieldView(room.id, preview.action, preview.state, preview.snapshotIndex, viewId);
-        },
-      });
-      if (previewCard) {
-        runtime.appendChild(previewCard);
-      }
-    }
+}
+
+function chatRuntimeQuickActionContext(room) {
+  const latestAction = latestRoomQuickAction(room);
+  if (!latestAction) return null;
+  return {
+    latestAction,
+    quickState: latestRoomQuickState(room),
+    preview: resolveRoomQuickPreview(room, latestAction),
+  };
+}
+
+function chatRuntimePreviewFieldView(room, preview) {
+  return roomQuickPreviewFieldView(
+    room.id,
+    preview.action,
+    preview.state,
+    preview.snapshotIndex,
+  );
+}
+
+function createChatRuntimePreviewSummaryRow(preview, previewFieldView) {
+  const previewSummaryLine = createQuickActionPreviewSummaryLine(preview, {
+    tagName: "span",
+    className: "quick-action-preview-summary-line",
+    fieldView: previewFieldView,
+  });
+  return createDetailRow("阶段预览", previewSummaryLine || preview.detailText);
+}
+
+function createChatRuntimePreviewCardNode(room, preview, previewFieldView) {
+  return createQuickActionPreviewCard(preview.action, preview.state, preview.structured, {
+    className: "chat-detail-preview-card",
+    maxFields: 3,
+    roomId: room.id,
+    fieldView: previewFieldView,
+    historyLabel: preview.historyLabel || "",
+    history: preview.history,
+    selectedHistoryIndex: preview.snapshotIndex,
+    onHistoryClick: (_snapshot, index) => {
+      previewRoomQuickStage(room.id, preview.action, preview.state, index);
+    },
+    onFieldViewChange: (viewId) => {
+      setRoomQuickPreviewFieldView(room.id, preview.action, preview.state, preview.snapshotIndex, viewId);
+    },
+  });
+}
+
+function appendChatRuntimePreviewRows(runtime, room, preview) {
+  if (!preview) return;
+  const previewFieldView = chatRuntimePreviewFieldView(room, preview);
+  runtime.appendChild(createChatRuntimePreviewSummaryRow(preview, previewFieldView));
+  const previewCard = createChatRuntimePreviewCardNode(room, preview, previewFieldView);
+  if (previewCard) {
+    runtime.appendChild(previewCard);
   }
+}
+
+function appendChatRuntimeQuickActionRows(runtime, room) {
+  const quickContext = chatRuntimeQuickActionContext(room);
+  if (!quickContext) return;
+  const { latestAction, quickState, preview } = quickContext;
+  runtime.appendChild(
+    createDetailRow("最近动作", `${latestAction} · ${quickActionStatusCopy(latestAction)}`),
+  );
+  runtime.appendChild(
+    createDetailRow("动作状态", `${quickActionFollowUpLabel(latestAction, quickState)} · ${quickActionFollowUpCopy(latestAction, quickState)}`),
+  );
+  appendChatRuntimePreviewRows(runtime, room, preview);
+}
+
+function appendChatRuntimeProviderRows(runtime, room) {
   runtime.appendChild(
     createDetailRow(
       "消息来源",
@@ -5756,128 +6329,172 @@ function renderChatDetailPanel() {
   if (roomSendErrors[room.id]) {
     runtime.appendChild(createDetailRow("最近错误", roomSendErrors[room.id]));
   }
-  chatDetailContentEl.appendChild(runtime);
+}
 
-  if (caretakerProfile(room)) {
-    const caretaker = caretakerProfile(room);
-    const caretakerSection = createDetailSection(
-      `${caretaker.role_label || "房间管家"} · ${caretaker.name}`,
-      caretaker.persona || "这只小狗会帮主人记住访客、留言和需要提醒的事情。",
-    );
-    caretakerSection.appendChild(createDetailRow("人设", caretaker.persona || "未设定"));
-    caretakerSection.appendChild(createDetailRow("短期记忆", caretaker.memory || "暂无记录"));
-    caretakerSection.appendChild(createDetailRow("自动回复", caretaker.auto_reply || "未设定"));
-    if (caretaker.patrol?.outcome) {
-      caretakerSection.appendChild(createDetailRow("巡视结果", caretaker.patrol.outcome));
-    }
-    if (Array.isArray(caretaker.messages) && caretaker.messages.length) {
-      const visitorList = document.createElement("div");
-      visitorList.className = "chat-detail-list";
-      for (const message of caretaker.messages.slice(0, 3)) {
-        const item = document.createElement("div");
-        item.className = "caretaker-note";
-        item.appendChild(
-          createLine(
-            "caretaker-note-title",
-            `${message.visitor} · ${message.urgency || "普通"}`,
-          ),
-        );
-        item.appendChild(createLine("caretaker-note-copy", message.note));
-        visitorList.appendChild(item);
-      }
-      caretakerSection.appendChild(visitorList);
-    }
-    if (Array.isArray(caretaker.notifications) && caretaker.notifications.length) {
-      const notificationList = document.createElement("div");
-      notificationList.className = "chat-detail-list";
-      for (const note of caretaker.notifications.slice(0, 2)) {
-        const item = document.createElement("div");
-        item.className = "caretaker-note caretaker-note-alert";
-        item.appendChild(createLine("caretaker-note-title", "给主人的提醒"));
-        item.appendChild(createLine("caretaker-note-copy", note));
-        notificationList.appendChild(item);
-      }
-      caretakerSection.appendChild(notificationList);
-    }
-    chatDetailContentEl.appendChild(caretakerSection);
-  }
+function createChatRuntimeDetailSection(room, shellPage) {
+  const runtime = createDetailSection("聊天状态");
+  appendChatRuntimeShellRows(runtime, room, shellPage);
+  appendChatRuntimeSyncRows(runtime, room);
+  appendChatRuntimeQuickActionRows(runtime, room);
+  appendChatRuntimeProviderRows(runtime, room);
+  return runtime;
+}
 
-  if (publicRoom) {
-    const cityProfile = cityState?.profile || directoryCity || {
-      title: publicRoom.city_id,
-      slug: publicRoom.city_id,
-    };
-    const citySection = createDetailSection(
-      "城市 / 频道资料",
-      publicRoom.description || displayCityDescription(cityProfile),
-    );
-    citySection.appendChild(createDetailRow("城市", displayCityTitle(cityProfile)));
-    citySection.appendChild(createDetailRow("频道", publicRoom.slug || publicRoom.room_id));
+function chatDetailRoomContextModel(room) {
+  const publicRoom = publicRoomRecordForConversation(room.id);
+  const cityState = cityStateForConversation(room.id);
+  const directoryCity = publicRoom ? worldDirectoryCity(publicRoom.city_id) : null;
+  const membership = publicRoom ? membershipForCity(publicRoom.city_id) : null;
+  const cityProfile = publicRoom
+    ? cityState?.profile || directoryCity || {
+        title: publicRoom.city_id,
+        slug: publicRoom.city_id,
+      }
+    : null;
+  return {
+    publicRoom,
+    cityState,
+    directoryCity,
+    membership,
+    cityProfile,
+    siblingRooms: publicRoom ? publicRoomsForCity(publicRoom.city_id).filter((item) => item.room_id !== room.id) : [],
+  };
+}
+
+function createChatDetailCityContextSection(context) {
+  const { publicRoom, cityState, directoryCity, membership, cityProfile } = context;
+  const citySection = createDetailSection(
+    "城市 / 频道资料",
+    publicRoom.description || displayCityDescription(cityProfile),
+  );
+  citySection.appendChild(createDetailRow("城市", displayCityTitle(cityProfile)));
+  citySection.appendChild(createDetailRow("频道", publicRoom.slug || publicRoom.room_id));
+  citySection.appendChild(
+    createDetailRow("治理状态", publicRoom.frozen ? "房间已冻结" : "房间可发言"),
+  );
+  if (directoryCity?.trust_state) {
     citySection.appendChild(
-      createDetailRow("治理状态", publicRoom.frozen ? "房间已冻结" : "房间可发言"),
+      createDetailRow("世界信任", translateTrustState(directoryCity.trust_state)),
     );
-    if (directoryCity?.trust_state) {
-      citySection.appendChild(
-        createDetailRow("世界信任", translateTrustState(directoryCity.trust_state)),
-      );
+  }
+  if (cityState?.profile?.federation_policy) {
+    citySection.appendChild(
+      createDetailRow(
+        "联邦策略",
+        translateFederationPolicy(cityState.profile.federation_policy),
+      ),
+    );
+  }
+  if (membership) {
+    citySection.appendChild(createDetailRow("你的身份", humanMembership(membership)));
+  }
+  return citySection;
+}
+
+function createChatDetailSiblingRoomsSection(context) {
+  if (!context.siblingRooms.length) return null;
+  const related = createDetailSection("同城其他群聊");
+  const list = document.createElement("div");
+  list.className = "chat-detail-list";
+  for (const sibling of context.siblingRooms.slice(0, 5)) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chat-detail-link";
+    button.textContent = `${sibling.slug} · ${sibling.frozen ? "已冻结" : "可发言"}`;
+    button.addEventListener("click", async () => {
+      focusRoom(sibling.room_id);
+      await loadGatewayState();
+      renderRooms();
+      renderTimeline();
+    });
+    list.appendChild(button);
+  }
+  related.appendChild(list);
+  return related;
+}
+
+function createChatDetailDirectContextSection(room) {
+  const direct = createDetailSection(
+    "私信窗口",
+    governance.world?.allows_cross_city_private_messages
+      ? "当前世界允许跨城私信，适合直接协作、追问和一对一沟通。"
+      : "当前世界未开启跨城私信，建议优先在同城身份下沟通。",
+  );
+  direct.appendChild(
+    createDetailRow(
+      "会话对象",
+      room.peer_label || room.participant_label || roomAudienceLabel(room) || roomDisplayPeer(room) || "私信对象",
+    ),
+  );
+  direct.appendChild(
+    createDetailRow(
+      "跨城私信",
+      governance.world?.allows_cross_city_private_messages ? "已开启" : "已关闭",
+    ),
+  );
+  direct.appendChild(createDetailRow("窗口类型", "点对点聊天"));
+  return direct;
+}
+
+function appendChatDetailRoomContextSections(container, room) {
+  const context = chatDetailRoomContextModel(room);
+  if (context.publicRoom) {
+    container.appendChild(createChatDetailCityContextSection(context));
+    const siblingSection = createChatDetailSiblingRoomsSection(context);
+    if (siblingSection) {
+      container.appendChild(siblingSection);
     }
-    if (cityState?.profile?.federation_policy) {
-      citySection.appendChild(
-        createDetailRow(
-          "联邦策略",
-          translateFederationPolicy(cityState.profile.federation_policy),
+    return;
+  }
+  container.appendChild(createChatDetailDirectContextSection(room));
+}
+
+function createCaretakerDetailSection(room) {
+  const caretaker = caretakerProfile(room);
+  if (!caretaker) return null;
+  const caretakerSection = createDetailSection(
+    `${caretaker.role_label || "房间管家"} · ${caretaker.name}`,
+    caretaker.persona || "这只小狗会帮主人记住访客、留言和需要提醒的事情。",
+  );
+  caretakerSection.appendChild(createDetailRow("人设", caretaker.persona || "未设定"));
+  caretakerSection.appendChild(createDetailRow("短期记忆", caretaker.memory || "暂无记录"));
+  caretakerSection.appendChild(createDetailRow("自动回复", caretaker.auto_reply || "未设定"));
+  if (caretaker.patrol?.outcome) {
+    caretakerSection.appendChild(createDetailRow("巡视结果", caretaker.patrol.outcome));
+  }
+  if (Array.isArray(caretaker.messages) && caretaker.messages.length) {
+    const visitorList = document.createElement("div");
+    visitorList.className = "chat-detail-list";
+    for (const message of caretaker.messages.slice(0, 3)) {
+      const item = document.createElement("div");
+      item.className = "caretaker-note";
+      item.appendChild(
+        createLine(
+          "caretaker-note-title",
+          `${message.visitor} · ${message.urgency || "普通"}`,
         ),
       );
+      item.appendChild(createLine("caretaker-note-copy", message.note));
+      visitorList.appendChild(item);
     }
-    if (membership) {
-      citySection.appendChild(createDetailRow("你的身份", humanMembership(membership)));
-    }
-    chatDetailContentEl.appendChild(citySection);
-
-    const siblingRooms = publicRoomsForCity(publicRoom.city_id).filter((item) => item.room_id !== room.id);
-    if (siblingRooms.length) {
-      const related = createDetailSection("同城其他群聊");
-      const list = document.createElement("div");
-      list.className = "chat-detail-list";
-      for (const sibling of siblingRooms.slice(0, 5)) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "chat-detail-link";
-        button.textContent = `${sibling.slug} · ${sibling.frozen ? "已冻结" : "可发言"}`;
-        button.addEventListener("click", async () => {
-          focusRoom(sibling.room_id);
-          await loadGatewayState();
-          renderRooms();
-          renderTimeline();
-        });
-        list.appendChild(button);
-      }
-      related.appendChild(list);
-      chatDetailContentEl.appendChild(related);
-    }
-  } else {
-    const direct = createDetailSection(
-      "私信窗口",
-      governance.world?.allows_cross_city_private_messages
-        ? "当前世界允许跨城私信，适合直接协作、追问和一对一沟通。"
-        : "当前世界未开启跨城私信，建议优先在同城身份下沟通。",
-    );
-    direct.appendChild(
-      createDetailRow(
-        "会话对象",
-        room.peer_label || room.participant_label || roomAudienceLabel(room) || roomDisplayPeer(room) || "私信对象",
-      ),
-    );
-    direct.appendChild(
-      createDetailRow(
-        "跨城私信",
-        governance.world?.allows_cross_city_private_messages ? "已开启" : "已关闭",
-      ),
-    );
-    direct.appendChild(createDetailRow("窗口类型", "点对点聊天"));
-    chatDetailContentEl.appendChild(direct);
+    caretakerSection.appendChild(visitorList);
   }
+  if (Array.isArray(caretaker.notifications) && caretaker.notifications.length) {
+    const notificationList = document.createElement("div");
+    notificationList.className = "chat-detail-list";
+    for (const note of caretaker.notifications.slice(0, 2)) {
+      const item = document.createElement("div");
+      item.className = "caretaker-note caretaker-note-alert";
+      item.appendChild(createLine("caretaker-note-title", "给主人的提醒"));
+      item.appendChild(createLine("caretaker-note-copy", note));
+      notificationList.appendChild(item);
+    }
+    caretakerSection.appendChild(notificationList);
+  }
+  return caretakerSection;
+}
 
+function createChatDetailActionsSection(room, shellPage) {
   const actions = createDetailSection("快捷动作");
   const actionRow = document.createElement("div");
   actionRow.className = "chat-detail-actions";
@@ -5915,358 +6532,464 @@ function renderChatDetailPanel() {
   }
 
   actions.appendChild(actionRow);
+  return actions;
+}
+
+function renderChatDetailPanel() {
+  const shellPage = currentShellPage();
+  if (currentShellPage() === "user") {
+    ensureUserSceneChrome();
+  }
+  if (!chatDetailContentEl) return;
+  clearChildren(chatDetailContentEl);
+
+  const room = state.rooms.find((item) => item.id === activeRoomId);
+  if (!room) {
+    const empty = createDetailSection(
+      "当前房间卡片",
+      gatewayUrl
+        ? "先从左侧打开一个会话，底部会显示房间卡片、状态和快捷动作。"
+        : "连接网关后，这里会展示房间卡片、状态和快捷操作。",
+    );
+    chatDetailContentEl.appendChild(empty);
+    return;
+  }
+
+  const hero = createChatDetailHeroNode(room, shellPage);
+  chatDetailContentEl.appendChild(hero);
+
+  const runtime = createChatRuntimeDetailSection(room, shellPage);
+  chatDetailContentEl.appendChild(runtime);
+
+  const caretakerSection = createCaretakerDetailSection(room);
+  if (caretakerSection) {
+    chatDetailContentEl.appendChild(caretakerSection);
+  }
+
+  appendChatDetailRoomContextSections(chatDetailContentEl, room);
+
+  const actions = createChatDetailActionsSection(room, shellPage);
   chatDetailContentEl.appendChild(actions);
 }
 
-function renderTimeline() {
-  if (!timelineEl) return;
-  const room = state.rooms.find((item) => item.id === activeRoomId);
+function createTimelineEmptyStateNode(cardSpec) {
+  const empty = document.createElement("div");
+  empty.className = cardSpec.className;
+  const emptyTitle = document.createElement("div");
+  emptyTitle.className = cardSpec.titleClassName;
+  emptyTitle.textContent = cardSpec.titleText;
+  const emptyCopy = document.createElement("div");
+  emptyCopy.className = cardSpec.copyClassName;
+  emptyCopy.textContent = cardSpec.copyText;
+  const emptyAction = document.createElement("div");
+  emptyAction.className = cardSpec.actionClassName;
+  emptyAction.textContent = cardSpec.actionText;
+  empty.appendChild(emptyTitle);
+  empty.appendChild(emptyCopy);
+  empty.appendChild(emptyAction);
+  return empty;
+}
+
+function createTimelineTypingIndicatorNode(typingSpec) {
+  const typingEl = document.createElement("div");
+  typingEl.className = typingSpec.className;
+  const dotsEl = document.createElement("span");
+  dotsEl.className = typingSpec.dotsClassName;
+  for (let i = 0; i < typingSpec.dotCount; i++) {
+    const dot = document.createElement("span");
+    dot.className = typingSpec.dotClassName;
+    dotsEl.appendChild(dot);
+  }
+  typingEl.appendChild(dotsEl);
+  const label = document.createElement("span");
+  label.textContent = typingSpec.labelText;
+  typingEl.appendChild(label);
+  return typingEl;
+}
+
+function createTimelinePendingMessageRowFrameNode(rowSpec) {
+  const row = document.createElement("div");
+  row.className = rowSpec.rowClassName;
+  Object.assign(row.dataset, rowSpec.rowDataset);
+  return row;
+}
+
+function createTimelinePendingMessageAvatarNode(rowSpec) {
+  const avatar = document.createElement("div");
+  avatar.className = rowSpec.avatarClassName;
+  avatar.textContent = rowSpec.avatarText;
+  applyAvatarStyle(avatar, currentIdentity());
+  return avatar;
+}
+
+function createTimelinePendingMessageMetaNode(rowSpec, message, quickContext) {
+  const meta = document.createElement("div");
+  meta.className = "message-meta";
+  const sender = document.createElement("span");
+  sender.className = "message-sender";
+  sender.textContent = rowSpec.senderText;
+  meta.appendChild(sender);
+
+  const role = document.createElement("span");
+  role.className = "message-role";
+  role.textContent = rowSpec.roleText;
+  meta.appendChild(role);
+  appendTimelineMessageQuickChips(meta, message, quickContext);
+  return meta;
+}
+
+function createTimelinePendingMessageHeaderNode(rowSpec, message, quickContext) {
+  const header = document.createElement("div");
+  header.className = "message-header";
+  const meta = createTimelinePendingMessageMetaNode(rowSpec, message, quickContext);
+  const timestamp = document.createElement("span");
+  timestamp.className = "message-time";
+  timestamp.textContent = rowSpec.timestampText;
+  header.appendChild(meta);
+  header.appendChild(timestamp);
+  return header;
+}
+
+function createTimelinePendingRetryActionsNode(room, message, rowSpec) {
+  if (!rowSpec.showRetry) return null;
+  const pendingActions = document.createElement("div");
+  pendingActions.className = "message-pending-actions";
+  const retryButton = document.createElement("button");
+  retryButton.type = "button";
+  retryButton.className = "message-pending-retry";
+  retryButton.dataset.pendingAction = "retry";
+  retryButton.textContent = "重发";
+  retryButton.addEventListener("click", () => {
+    retryButton.disabled = true;
+    void retryPendingEcho(room.id, message.id);
+  });
+  pendingActions.appendChild(retryButton);
+  return pendingActions;
+}
+
+function createTimelinePendingMessageArticleNode(room, message, rowSpec, quickContext) {
+  const article = document.createElement("article");
+  article.className = rowSpec.articleClassName;
+  Object.assign(article.dataset, rowSpec.articleDataset);
+  article.appendChild(createTimelinePendingMessageHeaderNode(rowSpec, message, quickContext));
+  article.appendChild(createMessageBodyNode(message, {
+    quickState: quickContext.quickState,
+  }));
+  const pendingActions = createTimelinePendingRetryActionsNode(room, message, rowSpec);
+  if (pendingActions) {
+    article.appendChild(pendingActions);
+  }
+  return article;
+}
+
+function createTimelinePendingMessageRowNode(room, message) {
+  const rowSpec = timelinePendingMessageRowSpec({
+    message,
+    currentIdentity: currentIdentity(),
+    badgeToken,
+  });
+  const quickContext = createTimelineMessageQuickContext(room, message);
+  const row = createTimelinePendingMessageRowFrameNode(rowSpec);
+  const avatar = createTimelinePendingMessageAvatarNode(rowSpec);
+  const article = createTimelinePendingMessageArticleNode(room, message, rowSpec, quickContext);
+  const stack = createTimelineMessageStackNode(article);
+  row.appendChild(avatar);
+  row.appendChild(stack);
+  return row;
+}
+
+function createTimelineMessageRowFrameNode(rowSpec) {
+  const row = document.createElement("div");
+  row.className = rowSpec.className;
+  Object.assign(row.dataset, rowSpec.dataset);
+  if (rowSpec.grouped) {
+    row.setAttribute("data-grouped", "true");
+  }
+  if (rowSpec.style) {
+    row.setAttribute("style", rowSpec.style);
+  }
+  return row;
+}
+
+function createTimelineMessageAvatarNode(message, room, rowSpec) {
+  const { isSelf, messageKind } = rowSpec;
+  const avatar = document.createElement("div");
+  avatar.className = `message-avatar message-avatar-${messageAvatarTone(message, room, isSelf)}`;
+  avatar.textContent = badgeToken(
+    isSelf ? currentIdentity() : message.sender,
+    messageKind === "system" ? "系" : messageKind === "caretaker" ? "管" : isSelf ? "我" : "聊",
+  );
+  applyAvatarStyle(avatar, message.sender);
+  return avatar;
+}
+
+function createTimelineMessageQuickContext(room, message) {
+  const latestMessage = latestRoomMessageLike(room);
+  const hasQuickAction = typeof message?.quick_action === "string" && message.quick_action.trim();
+  const isLatestQuickAction = latestMessage === message && Boolean(hasQuickAction);
+  return {
+    isLatestQuickAction,
+    quickState: isLatestQuickAction ? roomQuickState(room.id, message.quick_action) : "",
+  };
+}
+
+function appendTimelineMessageQuickChips(meta, message, quickContext) {
+  const actionChip = createMessageQuickActionChip(message.quick_action);
+  if (actionChip) {
+    meta.appendChild(actionChip);
+  }
+  const stateChip = createMessageQuickStateChip(message.quick_action, quickContext.quickState);
+  if (stateChip) {
+    meta.appendChild(stateChip);
+  }
+}
+
+function createTimelineMessageMetaNode(message, room, rowSpec, quickContext) {
+  const { isSelf } = rowSpec;
+  const meta = document.createElement("div");
+  meta.className = "message-meta";
+  const sender = document.createElement("span");
+  sender.className = "message-sender";
+  sender.textContent = message.sender;
+  meta.appendChild(sender);
+  const role = document.createElement("span");
+  role.className = `message-role${isSelf ? " message-role-self" : ""}`;
+  role.textContent = messageRoleLabel(message, room, isSelf);
+  meta.appendChild(role);
+  appendTimelineMessageQuickChips(meta, message, quickContext);
+  if (message?.is_edited && !message?.is_recalled) {
+    const edited = document.createElement("span");
+    edited.className = "message-edited";
+    edited.textContent = "已编辑";
+    meta.appendChild(edited);
+  }
+  return meta;
+}
+
+function createTimelineMessageTimestampNode(message) {
+  const timestamp = document.createElement("span");
+  timestamp.className = "message-time";
+  timestamp.textContent = message.timestamp;
+  if (message.timestamp_ms) {
+    timestamp.setAttribute("data-full-time", formatDateTime(message.timestamp_ms));
+  } else {
+    timestamp.setAttribute("data-full-time", message.timestamp);
+  }
+  return timestamp;
+}
+
+function createTimelineMessageHeaderNode(message, room, rowSpec, quickContext) {
+  const header = document.createElement("div");
+  header.className = "message-header";
+  const meta = createTimelineMessageMetaNode(message, room, rowSpec, quickContext);
+  const timestamp = createTimelineMessageTimestampNode(message);
+  header.appendChild(meta);
+  header.appendChild(timestamp);
+  return header;
+}
+
+function createTimelineReplyPreviewNode(message, messages) {
+  const replyPreview = buildReplyPreview(message, messages);
+  if (!replyPreview) return null;
+  const replyEl = document.createElement("div");
+  replyEl.className = "message-reply-preview";
+  replyEl.textContent = `↩ ${replyPreview.sender}: ${replyPreview.text}`;
+  return replyEl;
+}
+
+function createTimelineMessageArticleNode(message, room, messages, rowSpec, quickContext) {
+  const { isSelf, messageKind } = rowSpec;
+  const article = document.createElement("article");
+  article.className = `message${isSelf ? " self" : ""}`;
+  article.dataset.messageKind = messageKind;
+  article.appendChild(createTimelineMessageHeaderNode(message, room, rowSpec, quickContext));
+  const replyEl = createTimelineReplyPreviewNode(message, messages);
+  if (replyEl) {
+    article.appendChild(replyEl);
+  }
+  const body = createMessageBodyNode(message, {
+    quickState: quickContext.quickState,
+  });
+  article.appendChild(body);
+  const ownerActions = createMessageOwnerActions(room, message, { isSelf, messageKind });
+  if (ownerActions) {
+    article.appendChild(ownerActions);
+  }
+  return article;
+}
+
+function createTimelineMessageStackNode(article) {
+  const stack = document.createElement("div");
+  stack.className = "message-stack";
+  stack.appendChild(article);
+  return stack;
+}
+
+function createTimelineMessageRowNode({
+  message,
+  prevMessage,
+  room,
+  index,
+  unreadStartIndex,
+  messages,
+  allowMessageGrouping,
+  staggerBase,
+  staggerCap,
+}) {
+  const rowSpec = timelineMessageRowSpec({
+    message,
+    prevMessage,
+    room,
+    currentIdentity: currentIdentity(),
+    index,
+    unreadStartIndex,
+    messagesLength: messages.length,
+    allowMessageGrouping,
+    staggerBase,
+    staggerCap,
+  });
+  const quickContext = createTimelineMessageQuickContext(room, message);
+  const row = createTimelineMessageRowFrameNode(rowSpec);
+  const avatar = createTimelineMessageAvatarNode(message, room, rowSpec);
+  const article = createTimelineMessageArticleNode(message, room, messages, rowSpec, quickContext);
+  const stack = createTimelineMessageStackNode(article);
+  row.appendChild(avatar);
+  row.appendChild(stack);
+  return row;
+}
+
+function renderTimelineNoRoomState(shellPage) {
+  const emptyStateSpec = timelineNoRoomEmptyStateSpec({ gatewayUrl, shellPage });
+  renderConversationMetaChips(null, emptyStateSpec.metaChips);
+  renderThreadStatusRail(null);
+  const empty = createTimelineEmptyStateNode(emptyStateSpec.card);
+  timelineEl.appendChild(empty);
+}
+
+function appendTimelineCommittedMessageRows(room, messages, flowSpec) {
+  const {
+    unreadForDivider,
+    unreadStartIndex,
+    allowMessageGrouping,
+    staggerBase,
+    staggerCap,
+  } = flowSpec;
+  for (const [index, message] of messages.entries()) {
+    const prevMessage = index > 0 ? messages[index - 1] : null;
+    const dividerSpecs = timelineDividerSpecsForMessage({
+      index,
+      message,
+      prevMessage,
+      unreadStartIndex,
+      unreadForDivider,
+    });
+    for (const dividerSpec of dividerSpecs) {
+      const divider = document.createElement("div");
+      divider.className = dividerSpec.className;
+      divider.textContent = dividerSpec.text;
+      timelineEl.appendChild(divider);
+    }
+
+    const row = createTimelineMessageRowNode({
+      message,
+      prevMessage,
+      room,
+      index,
+      unreadStartIndex,
+      messages,
+      allowMessageGrouping,
+      staggerBase,
+      staggerCap,
+    });
+    timelineEl.appendChild(row);
+  }
+}
+
+function appendTimelinePendingMessageRows(room, pending) {
+  for (const message of pending) {
+    const pendingRow = createTimelinePendingMessageRowNode(room, message);
+    timelineEl.appendChild(pendingRow);
+  }
+}
+
+function appendTimelineMessageFlowRows(room, flowSpec) {
+  appendTimelineCommittedMessageRows(room, flowSpec.messages, flowSpec);
+  appendTimelinePendingMessageRows(room, flowSpec.pending);
+}
+
+function timelineWasNearBottom() {
+  return timelineEl && timelineEl.scrollHeight - timelineEl.scrollTop - timelineEl.clientHeight < 80;
+}
+
+function prepareTimelineSurface(room) {
   renderSceneHotspotsForRoom(room);
-  const shellPage = currentShellPage();
-  const compactChatShell = shellPage === "user" || shellPage === "admin";
-  const wasNearBottom =
-    timelineEl && timelineEl.scrollHeight - timelineEl.scrollTop - timelineEl.clientHeight < 80;
   clearChildren(timelineEl);
   syncRoomStageCanvas(room);
   renderConversationOverview();
   renderChatDetailPanel();
   renderThreadStatusRail(room);
+}
 
-  if (!room) {
-    renderConversationMetaChips(null, [
-      {
-        text: gatewayUrl
-          ? "先选会话，消息会显示在这里。"
-          : "离线预览态，先选会话再发消息。",
-        tone: "muted",
-      },
-    ]);
-    renderThreadStatusRail(null);
-    const empty = document.createElement("div");
-    empty.className = "empty-note timeline-empty timeline-empty-card";
-    const emptyTitle = document.createElement("div");
-    emptyTitle.className = "timeline-empty-title";
-    emptyTitle.textContent = "先选会话，再输入第一句";
-    const emptyCopy = document.createElement("div");
-    emptyCopy.className = "timeline-empty-copy";
-    emptyCopy.textContent = gatewayUrl
-      ? "消息会按当前线程展开，下面的输入区也会自动切到对应会话。"
-      : "离线预览态也能先把第一句写出来，消息会暂存在本地时间线。";
-    const emptyAction = document.createElement("div");
-    emptyAction.className = "timeline-empty-action";
-    emptyAction.textContent = shellPage === "admin"
-      ? "后台页先选会话，再像聊天一样记录。"
-      : "选中会话后，直接在底部输入即可。";
-    empty.appendChild(emptyTitle);
-    empty.appendChild(emptyCopy);
-    empty.appendChild(emptyAction);
-    timelineEl.appendChild(empty);
-    return;
-  }
-
-  const metaChips = [];
-  if (shellPage === "unified") {
-    metaChips.push(
-      { text: translateClientDisplayName(bootstrap.host.client_profile.display_name), tone: "muted" },
-      {
-        text: room.id === activeRoomId ? "当前会话" : "旁侧会话",
-        tone: room.id === activeRoomId ? "accent" : "muted",
-      },
-      { text: `入口 ${translateRoutePrefix(bootstrap.shell.route_prefix)}`, tone: "muted" },
-    );
-  } else {
-    const kindLabel = translateRoomKindForShellPage(roomKind(room), shellPage);
-    metaChips.push({ text: kindLabel, tone: roomKind(room) === "direct" ? "accent" : "muted" });
-    metaChips.push({ text: roomLastActivity(room), tone: "muted" });
-  }
-
-  const unread = unreadCount(room);
-  if (unread > 0) {
-    metaChips.push({ text: `${unread} 条未读`, tone: "warm" });
-  }
-  if (!compactChatShell) {
-    metaChips.push({ text: `身份 ${currentIdentity()}`, tone: "muted" });
-  }
-  if (shellPage !== "user") {
-    metaChips.push({
-      text: roomChatStatusSummary(room),
-      tone: roomSendErrors[room.id] ? "danger" : visiblePendingEchoCount(room) ? "warm" : "accent",
-    });
-  }
-  if (roomHasDraft(room.id)) {
-    metaChips.push({ text: "有草稿未发", tone: "accent" });
-  }
-  if (visiblePendingEchoCount(room)) {
-    metaChips.push({
-      text: roomSendErrors[room.id] ? "有待重发消息" : "有待同步消息",
-      tone: roomSendErrors[room.id] ? "danger" : "warm",
-    });
-  }
-  if (isSendingMessage) {
-    metaChips.push({ text: "发送中", tone: "warm" });
-  }
-  if (roomSendErrors[room.id]) {
-    metaChips.push({ text: "发送失败", tone: "danger" });
-  }
-  if (lastRefreshErrorMessage) {
-    metaChips.push({ text: "回退快照", tone: "warm" });
-  }
-
-  metaChips.push({ text: roomSyncLabel(), tone: refreshInProgress ? "warm" : "muted" });
-  metaChips.push({
-    text: `消息来源${translateProviderConnectionState(provider.connection_state)}`,
-    tone: provider.connection_state === "Connected" ? "accent" : "danger",
+function timelineMetaChipsForRoom(room, shellPage, unread, pendingCount) {
+  return timelineMetaChips({
+    room,
+    activeRoomId,
+    shellPage,
+    bootstrapDisplayName: bootstrap.host.client_profile.display_name,
+    routePrefix: bootstrap.shell.route_prefix,
+    currentIdentity: currentIdentity(),
+    roomKind: roomKind(room),
+    roomKindLabel: translateRoomKindForShellPage(roomKind(room), shellPage),
+    roomLastActivity: roomLastActivity(room),
+    unread,
+    hasDraft: roomHasDraft(room.id),
+    pendingCount,
+    sendError: Boolean(roomSendErrors[room.id]),
+    isSendingMessage,
+    lastRefreshErrorMessage,
+    roomChatStatusSummary: roomChatStatusSummary(room),
+    roomSyncLabel: roomSyncLabel(),
+    refreshInProgress,
+    providerConnectionState: provider.connection_state,
+    translateProviderConnectionState,
+    translateClientDisplayName,
+    translateRoutePrefix,
   });
+}
 
-  renderConversationMetaChips(room, metaChips);
-
-  const localPreviewMessages = localPreviewMessagesForEmptyRoom(room);
-
-  if (!room.messages?.length && !localPreviewMessages.length) {
+function renderTimelineSkeletonIfNeeded(room, localPreviewMessages, shellPage) {
+  if (shouldRenderTimelineSkeletonRowsForContext({
+    room,
+    localPreviewMessages,
+    shellPage,
+    shellVariant: document.body?.dataset?.shellVariant || "",
+  })) {
     renderTimelineSkeletonRows(4);
   }
+}
 
-  const messages = (room.messages?.length ? room.messages : localPreviewMessages).filter(
-    (m) => !(typeof m.text === "string" && m.text.includes("探针消息")),
-  );
-  const pending = visiblePendingEchoesForRoom(room);
-  const allowUnreadDivider = shellPage !== "hub" && shellPage !== "user";
-  const unreadForDivider = allowUnreadDivider ? unreadCount(room) : 0;
-  const unreadStartIndex =
-    unreadForDivider > 0 ? Math.max(messages.length - unreadForDivider, 0) : -1;
-  const totalRows = messages.length + pending.length;
-  const allowMessageStagger = shellPage !== "hub" && shellPage !== "creative";
-  const staggerBase = allowMessageStagger && totalRows <= 20 ? 30 : 0;
-  const staggerCap = allowMessageStagger && totalRows <= 20 ? 300 : 0;
-  const allowMessageGrouping = shellPage !== "hub" && shellPage !== "user";
+function timelineFlowSpecForRoom(room, localPreviewMessages, shellPage, unread) {
+  return timelineMessageFlowSpec({
+    roomMessages: room.messages || [],
+    localPreviewMessages,
+    pendingMessages: visiblePendingEchoesForRoom(room),
+    unread,
+    shellPage,
+  });
+}
 
-  for (const [index, message] of messages.entries()) {
-    if (index === unreadStartIndex) {
-      const unreadDivider = document.createElement("div");
-      unreadDivider.className = "timeline-divider";
-      unreadDivider.textContent =
-        unreadForDivider === 1
-          ? "以下是 1 条未读消息"
-          : `以下是 ${unreadForDivider} 条未读消息`;
-      timelineEl.appendChild(unreadDivider);
-    }
+function appendTimelineTypingIndicator(flowSpec) {
+  const typingSpec = timelineTypingIndicatorSpec(flowSpec.pending);
+  if (!typingSpec) return;
+  const typingEl = createTimelineTypingIndicatorNode(typingSpec);
+  timelineEl.appendChild(typingEl);
+}
 
-    // Date separator between messages on different days
-    const prevMessage = index > 0 ? messages[index - 1] : null;
-    if (prevMessage && message.timestamp_ms) {
-      const dateSep = createDateSeparator(prevMessage.timestamp_ms, message.timestamp_ms);
-      if (dateSep) {
-        const dateDivider = document.createElement("div");
-        dateDivider.className = "timeline-divider";
-        dateDivider.textContent = dateSep.label;
-        timelineEl.appendChild(dateDivider);
-      }
-    }
-
-    const isSelf = message.sender === currentIdentity();
-    const messageKind = messageThreadKind(message, room, isSelf);
-    const isGrouped = prevMessage
-      && prevMessage.sender === message.sender
-      && messageKind === messageThreadKind(prevMessage, room, prevMessage.sender === currentIdentity())
-      && index !== unreadStartIndex;
-    const row = document.createElement("div");
-    row.className = `message-row${isSelf ? " self" : ""}`;
-    row.dataset.messageKind = messageKind;
-    row.dataset.messageSide = messageKind === "system" ? "system" : isSelf ? "self" : "peer";
-    const messageId = messageStableId(message);
-    if (messageId) {
-      row.dataset.messageId = messageId;
-    }
-    if (allowMessageGrouping && isGrouped) {
-      row.setAttribute("data-grouped", "true");
-    }
-    if (staggerBase > 0 && index >= messages.length - 6) {
-      const delay = Math.min((index - (messages.length - 6)) * staggerBase, staggerCap);
-      row.setAttribute("style", `--msg-stagger:${delay}ms`);
-    }
-
-    const avatar = document.createElement("div");
-    avatar.className = `message-avatar message-avatar-${messageAvatarTone(message, room, isSelf)}`;
-    avatar.textContent = badgeToken(
-      isSelf ? currentIdentity() : message.sender,
-      messageKind === "system" ? "系" : messageKind === "caretaker" ? "管" : isSelf ? "我" : "聊",
-    );
-    applyAvatarStyle(avatar, message.sender);
-
-    const stack = document.createElement("div");
-    stack.className = "message-stack";
-
-    const article = document.createElement("article");
-    article.className = `message${isSelf ? " self" : ""}`;
-    article.dataset.messageKind = messageKind;
-
-    const header = document.createElement("div");
-    header.className = "message-header";
-
-    const meta = document.createElement("div");
-    meta.className = "message-meta";
-    const sender = document.createElement("span");
-    sender.className = "message-sender";
-    sender.textContent = message.sender;
-    meta.appendChild(sender);
-    const role = document.createElement("span");
-    role.className = `message-role${isSelf ? " message-role-self" : ""}`;
-    role.textContent = messageRoleLabel(message, room, isSelf);
-    meta.appendChild(role);
-    const latestMessage = latestRoomMessageLike(room);
-    const isLatestQuickAction = latestMessage === message && typeof message?.quick_action === "string" && message.quick_action.trim();
-    const actionChip = createMessageQuickActionChip(message.quick_action);
-    if (actionChip) {
-      meta.appendChild(actionChip);
-    }
-    const stateChip = createMessageQuickStateChip(
-      message.quick_action,
-      isLatestQuickAction ? roomQuickState(room.id, message.quick_action) : "",
-    );
-    if (stateChip) {
-      meta.appendChild(stateChip);
-    }
-    if (message?.is_edited && !message?.is_recalled) {
-      const edited = document.createElement("span");
-      edited.className = "message-edited";
-      edited.textContent = "已编辑";
-      meta.appendChild(edited);
-    }
-
-    const timestamp = document.createElement("span");
-    timestamp.className = "message-time";
-    timestamp.textContent = message.timestamp;
-    if (message.timestamp_ms) {
-      timestamp.setAttribute("data-full-time", formatDateTime(message.timestamp_ms));
-    } else {
-      timestamp.setAttribute("data-full-time", message.timestamp);
-    }
-    header.appendChild(meta);
-    header.appendChild(timestamp);
-
-    const body = createMessageBodyNode(message, {
-      quickState: isLatestQuickAction ? roomQuickState(room.id, message.quick_action) : "",
-    });
-    const ownerActions = createMessageOwnerActions(room, message, { isSelf, messageKind });
-
-    article.appendChild(header);
-    const replyPreview = buildReplyPreview(message, messages);
-    if (replyPreview) {
-      const replyEl = document.createElement("div");
-      replyEl.className = "message-reply-preview";
-      replyEl.textContent = `↩ ${replyPreview.sender}: ${replyPreview.text}`;
-      article.appendChild(replyEl);
-    }
-    article.appendChild(body);
-    if (ownerActions) {
-      article.appendChild(ownerActions);
-    }
-    stack.appendChild(article);
-    row.appendChild(avatar);
-    row.appendChild(stack);
-    timelineEl.appendChild(row);
-  }
-
-  for (const message of pending) {
-    const row = document.createElement("div");
-    row.className = "message-row self";
-    row.dataset.messageKind = "pending";
-    row.dataset.messageSide = "self";
-
-    const avatar = document.createElement("div");
-    avatar.className = "message-avatar message-avatar-self";
-    avatar.textContent = badgeToken(currentIdentity(), "我");
-    applyAvatarStyle(avatar, currentIdentity());
-
-    const stack = document.createElement("div");
-    stack.className = "message-stack";
-
-    const article = document.createElement("article");
-    article.className = `message self message-pending${message.failed ? " message-pending-failed" : ""}`;
-    article.dataset.messageKind = "pending";
-
-    const header = document.createElement("div");
-    header.className = "message-header";
-
-    const meta = document.createElement("div");
-    meta.className = "message-meta";
-    const sender = document.createElement("span");
-    sender.className = "message-sender";
-    sender.textContent = currentIdentity();
-    meta.appendChild(sender);
-
-    const role = document.createElement("span");
-    role.className = "message-role";
-    role.textContent = message.failed ? "待重发" : "待同步";
-    meta.appendChild(role);
-    const latestMessage = latestRoomMessageLike(room);
-    const isLatestQuickAction = latestMessage === message && typeof message?.quick_action === "string" && message.quick_action.trim();
-    const actionChip = createMessageQuickActionChip(message.quick_action);
-    if (actionChip) {
-      meta.appendChild(actionChip);
-    }
-    const stateChip = createMessageQuickStateChip(
-      message.quick_action,
-      isLatestQuickAction ? roomQuickState(room.id, message.quick_action) : "",
-    );
-    if (stateChip) {
-      meta.appendChild(stateChip);
-    }
-
-    const timestamp = document.createElement("span");
-    timestamp.className = "message-time";
-    timestamp.textContent = message.failed ? "发送失败" : "正在投递";
-    header.appendChild(meta);
-    header.appendChild(timestamp);
-
-    const body = createMessageBodyNode(message, {
-      quickState: isLatestQuickAction ? roomQuickState(room.id, message.quick_action) : "",
-    });
-
-    article.appendChild(header);
-    article.appendChild(body);
-    if (message.failed) {
-      const pendingActions = document.createElement("div");
-      pendingActions.className = "message-pending-actions";
-      const retryButton = document.createElement("button");
-      retryButton.type = "button";
-      retryButton.className = "message-pending-retry";
-      retryButton.dataset.pendingAction = "retry";
-      retryButton.textContent = "重发";
-      retryButton.addEventListener("click", () => {
-        retryButton.disabled = true;
-        void retryPendingEcho(room.id, message.id);
-      });
-      pendingActions.appendChild(retryButton);
-      article.appendChild(pendingActions);
-    }
-    stack.appendChild(article);
-    row.appendChild(avatar);
-    row.appendChild(stack);
-    timelineEl.appendChild(row);
-  }
-
-  if (room && (messages.length > 0 || pending.length > 0)) {
+function finishTimelineRender(room, flowSpec, wasNearBottom) {
+  if (flowSpec.messages.length > 0 || flowSpec.pending.length > 0) {
     ensureScrollToBottomFab();
   }
-
-  if (pending.some((message) => !message.failed)) {
-    const typingEl = document.createElement("div");
-    typingEl.className = "timeline-typing";
-    const dotsEl = document.createElement("span");
-    dotsEl.className = "timeline-typing-dots";
-    for (let i = 0; i < 3; i++) {
-      const dot = document.createElement("span");
-      dot.className = "timeline-typing-dot";
-      dotsEl.appendChild(dot);
-    }
-    typingEl.appendChild(dotsEl);
-    const label = document.createElement("span");
-    label.textContent = "发送中…";
-    typingEl.appendChild(label);
-    timelineEl.appendChild(typingEl);
-  }
-
+  appendTimelineTypingIndicator(flowSpec);
   markRoomRead(room.id);
   if (room.id === activeRoomId && (followTimelineToLatest || wasNearBottom || isSendingMessage)) {
     requestAnimationFrame(() => {
@@ -6278,69 +7001,390 @@ function renderTimeline() {
   followTimelineToLatest = false;
 }
 
-function renderGovernance() {
-  if (
+function renderTimeline() {
+  if (!timelineEl) return;
+  const room = state.rooms.find((item) => item.id === activeRoomId);
+  const shellPage = currentShellPage();
+  const wasNearBottom = timelineWasNearBottom();
+  prepareTimelineSurface(room);
+
+  if (!room) {
+    renderTimelineNoRoomState(shellPage);
+    return;
+  }
+
+  const unread = unreadCount(room);
+  const pendingCount = visiblePendingEchoCount(room);
+  const metaChips = timelineMetaChipsForRoom(room, shellPage, unread, pendingCount);
+  renderConversationMetaChips(room, metaChips);
+
+  const localPreviewMessages = localPreviewMessagesForEmptyRoom(room);
+  renderTimelineSkeletonIfNeeded(room, localPreviewMessages, shellPage);
+  const flowSpec = timelineFlowSpecForRoom(room, localPreviewMessages, shellPage, unread);
+  appendTimelineMessageFlowRows(room, flowSpec);
+  finishTimelineRender(room, flowSpec, wasNearBottom);
+}
+
+function renderGovernanceOfflineState() {
+  setNodeText(worldStateEl, "世界：离线");
+  setNodeText(worldSummaryEl, shellMode === "user"
+    ? (gatewayUrl
+        ? "边缘抽屉已打开，正在等待世界外壳状态。"
+        : "边缘抽屉默认收起，连接网关后可查看世界外壳。")
+    : (gatewayUrl
+        ? "正在等待世界状态"
+        : "请先连接网关以加载世界与城市状态"));
+  clearChildren(worldDirectoryListEl);
+  clearChildren(worldMirrorSourceListEl);
+  clearChildren(worldSquareListEl);
+  clearChildren(worldSafetyListEl);
+  for (const element of [
+    worldDirectoryListEl,
+    worldMirrorSourceListEl,
+    worldSquareListEl,
+    worldSafetyListEl,
+  ]) {
+    if (!element) continue;
+    const empty = document.createElement("li");
+    empty.className = "empty-note";
+    empty.textContent = "世界层暂不可用";
+    element.appendChild(empty);
+  }
+  clearChildren(cityListEl);
+  if (cityListEl) {
+    const cityEmpty = document.createElement("li");
+    cityEmpty.className = "empty-note";
+    cityEmpty.textContent = "世界状态暂不可用";
+    cityListEl.appendChild(cityEmpty);
+  }
+}
+
+function createGovernanceCityCardBaseNode(city, membership) {
+  const li = document.createElement("li");
+  li.className = "city-card";
+
+  const titleRow = document.createElement("div");
+  titleRow.className = "city-card-title";
+  titleRow.appendChild(createLine("city-name", displayCityTitle(city)));
+  titleRow.appendChild(createLine("city-slug", city.slug));
+  li.appendChild(titleRow);
+  li.appendChild(createLine("city-sub", displayCityDescription(city)));
+  li.appendChild(createLine("city-role", `你的状态：${humanMembership(membership)}`));
+  li.appendChild(
+    createLine(
+      "city-sub",
+      `公开发现 ${city.public_room_discovery_enabled ? "开启" : "关闭"} · 入城审批 ${city.approval_required ? "需要审批" : "开放加入"}`,
+    ),
+  );
+  return li;
+}
+
+function createGovernanceRoomOpenButton(room) {
+  const openButton = document.createElement("button");
+  openButton.type = "button";
+  openButton.className = "secondary mini-button";
+  openButton.textContent = "打开";
+  openButton.addEventListener("click", async () => {
+    focusRoom(room.room_id);
+    await loadGatewayState();
+    renderRooms();
+    renderTimeline();
+  });
+  return openButton;
+}
+
+function createGovernanceRoomFreezeButton(city, room) {
+  const toggleButton = document.createElement("button");
+  toggleButton.type = "button";
+  toggleButton.className = "secondary mini-button";
+  toggleButton.textContent = room.frozen ? "解冻" : "冻结";
+  toggleButton.addEventListener("click", async () => {
+    try {
+      await submitFreezeRoom(city.slug, room.slug, !room.frozen);
+    } catch (error) {
+      setGovernanceStatus(localizedRuntimeError(error, "房间冻结状态更新失败"), true);
+    }
+  });
+  return toggleButton;
+}
+
+function createGovernanceCityRoomEntryNode(city, membership, room) {
+  const row = document.createElement("div");
+  row.className = "city-room-entry";
+  const label = document.createElement("span");
+  label.textContent = `${room.slug}${room.frozen ? " · 已冻结" : ""}`;
+  row.appendChild(label);
+
+  const controls = document.createElement("div");
+  controls.className = "city-room-controls";
+  controls.appendChild(createGovernanceRoomOpenButton(room));
+  if (membership?.state === "Active" && roleAllowsFreezeRoom(membership.role)) {
+    controls.appendChild(createGovernanceRoomFreezeButton(city, room));
+  }
+  row.appendChild(controls);
+  return row;
+}
+
+function appendGovernanceCityRoomList(li, city, membership, rooms) {
+  const roomList = document.createElement("div");
+  roomList.className = "city-room-list";
+  roomList.textContent = "公共房间";
+  li.appendChild(roomList);
+
+  const roomWrap = document.createElement("div");
+  roomWrap.className = "city-room-wrap";
+  for (const room of rooms) {
+    roomWrap.appendChild(createGovernanceCityRoomEntryNode(city, membership, room));
+  }
+  li.appendChild(roomWrap);
+}
+
+function appendGovernancePendingMemberList(li, city, membership, pendingMembers) {
+  const pendingTitle = document.createElement("div");
+  pendingTitle.className = "city-room-list";
+  pendingTitle.textContent = "待审批居民";
+  li.appendChild(pendingTitle);
+
+  const pendingWrap = document.createElement("div");
+  pendingWrap.className = "city-room-wrap";
+  for (const pending of pendingMembers) {
+    const row = document.createElement("div");
+    row.className = "city-room-entry";
+    const label = document.createElement("span");
+    label.textContent = pending.resident_id;
+    row.appendChild(label);
+
+    if (membership?.state === "Active" && roleAllowsApproveJoin(membership.role)) {
+      const approveButton = document.createElement("button");
+      approveButton.type = "button";
+      approveButton.className = "secondary mini-button";
+      approveButton.textContent = "批准";
+      approveButton.addEventListener("click", async () => {
+        try {
+          await submitApproveResident(city.slug, pending.resident_id);
+        } catch (error) {
+          setGovernanceStatus(localizedRuntimeError(error, "批准居民失败"), true);
+        }
+      });
+      row.appendChild(approveButton);
+    }
+
+    pendingWrap.appendChild(row);
+  }
+  li.appendChild(pendingWrap);
+}
+
+function appendGovernanceActiveMemberList(li, city, membership, activeMembers) {
+  const activeTitle = document.createElement("div");
+  activeTitle.className = "city-room-list";
+  activeTitle.textContent = "活跃居民";
+  li.appendChild(activeTitle);
+
+  const activeWrap = document.createElement("div");
+  activeWrap.className = "city-room-wrap";
+  for (const resident of activeMembers) {
+    const row = document.createElement("div");
+    row.className = "city-room-entry";
+    const label = document.createElement("span");
+    label.textContent = `${resident.resident_id} · ${translateRole(resident.role)}`;
+    row.appendChild(label);
+
+    if (membership?.state === "Active" && roleAllowsManageStewards(membership.role)) {
+      const stewardButton = document.createElement("button");
+      stewardButton.type = "button";
+      stewardButton.className = "secondary mini-button";
+      const grant = resident.role !== "Steward";
+      stewardButton.textContent = grant ? "设为执事" : "撤销执事";
+      stewardButton.addEventListener("click", async () => {
+        try {
+          await submitStewardUpdate(city.slug, resident.resident_id, grant);
+        } catch (error) {
+          setGovernanceStatus(localizedRuntimeError(error, "执事权限更新失败"), true);
+        }
+      });
+      row.appendChild(stewardButton);
+    }
+
+    activeWrap.appendChild(row);
+  }
+  li.appendChild(activeWrap);
+}
+
+function createGovernanceJoinButton(city) {
+  const joinButton = document.createElement("button");
+  joinButton.type = "button";
+  joinButton.className = "secondary";
+  joinButton.textContent = "加入";
+  joinButton.addEventListener("click", async () => {
+    cityJoinInputEl.value = city.slug;
+    await submitJoinCity(city.slug);
+  });
+  return joinButton;
+}
+
+function createGovernancePendingApprovalNotice() {
+  const pending = document.createElement("div");
+  pending.className = "city-role notice-pending";
+  pending.textContent = "等待审批";
+  return pending;
+}
+
+function governanceLobbyRoom(rooms) {
+  return rooms.find((room) => room.slug === "lobby") || rooms[0];
+}
+
+function createGovernanceLobbyOpenButton(lobby) {
+  const openButton = document.createElement("button");
+  openButton.type = "button";
+  openButton.className = "secondary";
+  openButton.textContent = `打开 ${lobby.slug}`;
+  openButton.addEventListener("click", async () => {
+    focusRoom(lobby.room_id);
+    await loadGatewayState();
+    renderRooms();
+    renderTimeline();
+  });
+  return openButton;
+}
+
+function createGovernanceCreateRoomButton(city) {
+  const roomButton = document.createElement("button");
+  roomButton.type = "button";
+  roomButton.textContent = "新建房间";
+  roomButton.addEventListener("click", () => {
+    roomCityInputEl.value = city.slug;
+    roomTitleInputEl.focus();
+    setGovernanceStatus(`已准备在 ${city.slug} 中创建房间`);
+  });
+  return roomButton;
+}
+
+function appendGovernanceCityActions(li, city, membership, rooms) {
+  const actions = document.createElement("div");
+  actions.className = "city-actions";
+
+  if (!membership) {
+    actions.appendChild(createGovernanceJoinButton(city));
+  } else if (membership.state === "PendingApproval") {
+    actions.appendChild(createGovernancePendingApprovalNotice());
+  }
+
+  const lobby = governanceLobbyRoom(rooms);
+  if (lobby) {
+    actions.appendChild(createGovernanceLobbyOpenButton(lobby));
+  }
+
+  if (membership?.state === "Active" && roleAllowsCreatePublicRoom(membership.role)) {
+    actions.appendChild(createGovernanceCreateRoomButton(city));
+  }
+
+  if ((actions.children?.length || 0) > 0) {
+    li.appendChild(actions);
+  }
+}
+
+function appendGovernanceFederationPolicyControls(li, city, membership) {
+  if (!(membership?.state === "Active" && roleAllowsUpdateFederation(membership.role))) return;
+  const federationLabel = document.createElement("div");
+  federationLabel.className = "city-room-list";
+  federationLabel.textContent = `联邦策略 · ${translateFederationPolicy(city.federation_policy)}`;
+  li.appendChild(federationLabel);
+
+  const federationWrap = document.createElement("div");
+  federationWrap.className = "city-room-wrap";
+  const policies = [
+    ["Open", "开放互联"],
+    ["Selective", "选择互联"],
+    ["Isolated", "孤城断联"],
+  ];
+  for (const [policyValue, label] of policies) {
+    const row = document.createElement("div");
+    row.className = "city-room-entry";
+    const text = document.createElement("span");
+    text.textContent =
+      city.federation_policy === policyValue
+        ? `${label} · 当前生效`
+        : `${label} · 可切换`;
+    row.appendChild(text);
+
+    const applyButton = document.createElement("button");
+    applyButton.type = "button";
+    applyButton.className = "secondary mini-button";
+    applyButton.textContent =
+      city.federation_policy === policyValue ? "当前" : "应用";
+    applyButton.disabled = city.federation_policy === policyValue;
+    applyButton.addEventListener("click", async () => {
+      try {
+        await submitFederationPolicy(city.slug, policyValue);
+      } catch (error) {
+        setGovernanceStatus(localizedRuntimeError(error, "联邦策略更新失败"), true);
+      }
+    });
+    row.appendChild(applyButton);
+    federationWrap.appendChild(row);
+  }
+  li.appendChild(federationWrap);
+}
+
+function hasGovernanceRenderTargets() {
+  return !(
     !cityListEl &&
     !worldDirectoryListEl &&
     !worldMirrorSourceListEl &&
     !worldSquareListEl &&
     !worldSafetyListEl
-  ) {
-    return;
-  }
+  );
+}
 
-  if (!governance.world) {
-    setNodeText(worldStateEl, "世界：离线");
-    setNodeText(worldSummaryEl, shellMode === "user"
-      ? (gatewayUrl
-          ? "边缘抽屉已打开，正在等待世界外壳状态。"
-          : "边缘抽屉默认收起，连接网关后可查看世界外壳。")
-      : (gatewayUrl
-          ? "正在等待世界状态"
-          : "请先连接网关以加载世界与城市状态"));
-    clearChildren(worldDirectoryListEl);
-    clearChildren(worldMirrorSourceListEl);
-    clearChildren(worldSquareListEl);
-    clearChildren(worldSafetyListEl);
-    for (const element of [
-      worldDirectoryListEl,
-      worldMirrorSourceListEl,
-      worldSquareListEl,
-      worldSafetyListEl,
-    ]) {
-      if (!element) continue;
-      const empty = document.createElement("li");
-      empty.className = "empty-note";
-      empty.textContent = "世界层暂不可用";
-      element.appendChild(empty);
-    }
-    clearChildren(cityListEl);
-    if (cityListEl) {
-      const empty = document.createElement("li");
-      empty.className = "empty-note";
-      empty.textContent = "世界状态暂不可用";
-      cityListEl.appendChild(empty);
-    }
-    return;
-  }
-
-  setNodeText(worldStateEl, `世界：${displayWorldTitle(governance.world.title)}`);
+function updateGovernanceWorldHeader() {
   const directory = governance.world_directory;
+  setNodeText(worldStateEl, `世界：${displayWorldTitle(governance.world.title)}`);
   setNodeText(worldSummaryEl, shellMode === "user"
     ? `${displayWorldTitle(governance.world.title)} · 抽屉里放城市 ${directory?.city_count ?? governance.cities.length} 项 · 镜像 ${directory?.mirror_count ?? 0} 项`
     : `${displayWorldTitle(governance.world.title)} · 城市 ${directory?.city_count ?? governance.cities.length} · 镜像 ${directory?.mirror_count ?? 0} · 公告 ${(governance.world_square || []).length} · 跨城私聊 ${governance.world.allows_cross_city_private_messages ? "开启" : "关闭"}`);
+}
 
+function appendGovernanceEmptyCityState() {
+  if (!cityListEl) return;
+  const empty = document.createElement("li");
+  empty.className = "empty-note";
+  empty.textContent = "暂时还没有公开城市";
+  cityListEl.appendChild(empty);
+}
+
+function governancePendingMembersForCity(city) {
+  return governance.memberships.filter(
+    (item) => item.city_id === city.city_id && item.state === "PendingApproval",
+  );
+}
+
+function governanceActiveMembersForCity(city) {
+  return governance.memberships.filter(
+    (item) =>
+      item.city_id === city.city_id &&
+      item.state === "Active" &&
+      item.resident_id !== currentIdentity(),
+  );
+}
+
+function renderGovernance() {
+  if (!hasGovernanceRenderTargets()) return;
+
+  if (!governance.world) {
+    renderGovernanceOfflineState();
+    return;
+  }
+
+  updateGovernanceWorldHeader();
   renderWorldDirectory();
   renderMirrorSources();
   renderWorldSquare();
   renderWorldSafety();
 
+  if (!cityListEl) return;
   clearChildren(cityListEl);
   if (!governance.cities.length) {
-    const empty = document.createElement("li");
-    empty.className = "empty-note";
-    empty.textContent = "暂时还没有公开城市";
-    cityListEl.appendChild(empty);
+    appendGovernanceEmptyCityState();
     return;
   }
 
@@ -6348,248 +7392,25 @@ function renderGovernance() {
     const city = cityState.profile;
     const membership = membershipForCity(city.city_id);
     const rooms = publicRoomsForCity(city.city_id);
-    const pendingMembers = governance.memberships.filter(
-      (item) => item.city_id === city.city_id && item.state === "PendingApproval",
-    );
-    const activeMembers = governance.memberships.filter(
-      (item) =>
-        item.city_id === city.city_id &&
-        item.state === "Active" &&
-        item.resident_id !== currentIdentity(),
-    );
+    const pendingMembers = governancePendingMembersForCity(city);
+    const activeMembers = governanceActiveMembersForCity(city);
 
-    const li = document.createElement("li");
-    li.className = "city-card";
-
-    const titleRow = document.createElement("div");
-    titleRow.className = "city-card-title";
-    titleRow.appendChild(createLine("city-name", displayCityTitle(city)));
-    titleRow.appendChild(createLine("city-slug", city.slug));
-    li.appendChild(titleRow);
-    li.appendChild(createLine("city-sub", displayCityDescription(city)));
-    li.appendChild(createLine("city-role", `你的状态：${humanMembership(membership)}`));
-    li.appendChild(
-      createLine(
-        "city-sub",
-        `公开发现 ${city.public_room_discovery_enabled ? "开启" : "关闭"} · 入城审批 ${city.approval_required ? "需要审批" : "开放加入"}`,
-      ),
-    );
+    const li = createGovernanceCityCardBaseNode(city, membership);
 
     if (rooms.length) {
-      const roomList = document.createElement("div");
-      roomList.className = "city-room-list";
-      roomList.textContent = "公共房间";
-      li.appendChild(roomList);
-
-      const roomWrap = document.createElement("div");
-      roomWrap.className = "city-room-wrap";
-      for (const room of rooms) {
-        const row = document.createElement("div");
-        row.className = "city-room-entry";
-
-        const label = document.createElement("span");
-        label.textContent = `${room.slug}${room.frozen ? " · 已冻结" : ""}`;
-        row.appendChild(label);
-
-        const controls = document.createElement("div");
-        controls.className = "city-room-controls";
-
-        const openButton = document.createElement("button");
-        openButton.type = "button";
-        openButton.className = "secondary mini-button";
-        openButton.textContent = "打开";
-        openButton.addEventListener("click", async () => {
-          focusRoom(room.room_id);
-          await loadGatewayState();
-          renderRooms();
-          renderTimeline();
-        });
-        controls.appendChild(openButton);
-
-        if (membership?.state === "Active" && roleAllowsFreezeRoom(membership.role)) {
-          const toggleButton = document.createElement("button");
-          toggleButton.type = "button";
-          toggleButton.className = "secondary mini-button";
-          toggleButton.textContent = room.frozen ? "解冻" : "冻结";
-          toggleButton.addEventListener("click", async () => {
-            try {
-              await submitFreezeRoom(city.slug, room.slug, !room.frozen);
-            } catch (error) {
-              setGovernanceStatus(localizedRuntimeError(error, "房间冻结状态更新失败"), true);
-            }
-          });
-          controls.appendChild(toggleButton);
-        }
-
-        row.appendChild(controls);
-        roomWrap.appendChild(row);
-      }
-      li.appendChild(roomWrap);
+      appendGovernanceCityRoomList(li, city, membership, rooms);
     }
 
     if (pendingMembers.length) {
-      const pendingTitle = document.createElement("div");
-      pendingTitle.className = "city-room-list";
-      pendingTitle.textContent = "待审批居民";
-      li.appendChild(pendingTitle);
-
-      const pendingWrap = document.createElement("div");
-      pendingWrap.className = "city-room-wrap";
-      for (const pending of pendingMembers) {
-        const row = document.createElement("div");
-        row.className = "city-room-entry";
-        const label = document.createElement("span");
-        label.textContent = pending.resident_id;
-        row.appendChild(label);
-
-        if (membership?.state === "Active" && roleAllowsApproveJoin(membership.role)) {
-          const approveButton = document.createElement("button");
-          approveButton.type = "button";
-          approveButton.className = "secondary mini-button";
-          approveButton.textContent = "批准";
-          approveButton.addEventListener("click", async () => {
-            try {
-              await submitApproveResident(city.slug, pending.resident_id);
-            } catch (error) {
-              setGovernanceStatus(localizedRuntimeError(error, "批准居民失败"), true);
-            }
-          });
-          row.appendChild(approveButton);
-        }
-
-        pendingWrap.appendChild(row);
-      }
-      li.appendChild(pendingWrap);
+      appendGovernancePendingMemberList(li, city, membership, pendingMembers);
     }
 
     if (activeMembers.length) {
-      const activeTitle = document.createElement("div");
-      activeTitle.className = "city-room-list";
-      activeTitle.textContent = "活跃居民";
-      li.appendChild(activeTitle);
-
-      const activeWrap = document.createElement("div");
-      activeWrap.className = "city-room-wrap";
-      for (const resident of activeMembers) {
-        const row = document.createElement("div");
-        row.className = "city-room-entry";
-        const label = document.createElement("span");
-        label.textContent = `${resident.resident_id} · ${translateRole(resident.role)}`;
-        row.appendChild(label);
-
-        if (membership?.state === "Active" && roleAllowsManageStewards(membership.role)) {
-          const stewardButton = document.createElement("button");
-          stewardButton.type = "button";
-          stewardButton.className = "secondary mini-button";
-          const grant = resident.role !== "Steward";
-          stewardButton.textContent = grant ? "设为执事" : "撤销执事";
-          stewardButton.addEventListener("click", async () => {
-            try {
-              await submitStewardUpdate(city.slug, resident.resident_id, grant);
-            } catch (error) {
-              setGovernanceStatus(localizedRuntimeError(error, "执事权限更新失败"), true);
-            }
-          });
-          row.appendChild(stewardButton);
-        }
-
-        activeWrap.appendChild(row);
-      }
-      li.appendChild(activeWrap);
+      appendGovernanceActiveMemberList(li, city, membership, activeMembers);
     }
 
-    const actions = document.createElement("div");
-    actions.className = "city-actions";
-
-    if (!membership) {
-      const joinButton = document.createElement("button");
-      joinButton.type = "button";
-      joinButton.className = "secondary";
-      joinButton.textContent = "加入";
-      joinButton.addEventListener("click", async () => {
-        cityJoinInputEl.value = city.slug;
-        await submitJoinCity(city.slug);
-      });
-      actions.appendChild(joinButton);
-    } else if (membership.state === "PendingApproval") {
-      const pending = document.createElement("div");
-      pending.className = "city-role notice-pending";
-      pending.textContent = "等待审批";
-      actions.appendChild(pending);
-    }
-
-    const lobby = rooms.find((room) => room.slug === "lobby") || rooms[0];
-    if (lobby) {
-      const openButton = document.createElement("button");
-      openButton.type = "button";
-      openButton.className = "secondary";
-      openButton.textContent = `打开 ${lobby.slug}`;
-      openButton.addEventListener("click", async () => {
-        focusRoom(lobby.room_id);
-        await loadGatewayState();
-        renderRooms();
-        renderTimeline();
-      });
-      actions.appendChild(openButton);
-    }
-
-    if (membership?.state === "Active" && roleAllowsCreatePublicRoom(membership.role)) {
-      const roomButton = document.createElement("button");
-      roomButton.type = "button";
-      roomButton.textContent = "新建房间";
-      roomButton.addEventListener("click", () => {
-        roomCityInputEl.value = city.slug;
-        roomTitleInputEl.focus();
-        setGovernanceStatus(`已准备在 ${city.slug} 中创建房间`);
-      });
-      actions.appendChild(roomButton);
-    }
-
-    if ((actions.children?.length || 0) > 0) {
-      li.appendChild(actions);
-    }
-
-    if (membership?.state === "Active" && roleAllowsUpdateFederation(membership.role)) {
-      const federationLabel = document.createElement("div");
-      federationLabel.className = "city-room-list";
-      federationLabel.textContent = `联邦策略 · ${translateFederationPolicy(city.federation_policy)}`;
-      li.appendChild(federationLabel);
-
-      const federationWrap = document.createElement("div");
-      federationWrap.className = "city-room-wrap";
-      const policies = [
-        ["Open", "开放互联"],
-        ["Selective", "选择互联"],
-        ["Isolated", "孤城断联"],
-      ];
-      for (const [policyValue, label] of policies) {
-        const row = document.createElement("div");
-        row.className = "city-room-entry";
-        const text = document.createElement("span");
-        text.textContent =
-          city.federation_policy === policyValue
-            ? `${label} · 当前生效`
-            : `${label} · 可切换`;
-        row.appendChild(text);
-
-        const applyButton = document.createElement("button");
-        applyButton.type = "button";
-        applyButton.className = "secondary mini-button";
-        applyButton.textContent =
-          city.federation_policy === policyValue ? "当前" : "应用";
-        applyButton.disabled = city.federation_policy === policyValue;
-        applyButton.addEventListener("click", async () => {
-          try {
-            await submitFederationPolicy(city.slug, policyValue);
-          } catch (error) {
-            setGovernanceStatus(localizedRuntimeError(error, "联邦策略更新失败"), true);
-          }
-        });
-        row.appendChild(applyButton);
-        federationWrap.appendChild(row);
-      }
-      li.appendChild(federationWrap);
-    }
+    appendGovernanceCityActions(li, city, membership, rooms);
+    appendGovernanceFederationPolicyControls(li, city, membership);
 
     cityListEl.appendChild(li);
   }
@@ -6715,20 +7536,16 @@ function renderWorldSquare() {
   }
 }
 
-function renderWorldSafety() {
-  if (!worldSafetyListEl) return;
-  clearChildren(worldSafetyListEl);
-  const safety = governance.world_safety;
-  if (!safety) {
-    const empty = document.createElement("li");
-    empty.className = "empty-note";
-    empty.textContent = gatewayUrl
-      ? "世界安全动态暂不可用"
-      : "请先连接网关以加载世界安全状态";
-    worldSafetyListEl.appendChild(empty);
-    return;
-  }
+function renderWorldSafetyEmptyState() {
+  const empty = document.createElement("li");
+  empty.className = "empty-note";
+  empty.textContent = gatewayUrl
+    ? "世界安全动态暂不可用"
+    : "请先连接网关以加载世界安全状态";
+  worldSafetyListEl.appendChild(empty);
+}
 
+function createWorldSafetyMirrorCard(safety) {
   const mirrorCard = document.createElement("li");
   mirrorCard.className = "city-card micro-card";
   mirrorCard.appendChild(
@@ -6748,39 +7565,44 @@ function renderWorldSafety() {
   mirrorCard.appendChild(
     createLine("city-role", `治理员：${(safety.stewards || []).join("、") || "暂无"}`),
   );
-  worldSafetyListEl.appendChild(mirrorCard);
+  return mirrorCard;
+}
 
+function createWorldSafetyAdvisoryCard(advisory) {
+  const li = document.createElement("li");
+  li.className = "city-card micro-card";
+  const titleRow = document.createElement("div");
+  titleRow.className = "city-card-title";
+  titleRow.appendChild(createLine("city-name", advisory.subject_ref));
+  titleRow.appendChild(createLine("city-slug", translateAdvisoryAction(advisory.action)));
+  li.appendChild(titleRow);
+  li.appendChild(createLine("city-sub", advisory.reason));
+  li.appendChild(
+    createLine(
+      "city-role",
+      `${translateSubjectKind(advisory.subject_kind)} · ${advisory.issued_by} · ${formatDateTime(
+        advisory.issued_at_ms,
+      )}`,
+    ),
+  );
+  return li;
+}
+
+function appendWorldSafetyAdvisoryCards(safety) {
   const activeAdvisories = safety.advisories || [];
   if (!activeAdvisories.length) {
     const empty = document.createElement("li");
     empty.className = "empty-note";
     empty.textContent = "当前没有生效中的世界安全通告";
     worldSafetyListEl.appendChild(empty);
-  } else {
-    for (const advisory of activeAdvisories) {
-      const li = document.createElement("li");
-      li.className = "city-card micro-card";
-      const titleRow = document.createElement("div");
-      titleRow.className = "city-card-title";
-      titleRow.appendChild(createLine("city-name", advisory.subject_ref));
-      titleRow.appendChild(createLine("city-slug", translateAdvisoryAction(advisory.action)));
-      li.appendChild(titleRow);
-      li.appendChild(createLine("city-sub", advisory.reason));
-      li.appendChild(
-        createLine(
-          "city-role",
-          `${translateSubjectKind(advisory.subject_kind)} · ${advisory.issued_by} · ${formatDateTime(
-            advisory.issued_at_ms,
-          )}`,
-        ),
-      );
-      worldSafetyListEl.appendChild(li);
-    }
+    return;
   }
+  for (const advisory of activeAdvisories) {
+    worldSafetyListEl.appendChild(createWorldSafetyAdvisoryCard(advisory));
+  }
+}
 
-  const residentSanctions = safety.resident_sanctions || [];
-  const blacklistEntries = safety.registration_blacklist || [];
-  const reports = safety.reports || [];
+function createWorldSafetySanctionSummaryCard(residentSanctions, blacklistEntries) {
   const sanctionCard = document.createElement("li");
   sanctionCard.className = "city-card micro-card";
   sanctionCard.appendChild(
@@ -6800,8 +7622,10 @@ function renderWorldSafety() {
   sanctionCard.appendChild(
     createLine("city-role", `黑名单哈希条目 ${blacklistEntries.length}`),
   );
-  worldSafetyListEl.appendChild(sanctionCard);
+  return sanctionCard;
+}
 
+function createWorldSafetyReportSummaryCard(reports) {
   const reportCard = document.createElement("li");
   reportCard.className = "city-card micro-card";
   reportCard.appendChild(createLine("city-name", `举报记录 ${reports.length}`));
@@ -6819,60 +7643,173 @@ function renderWorldSafety() {
         : "当前还没有世界安全举报",
     ),
   );
-    reportCard.appendChild(
-      createLine(
-        "city-role",
-        reports.length
-          ? `最新时间 ${formatDateTime(reports[0].reported_at_ms)}`
+  reportCard.appendChild(
+    createLine(
+      "city-role",
+      reports.length
+        ? `最新时间 ${formatDateTime(reports[0].reported_at_ms)}`
         : "居民可以在这里举报群聊和公共空间违规",
-      ),
-    );
-  worldSafetyListEl.appendChild(reportCard);
+    ),
+  );
+  return reportCard;
+}
 
+function createWorldSafetySanctionCard(sanction) {
+  const li = document.createElement("li");
+  li.className = "city-card micro-card";
+  const titleRow = document.createElement("div");
+  titleRow.className = "city-card-title";
+  titleRow.appendChild(createLine("city-name", sanction.resident_id));
+  titleRow.appendChild(
+    createLine(
+      "city-slug",
+      `${translateReportStatus(sanction.status)} · 迁移资格 ${translatePortability(
+        sanction.portability_revoked,
+      )}`,
+    ),
+  );
+  li.appendChild(titleRow);
+  li.appendChild(createLine("city-sub", sanction.reason));
+  li.appendChild(
+    createLine(
+      "city-role",
+      `${sanction.city_id || "世界层"} · ${formatDateTime(sanction.issued_at_ms)}`,
+    ),
+  );
+  return li;
+}
+
+function createWorldSafetyReportCard(report) {
+  const li = document.createElement("li");
+  li.className = "city-card micro-card";
+  const titleRow = document.createElement("div");
+  titleRow.className = "city-card-title";
+  titleRow.appendChild(createLine("city-name", report.target_ref));
+  titleRow.appendChild(createLine("city-slug", translateReportStatus(report.status || "Pending")));
+  li.appendChild(titleRow);
+  li.appendChild(createLine("city-sub", report.summary));
+  li.appendChild(
+    createLine(
+      "city-role",
+      `${translateTargetKind(report.target_kind)} · ${report.city || "世界层"} · ${
+        report.reporter_id
+      } · ${formatDateTime(report.reported_at_ms)}`,
+    ),
+  );
+  return li;
+}
+
+function appendWorldSafetySanctionCards(residentSanctions) {
   for (const sanction of residentSanctions.slice(0, 6)) {
-    const li = document.createElement("li");
-    li.className = "city-card micro-card";
-    const titleRow = document.createElement("div");
-    titleRow.className = "city-card-title";
-    titleRow.appendChild(createLine("city-name", sanction.resident_id));
-      titleRow.appendChild(
-        createLine(
-          "city-slug",
-          `${translateReportStatus(sanction.status)} · 迁移资格 ${translatePortability(
-            sanction.portability_revoked,
-          )}`,
-        ),
-      );
-    li.appendChild(titleRow);
-    li.appendChild(createLine("city-sub", sanction.reason));
-    li.appendChild(
-      createLine(
-        "city-role",
-        `${sanction.city_id || "世界层"} · ${formatDateTime(sanction.issued_at_ms)}`,
-      ),
-    );
-    worldSafetyListEl.appendChild(li);
+    worldSafetyListEl.appendChild(createWorldSafetySanctionCard(sanction));
+  }
+}
+
+function appendWorldSafetyReportCards(reports) {
+  for (const report of reports.slice(0, 6)) {
+    worldSafetyListEl.appendChild(createWorldSafetyReportCard(report));
+  }
+}
+
+function renderWorldSafety() {
+  if (!worldSafetyListEl) return;
+  clearChildren(worldSafetyListEl);
+  const safety = governance.world_safety;
+  if (!safety) {
+    renderWorldSafetyEmptyState();
+    return;
   }
 
-  for (const report of reports.slice(0, 6)) {
-    const li = document.createElement("li");
-    li.className = "city-card micro-card";
-    const titleRow = document.createElement("div");
-    titleRow.className = "city-card-title";
-    titleRow.appendChild(createLine("city-name", report.target_ref));
-    titleRow.appendChild(createLine("city-slug", translateReportStatus(report.status || "Pending")));
-    li.appendChild(titleRow);
-    li.appendChild(createLine("city-sub", report.summary));
-    li.appendChild(
+  worldSafetyListEl.appendChild(createWorldSafetyMirrorCard(safety));
+  appendWorldSafetyAdvisoryCards(safety);
+
+  const residentSanctions = safety.resident_sanctions || [];
+  const blacklistEntries = safety.registration_blacklist || [];
+  const reports = safety.reports || [];
+  worldSafetyListEl.appendChild(createWorldSafetySanctionSummaryCard(residentSanctions, blacklistEntries));
+  worldSafetyListEl.appendChild(createWorldSafetyReportSummaryCard(reports));
+  appendWorldSafetySanctionCards(residentSanctions);
+  appendWorldSafetyReportCards(reports);
+}
+
+function createResidentDirectoryEmptyNode() {
+  const empty = document.createElement("li");
+  empty.className = "empty-note";
+  empty.textContent = gatewayUrl
+    ? "居民目录暂时还没有条目"
+    : "请先连接网关以加载居民目录";
+  return empty;
+}
+
+function residentDirectoryDisplayName(resident) {
+  return resident.nickname || resident.resident_id;
+}
+
+function appendResidentDirectoryTitleRow(li, resident) {
+  const displayName = residentDirectoryDisplayName(resident);
+  const titleRow = document.createElement("div");
+  titleRow.className = "city-card-title";
+  titleRow.appendChild(createLine("city-name", displayName));
+  if (resident.nickname) {
+    titleRow.appendChild(createLine("city-slug", resident.resident_id));
+  } else {
+    titleRow.appendChild(
       createLine(
-        "city-role",
-        `${translateTargetKind(report.target_kind)} · ${report.city || "世界层"} · ${
-          report.reporter_id
-        } · ${formatDateTime(report.reported_at_ms)}`,
+        "city-slug",
+        translateResidentLabel(resident.resident_id),
       ),
     );
-    worldSafetyListEl.appendChild(li);
   }
+  li.appendChild(titleRow);
+}
+
+function appendResidentDirectoryMetaRows(li, resident) {
+  li.appendChild(
+    createLine(
+      "city-sub",
+      `已加入城市：${joinOrFallback(resident.active_cities || [], "暂无")}`,
+    ),
+  );
+  if (resident.pending_cities?.length) {
+    li.appendChild(createLine("city-sub", `待审批城市：${resident.pending_cities.join("、")}`));
+  }
+  li.appendChild(
+    createLine(
+      "city-role",
+      `身份：${(resident.roles || []).map(translateRole).join("、") || "居民"}`,
+    ),
+  );
+}
+
+function createResidentDirectActionButton(resident) {
+  const directButton = document.createElement("button");
+  directButton.type = "button";
+  directButton.className = "secondary";
+  directButton.textContent = "发起私聊";
+  directButton.addEventListener("click", () => {
+    enterResidentRoom(resident).catch((err) => {
+      setGovernanceStatus(localizedRuntimeError(err, "打开私聊失败"), true);
+    });
+  });
+  return directButton;
+}
+
+function appendResidentDirectoryActions(li, resident) {
+  const actions = document.createElement("div");
+  actions.className = "city-actions";
+  actions.appendChild(createResidentDirectActionButton(resident));
+  li.appendChild(actions);
+}
+
+function createResidentDirectoryCardNode(resident) {
+  const li = document.createElement("li");
+  li.className = "city-card";
+  appendResidentDirectoryTitleRow(li, resident);
+  appendResidentDirectoryMetaRows(li, resident);
+  if (resident.resident_id !== currentIdentity()) {
+    appendResidentDirectoryActions(li, resident);
+  }
+  return li;
 }
 
 function renderResidents() {
@@ -6884,148 +7821,135 @@ function renderResidents() {
   }
   clearChildren(residentListEl);
   if (!governance.residents?.length) {
-    const empty = document.createElement("li");
-    empty.className = "empty-note";
-    empty.textContent = gatewayUrl
-      ? "居民目录暂时还没有条目"
-      : "请先连接网关以加载居民目录";
-    residentListEl.appendChild(empty);
+    residentListEl.appendChild(createResidentDirectoryEmptyNode());
     return;
   }
 
   for (const resident of governance.residents) {
-    const li = document.createElement("li");
-    li.className = "city-card";
-
-    const displayName = resident.nickname || resident.resident_id;
-    const titleRow = document.createElement("div");
-    titleRow.className = "city-card-title";
-    titleRow.appendChild(createLine("city-name", displayName));
-    if (resident.nickname) {
-      titleRow.appendChild(
-        createLine("city-slug", resident.resident_id),
-      );
-    } else {
-      titleRow.appendChild(
-        createLine(
-          "city-slug",
-          translateResidentLabel(resident.resident_id),
-        ),
-      );
-    }
-    li.appendChild(titleRow);
-    li.appendChild(
-      createLine(
-        "city-sub",
-        `已加入城市：${joinOrFallback(resident.active_cities || [], "暂无")}`,
-      ),
-    );
-    if (resident.pending_cities?.length) {
-      li.appendChild(createLine("city-sub", `待审批城市：${resident.pending_cities.join("、")}`));
-    }
-    li.appendChild(
-      createLine(
-        "city-role",
-        `身份：${(resident.roles || []).map(translateRole).join("、") || "居民"}`,
-      ),
-    );
-
-    if (resident.resident_id !== currentIdentity()) {
-      const actions = document.createElement("div");
-      actions.className = "city-actions";
-      const directButton = document.createElement("button");
-      directButton.type = "button";
-      directButton.className = "secondary";
-      directButton.textContent = "发起私聊";
-      directButton.addEventListener("click", () => {
-        enterResidentRoom(resident).catch((err) => {
-          setGovernanceStatus(localizedRuntimeError(err, "打开私聊失败"), true);
-        });
-      });
-      actions.appendChild(directButton);
-      li.appendChild(actions);
-    }
-
-    residentListEl.appendChild(li);
+    residentListEl.appendChild(createResidentDirectoryCardNode(resident));
   }
 }
 /** Render compact resident directory in creative.html sidebar */
-function renderResidentList() {
-  if (!residentListEl) return;
-  // Hide residents when search mode is rooms-only (only when search tabs exist)
+function syncResidentListSearchVisibility() {
   if (searchModeControlsEl) {
     residentListEl.style.display = searchMode === "rooms" ? "none" : "";
   }
-  clearChildren(residentListEl);
-  const residents = governance.residents;
-  const identity = currentIdentity();
-  const query = roomSearch.toLowerCase().trim();
-  if (!Array.isArray(residents) || !residents.length) {
-    const empty = document.createElement("li");
-    empty.className = "empty-note";
-    empty.textContent = residents
-      ? "暂无其他居民"
-      : gatewayUrl
-        ? "居民目录暂不可用"
-        : "请先连接网关以加载居民目录";
-    residentListEl.appendChild(empty);
-    return;
-  }
-  const filtered = residents
+}
+
+function createCompactResidentEmptyNode(residents) {
+  const empty = document.createElement("li");
+  empty.className = "empty-note";
+  empty.textContent = residents
+    ? "暂无其他居民"
+    : gatewayUrl
+      ? "居民目录暂不可用"
+      : "请先连接网关以加载居民目录";
+  return empty;
+}
+
+function createCompactResidentFilteredEmptyNode(query) {
+  const empty = document.createElement("li");
+  empty.className = "empty-note";
+  empty.textContent = query ? `没有匹配「${roomSearch}」的居民` : "暂无其他居民";
+  return empty;
+}
+
+function compactResidentListQuery() {
+  return roomSearch.toLowerCase().trim();
+}
+
+function filteredCompactResidents(residents, identity, query) {
+  return residents
     .filter((r) => r.resident_id !== identity)
     .filter((r) => !query || r.resident_id.toLowerCase().includes(query));
-  if (!filtered.length) {
-    const empty = document.createElement("li");
-    empty.className = "empty-note";
-    empty.textContent = query ? `没有匹配「${roomSearch}」的居民` : "暂无其他居民";
-    residentListEl.appendChild(empty);
-    return;
-  }
-  const sorted = [...filtered].sort((a, b) => {
+}
+
+function sortedCompactResidents(residents) {
+  return [...residents].sort((a, b) => {
     if (a.online !== b.online) return a.online ? -1 : 1;
     return a.resident_id.localeCompare(b.resident_id);
   });
-  for (const resident of sorted) {
-    const li = document.createElement("li");
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "room-button";
-    const displayName = resident.nickname || resident.resident_id;
-    const avatar = document.createElement("div");
-    avatar.className = "room-avatar";
-    avatar.textContent = displayName.charAt(0).toUpperCase();
-    applyAvatarStyle(avatar, resident.resident_id);
-    const content = document.createElement("div");
-    content.className = "room-content";
-    const top = document.createElement("div");
-    top.className = "room-topline";
-    const titleStack = document.createElement("div");
-    titleStack.className = "room-title-stack";
-    const nameLine = document.createElement("span");
-    nameLine.className = "room-name";
-    nameLine.textContent = displayName;
-    if (resident.nickname) {
-      const idLine = document.createElement("span");
-      idLine.className = "room-subtitle";
-      idLine.textContent = resident.resident_id;
-      titleStack.appendChild(idLine);
-    }
-    const statusDot = document.createElement("span");
-    statusDot.className = "resident-status-dot" + (resident.online ? " is-online" : " is-offline");
-    statusDot.setAttribute("aria-label", resident.online ? "在线" : "离线");
-    nameLine.appendChild(statusDot);
-    titleStack.appendChild(nameLine);
-    top.appendChild(titleStack);
-    content.appendChild(top);
-    button.appendChild(avatar);
-    button.appendChild(content);
-    button.addEventListener("click", () => {
-      enterResidentRoom(resident).catch((err) => {
-        setGovernanceStatus(localizedRuntimeError(err, "打开私聊失败"), true);
-      });
+}
+
+function createCompactResidentAvatar(resident, displayName) {
+  const avatar = document.createElement("div");
+  avatar.className = "room-avatar";
+  avatar.textContent = displayName.charAt(0).toUpperCase();
+  applyAvatarStyle(avatar, resident.resident_id);
+  return avatar;
+}
+
+function createCompactResidentTitleStack(resident, displayName) {
+  const titleStack = document.createElement("div");
+  titleStack.className = "room-title-stack";
+  const nameLine = document.createElement("span");
+  nameLine.className = "room-name";
+  nameLine.textContent = displayName;
+  if (resident.nickname) {
+    const idLine = document.createElement("span");
+    idLine.className = "room-subtitle";
+    idLine.textContent = resident.resident_id;
+    titleStack.appendChild(idLine);
+  }
+  const statusDot = document.createElement("span");
+  statusDot.className = "resident-status-dot" + (resident.online ? " is-online" : " is-offline");
+  statusDot.setAttribute("aria-label", resident.online ? "在线" : "离线");
+  nameLine.appendChild(statusDot);
+  titleStack.appendChild(nameLine);
+  return titleStack;
+}
+
+function createCompactResidentButtonContent(resident, displayName) {
+  const content = document.createElement("div");
+  content.className = "room-content";
+  const top = document.createElement("div");
+  top.className = "room-topline";
+  top.appendChild(createCompactResidentTitleStack(resident, displayName));
+  content.appendChild(top);
+  return content;
+}
+
+function createCompactResidentButton(resident) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "room-button";
+  button.addEventListener("click", () => {
+    enterResidentRoom(resident).catch((err) => {
+      setGovernanceStatus(localizedRuntimeError(err, "打开私聊失败"), true);
     });
-    li.appendChild(button);
-    residentListEl.appendChild(li);
+  });
+  return button;
+}
+
+function createCompactResidentListItemNode(resident) {
+  const li = document.createElement("li");
+  const button = createCompactResidentButton(resident);
+  const displayName = resident.nickname || resident.resident_id;
+  button.appendChild(createCompactResidentAvatar(resident, displayName));
+  button.appendChild(createCompactResidentButtonContent(resident, displayName));
+  li.appendChild(button);
+  return li;
+}
+
+function renderResidentList() {
+  if (!residentListEl) return;
+  // Hide residents when search mode is rooms-only (only when search tabs exist)
+  syncResidentListSearchVisibility();
+  clearChildren(residentListEl);
+  const residents = governance.residents;
+  const identity = currentIdentity();
+  const query = compactResidentListQuery();
+  if (!Array.isArray(residents) || !residents.length) {
+    residentListEl.appendChild(createCompactResidentEmptyNode(residents));
+    return;
+  }
+  const filtered = filteredCompactResidents(residents, identity, query);
+  if (!filtered.length) {
+    residentListEl.appendChild(createCompactResidentFilteredEmptyNode(query));
+    return;
+  }
+  for (const resident of sortedCompactResidents(filtered)) {
+    residentListEl.appendChild(createCompactResidentListItemNode(resident));
   }
 }
 
@@ -7180,10 +8104,7 @@ function updateComposerStatus() {
   updateCaretakerStatus();
 }
 
-function updateComposerState() {
-  ensureComposerTip();
-  ensureComposerKeyBindings();
-  const room = state.rooms.find((item) => item.id === activeRoomId);
+function composerStateModel(room) {
   const shellPage = currentShellPage();
   const compactChatShell = shellPage === "user" || shellPage === "admin";
   const draftText = composerInputEl?.value.trim() || "";
@@ -7196,18 +8117,18 @@ function updateComposerState() {
     requiresIdentity: userShellProjection(),
     gatewayUnavailable: gatewayUnavailableForComposer(),
   });
+  return { shellPage, compactChatShell, composerAvailability };
+}
+
+function applyComposerFormState(room, shellPage, composerAvailability) {
   if (composerFormEl) {
     composerFormEl.dataset.shellMode = shellMode;
     composerFormEl.dataset.draftState = composerAvailability.draftState;
     setDatasetFlag(composerFormEl, "quickAction", room ? roomQuickAction(room.id) : "");
   }
-  const { canDraft, canLiveSend, canSend } = composerAvailability;
-  if (!composerFormEl || !composerInputEl || !composerSendEl) {
-    updateComposerStatus();
-    return;
-  }
-  composerInputEl.disabled = !canDraft || isSendingMessage;
-  composerSendEl.disabled = !canSend;
+}
+
+function composerPlaceholderForState(room, shellPage, compactChatShell, composerAvailability) {
   let placeholder;
   if (isSendingMessage) {
     placeholder = "正在发送消息...";
@@ -7232,7 +8153,7 @@ function updateComposerState() {
       ? "先选会话，再输入第一句"
       : "先选会话，再写跟进或公告";
   }
-  if (!residentGatewayLoginRequired() && !isSendingMessage && room && !canLiveSend) {
+  if (!residentGatewayLoginRequired() && !isSendingMessage && room && !composerAvailability.canLiveSend) {
     placeholder += gatewayUrl ? "（会先保存在本地，等待同步）" : "（会先进入本地时间线）";
   }
   if (shellPage === "hub" && !gatewayUnavailableForComposer() && !isSendingMessage) {
@@ -7241,6 +8162,13 @@ function updateComposerState() {
   if (editingMessageTarget) {
     placeholder = "正在编辑已发送消息";
   }
+  return placeholder;
+}
+
+function applyComposerInputState(room, shellPage, compactChatShell, composerAvailability) {
+  composerInputEl.disabled = !composerAvailability.canDraft || isSendingMessage;
+  composerSendEl.disabled = !composerAvailability.canSend;
+  const placeholder = composerPlaceholderForState(room, shellPage, compactChatShell, composerAvailability);
   composerInputEl.placeholder = placeholder;
   composerInputEl.enterKeyHint = "send";
   composerInputEl.setAttribute("aria-label", placeholder);
@@ -7252,6 +8180,9 @@ function updateComposerState() {
   composerFormEl.classList.toggle("is-sending", isSendingMessage);
   composerFormEl.classList.toggle("is-editing-message", Boolean(editingMessageTarget));
   composerFormEl.dataset.composerPage = shellPage;
+}
+
+function renderComposerDependentSurfaces(room) {
   syncUserQuickActionButtons(room?.id || activeRoomId);
   updateComposerStatus();
   renderComposerHero(room);
@@ -7260,61 +8191,81 @@ function updateComposerState() {
   renderComposerMeta(room);
 }
 
+function updateComposerState() {
+  ensureComposerTip();
+  ensureComposerKeyBindings();
+  const room = state.rooms.find((item) => item.id === activeRoomId);
+  const { shellPage, compactChatShell, composerAvailability } = composerStateModel(room);
+  applyComposerFormState(room, shellPage, composerAvailability);
+  if (!composerFormEl || !composerInputEl || !composerSendEl) {
+    updateComposerStatus();
+    return;
+  }
+  applyComposerInputState(room, shellPage, compactChatShell, composerAvailability);
+  renderComposerDependentSurfaces(room);
+}
+
 async function submitComposerMessage() {
+  if (composerSubmitBlocked()) return false;
+  const draft = composerSubmitDraft();
+  if (!draft) return false;
+  if (editingMessageTarget) return submitComposerEditTarget(draft.text);
+  return submitComposerNewMessage(draft.text, draft.quickAction);
+}
+
+function composerSubmitBlocked() {
   if (isSendingMessage) {
     updateComposerState();
-    return false;
+    return true;
   }
   if (residentGatewayLoginRequired()) {
     setAuthStatus("请先登录后发送", true);
     updateResidentLoginSurface();
     updateComposerState();
-    return false;
+    return true;
   }
   if (!activeRoomId) {
     updateComposerState();
-    return false;
-  }
-  const text = composerInputEl.value.trim();
-  const quickAction = roomQuickAction(activeRoomId);
-  if (!text) return false;
-  composerSendEl.disabled = true;
-  if (editingMessageTarget) {
-    const target = editingMessageTarget;
-    if (target.roomId !== activeRoomId) {
-      clearMessageEditTarget({ clearInput: true });
-      updateComposerState();
-      return false;
-    }
-    try {
-      await editMessage(target.roomId, target.messageId, text);
-      clearMessageEditTarget({ clearInput: true });
-      updateRoomDraft(target.roomId, "");
-      delete roomSendErrors[target.roomId];
-      renderRooms();
-      renderTimeline();
-      renderConversationOverview();
-    } catch (error) {
-      roomSendErrors[target.roomId] = localizedRuntimeError(error, "消息编辑失败");
-      refreshGatewayBadge();
-      renderRooms();
-      renderTimeline();
-      renderConversationOverview();
-      return false;
-    } finally {
-      updateComposerState();
-    }
     return true;
   }
+  return false;
+}
+
+function composerSubmitDraft() {
+  const text = composerInputEl.value.trim();
+  const quickAction = roomQuickAction(activeRoomId);
+  if (!text) return null;
+  composerSendEl.disabled = true;
+  return { text, quickAction };
+}
+
+function renderComposerSubmitSurfaces() {
+  renderRooms();
+  renderTimeline();
+  renderConversationOverview();
+}
+
+function renderComposerSubmitFailure(roomId, message) {
+  roomSendErrors[roomId] = message;
+  refreshGatewayBadge();
+  renderComposerSubmitSurfaces();
+}
+
+async function submitComposerEditTarget(text) {
+  const target = editingMessageTarget;
+  if (target.roomId !== activeRoomId) {
+    clearMessageEditTarget({ clearInput: true });
+    updateComposerState();
+    return false;
+  }
   try {
-    await sendMessage(text, { quickAction });
+    await editMessage(target.roomId, target.messageId, text);
+    clearMessageEditTarget({ clearInput: true });
+    updateRoomDraft(target.roomId, "");
+    delete roomSendErrors[target.roomId];
+    renderComposerSubmitSurfaces();
   } catch (error) {
-    const message = localizedRuntimeError(error, "消息发送失败");
-    roomSendErrors[activeRoomId] = message;
-    refreshGatewayBadge();
-    renderRooms();
-    renderTimeline();
-    renderConversationOverview();
+    renderComposerSubmitFailure(target.roomId, localizedRuntimeError(error, "消息编辑失败"));
     return false;
   } finally {
     updateComposerState();
@@ -7322,10 +8273,21 @@ async function submitComposerMessage() {
   return true;
 }
 
-function updateGovernanceFormState() {
-  const enabled = Boolean(gatewayUrl && currentIdentity());
-  const worldStewardEnabled = enabled && actorIsWorldSteward();
-  const worldStewardInputs = new Set([
+async function submitComposerNewMessage(text, quickAction) {
+  try {
+    await sendMessage(text, { quickAction });
+  } catch (error) {
+    const message = localizedRuntimeError(error, "消息发送失败");
+    renderComposerSubmitFailure(activeRoomId, message);
+    return false;
+  } finally {
+    updateComposerState();
+  }
+  return true;
+}
+
+function governanceWorldStewardInputElements() {
+  return new Set([
     worldMirrorUrlInputEl,
     worldNoticeTitleInputEl,
     worldNoticeSeveritySelectEl,
@@ -7348,7 +8310,10 @@ function updateGovernanceFormState() {
     worldResidentMobileInputEl,
     worldResidentReasonInputEl,
   ]);
-  for (const element of [
+}
+
+function governanceManagedInputElements() {
+  return [
     providerUrlInputEl,
     cityTitleInputEl,
     citySlugInputEl,
@@ -7385,37 +8350,46 @@ function updateGovernanceFormState() {
     worldResidentEmailInputEl,
     worldResidentMobileInputEl,
     worldResidentReasonInputEl,
-  ]) {
+  ];
+}
+
+function updateGovernanceManagedInputs(enabled, worldStewardEnabled) {
+  const worldStewardInputs = governanceWorldStewardInputElements();
+  for (const element of governanceManagedInputElements()) {
     if (!element) continue;
     element.disabled = worldStewardInputs.has(element) ? !worldStewardEnabled : !enabled;
   }
-  const cityCreateButton = cityCreateFormEl?.querySelector("button");
-  if (cityCreateButton) cityCreateButton.disabled = !enabled;
-  const cityJoinButton = cityJoinFormEl?.querySelector("button");
-  if (cityJoinButton) cityJoinButton.disabled = !enabled;
-  const roomCreateButton = roomCreateFormEl?.querySelector("button");
-  if (roomCreateButton) roomCreateButton.disabled = !enabled;
-  const directOpenButton = directOpenFormEl?.querySelector("button");
-  if (directOpenButton) directOpenButton.disabled = !enabled;
-  const providerConnectButton = providerConnectFormEl?.querySelector("button");
-  if (providerConnectButton) providerConnectButton.disabled = !enabled;
-  if (providerDisconnectButtonEl) {
-    providerDisconnectButtonEl.disabled = !enabled || !provider.base_url;
+}
+
+function governanceButtonStateDescriptors(enabled, worldStewardEnabled) {
+  return [
+    { element: cityCreateFormEl?.querySelector("button"), disabled: !enabled },
+    { element: cityJoinFormEl?.querySelector("button"), disabled: !enabled },
+    { element: roomCreateFormEl?.querySelector("button"), disabled: !enabled },
+    { element: directOpenFormEl?.querySelector("button"), disabled: !enabled },
+    { element: providerConnectFormEl?.querySelector("button"), disabled: !enabled },
+    { element: providerDisconnectButtonEl, disabled: !enabled || !provider.base_url },
+    { element: worldMirrorFormEl?.querySelector("button"), disabled: !worldStewardEnabled },
+    { element: worldNoticeFormEl?.querySelector("button"), disabled: !worldStewardEnabled },
+    { element: worldTrustFormEl?.querySelector("button"), disabled: !worldStewardEnabled },
+    { element: worldAdvisoryFormEl?.querySelector("button"), disabled: !worldStewardEnabled },
+    { element: worldReportReviewFormEl?.querySelector("button"), disabled: !worldStewardEnabled },
+    { element: worldReportFormEl?.querySelector("button"), disabled: !enabled },
+    { element: worldResidentSanctionFormEl?.querySelector("button"), disabled: !worldStewardEnabled },
+  ];
+}
+
+function updateGovernanceManagedButtons(enabled, worldStewardEnabled) {
+  for (const { element, disabled } of governanceButtonStateDescriptors(enabled, worldStewardEnabled)) {
+    if (element) element.disabled = disabled;
   }
-  const worldMirrorButton = worldMirrorFormEl?.querySelector("button");
-  if (worldMirrorButton) worldMirrorButton.disabled = !worldStewardEnabled;
-  const worldNoticeButton = worldNoticeFormEl?.querySelector("button");
-  if (worldNoticeButton) worldNoticeButton.disabled = !worldStewardEnabled;
-  const worldTrustButton = worldTrustFormEl?.querySelector("button");
-  if (worldTrustButton) worldTrustButton.disabled = !worldStewardEnabled;
-  const worldAdvisoryButton = worldAdvisoryFormEl?.querySelector("button");
-  if (worldAdvisoryButton) worldAdvisoryButton.disabled = !worldStewardEnabled;
-  const worldReportReviewButton = worldReportReviewFormEl?.querySelector("button");
-  if (worldReportReviewButton) worldReportReviewButton.disabled = !worldStewardEnabled;
-  const worldReportButton = worldReportFormEl?.querySelector("button");
-  if (worldReportButton) worldReportButton.disabled = !enabled;
-  const worldResidentSanctionButton = worldResidentSanctionFormEl?.querySelector("button");
-  if (worldResidentSanctionButton) worldResidentSanctionButton.disabled = !worldStewardEnabled;
+}
+
+function updateGovernanceFormState() {
+  const enabled = Boolean(gatewayUrl && currentIdentity());
+  const worldStewardEnabled = enabled && actorIsWorldSteward();
+  updateGovernanceManagedInputs(enabled, worldStewardEnabled);
+  updateGovernanceManagedButtons(enabled, worldStewardEnabled);
 }
 
 function updateAuthFormState() {
@@ -7566,9 +8540,61 @@ function scheduleGatewayRealtimeRestart(afterVersion) {
   }, 0);
 }
 
+function gatewayRealtimeSupported() {
+  return Boolean(gatewayUrl && typeof EventSource === "function");
+}
+
+function openGatewayShellEventSource(afterVersion) {
+  const eventSource = new EventSource(gatewayShellEventsUrl({ afterVersion }));
+  shellEventSource = eventSource;
+  return eventSource;
+}
+
+function gatewayRealtimeStateVersion(payload) {
+  return typeof payload?.state_version === "string" && payload.state_version.trim()
+    ? payload.state_version.trim()
+    : null;
+}
+
+async function handleGatewayRealtimeShellStateEvent(event) {
+  const payload = JSON.parse(event.data || "{}");
+  const incomingStateVersion = gatewayRealtimeStateVersion(payload);
+  if (incomingStateVersion && incomingStateVersion === lastShellStateVersion) {
+    lastRefreshAtMs = Date.now();
+    lastRefreshErrorMessage = "";
+    scheduleGatewayRealtimeRestart(incomingStateVersion);
+    return true;
+  }
+
+  const changed = await applyGatewayShellStatePayload(payload, { persist: true });
+  if (!changed) return false;
+  if (incomingStateVersion) {
+    lastShellStateVersion = incomingStateVersion;
+  }
+  lastRefreshAtMs = Date.now();
+  lastRefreshErrorMessage = "";
+  renderShellStateRefresh();
+  scheduleGatewayRealtimeRestart(incomingStateVersion);
+  return true;
+}
+
+function handleGatewayRealtimeError(hasReceivedSnapshot) {
+  stopShellEventSource();
+  if (!hasReceivedSnapshot) {
+    void refreshFromGateway();
+    startGatewayPolling();
+    return;
+  }
+  if (lastShellStateVersion) {
+    scheduleGatewayRealtimeRestart(lastShellStateVersion);
+  } else {
+    startGatewayPolling();
+  }
+}
+
 function startGatewayRealtime({ afterVersion = lastShellStateVersion } = {}) {
   stopShellEventSource();
-  if (!gatewayUrl || typeof EventSource !== "function") {
+  if (!gatewayRealtimeSupported()) {
     startGatewayPolling();
     return;
   }
@@ -7577,51 +8603,17 @@ function startGatewayRealtime({ afterVersion = lastShellStateVersion } = {}) {
     refreshTimer = null;
   }
   let hasReceivedSnapshot = false;
-  const eventSource = new EventSource(gatewayShellEventsUrl({ afterVersion }));
-  shellEventSource = eventSource;
+  const eventSource = openGatewayShellEventSource(afterVersion);
 
   eventSource.addEventListener("shell-state", async (event) => {
     try {
-      const payload = JSON.parse(event.data || "{}");
-      const incomingStateVersion =
-        typeof payload?.state_version === "string" && payload.state_version.trim()
-          ? payload.state_version.trim()
-          : null;
-      if (incomingStateVersion && incomingStateVersion === lastShellStateVersion) {
-        hasReceivedSnapshot = true;
-        lastRefreshAtMs = Date.now();
-        lastRefreshErrorMessage = "";
-        scheduleGatewayRealtimeRestart(incomingStateVersion);
-        return;
-      }
-      const changed = await applyGatewayShellStatePayload(payload, { persist: true });
-      if (!changed) return;
-      hasReceivedSnapshot = true;
-      if (incomingStateVersion) {
-        lastShellStateVersion = incomingStateVersion;
-      }
-      lastRefreshAtMs = Date.now();
-      lastRefreshErrorMessage = "";
-      renderShellStateRefresh();
-      scheduleGatewayRealtimeRestart(incomingStateVersion);
+      hasReceivedSnapshot = (await handleGatewayRealtimeShellStateEvent(event)) || hasReceivedSnapshot;
     } catch (error) {
       lastRefreshErrorMessage = localizedRuntimeError(error, "实时同步失败");
     }
   });
 
-  eventSource.onerror = () => {
-    stopShellEventSource();
-    if (!hasReceivedSnapshot) {
-      void refreshFromGateway();
-      startGatewayPolling();
-      return;
-    }
-    if (lastShellStateVersion) {
-      scheduleGatewayRealtimeRestart(lastShellStateVersion);
-    } else {
-      startGatewayPolling();
-    }
-  };
+  eventSource.onerror = () => handleGatewayRealtimeError(hasReceivedSnapshot);
 }
 
 async function refreshOnForeground(reason = "foreground") {
@@ -7637,45 +8629,62 @@ async function refreshOnForeground(reason = "foreground") {
   }
 }
 
-async function sendMessage(text, { quickAction = "" } = {}) {
-  if (!activeRoomId) return;
-  if (residentGatewayLoginRequired()) {
-    throw new Error("请先登录后发送");
-  }
-  const roomId = activeRoomId;
-  if (!gatewayUrl) {
-    const room = state.rooms.find((item) => item.id === roomId);
-    if (!room) return;
-    const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    room.messages = room.messages || [];
-    room.messages.push({
-      sender: currentIdentity(),
-      timestamp,
-      text,
-      quick_action: quickAction,
-    });
-    if (quickAction) {
-      const initialState = resetRoomQuickState(roomId, quickAction);
-      captureRoomQuickSnapshotFromText(roomId, quickAction, initialState, text);
-    }
-    lastRefreshAtMs = Date.now();
-    followTimelineToLatest = true;
-    delete roomSendErrors[roomId];
-    updateRoomDraft(roomId, "");
-    setRoomQuickAction(roomId, "");
-    composerInputEl.value = "";
-    autoSizeComposerInput();
-    lastSentMessage = text;
-    renderRooms();
-    renderTimeline();
-    updateComposerState();
-    renderConversationOverview();
-    requestAnimationFrame(() => {
-      composerInputEl?.focus();
-    });
-    return;
-  }
-  const payload = {
+function appendLocalRoomMessage(roomId, text, quickAction) {
+  const room = state.rooms.find((item) => item.id === roomId);
+  if (!room) return false;
+  const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  room.messages = room.messages || [];
+  room.messages.push({
+    sender: currentIdentity(),
+    timestamp,
+    text,
+    quick_action: quickAction,
+  });
+  return true;
+}
+
+function captureQuickActionSend(roomId, text, quickAction) {
+  if (!quickAction) return;
+  const initialState = resetRoomQuickState(roomId, quickAction);
+  captureRoomQuickSnapshotFromText(roomId, quickAction, initialState, text);
+}
+
+function clearComposerAfterSend(roomId, text) {
+  composerInputEl.value = "";
+  autoSizeComposerInput();
+  updateRoomDraft(roomId, "");
+  setRoomQuickAction(roomId, "");
+  lastSentMessage = text;
+}
+
+function renderAfterSend({ composerFirst = false } = {}) {
+  if (composerFirst) updateComposerState();
+  renderRooms();
+  renderTimeline();
+  if (!composerFirst) updateComposerState();
+  renderConversationOverview();
+}
+
+function focusComposerAfterSend() {
+  requestAnimationFrame(() => {
+    composerInputEl?.focus();
+  });
+}
+
+function commitLocalSend(roomId, text, quickAction) {
+  if (!appendLocalRoomMessage(roomId, text, quickAction)) return false;
+  captureQuickActionSend(roomId, text, quickAction);
+  lastRefreshAtMs = Date.now();
+  followTimelineToLatest = true;
+  delete roomSendErrors[roomId];
+  clearComposerAfterSend(roomId, text);
+  renderAfterSend();
+  focusComposerAfterSend();
+  return true;
+}
+
+function gatewayMessagePayload(roomId, text, quickAction) {
+  return {
     room_id: roomId,
     sender: currentIdentity(),
     text,
@@ -7683,41 +8692,61 @@ async function sendMessage(text, { quickAction = "" } = {}) {
     device_id: "browser-shell",
     language_tag: navigator.language || "zh-CN",
   };
+}
+
+function prepareGatewaySend(roomId, text, quickAction) {
   isSendingMessage = true;
   followTimelineToLatest = true;
   const pendingEchoId = enqueuePendingEcho(roomId, text, quickAction);
-  if (quickAction) {
-    const initialState = resetRoomQuickState(roomId, quickAction);
-    captureRoomQuickSnapshotFromText(roomId, quickAction, initialState, text);
-  }
-  composerInputEl.value = "";
-  autoSizeComposerInput();
-  updateRoomDraft(roomId, "");
-  setRoomQuickAction(roomId, "");
-  lastSentMessage = text;
+  captureQuickActionSend(roomId, text, quickAction);
+  clearComposerAfterSend(roomId, text);
+  renderAfterSend({ composerFirst: true });
+  return pendingEchoId;
+}
+
+async function postGatewayMessageAndRefresh(roomId, payload, onPosted) {
+  await postGatewayJson("/v1/shell/message", payload);
+  onPosted?.();
+  delete roomSendErrors[roomId];
+  await refreshFromGateway({ requireShell: true });
+  clearPendingEchoes(roomId);
+}
+
+function handleGatewaySendFailure(roomId, pendingEchoId, posted, error) {
+  markPendingEchoFailed(roomId, pendingEchoId, true);
+  const fallback = posted ? "消息可能已发出，但会话同步失败" : "消息发送失败";
+  roomSendErrors[roomId] = localizedRuntimeError(error, fallback);
+  return new Error(roomSendErrors[roomId]);
+}
+
+function finishGatewaySendAttempt() {
+  isSendingMessage = false;
   updateComposerState();
-  renderRooms();
-  renderTimeline();
   renderConversationOverview();
+  focusComposerAfterSend();
+}
+
+async function sendMessage(text, { quickAction = "" } = {}) {
+  if (!activeRoomId) return;
+  if (residentGatewayLoginRequired()) {
+    throw new Error("请先登录后发送");
+  }
+  const roomId = activeRoomId;
+  if (!gatewayUrl) {
+    commitLocalSend(roomId, text, quickAction);
+    return;
+  }
+  const payload = gatewayMessagePayload(roomId, text, quickAction);
+  const pendingEchoId = prepareGatewaySend(roomId, text, quickAction);
   let posted = false;
   try {
-    await postGatewayJson("/v1/shell/message", payload);
-    posted = true;
-    delete roomSendErrors[roomId];
-    await refreshFromGateway({ requireShell: true });
-    clearPendingEchoes(roomId);
-  } catch (error) {
-    markPendingEchoFailed(roomId, pendingEchoId, true);
-    const fallback = posted ? "消息可能已发出，但会话同步失败" : "消息发送失败";
-    roomSendErrors[roomId] = localizedRuntimeError(error, fallback);
-    throw new Error(roomSendErrors[roomId]);
-  } finally {
-    isSendingMessage = false;
-    updateComposerState();
-    renderConversationOverview();
-    requestAnimationFrame(() => {
-      composerInputEl?.focus();
+    await postGatewayMessageAndRefresh(roomId, payload, () => {
+      posted = true;
     });
+  } catch (error) {
+    throw handleGatewaySendFailure(roomId, pendingEchoId, posted, error);
+  } finally {
+    finishGatewaySendAttempt();
   }
 }
 
@@ -8104,30 +9133,6 @@ async function updateMyNickname(nickname) {
   return updateMyNicknameMod(nickname);
 }
 
-
-function exportFileExtension(format) {
-  if (format === "jsonl") return "jsonl";
-  if (format === "txt") return "txt";
-  return "md";
-}
-
-function exportMimeType(format) {
-  if (format === "jsonl") return "application/x-ndjson";
-  if (format === "txt") return "text/plain;charset=utf-8";
-  return "text/markdown;charset=utf-8";
-}
-
-function downloadContent(filename, content, mimeType) {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
-}
 
 async function exportCurrentConversation(fallbackMessage = "导出当前会话失败") {
   try {
@@ -8577,67 +9582,94 @@ if (hudRailToggleEl && sfcRailEl) {
 
 // escapeHtml moved to shell-message-render.js
 
-function initializeComposerSymbolTabs() {
-  if (!composerSymbolMenuEl || composerSymbolMenuEl.dataset.symbolTabsReady === "true") return;
-  const categories = Array.from(composerSymbolMenuEl.querySelectorAll(".composer-symbol-category"));
-  if (categories.length <= 1) return;
+function composerSymbolCategories() {
+  if (!composerSymbolMenuEl) return [];
+  return Array.from(composerSymbolMenuEl.querySelectorAll(".composer-symbol-category"));
+}
 
+function selectComposerSymbolCategory(categories, tabButtons, selectedIndex) {
+  categories.forEach((category, index) => {
+    const active = index === selectedIndex;
+    category.classList.toggle("is-active", active);
+    category.hidden = !active;
+    tabButtons[index]?.classList.toggle("is-active", active);
+    tabButtons[index]?.setAttribute("aria-selected", active ? "true" : "false");
+    tabButtons[index]?.setAttribute("tabindex", active ? "0" : "-1");
+  });
+}
+
+function prepareComposerSymbolCategoryPanel(category, index) {
+  const heading = category.querySelector(".composer-symbol-heading")?.textContent?.trim() || `分类 ${index + 1}`;
+  const panelId = category.id || `composer-symbol-panel-${index + 1}`;
+  const tabId = `composer-symbol-tab-${index + 1}`;
+
+  category.id = panelId;
+  category.setAttribute("role", "tabpanel");
+  category.setAttribute("aria-labelledby", tabId);
+
+  return { heading, panelId, tabId };
+}
+
+function handleComposerSymbolTabKeydown(event, index, categories, tabButtons, selectCategory) {
+  if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+  event.preventDefault();
+  const direction = event.key === "ArrowRight" ? 1 : -1;
+  const nextIndex = (index + direction + categories.length) % categories.length;
+  selectCategory(nextIndex);
+  tabButtons[nextIndex]?.focus();
+}
+
+function createComposerSymbolTabButton(panel, index, categories, tabButtons, selectCategory) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.id = panel.tabId;
+  button.className = "composer-symbol-tab";
+  button.setAttribute("data-symbol-tab", String(index));
+  button.setAttribute("role", "tab");
+  button.setAttribute("aria-controls", panel.panelId);
+  button.textContent = panel.heading.replace(/\s*\/\s*/g, "/");
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    selectCategory(index);
+  });
+  button.addEventListener("keydown", (event) => {
+    handleComposerSymbolTabKeydown(event, index, categories, tabButtons, selectCategory);
+  });
+  return button;
+}
+
+function createComposerSymbolTabBar(categories) {
   const tabBar = document.createElement("div");
   tabBar.className = "composer-symbol-tabs";
   tabBar.setAttribute("role", "tablist");
   tabBar.setAttribute("aria-label", "颜文字分类");
 
   const tabButtons = [];
-  const selectCategory = (selectedIndex) => {
-    categories.forEach((category, index) => {
-      const active = index === selectedIndex;
-      category.classList.toggle("is-active", active);
-      category.hidden = !active;
-      tabButtons[index]?.classList.toggle("is-active", active);
-      tabButtons[index]?.setAttribute("aria-selected", active ? "true" : "false");
-      tabButtons[index]?.setAttribute("tabindex", active ? "0" : "-1");
-    });
-  };
-
+  const selectCategory = (selectedIndex) => selectComposerSymbolCategory(categories, tabButtons, selectedIndex);
   categories.forEach((category, index) => {
-    const heading = category.querySelector(".composer-symbol-heading")?.textContent?.trim() || `分类 ${index + 1}`;
-    const panelId = category.id || `composer-symbol-panel-${index + 1}`;
-    const tabId = `composer-symbol-tab-${index + 1}`;
-
-    category.id = panelId;
-    category.setAttribute("role", "tabpanel");
-    category.setAttribute("aria-labelledby", tabId);
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.id = tabId;
-    button.className = "composer-symbol-tab";
-    button.setAttribute("data-symbol-tab", String(index));
-    button.setAttribute("role", "tab");
-    button.setAttribute("aria-controls", panelId);
-    button.textContent = heading.replace(/\s*\/\s*/g, "/");
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      selectCategory(index);
-    });
-    button.addEventListener("keydown", (event) => {
-      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
-      event.preventDefault();
-      const direction = event.key === "ArrowRight" ? 1 : -1;
-      const nextIndex = (index + direction + categories.length) % categories.length;
-      selectCategory(nextIndex);
-      tabButtons[nextIndex]?.focus();
-    });
-
+    const panel = prepareComposerSymbolCategoryPanel(category, index);
+    const button = createComposerSymbolTabButton(panel, index, categories, tabButtons, selectCategory);
     tabButtons.push(button);
     tabBar.appendChild(button);
   });
 
+  return { tabBar, selectCategory };
+}
+
+function installComposerSymbolTabs(tabBar, selectCategory) {
   composerSymbolMenuEl.insertBefore(tabBar, composerSymbolMenuEl.firstChild);
   composerSymbolMenuEl.classList.add("is-tabbed");
   composerSymbolMenuEl.dataset.symbolTabsReady = "true";
   selectCategory(0);
+}
+
+function initializeComposerSymbolTabs() {
+  if (!composerSymbolMenuEl || composerSymbolMenuEl.dataset.symbolTabsReady === "true") return;
+  const categories = composerSymbolCategories();
+  if (categories.length <= 1) return;
+  const { tabBar, selectCategory } = createComposerSymbolTabBar(categories);
+  installComposerSymbolTabs(tabBar, selectCategory);
 }
 
 function setComposerSymbolMenuOpen(open) {
@@ -8778,10 +9810,7 @@ function renderSearchResults(messages) {
   for (const msg of messages) {
     const item = document.createElement("div");
     item.className = "search-result-item";
-    item.innerHTML =
-      '<span class="search-result-sender">' + escapeHtml(msg.sender) + '</span>' +
-      '<span class="search-result-text">' + escapeHtml(msg.text?.substring(0, 100) || "") + '</span>' +
-      '<span class="search-result-time">' + formatDateTime(msg.timestamp_ms) + '</span>';
+    item.innerHTML = buildSearchResultItemHtml(msg);
     item.addEventListener("click", () => {
       scrollToMessage(msg.message_id);
       toggleMessageSearch();

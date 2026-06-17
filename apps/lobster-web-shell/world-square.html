@@ -7,7 +7,6 @@
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="./styles.tokens.css?v=20260604-css-split" />
     <link rel="stylesheet" href="./styles.world-square.css?v=20260525-h5-shell-fix-v2" />
-    <link rel="stylesheet" href="./styles.creative.css?v=20260525-h5-shell-fix-v2" />
   </head>
   <body data-shell-page="world-square" data-shell-variant="world-square-readonly" data-sfc-theme="city" data-resident-login="enabled">
     <div id="resident-login-overlay" class="resident-login-overlay shell-hidden" aria-hidden="true">
@@ -44,45 +43,51 @@
           <p class="world-square-hud-note">公共广场入口，后续接入公告与跨城发现。</p>
         </div>
         <nav class="world-square-actions" aria-label="世界广场导航">
-          <button type="button" id="hud-login-toggle" class="hud-login-toggle shell-hidden" aria-label="打开登录窗口">登录</button>
-          <button type="button" id="theme-toggle" class="theme-toggle" aria-label="切换亮色/暗色模式" title="切换亮色/暗色模式">☀️</button>
-          <a href="./unified.html">返回世界入口</a>
-          <a href="./index.html">回主城群聊</a>
+          <button type="button" id="hud-login-toggle" class="hud-login-toggle" aria-label="打开登录窗口">登录</button>
+          <span id="hud-connection-status" class="hud-pill shell-hidden">连线中</span>
+          <a href="./index.html">返回主城群聊</a>
         </nav>
       </header>
 
-      <aside class="world-square-rail" data-shell-column="rooms" aria-label="站点导航">
-        <div class="world-square-rail-title">导航</div>
-        <input
-          id="world-square-search"
-          class="world-square-rail-search"
-          type="search"
-          placeholder="搜索居民、房间或最近消息"
-          autocomplete="off"
-          aria-label="搜索居民ID"
-        />
-        <div class="rail-actions">
-          <a href="./creative.html" class="rail-item">
-            <span class="rail-item-label">住宅</span>
-          </a>
-          <a href="./index.html" class="rail-item">
-            <span class="rail-item-label">主城</span>
-          </a>
-          <a href="./unified.html" class="rail-item">
-            <span class="rail-item-label">世界入口</span>
-          </a>
-          <a href="./world-square.html" class="rail-item is-active" aria-current="page">
-            <span class="rail-item-label">世界广场</span>
-          </a>
+      <aside class="sfc-rail creative-rail world-square-rail" data-shell-column="rooms" aria-label="站点导航">
+        <div class="creative-rail-stack">
+          <div class="rail-title">导航</div>
+          <div class="rail-actions">
+            <a href="./creative.html" class="rail-item">
+              <span class="rail-label">住宅</span>
+            </a>
+            <a href="./index.html" class="rail-item">
+              <span class="rail-label">主城</span>
+            </a>
+            <a href="./world-square.html" class="rail-item is-active" aria-current="page">
+              <span class="rail-label">世界</span>
+            </a>
+          </div>
+        </div>
+        <div class="creative-rail-divider">
+          <span>广场</span>
+          <input
+            id="world-square-search"
+            class="creative-rail-search world-square-rail-search"
+            type="search"
+            placeholder="搜索居民、房间或最近消息"
+            autocomplete="off"
+            aria-label="搜索居民ID"
+          />
         </div>
       </aside>
 
       <section class="world-square-stage" aria-label="世界广场概念图">
         <div class="world-square-scene" role="img" aria-label="世界广场完整概念图"></div>
-        <div class="scene-hotspots" aria-label="场景热点">
-          <button class="scene-hotspot" data-hotspot-title="广场公告" data-hotspot-kind="notice" style="left:25%;top:18%;width:22%;height:16%;" aria-label="查看广场公告"></button>
-          <button class="scene-hotspot" data-hotspot-title="公共讨论" data-hotspot-kind="discussion" style="left:55%;top:14%;width:22%;height:16%;" aria-label="查看公共讨论"></button>
-          <button class="scene-hotspot" data-hotspot-title="跨城发现" data-hotspot-kind="discovery" style="left:40%;top:55%;width:24%;height:16%;" aria-label="查看跨城发现"></button>
+        <div class="scene-hotspot-label-layer world-square-label-layer" aria-hidden="true">
+          <span class="scene-hotspot-label-chip world-square-label-chip" data-hotspot-kind="notice" style="left:36%;top:26%;">广场公告</span>
+          <span class="scene-hotspot-label-chip world-square-label-chip" data-hotspot-kind="discussion" style="left:66%;top:22%;">公共讨论</span>
+          <span class="scene-hotspot-label-chip world-square-label-chip" data-hotspot-kind="discovery" style="left:52%;top:63%;">跨城发现</span>
+        </div>
+        <div class="scene-hotspots world-square-hotspots" aria-label="世界广场热点">
+          <button type="button" class="scene-hotspot world-square-hotspot world-square-hotspot--notice" data-hotspot-title="广场公告" data-hotspot-kind="notice" aria-label="查看广场公告"></button>
+          <button type="button" class="scene-hotspot world-square-hotspot world-square-hotspot--discussion" data-hotspot-title="公共讨论" data-hotspot-kind="discussion" aria-label="查看公共讨论"></button>
+          <button type="button" class="scene-hotspot world-square-hotspot world-square-hotspot--discovery" data-hotspot-title="跨城发现" data-hotspot-kind="discovery" aria-label="查看跨城发现"></button>
         </div>
         <details class="world-square-card world-square-card--compact" aria-label="世界广场说明">
           <summary class="world-square-card-toggle">广场信息</summary>
@@ -142,8 +147,9 @@
           });
         }
 
-        /* 白天素材暂缺优质版本，全天使用夜晚图。后续替换白天素材后恢复 isDay 分支即可。 */
-        const preloadAsset = "./assets/pixel/concepts/world-square-concept-20260427-256.png";
+        const preloadAsset = isDay
+          ? "./assets/pixel/concepts/world-square-concept-day-256.png"
+          : "./assets/pixel/concepts/world-square-concept-20260427-256.png";
 
         const link = document.createElement("link");
         link.rel = "preload";
@@ -156,28 +162,32 @@
         var clearMode = false;
         var stageEl = document.querySelector(".world-square-stage");
         var cardEl = document.querySelector(".world-square-card");
-        var hotspots = document.querySelectorAll(".scene-hotspot");
+        var labelLayerEl = document.querySelector(".world-square-label-layer");
+        var hotspots = document.querySelectorAll(".world-square-hotspots .scene-hotspot");
+
+        function hotspotLabelFor(hs) {
+          var kind = hs && hs.dataset ? hs.dataset.hotspotKind : "";
+          if (!kind || !labelLayerEl) return null;
+          return labelLayerEl.querySelector('[data-hotspot-kind="' + kind + '"]');
+        }
 
         function showHotspotLabel(hs) {
-          var label = hs.querySelector(".scene-hotspot-label");
-          if (!label) {
-            label = document.createElement("span");
-            label.className = "scene-hotspot-label";
-            label.textContent = hs.dataset.hotspotTitle || "";
-            hs.appendChild(label);
-          }
+          var label = hotspotLabelFor(hs);
+          if (label) label.classList.add("is-near-pointer");
           hs.classList.add("is-active");
         }
 
         function hideHotspotLabels() {
+          document.body.classList.remove("scene-hotspot-labels-visible");
           for (var i = 0; i < hotspots.length; i++) {
             hotspots[i].classList.remove("is-active");
-            var l = hotspots[i].querySelector(".scene-hotspot-label");
-            if (l) l.remove();
+            var l = hotspotLabelFor(hotspots[i]);
+            if (l) l.classList.remove("is-near-pointer");
           }
         }
 
         function showAllLabelsBriefly() {
+          document.body.classList.add("scene-hotspot-labels-visible");
           for (var i = 0; i < hotspots.length; i++) showHotspotLabel(hotspots[i]);
           clearTimeout(hotspotTimer);
           hotspotTimer = setTimeout(hideHotspotLabels, 2800);
@@ -188,8 +198,9 @@
           document.body.classList.toggle("scene-clear-mode", clearMode);
           if (clearMode) {
             if (cardEl) cardEl.open = false;
-            showAllLabelsBriefly();
             clearTimeout(hotspotTimer);
+            document.body.classList.add("scene-hotspot-labels-visible");
+            for (var i = 0; i < hotspots.length; i++) showHotspotLabel(hotspots[i]);
           } else {
             hideHotspotLabels();
           }
@@ -205,6 +216,8 @@
             var kind = this.dataset.hotspotKind;
             var item = document.querySelector('[data-readonly-kind="' + kind + '"]');
             if (item) item.scrollIntoView({ behavior: "smooth", block: "center" });
+            clearMode = false;
+            document.body.classList.remove("scene-clear-mode");
             if (cardEl && !cardEl.open) cardEl.open = true;
             showAllLabelsBriefly();
           });
@@ -277,7 +290,7 @@
       })();
     </script>
 
-    <!-- 注册登录模块（轻量接入，不加载完整 app.js） -->
+    <!-- 居民登录：右上角按钮触发，登录后显示连线中 -->
     <script type="module">
       import { initAuth } from "./shell-auth.js";
 
@@ -300,6 +313,19 @@
         hudLoginToggleEl: document.getElementById("hud-login-toggle"),
       };
 
+      const connectionStatusEl = document.getElementById("hud-connection-status");
+
+      function updateHudForIdentity() {
+        const loggedIn = !!localStorage.getItem("lobster-identity");
+        if (loggedIn) {
+          els.hudLoginToggleEl?.classList.add("shell-hidden");
+          connectionStatusEl?.classList.remove("shell-hidden");
+        } else {
+          els.hudLoginToggleEl?.classList.remove("shell-hidden");
+          connectionStatusEl?.classList.add("shell-hidden");
+        }
+      }
+
       initAuth(els, {
         gatewayUrl: () => gatewayUrl,
         postJson: async (path, body) => {
@@ -312,12 +338,14 @@
           return res.json();
         },
         refreshFromGateway: () => {},
-        persistIdentity: (id) => { try { localStorage.setItem("lobster-identity", id); } catch(e) {} },
+        persistIdentity: (id) => {
+          try { localStorage.setItem("lobster-identity", id); } catch(e) {}
+          updateHudForIdentity();
+        },
         userProjection: () => null,
         desiredResidentId: () => undefined,
       });
 
-      // Login toggle
       const closeBtn = document.getElementById("resident-login-close");
       const overlay = document.getElementById("resident-login-overlay");
       const toggle = document.getElementById("hud-login-toggle");
@@ -331,12 +359,7 @@
         overlay?.classList.add("shell-hidden");
       });
 
-      // Auto-show login if not logged in and gateway is connected
-      if (gatewayUrl && !localStorage.getItem("lobster-identity")) {
-        setTimeout(() => {
-          if (toggle) toggle.classList.remove("shell-hidden");
-        }, 800);
-      }
+      updateHudForIdentity();
     </script>
   </body>
 </html>

@@ -28,6 +28,7 @@ export function initSceneRuntime({
   stageSelector = DEFAULT_STAGE_SELECTOR,
   restoreSelector = ".creative-chat-frame, .public-square-chat, .user-chat-frame",
   hotspotContainerSelector = ".scene-hotspots",
+  labelLayerSelector = ".scene-hotspot-label-layer",
   onEscape,
   isRailOpen,
   closeRail,
@@ -36,7 +37,9 @@ export function initSceneRuntime({
   const stageEl = documentRef?.querySelector?.(stageSelector) || null;
   const restoreEl = documentRef?.querySelector?.(restoreSelector) || null;
   const hotspotContainerEl = documentRef?.querySelector?.(hotspotContainerSelector) || null;
+  const labelLayerEl = documentRef?.querySelector?.(labelLayerSelector) || null;
   let hotspotEls = Array.from(documentRef?.querySelectorAll?.(".scene-hotspot") || []);
+  let hotspotLabelEls = [];
   const fallbackHotspotSpecs = staticSceneHotspotSpecs(hotspotEls);
   let hotspotLayerSignature = "";
   let popoverEl = null;
@@ -62,10 +65,50 @@ export function initSceneRuntime({
     hotspotEls.forEach((button) => {
       button.classList?.toggle("is-near-pointer", button === targetHotspot);
     });
+    hotspotLabelEls.forEach((label) => {
+      const matches = targetHotspot && label.dataset?.hotspotIndex === targetHotspot.dataset?.hotspotIndex;
+      label.classList?.toggle("is-near-pointer", Boolean(matches));
+    });
+  }
+
+  function hotspotLabelText(button) {
+    return button.querySelector?.("span")?.textContent?.trim()
+      || button.dataset?.hotspotTitle
+      || button.textContent?.trim()
+      || "热点";
+  }
+
+  function renderHotspotLabelLayer() {
+    if (!labelLayerEl || !stageEl) {
+      hotspotLabelEls = [];
+      return;
+    }
+    const stageRect = stageEl.getBoundingClientRect?.();
+    if (!stageRect) {
+      hotspotLabelEls = [];
+      return;
+    }
+    const labels = hotspotEls.map((button, index) => {
+      const rect = button.getBoundingClientRect?.();
+      const label = documentRef.createElement("span");
+      label.className = "scene-hotspot-label-chip";
+      label.dataset.hotspotIndex = String(index);
+      label.dataset.hotspotTitle = button.dataset?.hotspotTitle || "";
+      label.textContent = hotspotLabelText(button);
+      if (button.dataset) button.dataset.hotspotIndex = String(index);
+      if (rect) {
+        label.style.left = `${rect.left - stageRect.left + rect.width / 2}px`;
+        label.style.top = `${rect.top - stageRect.top + rect.height / 2}px`;
+      }
+      return label;
+    });
+    labelLayerEl.replaceChildren?.(...labels);
+    hotspotLabelEls = labels;
   }
 
   function setHotspotLabelsVisible(visible, { autoHideMs = 3200 } = {}) {
     hotspotLabelsVisible = Boolean(visible);
+    if (hotspotLabelsVisible) renderHotspotLabelLayer();
     body?.classList?.toggle("scene-hotspot-labels-visible", hotspotLabelsVisible);
     if (labelTimer) {
       clearTimeout(labelTimer);
@@ -128,15 +171,29 @@ export function initSceneRuntime({
     if (!button || button.dataset?.sceneHotspotBound === "true") return;
     const isNavigationHotspot = button.tagName?.toLowerCase() === "a" && button.getAttribute?.("href");
     button.setAttribute?.("aria-expanded", "false");
-    button.addEventListener?.("mouseenter", () => openPopover(button));
-    button.addEventListener?.("mouseleave", () => schedulePopoverClose(220));
-    button.addEventListener?.("focus", () => openPopover(button));
-    button.addEventListener?.("blur", () => schedulePopoverClose(220));
+    button.addEventListener?.("mouseenter", () => {
+      setNearHotspot(button);
+      openPopover(button);
+    });
+    button.addEventListener?.("mouseleave", () => {
+      setNearHotspot(null);
+      schedulePopoverClose(220);
+    });
+    button.addEventListener?.("focus", () => {
+      setNearHotspot(button);
+      openPopover(button);
+    });
+    button.addEventListener?.("blur", () => {
+      setNearHotspot(null);
+      schedulePopoverClose(220);
+    });
     button.addEventListener?.("click", (event) => {
       if (!isNavigationHotspot) {
         event.stopPropagation?.();
       }
       setHotspotLabelsVisible(false);
+      setClearMode(false);
+      setNearHotspot(button);
       openPopover(button);
       if (!isNavigationHotspot) {
         schedulePopoverClose(1600);
@@ -148,6 +205,7 @@ export function initSceneRuntime({
   function bindHotspots() {
     refreshHotspots();
     hotspotEls.forEach(bindHotspot);
+    renderHotspotLabelLayer();
   }
 
   function renderSceneHotspotsForRoom(room) {
@@ -169,6 +227,7 @@ export function initSceneRuntime({
       ...specs.map((spec) => createSceneHotspotElement(spec, documentRef)),
     );
     bindHotspots();
+    renderHotspotLabelLayer();
   }
 
   function updateNearHotspot(event) {
@@ -177,6 +236,7 @@ export function initSceneRuntime({
       return;
     }
     const padding = 48;
+    if (hotspotLabelsVisible) renderHotspotLabelLayer();
     const targetHotspot = hotspotEls.find((button) => {
       const rect = button.getBoundingClientRect?.();
       if (!rect) return false;
@@ -226,34 +286,14 @@ export function initSceneRuntime({
       if (event.target.closest(".creative-rail, .public-square-rail, .world-entry-rail, .user-rail")) return;
       if (event.target.closest(".creative-hud, .public-square-hud, .world-entry-hud, .user-hud")) return;
       if (event.target.closest(".scene-hotspot-popover")) return;
-      // On mobile (pointer-events:none), find hotspot near click point
-      var tappedHotspot = null;
-      if (hotspotEls.length) {
-        var tapPadding = 64;
-        tappedHotspot = hotspotEls.find(function(button) {
-          var rect = button.getBoundingClientRect();
-          if (!rect) return false;
-          return (
-            event.clientX >= rect.left - tapPadding &&
-            event.clientX <= rect.right + tapPadding &&
-            event.clientY >= rect.top - tapPadding &&
-            event.clientY <= rect.bottom + tapPadding
-          );
-        });
-      }
-      if (tappedHotspot) {
-        // Tap near hotspot → open its popover (handles mobile touch where pointer-events:none)
-        setHotspotLabelsVisible(false);
-        openPopover(tappedHotspot);
-        schedulePopoverClose(3200);
-        return;
-      }
-      // Click on empty scene: briefly show all hotspot labels
       if (isClearMode()) {
         setClearMode(false);
       } else {
-        setHotspotLabelsVisible(true); // auto-hide after 3200ms
+        setClearMode(true); // show labels and hide chat chrome
       }
+    });
+    windowRef?.addEventListener?.("resize", () => {
+      if (hotspotLabelsVisible) renderHotspotLabelLayer();
     });
   }
 
@@ -267,7 +307,7 @@ export function initSceneRuntime({
         if (isClearMode()) {
           setClearMode(false);
         } else {
-          setHotspotLabelsVisible(true); // briefly show hotspot labels
+          setClearMode(true); // show labels and hide chat chrome
         }
       }
     });

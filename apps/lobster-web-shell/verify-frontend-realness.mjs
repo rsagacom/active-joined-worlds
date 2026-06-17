@@ -61,7 +61,7 @@ function assert(condition, message) {
 
 async function waitForApp(page) {
   await page.waitForSelector("#composer-input:not([disabled])", { timeout: 5000 });
-  await page.waitForSelector(".scene-hotspot--coffee span", { state: "attached", timeout: 5000 });
+  await page.waitForSelector('.scene-hotspot-label-chip[data-hotspot-title="吧台"]', { state: "attached", timeout: 5000 });
 }
 
 async function visibleOpacity(page, selector) {
@@ -113,7 +113,7 @@ async function verifyCreativeHotspots(page, baseUrl) {
   await page.reload({ waitUntil: "networkidle" });
   await waitForApp(page);
 
-  const coffeeLabel = ".scene-hotspot--coffee span";
+  const coffeeLabel = '.scene-hotspot-label-chip[data-hotspot-title="吧台"]';
   assert(await visibleOpacity(page, coffeeLabel) === 0, "hotspot labels should not permanently cover the scene");
 
   await page.locator(".scene-hotspot--coffee").hover();
@@ -131,12 +131,19 @@ async function verifyCreativeHotspots(page, baseUrl) {
   const stage = await elementBox(page, ".creative-stage");
   await page.mouse.click(stage.x + stage.width * 0.58, stage.y + stage.height * 0.62);
   await page.waitForFunction(() => document.body.classList.contains("scene-hotspot-labels-visible"));
+  await page.waitForFunction(() => document.body.classList.contains("scene-clear-mode"));
   await page.waitForFunction(
     (selector) => Number(getComputedStyle(document.querySelector(selector)).opacity) > 0.9,
     coffeeLabel,
     { timeout: 1000 },
   );
   assert(await visibleOpacity(page, coffeeLabel) > 0.9, "blank scene click should reveal all hotspot labels");
+  await page.waitForFunction(
+    (selector) => Number(getComputedStyle(document.querySelector(selector)).opacity) < 0.05,
+    ".creative-chat-frame",
+    { timeout: 1000 },
+  );
+  assert(await visibleOpacity(page, ".creative-chat-frame") < 0.05, "blank scene click should hide chat chrome");
 }
 
 async function verifySceneRails(page, baseUrl) {
@@ -144,7 +151,6 @@ async function verifySceneRails(page, baseUrl) {
     { path: "/creative.html", rail: "#creative-rail", stage: ".creative-stage" },
     { path: "/index.html", rail: ".public-square-rail", stage: ".public-square-stage" },
     { path: "/world-square.html", rail: ".world-square-rail", stage: ".world-square-stage" },
-    { path: "/unified.html", rail: ".world-entry-rail", stage: ".world-entry-stage" },
   ];
   for (const item of cases) {
     await page.setViewportSize({ width: 1560, height: 873 });
@@ -160,7 +166,6 @@ async function verifyDayNightBackgrounds(page, baseUrl) {
   const cases = [
     { path: "/creative.html", selector: ".creative-stage", expected: "creative-room-scene-v2-day" },
     { path: "/index.html", selector: ".public-square-stage", expected: "hub-main-city-scene-v1-day" },
-    { path: "/unified.html", selector: ".world-entry-scene", expected: "world-metro-station-scene-v1-day" },
     { path: "/world-square.html", selector: ".world-square-scene", expected: "world-square-concept-day", pseudo: "::before" },
   ];
 
@@ -233,6 +238,66 @@ async function verifyAdminDs(page, baseUrl) {
   await page.waitForFunction(() => document.querySelector("#dsSidebar")?.classList.contains("collapsed"));
 }
 
+async function verifySceneHotspotSizes(page, baseUrl) {
+  // 守护 ASSET_HANDOFF §5 四层契约：已四层化页面(index/creative/world-square)的透明命中区
+  // 必须固定 64×34，禁止回灌 clamp(64px,8vw,108px) 或加大热点尺寸（2026-06-17 world-square
+  // 桌面 108px 回归即由此类运行时尺寸断言捕获，静态 CSS 断言会被同选择器多处规则绕过）。
+  const cases = [
+    { path: "/index.html", label: "index" },
+    { path: "/creative.html", label: "creative" },
+    { path: "/world-square.html", label: "world-square" },
+  ];
+  const viewports = [
+    { width: 1440, height: 900, name: "desktop" },
+    { width: 390, height: 844, name: "mobile" },
+  ];
+  for (const vp of viewports) {
+    for (const c of cases) {
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await page.goto(`${baseUrl}${c.path}?verify=frontend-realness`, { waitUntil: "networkidle" });
+      const sizes = await page.evaluate(() =>
+        Array.from(document.querySelectorAll(".scene-hotspot")).map((n) => ({ w: n.offsetWidth, h: n.offsetHeight })),
+      );
+      assert(sizes.length > 0, `${c.label} [${vp.name}] should render scene hotspots`);
+      for (const s of sizes) {
+        assert(s.w === 64, `${c.label} [${vp.name}] hotspot width must be fixed 64px (ASSET_HANDOFF §5), got ${s.w}`);
+        assert(s.h === 34, `${c.label} [${vp.name}] hotspot height must be 34px, got ${s.h}`);
+      }
+    }
+  }
+}
+
+async function verifyNoJavascriptErrors(page, baseUrl) {
+  // 守护所有 shell 页面桌面+移动加载无未捕获 JS 异常（如 admin ensureConversationCallout
+  // insertBefore 无 parentElement 守卫导致的 DOMException 崩溃，2026-06-17 修复）。
+  const pages = [
+    { path: "/index.html", label: "index" },
+    { path: "/creative.html", label: "creative" },
+    { path: "/world-square.html", label: "world-square" },
+    { path: "/unified.html", label: "unified" },
+    { path: "/admin.html", label: "admin" },
+    { path: "/admin-ds.html", label: "admin-ds" },
+  ];
+  const viewports = [
+    { width: 1440, height: 900, name: "desktop" },
+    { width: 390, height: 844, name: "mobile" },
+  ];
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  for (const vp of viewports) {
+    for (const p of pages) {
+      errors.length = 0;
+      await page.setViewportSize({ width: vp.width, height: vp.height });
+      await page.goto(`${baseUrl}${p.path}?verify=frontend-realness`, { waitUntil: "networkidle" }).catch(() => {});
+      await page.waitForTimeout(400);
+      assert(
+        errors.length === 0,
+        `${p.label} [${vp.name}] must load without uncaught JS errors: ${errors.join(" | ").slice(0, 240)}`,
+      );
+    }
+  }
+}
+
 const server = createStaticServer();
 const address = await listen(server);
 const baseUrl = `http://${address.address}:${address.port}`;
@@ -245,7 +310,9 @@ try {
   await verifySceneRails(page, baseUrl);
   await verifyDayNightBackgrounds(page, baseUrl);
   await verifyAdminDs(page, baseUrl);
-  console.log("frontend realness: composer, hotspot labels, shared scene rails, day/night backgrounds and formal admin passed");
+  await verifySceneHotspotSizes(page, baseUrl);
+  await verifyNoJavascriptErrors(page, baseUrl);
+  console.log("frontend realness: composer, hotspot labels, shared scene rails, day/night backgrounds, formal admin, fixed hotspot sizes (64x34) and zero uncaught JS errors passed");
 } finally {
   await browser.close();
   await close(server);

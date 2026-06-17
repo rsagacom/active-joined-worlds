@@ -1,6 +1,6 @@
 # lobster-chat Active Work Queue
 
-Last updated: 2026-06-09
+Last updated: 2026-06-16
 
 ## 2026-06-09 Codex 技术债校准与修复
 
@@ -1162,6 +1162,72 @@ zsh -n scripts/start-web-preview.sh
 node --check scripts/preview-server.mjs
 node --check scripts/smoke-web-dual-browser.mjs
 git diff --check
+```
+
+## 2026-06-16 Codex 复盘: CC 近期推进核验与技术债护栏恢复
+
+### 读取来源
+
+| 来源 | 结论 |
+| --- | --- |
+| 真实代码 | `/Volumes/AJW-Data/Projects/lobster-chat` 当前仍有较多未提交改动，包含 CC/DS 推进的 admin、世界广场、像素资产和主题实验；不能只按提交记录判断完成度 |
+| CC 近期记录 | `/Users/rsaga/.ai-checkpoints/claude-code-sessions/project-state.md` 与 2026-06-12 session 记录显示：Gateway 244、TUI 225、CLI 50、web-shell 800 tests 作为近期绿线；CSS 已做 `styles.user-shell.css` 抽取，`styles.css` 目标为 5752 行 |
+| 当前偏差 | 本轮进入时 `npm test` 表面可过，但真实覆盖已漂移：admin-ds 写操作测试被削弱，`styles.css` 被回灌到 17852 行，页面丢失 2026-06-12 拆分样式引用，creative 场景暖色遮罩被加回 |
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| admin-ds 写操作护栏 | 完成 | 恢复/补强 ban/unban/freeze/unfreeze 运行时测试，覆盖 POST body、prompt cancel、空 ID、无 gateway、JSON POST helper |
+| 受控写接口静态合同 | 完成 | 将旧“只读后台”测试修正为“读取 gateway projection + 所有写操作走统一 `fetchGatewayJsonPost` helper”，防止散落 raw POST/DELETE/PUT/PATCH |
+| CSS split 防回归 | 完成 | `index.html`、`admin.html`、`creative.html` 补回 `styles.base.css` / `styles.scene.css` / `styles.chat.css` / `styles.user-shell.css` 引用断言 |
+| `styles.css` 回退修复 | 完成 | 将 `styles.css` 从 17852 行恢复到已提交拆分基线 5752 行；回退前备份在 `/Volumes/AJW-Data/Backups/lobster-chat-style-regression-20260616/styles.css.before-restore` |
+| 场景美术护栏 | 完成 | 移除 creative day/night 之上的暖色径向遮罩，并将测试锁定到拆分后的 `styles.scene.css` 真实位置 |
+| rail 宽度覆盖 | 完成 | 修正 `styles.scene.css` 后置规则把 public-square rail 固定为 `220px` 的覆盖，统一回 `var(--im-scene-rail-width, 220px)` |
+| app.js 身份 helper 去重 | 完成 | 恢复 `shell-identity.js` 复用，移除 `app.js` 内联的 visitor/scoped/route/display helper；`fake-dom` import rewrite 白名单同步补回 |
+
+### 验证
+
+```bash
+cd /Volumes/AJW-Data/Projects/lobster-chat/apps/lobster-web-shell
+node --test test/admin-ds-runtime.test.mjs test/admin-ds-static.test.mjs test/shell-pages-static.test.mjs
+# 101 passed / 0 failed
+
+npm test
+# unit: 803 passed / 0 failed
+# layout: verify-scene-layout.mjs passed
+# realness: verify-frontend-realness.mjs passed
+```
+
+### 当前真实进度百分比
+
+| 模块 | 当前估算 | 依据 |
+| --- | ---: | --- |
+| P0 单城邦中心化 IM 真闭环 | 98% | 身份、shell state、send/edit/recall/export、presence/read、admin summary 已有测试和 smoke 基线；剩余主要是上线环境复验 |
+| P1 空间房间与交互完善 | 82% | `image_layer` / `hotspot_layer` 和 H5 渲染已成型，场景编辑器存在；仍需把编辑器 UX、移动端交互和 gateway 保存路径继续压实 |
+| P2 后台与运维可用 | 91% | admin-ds 已接入多类真实读写端点与失败反馈；邀请码/部分日志/高级配置仍有 mock 或待接入边界 |
+| P3 技术债与工程鲁棒性 | 74% | Gateway/TUI/CLI/release gate 已大量收口，CSS 拆分恢复；但 `app.js` 仍 8892 行，`admin-ds.js` 2951 行，前端模块边界仍是最大剩余债 |
+| P4 TUI/CLI parity | 95% | TUI 225、CLI 50 的近期基线存在，send/edit/recall/export parity 已补；后续以 release smoke 和真实运行复验为主 |
+| P5 真实 transport / 加密 / 跨城 | 15% | 仍属后置，不应阻塞当前单城 IM MVP |
+
+### 下一步开发计划
+
+1. 先把本轮 web-shell 护栏保持绿色，不再让 CC/DS 在 UI/素材推进时回灌拆分前 CSS 或删除测试覆盖。
+2. 继续按 TDD 拆 `app.js`，优先提取低风险纯函数：room projection/search、composer 状态、message action、scene hotspot runtime；每次只拆一个边界并跑 `node --test test/*.test.mjs`。
+3. admin-ds 继续补真实后端端点的写操作闭环；没有 Gateway 端点的模块只做禁用原因/只读投影，不做假成功态。
+4. 对世界广场、主题实验、像素资产改动补最小静态/realness 测试，防止视觉推进破坏 IM 主入口和 day/night 美术约束。
+5. 每轮 CC/DS 合并前至少跑：`npm test`、对应 Gateway/Rust 聚焦测试、`git diff --check`；大体量素材和备份继续放 `/Volumes/AJW-Data`。
+
+### 给 CC / DS v4 的继续推进提示词
+
+```text
+你接手 /Volumes/AJW-Data/Projects/lobster-chat，先读 /Users/rsaga/.codex/memories/ACTIVE-im.md、docs/ACTIVE_WORK_QUEUE.md、docs/IMPLEMENTATION_PHASES.md、docs/DEVELOPMENT_BLUEPRINT.md。当前主线是单城邦中心化 IM，gateway 合同是唯一真源，H5 是主入口，TUI/CLI 做同合同 parity。
+
+不要回灌拆分前 CSS，不要删除测试让 npm test 变绿。web-shell 当前基线：npm test 必须通过，unit 约 802 passed，layout 和 realness 也必须过；styles.css 应保持约 5752 行，base/scene/chat/user-shell 拆分样式必须被 index/admin/creative 正确引用。像素日景禁止暖黄/奶油/金色罩层，day/night 走 body[data-time-of-day] + PNG 直切。
+
+优先做非技术债业务时：只接已有 Gateway 端点，admin-ds 写操作统一走 fetchGatewayJsonPost，失败要有反馈，待接入功能必须 disabled + reason，不能假成功。推进世界广场或主题 UI 时必须保护 IM 主入口、居民房间、主城、后台三条路径。
+
+若继续技术债：按 TDD 小步拆 app.js。下一块建议提取 room projection/search 或 composer 状态纯函数，新增/移动测试后先看红灯，再实现，最后跑 npm test。不要同时改多个边界，不要动无关素材和生成包。
 ```
 
 ### 给 CC/DS 的后续建议

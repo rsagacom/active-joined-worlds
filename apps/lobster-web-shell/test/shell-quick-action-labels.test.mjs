@@ -20,6 +20,7 @@ import {
   nextQuickActionState,
   quickActionDefaultSendLabel,
   buildRoomQuickActionPillDomSpec,
+  buildRoomInlineActionsModel,
   buildRoomInlineActionDomSpec,
   buildRoomInlineProgressDomSpec,
   buildRoomInlineProgressRenderDomSpec,
@@ -196,6 +197,80 @@ test("buildRoomInlineActionsRailDomSpec: 未知 action 只保留 quickAction，�
     },
   });
   assert.equal(buildRoomInlineActionsRailDomSpec(""), null);
+});
+
+test("buildRoomInlineActionsModel: 活跃房间聚合 rail/progress 和默认按钮标签", () => {
+  assert.deepEqual(buildRoomInlineActionsModel({
+    roomId: "room:1",
+    activeRoomId: "room:1",
+    action: "委托",
+    state: "已回执",
+  }), {
+    action: "委托",
+    state: "已回执",
+    primarySpec: null,
+    secondarySpec: null,
+    primaryLabel: "补充委托",
+    secondaryLabel: "标记已完成",
+    railDomSpec: {
+      className: "room-inline-actions",
+      dataset: {
+        quickAction: "委托",
+        actionIntensity: "strong",
+      },
+    },
+    progressDomSpec: {
+      type: "div",
+      className: "room-inline-progress",
+      dataset: {
+        actionIntensity: "strong",
+      },
+      title: "委托已有回执，后续等待确认完成。",
+      tabIndex: 0,
+      attributes: {
+        role: "button",
+      },
+      children: [
+        {
+          type: "span",
+          className: "room-inline-progress-count",
+          text: "2 / 3",
+        },
+        {
+          type: "span",
+          className: "room-inline-progress-label",
+          text: "已回执",
+        },
+      ],
+      stageIndex: 1,
+      stageCount: 3,
+    },
+  });
+});
+
+test("buildRoomInlineActionsModel: 合同按钮覆盖默认标签并过滤非活跃房间", () => {
+  const primarySpec = { label: "合同跟进委托", action: "委托" };
+  const secondarySpec = { label: "合同标记已回执", action: "委托", next_state: "已回执" };
+
+  const model = buildRoomInlineActionsModel({
+    roomId: "room:1",
+    activeRoomId: "room:1",
+    action: "委托",
+    state: "待回执",
+    primarySpec,
+    secondarySpec,
+  });
+
+  assert.equal(model.primaryLabel, "合同跟进委托");
+  assert.equal(model.secondaryLabel, "合同标记已回执");
+  assert.equal(model.primarySpec, primarySpec);
+  assert.equal(model.secondarySpec, secondarySpec);
+  assert.equal(buildRoomInlineActionsModel({
+    roomId: "room:1",
+    activeRoomId: "room:2",
+    action: "委托",
+    state: "待回执",
+  }), null);
 });
 
 test("buildRoomInlineActionDomSpec: 生成 primary/secondary 动作节点规格", () => {

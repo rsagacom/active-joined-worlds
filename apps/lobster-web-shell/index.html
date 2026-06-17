@@ -92,28 +92,34 @@
           <button type="button" id="hud-login-toggle" class="hud-login-toggle shell-hidden" aria-label="打开登录窗口">登录</button>
           <span class="hub-hud-chip">群聊</span>
           <span id="hud-status" class="hud-pill">连线中</span>
-          <button type="button" id="theme-toggle" class="theme-toggle" aria-label="切换亮色/暗色模式" title="切换亮色/暗色模式">☀️</button>
         </div>
       </header>
 
       <main class="sfc-layout sfc-city-layout public-square-layout" aria-label="城邦公共聊天">
-        <aside class="sfc-rail sfc-city-rail public-square-rail" data-shell-column="rooms">
-          <div class="rail-title">导航</div>
-          <div class="rail-actions">
-            <a href="./creative.html" class="rail-item">
-              <span class="rail-item-label">住宅</span>
-            </a>
-            <a href="./index.html" class="rail-item is-active" aria-current="page">
-              <span class="rail-item-label">主城</span>
-            </a>
-            <a href="./unified.html" class="rail-item">
-              <span class="rail-item-label">世界入口</span>
-            </a>
+        <aside id="creative-rail" class="sfc-rail creative-rail public-square-rail" data-shell-column="rooms" aria-hidden="true">
+          <div class="creative-rail-stack">
+            <div class="rail-title">导航</div>
+            <div class="rail-actions">
+              <a href="./creative.html" class="rail-item">
+                <span class="rail-label">住宅</span>
+              </a>
+              <a href="./index.html" class="rail-item is-active" aria-current="page">
+                <span class="rail-label">主城</span>
+              </a>
+              <a href="./world-square.html" class="rail-item">
+                <span class="rail-label">世界</span>
+              </a>
+              <a id="scene-editor-link" href="./scene-editor.html" class="rail-item rail-item--scene-editor" data-rail-visibility="owner-only" title="编辑房间场景">
+                <span class="rail-label">🎨 场景</span>
+              </a>
+            </div>
           </div>
-          <div class="rail-section">
-            <div class="rail-section-title">频道</div>
-            <ul id="room-list" class="rail-list public-square-list"></ul>
+          <div class="creative-rail-divider">
+            <span>居民</span>
+            <input id="room-search-input" class="rail-search-input" type="text" placeholder="搜索居民或房间..." autocomplete="off" />
           </div>
+          <ul id="resident-list" class="rail-list creative-resident-list"></ul>
+          <ul id="room-list" class="rail-list creative-room-list"></ul>
         </aside>
 
         <section class="sfc-stage sfc-city-stage public-square-stage">
@@ -122,12 +128,14 @@
             class="stage-canvas public-square-stage-canvas"
             aria-label="主城场景画布"
           ></canvas>
+          <div class="scene-hotspot-label-layer public-square-hotspot-label-layer" aria-hidden="true"></div>
+
           <div class="scene-hotspots public-square-hotspots" aria-label="主城热点">
             <a
-              href="./unified.html"
+              href="./world-square.html"
               class="scene-hotspot scene-hotspot--metro"
               data-hotspot-title="地铁口"
-              data-hotspot-copy="通过地铁站进入世界入口。"
+              data-hotspot-copy="通过地铁站前往世界。"
             >
               <span>地铁口</span>
             </a>
@@ -306,6 +314,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=20260525-h5-shell-fix-v2"></script>
+    <script type="module" src="./app.js?v=20260616-clear-empty-skeleton"></script>
   </body>
 </html>

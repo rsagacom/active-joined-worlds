@@ -1744,13 +1744,17 @@
         }
         if (gatewayAuditLogs.length > 0) {
           logs = gatewayAuditLogs;
+        } else if (DS && DS.logs && DS.logs.length > 0) {
+          logs = DS.logs;
         }
-        // else: Gateway returned no events — keep existing logs, don't disrupt UI
+      } else if (DS && DS.logs && DS.logs.length > 0) {
+        logs = DS.logs;
       }
-      // else (result null or no .events): keep existing logs, don't disrupt UI
     } catch (e) {
       showAdminNotice('加载审计日志失败: ' + (e.message || '网络错误'), 'error');
-      // keep existing logs, don't disrupt UI
+      if (DS && DS.logs && DS.logs.length > 0) {
+        logs = DS.logs;
+      }
     }
     renderLogs(
       document.getElementById('logLevelFilter') ? document.getElementById('logLevelFilter').value : 'all',
@@ -2720,24 +2724,6 @@
         tdStatus.appendChild(makeTag(sl, sc));
         tr.appendChild(tdStatus);
         tr.appendChild(makeTd(sanction.issued_by));
-        var tdAction = el('td');
-        if (sanction.status === 'Active' && sanction.sanction_id) {
-          var liftBtn = makeBtn('解除', 'ds-btn-outline ds-btn-xs');
-          liftBtn.style.color = 'var(--ds-success)';
-          liftBtn.addEventListener('click', function () {
-            if (confirm('确定解除制裁 ' + sanction.sanction_id + ' 吗？')) {
-              fetchGatewayJsonPost('/v1/admin/residents/unsanction', {
-                actor_id: currentGatewayIdentity(),
-                sanction_id: sanction.sanction_id,
-              }).then(function (res) {
-                if (res.error) { showAdminNotice('解除失败: ' + res.error, 'error'); }
-                else { showAdminNotice('制裁已解除', 'success'); loadSafetyData(); }
-              });
-            }
-          });
-          tdAction.appendChild(liftBtn);
-        }
-        tr.appendChild(tdAction);
         tbody.appendChild(tr);
       })(residentSanctions[i]);
     }

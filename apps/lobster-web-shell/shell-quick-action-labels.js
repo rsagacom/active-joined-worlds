@@ -168,6 +168,10 @@ export function quickActionFollowUpCopy(action, state = "") {
   return quickActionStage(action, state)?.copy || "";
 }
 
+export function quickActionAdvanceLabel(action, state = "") {
+  return quickActionStage(action, state)?.advanceLabel || "";
+}
+
 export function quickActionBadgeLabel(action) {
   return action ? `动作 ${action}` : "";
 }
@@ -204,6 +208,30 @@ export function buildRoomInlineActionsRailDomSpec(action = "") {
   return {
     className: "room-inline-actions",
     dataset,
+  };
+}
+
+export function buildRoomInlineActionsModel({
+  roomId = "",
+  activeRoomId = "",
+  action = "",
+  state = "",
+  primarySpec = null,
+  secondarySpec = null,
+} = {}) {
+  if (!roomId || roomId !== activeRoomId || !action) return null;
+  const primaryLabel = primarySpec?.label || quickActionOverviewCtaLabel(action, state);
+  const secondaryLabel = secondarySpec?.label || quickActionAdvanceLabel(action, state);
+  if (!primaryLabel && !secondaryLabel) return null;
+  return {
+    action,
+    state,
+    primarySpec: primarySpec || null,
+    secondarySpec: secondarySpec || null,
+    primaryLabel,
+    secondaryLabel,
+    railDomSpec: buildRoomInlineActionsRailDomSpec(action),
+    progressDomSpec: buildRoomInlineProgressRenderDomSpec(action, state),
   };
 }
 

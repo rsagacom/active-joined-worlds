@@ -8,13 +8,16 @@ const WEB_SHELL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 export const APP_LOCAL_IMPORT_PATHS = Object.freeze([
   "./composer-state.js",
   "./shell-composer.js",
+  "./shell-avatar.js",
   "./shell-dom-helpers.js",
   "./shell-errors.js",
+  "./shell-export-utils.js",
   "./shell-gateway.js",
   "./shell-identity.js",
   "./shell-labels.js",
   "./shell-message-state.js",
   "./shell-message-render.js",
+  "./shell-message-search.js",
   "./shell-quick-action-labels.js",
   "./shell-quick-action-templates.js",
   "./shell-quick-action-preview.js",
@@ -22,9 +25,9 @@ export const APP_LOCAL_IMPORT_PATHS = Object.freeze([
   "./shell-quick-actions.js",
   "./shell-payload.js",
   "./shell-state-normalize.js",
+  "./shell-timeline-empty-state.js",
   "./shell-scene-runtime.js",
   "./shell-auth.js",
-  "./shell-avatar.js",
   "./shell-room-profiles.js",
   "./shell-role-permissions.js",
   "./shell-shared.js",
@@ -507,6 +510,10 @@ class FakeDocument {
     return new FakeTextNode(text, this);
   }
 
+  getElementById(id) {
+    return this._byId.get(String(id)) || null;
+  }
+
   querySelector(selector) {
     return this._queryFrom(this.body, selector, true)[0] || null;
   }
@@ -525,10 +532,6 @@ class FakeDocument {
   dispatchEvent(event) {
     const handlers = this._listeners.get(event.type) || [];
     for (const handler of handlers) handler.call(this, event);
-  }
-
-  getElementById(id) {
-    return this._byId.get(id) || null;
   }
 
   _indexById(id, element) {

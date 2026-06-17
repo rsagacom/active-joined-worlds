@@ -1084,7 +1084,7 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .hub-hud-chip {
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-layout {
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: var(--im-scene-rail-width, 220px) minmax(0, 1fr);
   gap: 14px;
 }
 

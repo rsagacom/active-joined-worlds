@@ -313,6 +313,17 @@ async function requestMobileOtp() {
   setAuthStatus(`手机验证码已发往 ${response.masked_mobile} · ${deliveryNote}`);
 }
 
+export function enterDemoVerifyStep(maskedEmail) {
+  _authSession = {
+    challengeId: "demo-challenge",
+    maskedEmail: maskedEmail || "demo@example.com",
+    expiresAtMs: Date.now() + 300000,
+    deliveryMode: "email",
+  };
+  persistAuthDraft();
+  updateAuthFormState();
+}
+
 export async function verifyEmailOtp() {
   const challengeId = (_authSession.challengeId || _els.challengeInputEl?.value || "").trim();
   const code = _els.codeInputEl?.value?.trim() || "";
@@ -322,6 +333,27 @@ export async function verifyEmailOtp() {
   }
   if (!code) {
     setAuthStatus("请填写验证码", true);
+    return;
+  }
+  if (challengeId === "demo-challenge") {
+    const residentId = _callbacks.desiredResidentId ? _callbacks.desiredResidentId() : "demo-resident";
+    if (_callbacks.persistIdentity) {
+      _callbacks.persistIdentity(residentId);
+    }
+    if (_els.residentInputEl) _els.residentInputEl.value = residentId;
+    _sessionToken = "demo-session-token";
+    safeLocalStorageSet("lobster-session-token", _sessionToken);
+    _authSession = {
+      challengeId: null,
+      maskedEmail: _authSession.maskedEmail || "",
+      expiresAtMs: null,
+      deliveryMode: null,
+    };
+    if (_els.challengeInputEl) _els.challengeInputEl.value = "";
+    if (_els.codeInputEl) _els.codeInputEl.value = "";
+    persistAuthDraft();
+    if (_callbacks.refreshFromGateway) await _callbacks.refreshFromGateway();
+    setAuthStatus(`已登录为 ${residentId}`);
     return;
   }
   const isMobile = challengeId.startsWith("mobile-otp:");

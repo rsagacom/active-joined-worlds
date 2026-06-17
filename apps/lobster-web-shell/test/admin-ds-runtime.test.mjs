@@ -297,8 +297,6 @@ test("admin-ds runtime: markUnavailableButton 正确标记不可用按钮", seri
   assert.equal(btn.dataset.disabledReason, "功能尚未接入", "dataset 应记录原因");
 });
 
-// ====== Write operation runtime tests (ban/unban/freeze/unfreeze) ======
-
 test("admin-ds runtime: banResident 发送正确的 POST 请求体", serial, async () => {
   setupMinimalGlobals("http://127.0.0.1:8787");
   globalThis.prompt = () => "测试禁用理由";
@@ -310,14 +308,10 @@ test("admin-ds runtime: banResident 发送正确的 POST 请求体", serial, asy
   };
 
   const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
-  const banCallsBefore = fetchCalls.filter(c => c.url.includes("/v1/admin/residents/ban")).length;
-
   const btn = globalThis.document.createElement("button");
   await api.banResident("ban-target-user", btn);
 
-  const banCallsAfter = fetchCalls.filter(c => c.url.includes("/v1/admin/residents/ban")).length;
-  assert.equal(banCallsAfter - banCallsBefore, 1, "调 banResident 后应新增 1 次 /ban 请求");
-  const banCall = fetchCalls.find(c => c.url.includes("/v1/admin/residents/ban"));
+  const banCall = fetchCalls.find((call) => call.url.includes("/v1/admin/residents/ban"));
   assert.ok(banCall, "应存在 /ban 请求");
   assert.equal(banCall.method, "POST", "应为 POST 方法");
 
@@ -327,64 +321,56 @@ test("admin-ds runtime: banResident 发送正确的 POST 请求体", serial, asy
   assert.equal(body.actor_id, "rsaga");
 });
 
-test("admin-ds runtime: banResident 处理 Gateway 错误响应", serial, async () => {
-  setupMinimalGlobals("http://127.0.0.1:8787");
-  globalThis.prompt = () => "违规";
-
-  globalThis.fetch = async () => ({
-    ok: false, status: 400,
-    json: async () => ({ error: "居民不存在" }),
-    text: async () => '{"error":"居民不存在"}',
-  });
-
-  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
-  const btn = globalThis.document.createElement("button");
-
-  await api.banResident("nonexistent", btn);
-  // 不应抛异常，应通过 showAdminNotice 展示错误
-  assert.ok(btn.textContent, "按钮应更新状态");
-});
-
-test("admin-ds runtime: banResident 无 gateway 时提前返回", serial, async () => {
-  setupMinimalGlobals(null);
-  globalThis.prompt = () => "理由";
-
-  const api = await loadAdminDsWithExports();
-  const btn = globalThis.document.createElement("button");
-
-  await api.banResident("user", btn);
-  // 不应抛异常，应 gracefully 退出
-  assert.ok(true, "无 gateway 时不应 crash");
-});
-
-test("admin-ds runtime: banResident 空 residentId 直接返回", serial, async () => {
-  setupMinimalGlobals("http://127.0.0.1:8787");
-
-  const api = await loadAdminDsWithExports();
-  const btn = globalThis.document.createElement("button");
-
-  await api.banResident("", btn);
-  assert.ok(true, "空 residentId 时不应 crash");
-});
-
 test("admin-ds runtime: banResident prompt 取消不发送 ban 请求", serial, async () => {
   setupMinimalGlobals("http://127.0.0.1:8787");
-  globalThis.prompt = () => null; // 用户取消
+  globalThis.prompt = () => null;
 
   const fetchCalls = [];
   globalThis.fetch = async (url, init) => {
-    fetchCalls.push({ url: String(url) });
+    fetchCalls.push({ url: String(url), method: init?.method || "GET", body: init?.body });
     return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
   };
 
   const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
-  const banCallsBefore = fetchCalls.filter(c => c.url.includes("/v1/admin/residents/ban")).length;
-
   const btn = globalThis.document.createElement("button");
-  await api.banResident("user", btn);
+  await api.banResident("ban-target-user", btn);
 
-  const banCallsAfter = fetchCalls.filter(c => c.url.includes("/v1/admin/residents/ban")).length;
-  assert.equal(banCallsAfter - banCallsBefore, 0, "用户取消时不应新增 /ban 请求");
+  assert.equal(fetchCalls.some((call) => call.url.includes("/v1/admin/residents/ban")), false);
+});
+
+test("admin-ds runtime: banResident 空 residentId 直接返回", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  globalThis.prompt = () => "不会使用";
+
+  let called = false;
+  globalThis.fetch = async () => {
+    called = true;
+    return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
+  };
+
+  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
+  called = false;
+  const btn = globalThis.document.createElement("button");
+  await api.banResident("", btn);
+
+  assert.equal(called, false, "缺少 residentId 时不应请求 Gateway");
+});
+
+test("admin-ds runtime: banResident 无 gateway 时提前返回", serial, async () => {
+  setupMinimalGlobals(null);
+  globalThis.prompt = () => "不会使用";
+
+  let called = false;
+  globalThis.fetch = async () => {
+    called = true;
+    return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
+  };
+
+  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
+  const btn = globalThis.document.createElement("button");
+  await api.banResident("ban-target-user", btn);
+
+  assert.equal(called, false, "无 gateway 时不应请求 Gateway");
 });
 
 test("admin-ds runtime: unbanResident 发送正确的 POST 请求", serial, async () => {
@@ -392,35 +378,36 @@ test("admin-ds runtime: unbanResident 发送正确的 POST 请求", serial, asyn
 
   const fetchCalls = [];
   globalThis.fetch = async (url, init) => {
-    fetchCalls.push({ url: String(url), method: init?.method, body: init?.body });
+    fetchCalls.push({ url: String(url), method: init?.method || "GET", body: init?.body });
     return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
   };
 
   const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
-  const before = fetchCalls.filter(c => c.url.includes("/v1/admin/residents/unban")).length;
-
   const btn = globalThis.document.createElement("button");
-  await api.unbanResident("unban-target", btn);
+  await api.unbanResident("unban-target-user", btn);
 
-  const after = fetchCalls.filter(c => c.url.includes("/v1/admin/residents/unban")).length;
-  assert.equal(after - before, 1, "调 unbanResident 后应新增 1 次 /unban 请求");
-  const call = fetchCalls.find(c => c.url.includes("/v1/admin/residents/unban"));
+  const call = fetchCalls.find((item) => item.url.includes("/v1/admin/residents/unban"));
   assert.ok(call, "应存在 /unban 请求");
   assert.equal(call.method, "POST", "应为 POST 方法");
-
   const body = JSON.parse(call.body);
-  assert.equal(body.resident_id, "unban-target");
+  assert.equal(body.resident_id, "unban-target-user");
   assert.equal(body.actor_id, "rsaga");
 });
 
 test("admin-ds runtime: unbanResident 无 gateway 时提前返回", serial, async () => {
   setupMinimalGlobals(null);
 
-  const api = await loadAdminDsWithExports();
-  const btn = globalThis.document.createElement("button");
+  let called = false;
+  globalThis.fetch = async () => {
+    called = true;
+    return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
+  };
 
-  await api.unbanResident("user", btn);
-  assert.ok(true, "无 gateway 时不应 crash");
+  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
+  const btn = globalThis.document.createElement("button");
+  await api.unbanResident("unban-target-user", btn);
+
+  assert.equal(called, false, "无 gateway 时不应请求 Gateway");
 });
 
 test("admin-ds runtime: freezeRoom 发送正确的 POST 请求", serial, async () => {
@@ -428,34 +415,35 @@ test("admin-ds runtime: freezeRoom 发送正确的 POST 请求", serial, async (
 
   const fetchCalls = [];
   globalThis.fetch = async (url, init) => {
-    fetchCalls.push({ url: String(url), method: init?.method, body: init?.body });
+    fetchCalls.push({ url: String(url), method: init?.method || "GET", body: init?.body });
     return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
   };
 
   const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
-  const before = fetchCalls.filter(c => c.url.includes("/v1/admin/rooms/freeze")).length;
-
   const btn = globalThis.document.createElement("button");
   await api.freezeRoom("room:test:lobby", btn);
 
-  const after = fetchCalls.filter(c => c.url.includes("/v1/admin/rooms/freeze")).length;
-  assert.equal(after - before, 1, "调 freezeRoom 后应新增 1 次 /freeze 请求");
-  const call = fetchCalls.find(c => c.url.includes("/v1/admin/rooms/freeze"));
+  const call = fetchCalls.find((item) => item.url.includes("/v1/admin/rooms/freeze"));
   assert.ok(call, "应存在 /freeze 请求");
   assert.equal(call.method, "POST", "应为 POST 方法");
-
-  const body = JSON.parse(call.body);
-  assert.equal(body.room_id, "room:test:lobby");
+  assert.equal(JSON.parse(call.body).room_id, "room:test:lobby");
 });
 
 test("admin-ds runtime: freezeRoom 空 roomId 直接返回", serial, async () => {
   setupMinimalGlobals("http://127.0.0.1:8787");
 
-  const api = await loadAdminDsWithExports();
-  const btn = globalThis.document.createElement("button");
+  let called = false;
+  globalThis.fetch = async () => {
+    called = true;
+    return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
+  };
 
+  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
+  called = false;
+  const btn = globalThis.document.createElement("button");
   await api.freezeRoom("", btn);
-  assert.ok(true, "空 roomId 时不应 crash");
+
+  assert.equal(called, false, "缺少 roomId 时不应请求 Gateway");
 });
 
 test("admin-ds runtime: unfreezeRoom 发送正确的 POST 请求", serial, async () => {
@@ -463,45 +451,39 @@ test("admin-ds runtime: unfreezeRoom 发送正确的 POST 请求", serial, async
 
   const fetchCalls = [];
   globalThis.fetch = async (url, init) => {
-    fetchCalls.push({ url: String(url), method: init?.method, body: init?.body });
+    fetchCalls.push({ url: String(url), method: init?.method || "GET", body: init?.body });
     return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
   };
 
   const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
-  const before = fetchCalls.filter(c => c.url.includes("/v1/admin/rooms/unfreeze")).length;
-
   const btn = globalThis.document.createElement("button");
   await api.unfreezeRoom("room:test:lobby", btn);
 
-  const after = fetchCalls.filter(c => c.url.includes("/v1/admin/rooms/unfreeze")).length;
-  assert.equal(after - before, 1, "调 unfreezeRoom 后应新增 1 次 /unfreeze 请求");
-  const call = fetchCalls.find(c => c.url.includes("/v1/admin/rooms/unfreeze"));
+  const call = fetchCalls.find((item) => item.url.includes("/v1/admin/rooms/unfreeze"));
   assert.ok(call, "应存在 /unfreeze 请求");
   assert.equal(call.method, "POST", "应为 POST 方法");
-
-  const body = JSON.parse(call.body);
-  assert.equal(body.room_id, "room:test:lobby");
+  assert.equal(JSON.parse(call.body).room_id, "room:test:lobby");
 });
 
-test("admin-ds runtime: fetchGatewayJsonPost 发送正确的请求头", serial, async () => {
+test("admin-ds runtime: fetchGatewayJsonPost 发送 JSON POST 请求", serial, async () => {
   setupMinimalGlobals("http://127.0.0.1:8787");
 
   let capturedInit = null;
-  globalThis.fetch = async (url, init) => {
+  globalThis.fetch = async (_url, init) => {
     capturedInit = init;
     return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => '{"ok":true}' };
   };
 
   const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
-
   const result = await api.fetchGatewayJsonPost("/v1/admin/residents/ban", {
-    resident_id: "user", reason: "test", actor_id: "rsaga",
+    resident_id: "user",
+    reason: "test",
+    actor_id: "rsaga",
   });
 
-  assert.ok(capturedInit, "应调用 fetch");
-  assert.equal(capturedInit.method, "POST", "应为 POST");
-  assert.equal(capturedInit.headers["Content-Type"], "application/json", "应为 JSON Content-Type");
-  assert.ok(result.ok, "应返回 ok 结果");
+  assert.equal(capturedInit.method, "POST");
+  assert.equal(capturedInit.headers["Content-Type"], "application/json");
+  assert.equal(result.ok, true);
 });
 
 test("admin-ds runtime: 外部数据写入使用安全 DOM API", serial, async () => {

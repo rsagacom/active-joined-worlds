@@ -18,6 +18,16 @@ function sliceBetween(source, startMarker, endMarker) {
   return source.slice(start, end);
 }
 
+function assertInOrder(source, markers, context) {
+  let cursor = -1;
+  for (const marker of markers) {
+    const index = source.indexOf(marker, cursor + 1);
+    assert.notEqual(index, -1, `${context} missing marker: ${marker}`);
+    assert.ok(index > cursor, `${context} marker out of order: ${marker}`);
+    cursor = index;
+  }
+}
+
 test("hub page is now main-city group chat page with canvas and timeline", async () => {
   const html = await readShellPage("index.html");
 
@@ -27,9 +37,13 @@ test("hub page is now main-city group chat page with canvas and timeline", async
   assert.match(html, /id="room-stage-canvas"/);
   assert.match(html, /id="timeline"/);
   assert.match(html, /id="composer"/);
+  assert.match(html, /styles\.base\.css\?v=20260612-css-split/);
+  assert.match(html, /styles\.scene\.css\?v=20260612-css-split/);
+  assert.match(html, /styles\.chat\.css\?v=20260612-css-split/);
   assert.match(html, /styles\.css\?v=20260525-h5-shell-fix-v2/);
+  assert.match(html, /styles\.user-shell\.css\?v=20260612-user-shell-extract/);
   assert.match(html, /styles\.pixel-map\.css\?v=20260525-h5-shell-fix-v2/);
-  assert.match(html, /app\.js\?v=20260525-h5-shell-fix-v2/);
+  assert.match(html, /app\.js\?v=20260616-clear-empty-skeleton/);
   assert.match(html, /data-symbol-trigger/);
   assert.match(html, /composer-symbol-category/);
   assert.match(html, /高兴/);
@@ -37,12 +51,12 @@ test("hub page is now main-city group chat page with canvas and timeline", async
   assert.match(html, /震惊 \/ 尴尬/);
   assert.match(html, /@用户名/);
   assert.match(html, /class="[^"]*sfc-city-stage[^"]*"/);
-  // 居民侧主导航只保留住宅、主城与世界入口，城主治理入口不混入普通交流页。
+  // 居民侧主导航统一为住宅、主城、世界（指向 world-square）+ 场景。
   assert.match(html, /href="\.\/creative\.html"/);
   assert.match(html, /href="\.\/index\.html"/);
-  assert.match(html, /href="\.\/unified\.html"/);
+  assert.match(html, /href="\.\/world-square\.html"/);
   assert.match(html, /class="scene-hotspot scene-hotspot--metro"/);
-  assert.match(html, /href="\.\/unified\.html"[\s\S]*地铁口/);
+  assert.match(html, /href="\.\/world-square\.html"[\s\S]*地铁口/);
   assert.doesNotMatch(html, /pixel-map--city|map-sprite--city/);
   assert.doesNotMatch(html, /href="\.\/admin\.html"/);
 });
@@ -57,7 +71,7 @@ test("creative page is the residential pixel room entry", async () => {
   assert.match(html, /data-default-room-id="dm:rsaga:builder"/);
   assert.match(html, /href="\.\/creative\.html" class="rail-item is-active" aria-current="page"/);
   assert.match(html, /href="\.\/index\.html"/);
-  assert.match(html, /href="\.\/unified\.html"/);
+  assert.match(html, /href="\.\/world-square\.html"/);
   assert.match(html, /class="scene-hotspot scene-hotspot--stairs"/);
   assert.match(html, /href="\.\/index\.html"[\s\S]*楼梯/);
   assert.match(html, /<div class="creative-rail-divider">[\s\S]*?居民[\s\S]*?<\/div>/);
@@ -65,8 +79,9 @@ test("creative page is the residential pixel room entry", async () => {
   assert.match(html, /id="room-search-input"/);
   assert.match(html, /placeholder="搜索居民或房间..."/);
   assert.match(html, /styles\.creative\.css\?v=20260525-h5-shell-fix-v2/);
+  assert.match(html, /styles\.user-shell\.css\?v=20260612-user-shell-extract/);
   assert.match(html, /styles\.pixel-map\.css\?v=20260525-h5-shell-fix-v2/);
-  assert.match(html, /app\.js\?v=20260525-h5-shell-fix-v2/);
+  assert.match(html, /app\.js\?v=20260616-clear-empty-skeleton/);
   assert.match(html, /data-symbol-trigger/);
   assert.match(html, /composer-symbol-category/);
   assert.match(html, /卖萌/);
@@ -79,7 +94,11 @@ test("admin page has collapsible management navigation and tool groups", async (
   const html = await readShellPage("admin.html");
 
   assert.match(html, /<title>龙虾聊天 · 管理后台<\/title>/);
+  assert.match(html, /href="\.\/styles\.base\.css\?v=20260612-css-split"/);
+  assert.match(html, /href="\.\/styles\.scene\.css\?v=20260612-css-split"/);
+  assert.match(html, /href="\.\/styles\.chat\.css\?v=20260612-css-split"/);
   assert.match(html, /href="\.\/styles\.css\?v=20260525-h5-shell-fix-v2"/);
+  assert.match(html, /href="\.\/styles\.user-shell\.css\?v=20260612-user-shell-extract"/);
   assert.match(html, /管理后台/);
 
   // 左侧是可收起管理目录，仍保留会话队列作为首个日常入口。
@@ -467,6 +486,188 @@ test("admin workspace css keeps auth and detail panels workspace-driven", async 
   );
 });
 
+test("workspace application state and DOM sync are delegated out of applyWorkspace", async () => {
+  const source = await readShellModule("app.js");
+  const viewStateResolver = sliceBetween(
+    source,
+    "function workspaceViewState() {",
+    "function applyWorkspaceBodyState(viewState) {",
+  );
+  const bodyStateApplier = sliceBetween(
+    source,
+    "function applyWorkspaceBodyState(viewState) {",
+    "function syncWorkspaceTabState() {",
+  );
+  const tabSyncer = sliceBetween(
+    source,
+    "function syncWorkspaceTabState() {",
+    "function applyWorkspacePanelVisibility(viewState) {",
+  );
+  const panelVisibilityApplier = sliceBetween(
+    source,
+    "function applyWorkspacePanelVisibility(viewState) {",
+    "function applyWorkspaceChromeEnhancements() {",
+  );
+  const chromeEnhancer = sliceBetween(
+    source,
+    "function applyWorkspaceChromeEnhancements() {",
+    "function applyWorkspace() {",
+  );
+  const workspaceApplier = sliceBetween(
+    source,
+    "function applyWorkspace() {",
+    "function updatePanelTitles() {",
+  );
+
+  assert.match(viewStateResolver, /const shellPage = currentShellPage\(\)/);
+  assert.match(viewStateResolver, /inlineChatDetail: currentWorkspace === "chat" && isUserShell/);
+  assert.match(viewStateResolver, /showChatGovernanceRail: currentWorkspace === "governance"/);
+  assert.match(bodyStateApplier, /document\.body\.dataset\.workspace = currentWorkspace/);
+  assert.match(bodyStateApplier, /syncChatFocusWithWorkspace\(\)/);
+  assert.match(bodyStateApplier, /document\.body\.dataset\.chatPane = currentWorkspace === "chat" \? chatPaneMode : "split"/);
+  assert.match(bodyStateApplier, /layoutEl\?\.classList\.toggle\("layout-chat-inline-detail", viewState\.inlineChatDetail\)/);
+  assert.match(tabSyncer, /for \(const button of workspaceTabs\) \{/);
+  assert.match(tabSyncer, /button\.setAttribute\("aria-current", "page"\)/);
+  assert.match(panelVisibilityApplier, /guidePanelEl\?\.classList\.toggle/);
+  assert.match(panelVisibilityApplier, /governancePanelEl\?\.classList\.toggle/);
+  assert.match(panelVisibilityApplier, /toggleElements\(governanceBrowseBlocks/);
+  assert.match(panelVisibilityApplier, /toggleElements\(worldActionForms/);
+  assert.match(panelVisibilityApplier, /toggleElements\(governanceAdminForms/);
+  assert.match(chromeEnhancer, /ensureChatFocusToggle\(\)/);
+  assert.match(chromeEnhancer, /ensureConversationCallout\(\)/);
+  assert.match(chromeEnhancer, /ensureChatPaneToggle\(\)/);
+  assert.match(workspaceApplier, /const viewState = workspaceViewState\(\)/);
+  assert.match(workspaceApplier, /applyWorkspaceBodyState\(viewState\)/);
+  assert.match(workspaceApplier, /syncWorkspaceTabState\(\)/);
+  assert.match(workspaceApplier, /applyWorkspacePanelVisibility\(viewState\)/);
+  assert.match(workspaceApplier, /applyWorkspaceChromeEnhancements\(\)/);
+  assert.doesNotMatch(workspaceApplier, /for \(const button of workspaceTabs\)/);
+  assert.doesNotMatch(workspaceApplier, /guidePanelEl\?\.classList\.toggle/);
+  assert.doesNotMatch(workspaceApplier, /ensureChatQuickLinks\(\)/);
+});
+
+test("shell mode DOM sync is delegated out of applyShellMode", async () => {
+  const source = await readShellModule("app.js");
+  const viewStateResolver = sliceBetween(
+    source,
+    "function shellModeViewState() {",
+    "function applyShellModeBodyDataset(viewState) {",
+  );
+  const bodyDatasetSync = sliceBetween(
+    source,
+    "function applyShellModeBodyDataset(viewState) {",
+    "function updateShellModeBadge(viewState) {",
+  );
+  const badgeSync = sliceBetween(
+    source,
+    "function updateShellModeBadge(viewState) {",
+    "function updateShellModeDocumentTitle(viewState) {",
+  );
+  const titleSync = sliceBetween(
+    source,
+    "function updateShellModeDocumentTitle(viewState) {",
+    "function updateShellModeMasthead(viewState) {",
+  );
+  const mastheadSync = sliceBetween(
+    source,
+    "function updateShellModeMasthead(viewState) {",
+    "function renderShellModeGuide(config) {",
+  );
+  const guideRenderer = sliceBetween(
+    source,
+    "function renderShellModeGuide(config) {",
+    "function toggleShellModeEntryGrid(shellPage) {",
+  );
+  const entryGridToggle = sliceBetween(
+    source,
+    "function toggleShellModeEntryGrid(shellPage) {",
+    "function toggleShellModeStatusChrome(compactShell) {",
+  );
+  const statusToggle = sliceBetween(
+    source,
+    "function toggleShellModeStatusChrome(compactShell) {",
+    "function toggleAdminShellRoleVisibility(hideAdmin) {",
+  );
+  const adminToggle = sliceBetween(
+    source,
+    "function toggleAdminShellRoleVisibility(hideAdmin) {",
+    "function applyShellMode() {",
+  );
+  const applySource = sliceBetween(
+    source,
+    "function applyShellMode() {",
+    "function updateShellEntryCards(mode) {",
+  );
+
+  assert.match(viewStateResolver, /shellMode = resolveShellMode\(\)/);
+  assert.match(viewStateResolver, /compactShell = shellPage === "user" \|\| shellPage === "admin"/);
+  assert.match(bodyDatasetSync, /document\.body\.dataset\.shellMode = viewState\.shellMode/);
+  assert.match(badgeSync, /shellModeBadgeEl\.textContent/);
+  assert.match(badgeSync, /shellModeBadgeEl\.classList\.toggle\("shell-hidden", viewState\.compactShell\)/);
+  assert.match(titleSync, /document\.title = `龙虾聊天 · \$\{translateShellMode\(viewState\.shellMode\)\}`/);
+  assert.match(mastheadSync, /mastheadEyebrowEl\.textContent = viewState\.shellPage === "hub" \? "龙虾聊天" : viewState\.config\.eyebrow/);
+  assert.match(guideRenderer, /for \(const item of config\.guide\) \{/);
+  assert.match(entryGridToggle, /entryGridEl\.classList\.toggle\("shell-hidden", shellPage !== "hub"\)/);
+  assert.match(statusToggle, /transportStateEl\?\.classList\.toggle\("shell-hidden", compactShell\)/);
+  assert.match(adminToggle, /document\.querySelectorAll\("\[data-shell-role='admin'\]"\)/);
+  assert.match(applySource, /const viewState = shellModeViewState\(\)/);
+  assert.match(applySource, /applyShellModeBodyDataset\(viewState\)/);
+  assert.match(applySource, /renderShellModeGuide\(viewState\.config\)/);
+  assert.match(applySource, /toggleAdminShellRoleVisibility\(viewState\.shellMode === "user"\)/);
+  assert.doesNotMatch(applySource, /document\.querySelectorAll\("\[data-shell-role='admin'\]"\)/);
+  assert.doesNotMatch(applySource, /modeGuideEl\.appendChild\(div\)/);
+});
+
+test("workspace chrome DOM assembly is delegated out of ensureWorkspaceChrome", async () => {
+  const source = await readShellModule("app.js");
+  const navSync = sliceBetween(
+    source,
+    "function syncWorkspaceNavigationChrome(userProjection, hubProjection) {",
+    "function createWorkspaceNavElement() {",
+  );
+  const navRenderer = sliceBetween(
+    source,
+    "function renderWorkspaceNavigationTabs() {",
+    "function createRoomSearchInput(config) {",
+  );
+  const userSearch = sliceBetween(
+    source,
+    "function ensureUserRoomSearchControls(userProjection) {",
+    "function ensureSearchModeControls() {",
+  );
+  const toolbar = sliceBetween(
+    source,
+    "function ensureRoomToolbarChrome(userProjection) {",
+    "function ensureConversationOverviewChrome() {",
+  );
+  const composer = sliceBetween(
+    source,
+    "function ensureComposerStatusChrome() {",
+    "function ensureComposerTip() {",
+  );
+  const chromeEnsurer = sliceBetween(
+    source,
+    "function ensureWorkspaceChrome() {",
+    "function bindRoomSearchInput() {",
+  );
+
+  assert.match(navSync, /workspaceNavEl\.remove\(\)/);
+  assert.match(navSync, /workspaceNavEl = createWorkspaceNavElement\(\)/);
+  assert.match(navRenderer, /availableWorkspacesForShellMode\(shellMode\)\.map/);
+  assert.match(userSearch, /createRoomSearchInput\(\{/);
+  assert.match(userSearch, /ensureSearchModeControls\(\)/);
+  assert.match(toolbar, /roomListEl\.insertAdjacentElement\("beforebegin", createRoomToolbar\(\)\)/);
+  assert.match(composer, /composerStatusEl\.className = "composer-status composer-status-muted"/);
+  assert.match(composer, /ensureRoomViewToggleChrome\(userProjection\)/);
+  assert.match(chromeEnsurer, /syncWorkspaceNavigationChrome\(userProjection, hubProjection\)/);
+  assert.match(chromeEnsurer, /ensureUserRoomSearchControls\(userProjection\)/);
+  assert.match(chromeEnsurer, /ensureRoomToolbarChrome\(userProjection\)/);
+  assert.match(chromeEnsurer, /ensureNonUserCaretakerChrome\(userProjection\)/);
+  assert.doesNotMatch(chromeEnsurer, /document\.createElement\("nav"\)/);
+  assert.doesNotMatch(chromeEnsurer, /document\.createElement\("input"\)/);
+  assert.doesNotMatch(chromeEnsurer, /document\.createElement\("button"\)/);
+});
+
 test("admin tools panel css has high-contrast action status labels", async () => {
   const shared = await readShellModule("styles.css");
   const adminCss = await readShellModule("styles.admin.css");
@@ -498,11 +699,10 @@ test("unified page is world-entry metro station with pixel scene and hotspots", 
   assert.match(html, /data-default-shell-mode="unified"/);
   assert.match(html, /data-sfc-theme="city"/);
   assert.match(html, /href="\.\/styles\.world-entry\.css\?v=20260525-h5-shell-fix-v2/);
-  assert.match(html, /app\.js\?v=20260525-h5-shell-fix-v2/);
+  assert.match(html, /app\.js\?v=20260616-clear-empty-skeleton/);
   assert.match(html, /href="\.\/creative\.html"/);
   assert.match(html, /href="\.\/index\.html"/);
   assert.match(html, /href="\.\/world-square\.html"/);
-  assert.match(html, /href="\.\/unified\.html"/);
   assert.match(html, /世界入口/);
   assert.match(html, /地铁候车站/);
   assert.match(html, /返回主城/);
@@ -523,7 +723,6 @@ test("world-square page is a readonly public square entry", async () => {
   assert.match(html, /data-shell-page="world-square"/);
   assert.match(html, /data-shell-variant="world-square-readonly"/);
   assert.match(html, /assets\/pixel\/concepts\/world-square-concept-20260427-256\.png/);
-  assert.match(html, /href="\.\/unified\.html"/);
   assert.match(html, /href="\.\/index\.html"/);
   assert.match(css, /world-square-concept-20260427-256\.png/);
   assert.match(css, /世界广场/);
@@ -539,7 +738,7 @@ test("world-square page is a readonly public square entry", async () => {
   assert.match(html, /world-square-readonly-grid/);
   assert.match(html, /<details class="world-square-card world-square-card--compact" aria-label="世界广场说明">/);
   assert.match(html, /<summary class="world-square-card-toggle">广场信息<\/summary>/);
-  assert.match(html, /class="world-square-rail-title">导航<\/div>/);
+  assert.match(html, /class="rail-title">导航<\/div>/);
   assert.match(html, /<\/section>\s*<\/div>\s*<script>/);
   assert.doesNotMatch(html, /<\/main>\s*<\/div>\s*<script>/);
   assert.doesNotMatch(html, /<section class="world-square-card/);
@@ -554,6 +753,110 @@ test("world-square page is a readonly public square entry", async () => {
   assert.match(css, /\.world-square-card\[open\]/);
   assert.match(css, /\.world-square-card:not\(\[open\]\)/);
   assert.match(css, /@media \(max-width: 820px\)[\s\S]*\.world-square-card--compact/);
+});
+
+test("world-square reuses the private-room rail chrome", async () => {
+  const html = await readShellPage("world-square.html");
+  const css = await readShellModule("styles.world-square.css");
+
+  assert.match(html, /<aside class="sfc-rail creative-rail world-square-rail" data-shell-column="rooms" aria-label="站点导航">/);
+  assert.match(html, /<div class="creative-rail-stack">[\s\S]*?<div class="rail-title">导航<\/div>[\s\S]*?<div class="rail-actions">/);
+  assert.match(html, /<div class="creative-rail-divider">[\s\S]*?<span>广场<\/span>[\s\S]*?class="creative-rail-search world-square-rail-search"/);
+  assert.match(html, /<span class="rail-label">住宅<\/span>/);
+  assert.match(html, /<span class="rail-label">主城<\/span>/);
+  assert.match(html, /<span class="rail-label">世界<\/span>/);
+  assert.doesNotMatch(html, /rail-item-label/);
+  assert.match(
+    css,
+    /\.world-square-rail\s*\{[\s\S]*?linear-gradient\(180deg,\s*rgba\(23,\s*18,\s*16,\s*0\.96\),\s*rgba\(16,\s*12,\s*11,\s*0\.98\)\);[\s\S]*?border:\s*1px solid rgba\(220,\s*185,\s*106,\s*0\.22\);/,
+  );
+  assert.match(css, /\.world-square-rail \.creative-rail-divider\s*\{/);
+});
+
+test("creative hub and world-square pages preserve the three-layer scene stack", async () => {
+  const creativeHtml = await readShellPage("creative.html");
+  const hubHtml = await readShellPage("index.html");
+  const worldHtml = await readShellPage("world-square.html");
+  const worldCss = await readShellModule("styles.world-square.css");
+
+  assertInOrder(
+    creativeHtml,
+    [
+      '<section class="sfc-stage creative-stage"',
+      '<div class="scene-hotspot-label-layer creative-hotspot-label-layer" aria-hidden="true"></div>',
+      '<div class="scene-hotspots creative-hotspots"',
+      '<div class="creative-chat-frame">',
+      '<form id="composer" class="sfc-composer creative-composer">',
+    ],
+    "creative three-layer stack",
+  );
+  assertInOrder(
+    hubHtml,
+    [
+      '<section class="sfc-stage sfc-city-stage public-square-stage">',
+      'class="stage-canvas public-square-stage-canvas"',
+      '<div class="scene-hotspot-label-layer public-square-hotspot-label-layer" aria-hidden="true"></div>',
+      '<div class="scene-hotspots public-square-hotspots"',
+      '<div class="sfc-chat-bar sfc-city-chat public-square-chat">',
+      '<form id="composer" class="sfc-composer sfc-city-composer public-square-composer">',
+    ],
+    "hub three-layer stack",
+  );
+  assertInOrder(
+    worldHtml,
+    [
+      '<section class="world-square-stage" aria-label="世界广场概念图">',
+      '<div class="world-square-scene" role="img" aria-label="世界广场完整概念图"></div>',
+      '<div class="scene-hotspot-label-layer world-square-label-layer" aria-hidden="true">',
+      '<div class="scene-hotspots world-square-hotspots" aria-label="世界广场热点">',
+      '<details class="world-square-card world-square-card--compact" aria-label="世界广场说明">',
+    ],
+    "world-square four-layer stack",
+  );
+
+  assert.match(worldCss, /\.world-square-scene\s*\{[\s\S]*?z-index:\s*1;[\s\S]*?pointer-events:\s*none;/);
+  assert.match(worldCss, /\.world-square-label-layer\s*\{[\s\S]*?z-index:\s*2;[\s\S]*?pointer-events:\s*none;/);
+  assert.match(worldCss, /\.world-square-hotspots\s*\{[\s\S]*?z-index:\s*3;[\s\S]*?pointer-events:\s*none;/);
+  assert.match(worldCss, /\.world-square-hotspots \.scene-hotspot\s*\{[\s\S]*?pointer-events:\s*auto;[\s\S]*?background:\s*transparent;[\s\S]*?border-color:\s*transparent;/);
+  assert.match(worldCss, /\.world-square-hotspots \.scene-hotspot\s*\{[\s\S]*?width:\s*64px;[\s\S]*?height:\s*34px;/);
+  assert.match(worldCss, /\.world-square-card\s*\{[\s\S]*?z-index:\s*4;/);
+
+  const dayBlock = sliceBetween(
+    worldCss,
+    'body[data-time-of-day="day"] .world-square-scene::before {',
+    "\n}\n\n.world-square-card",
+  );
+  assert.doesNotMatch(dayBlock, /linear-gradient/);
+  assert.doesNotMatch(dayBlock, /rgba\(255,\s*2\d{2},/);
+  assert.match(dayBlock, /world-square-concept-day-256\.png/);
+});
+
+test("scene interaction contract keeps labels separate and hotspots transparent", async () => {
+  const source = await readShellModule("shell-scene-runtime.js");
+  const pixelCss = await readShellModule("styles.pixel-map.css");
+  const worldCss = await readShellModule("styles.world-square.css");
+
+  assert.match(source, /labelLayerSelector = "\.scene-hotspot-label-layer"/);
+  assert.match(source, /function renderHotspotLabelLayer\(\)/);
+  assert.match(source, /scene-hotspot-label-chip/);
+  assert.match(source, /setHotspotLabelsVisible\(true, \{ autoHideMs: 0 \}\)/);
+  assert.match(source, /setClearMode\(true\); \/\/ show labels and hide chat chrome/);
+  assert.doesNotMatch(source, /tapPadding\s*=\s*64/);
+
+  assert.match(pixelCss, /--scene-z-label:\s*2;/);
+  assert.match(pixelCss, /\.scene-hotspot-label-layer\s*\{[\s\S]*?z-index:\s*var\(--scene-z-label\);[\s\S]*?pointer-events:\s*none;/);
+  assert.match(pixelCss, /\.scene-hotspot-label-chip\s*\{[\s\S]*?opacity:\s*0;/);
+  assert.match(pixelCss, /body\.scene-hotspot-labels-visible\[data-shell-page="hub"\]\[data-shell-variant="public-square"\] \.scene-hotspot-label-chip/);
+  assert.match(pixelCss, /body\.scene-hotspot-labels-visible\[data-shell-variant="creative-terminal"\] \.scene-hotspot-label-chip/);
+  assert.match(pixelCss, /\.scene-hotspots \.scene-hotspot\s*\{[\s\S]*?pointer-events:\s*auto !important;[\s\S]*?background:\s*transparent !important;[\s\S]*?border-color:\s*transparent !important;/);
+  assert.match(pixelCss, /\.scene-hotspot\s*>\s*span\s*\{[\s\S]*?display:\s*none !important;/);
+  assert.match(pixelCss, /body\[data-shell-variant="creative-terminal"\] \.scene-hotspot--desk\s*\{[\s\S]*?width:\s*64px !important;[\s\S]*?height:\s*34px !important;/);
+  assert.match(pixelCss, /body\[data-shell-page="hub"\]\[data-shell-variant="public-square"\] \.scene-hotspot--metro\s*\{[\s\S]*?width:\s*64px !important;[\s\S]*?height:\s*34px !important;/);
+
+  assert.match(worldCss, /\.world-square-label-layer \.scene-hotspot-label-chip\s*\{[\s\S]*?opacity:\s*0;/);
+  assert.match(worldCss, /body\.scene-hotspot-labels-visible\[data-shell-page="world-square"\] \.world-square-label-layer \.scene-hotspot-label-chip/);
+  assert.doesNotMatch(worldCss, /\.world-square-hotspots \.scene-hotspot:hover[\s\S]*?background:\s*rgba/);
+  assert.doesNotMatch(worldCss, /\.world-square-hotspots \.scene-hotspot:hover[\s\S]*?border-color:\s*rgba/);
 });
 
 test("user.html redirects to creative.html with query params preserved", async () => {
@@ -643,16 +946,17 @@ test("pixel scene hotspot labels reveal near pointer and from blank-scene click"
   const source = await readShellModule("shell-scene-runtime.js");
 
   // Verify hotspot label visibility is controlled via CSS classes (implementation detail may vary)
-  assert.match(css, /scene-hotspot.*span/);
+  assert.match(css, /scene-hotspot-label-layer/);
+  assert.match(css, /scene-hotspot-label-chip/);
   assert.match(css, /scene-hotspot-labels-visible/);
   assert.match(css, /scene-clear-mode/);
-  assert.match(css, /\.scene-hotspot\.is-near-pointer span/);
-  assert.match(css, /body\.scene-hotspot-labels-visible\[data-shell-variant="creative-terminal"\] \.scene-hotspot span/);
+  assert.match(css, /\.scene-hotspot-label-chip\.is-near-pointer/);
+  assert.match(css, /body\.scene-hotspot-labels-visible\[data-shell-variant="creative-terminal"\] \.scene-hotspot-label-chip/);
   assert.match(source, /let hotspotLabelsVisible = false/);
   assert.match(source, /let labelTimer = null/);
   assert.match(source, /function setHotspotLabelsVisible\(visible/);
+  assert.match(source, /function renderHotspotLabelLayer\(\)/);
   assert.match(source, /setTimeout\(\(\) => setHotspotLabelsVisible\(false\), autoHideMs\)/);
-  assert.match(source, /setHotspotLabelsVisible\(true\).*\/\/.*auto-hide/);
   assert.match(source, /if \(isClearMode\(\)\)/);
 });
 
@@ -680,35 +984,147 @@ test("scene hotspot logic supports world-entry stages", async () => {
 test("world-entry runtime preserves the metro entry title", async () => {
   const source = await readShellModule("app.js");
 
-  assert.match(source, /shellPage !== "hub" && shellPage !== "world-entry"/);
+  assert.match(source, /viewState\.shellPage !== "hub" && viewState\.shellPage !== "world-entry"/);
   assert.match(
     source,
-    /if \(shellPage !== "hub" && shellPage !== "world-entry"\) \{\s*document\.title = `龙虾聊天 · \$\{translateShellMode\(shellMode\)\}`;\s*\}/
+    /if \(viewState\.shellPage !== "hub" && viewState\.shellPage !== "world-entry"\) \{\s*document\.title = `龙虾聊天 · \$\{translateShellMode\(viewState\.shellMode\)\}`;\s*\}/
   );
 });
 
 test("world-entry route hydration uses gateway projection without innerHTML sinks", async () => {
   const source = await readShellModule("app.js");
+  const loader = sliceBetween(
+    source,
+    "async function loadWorldEntry() {",
+    "function openIndexedDb() {",
+  );
+  const fetcher = sliceBetween(
+    source,
+    "async function fetchWorldEntryPayload() {",
+    "function syncWorldEntryHud(payload) {",
+  );
+  const hudSync = sliceBetween(
+    source,
+    "function syncWorldEntryHud(payload) {",
+    "function createWorldSquareRouteOptionNode() {",
+  );
 
   assert.match(source, /async function loadWorldEntry\(\)/);
-  assert.match(source, /fetch\(`\$\{gatewayUrl\}\/v1\/world-entry`\)/);
-  assert.match(source, /routeList\.replaceChildren\(\)/);
-  assert.match(source, /document\.createElement\("a"\)/);
-  assert.match(source, /option\.setAttribute\("href", route\.href \|\| "#"\)/);
-  assert.match(source, /title\.textContent = route\.title \|\| ""/);
-  assert.match(source, /desc\.textContent = route\.description/);
-  assert.match(source, /status\.textContent = route\.is_current \? `当前主城 · \$\{route\.status_label\}` : route\.status_label/);
+  assert.match(fetcher, /fetch\(`\$\{gatewayUrl\}\/v1\/world-entry`\)/);
+  assert.match(fetcher, /const routes = Array\.isArray\(payload\?\.routes\) \? payload\.routes : \[\]/);
+  assert.match(fetcher, /if \(routes\.length === 0\) return null/);
+  assert.match(hudSync, /document\.querySelector\("\.world-entry-hud \.hud-title"\)/);
+  assert.match(hudSync, /hudTitle\.textContent = payload\.title/);
+  assert.match(hudSync, /stationChip\.textContent = payload\.station_label/);
+  assert.match(hudSync, /hudStatus\.textContent = payload\.source_summary/);
+  assert.match(loader, /const routeList = worldEntryRouteListElement\(\)/);
+  assert.match(loader, /const payload = await fetchWorldEntryPayload\(\)/);
+  assert.match(loader, /syncWorldEntryHud\(payload\)/);
+  assert.match(loader, /renderWorldEntryRoutes\(routeList, payload\.routes\)/);
+  assert.doesNotMatch(loader, /document\.createElement\("a"\)/);
+  assert.doesNotMatch(loader, /routeList\.appendChild/);
   assert.doesNotMatch(source, /world-route[\s\S]{0,500}\.innerHTML\s*=/);
+});
+
+test("world-entry route option DOM is delegated out of loadWorldEntry", async () => {
+  const source = await readShellModule("app.js");
+  const squareRenderer = sliceBetween(
+    source,
+    "function createWorldSquareRouteOptionNode() {",
+    "function createWorldEntryRouteOptionNode(route) {",
+  );
+  const routeRenderer = sliceBetween(
+    source,
+    "function createWorldEntryRouteOptionNode(route) {",
+    "function renderWorldEntryRoutes(routeList, routes) {",
+  );
+  const routesRenderer = sliceBetween(
+    source,
+    "function renderWorldEntryRoutes(routeList, routes) {",
+    "async function loadWorldEntry() {",
+  );
+
+  assert.match(squareRenderer, /option\.className = "world-route-option world-route-option-square"/);
+  assert.match(squareRenderer, /option\.setAttribute\("href", "\.\/world-square\.html"\)/);
+  assert.match(squareRenderer, /title\.textContent = "世界广场"/);
+  assert.match(routeRenderer, /option\.className = "world-route-option"/);
+  assert.match(routeRenderer, /if \(route\.is_current\) \{/);
+  assert.match(routeRenderer, /option\.setAttribute\("href", route\.href \|\| "#"\)/);
+  assert.match(routeRenderer, /title\.textContent = route\.title \|\| ""/);
+  assert.match(routeRenderer, /desc\.textContent = route\.description/);
+  assert.match(routeRenderer, /status\.textContent = route\.is_current \? `当前主城 · \$\{route\.status_label\}` : route\.status_label/);
+  assert.match(routesRenderer, /routeList\.replaceChildren\(\)/);
+  assert.match(routesRenderer, /routeList\.appendChild\(createWorldSquareRouteOptionNode\(\)\)/);
+  assert.match(routesRenderer, /for \(const route of routes\) \{/);
+  assert.match(routesRenderer, /routeList\.appendChild\(createWorldEntryRouteOptionNode\(route\)\)/);
 });
 
 test("composer symbol menu switches categories with tabs", async () => {
   const source = await readShellModule("app.js");
   const css = await readShellModule("styles.pixel-map.css");
+  const categoryResolver = sliceBetween(
+    source,
+    "function composerSymbolCategories() {",
+    "function selectComposerSymbolCategory(categories, tabButtons, selectedIndex) {",
+  );
+  const categorySelector = sliceBetween(
+    source,
+    "function selectComposerSymbolCategory(categories, tabButtons, selectedIndex) {",
+    "function prepareComposerSymbolCategoryPanel(category, index) {",
+  );
+  const panelPreparer = sliceBetween(
+    source,
+    "function prepareComposerSymbolCategoryPanel(category, index) {",
+    "function handleComposerSymbolTabKeydown(event, index, categories, tabButtons, selectCategory) {",
+  );
+  const keyHandler = sliceBetween(
+    source,
+    "function handleComposerSymbolTabKeydown(event, index, categories, tabButtons, selectCategory) {",
+    "function createComposerSymbolTabButton(panel, index, categories, tabButtons, selectCategory) {",
+  );
+  const buttonFactory = sliceBetween(
+    source,
+    "function createComposerSymbolTabButton(panel, index, categories, tabButtons, selectCategory) {",
+    "function createComposerSymbolTabBar(categories) {",
+  );
+  const tabBarFactory = sliceBetween(
+    source,
+    "function createComposerSymbolTabBar(categories) {",
+    "function installComposerSymbolTabs(tabBar, selectCategory) {",
+  );
+  const installer = sliceBetween(
+    source,
+    "function installComposerSymbolTabs(tabBar, selectCategory) {",
+    "function initializeComposerSymbolTabs() {",
+  );
+  const initializer = sliceBetween(
+    source,
+    "function initializeComposerSymbolTabs() {",
+    "function setComposerSymbolMenuOpen(open) {",
+  );
 
-  assert.match(source, /function initializeComposerSymbolTabs/);
-  assert.match(source, /composer-symbol-tabs/);
-  assert.match(source, /data-symbol-tab/);
-  assert.match(source, /selectCategory\(0\)/);
+  assert.match(categoryResolver, /composerSymbolMenuEl\.querySelectorAll\("\.composer-symbol-category"\)/);
+  assert.match(categorySelector, /category\.classList\.toggle\("is-active", active\)/);
+  assert.match(categorySelector, /tabButtons\[index\]\?\.setAttribute\("aria-selected", active \? "true" : "false"\)/);
+  assert.match(panelPreparer, /category\.querySelector\("\.composer-symbol-heading"\)/);
+  assert.match(panelPreparer, /category\.setAttribute\("role", "tabpanel"\)/);
+  assert.match(keyHandler, /event\.key !== "ArrowRight" && event\.key !== "ArrowLeft"/);
+  assert.match(keyHandler, /tabButtons\[nextIndex\]\?\.focus\(\)/);
+  assert.match(buttonFactory, /button\.setAttribute\("data-symbol-tab", String\(index\)\)/);
+  assert.match(buttonFactory, /button\.addEventListener\("click"/);
+  assert.match(buttonFactory, /handleComposerSymbolTabKeydown\(event, index, categories, tabButtons, selectCategory\)/);
+  assert.match(tabBarFactory, /tabBar\.className = "composer-symbol-tabs"/);
+  assert.match(tabBarFactory, /const tabButtons = \[\]/);
+  assert.match(tabBarFactory, /const selectCategory = \(selectedIndex\) =>/);
+  assert.match(tabBarFactory, /createComposerSymbolTabButton\(panel, index, categories, tabButtons, selectCategory\)/);
+  assert.match(installer, /composerSymbolMenuEl\.insertBefore\(tabBar, composerSymbolMenuEl\.firstChild\)/);
+  assert.match(installer, /composerSymbolMenuEl\.dataset\.symbolTabsReady = "true"/);
+  assert.match(installer, /selectCategory\(0\)/);
+  assert.match(initializer, /const categories = composerSymbolCategories\(\)/);
+  assert.match(initializer, /const \{ tabBar, selectCategory \} = createComposerSymbolTabBar\(categories\)/);
+  assert.match(initializer, /installComposerSymbolTabs\(tabBar, selectCategory\)/);
+  assert.doesNotMatch(initializer, /document\.createElement\("button"\)/);
+  assert.doesNotMatch(initializer, /addEventListener\("keydown"/);
   assert.match(css, /composer-symbol-tabs/);
   assert.match(css, /composer-symbol-tab\.is-active/);
   assert.match(css, /composer-symbol-menu\.is-tabbed \.composer-symbol-category\[hidden\]/);
@@ -726,7 +1142,7 @@ test("timeline message text is rendered through textContent sinks", async () => 
 
   assert.match(
     source,
-    /function createMessageBodyNode\(message, options = \{\}\) \{[\s\S]*body\.textContent = message\.text/
+    /function appendPlainMessageBodyText\(body, message\) \{[\s\S]*body\.textContent = message\.text/
   );
   assert.match(source, /label\.textContent = field\.label/);
   assert.match(source, /value\.textContent = field\.value/);
@@ -735,27 +1151,112 @@ test("timeline message text is rendered through textContent sinks", async () => 
   assert.doesNotMatch(source, /message\.text[^;\n]*innerHTML/);
 });
 
+test("message body terminal plain and structured DOM are delegated out of createMessageBodyNode", async () => {
+  const source = await readShellModule("app.js");
+  const shellRenderer = sliceBetween(
+    source,
+    "function createMessageBodyShell(structured, action) {",
+    "function applyMessageBodyTerminalState(body, message) {",
+  );
+  const terminalRenderer = sliceBetween(
+    source,
+    "function applyMessageBodyTerminalState(body, message) {",
+    "function appendPlainMessageBodyText(body, message) {",
+  );
+  const plainRenderer = sliceBetween(
+    source,
+    "function appendPlainMessageBodyText(body, message) {",
+    "function appendMessageQuickSheetFields(sheet, structured) {",
+  );
+  const fieldRenderer = sliceBetween(
+    source,
+    "function appendMessageQuickSheetFields(sheet, structured) {",
+    "function appendMessageQuickSheetNotes(sheet, structured) {",
+  );
+  const notesRenderer = sliceBetween(
+    source,
+    "function appendMessageQuickSheetNotes(sheet, structured) {",
+    "function appendMessageQuickSheetFollowUp(sheet, action, quickState) {",
+  );
+  const followUpRenderer = sliceBetween(
+    source,
+    "function appendMessageQuickSheetFollowUp(sheet, action, quickState) {",
+    "function appendStructuredMessageBodySheet(body, structured, action, quickState) {",
+  );
+  const sheetRenderer = sliceBetween(
+    source,
+    "function appendStructuredMessageBodySheet(body, structured, action, quickState) {",
+    "function createMessageBodyNode(message, options = {}) {",
+  );
+  const bodyRenderer = sliceBetween(
+    source,
+    "function createMessageBodyNode(message, options = {}) {",
+    "function roomDisplayPeer(room) {",
+  );
+
+  assert.match(shellRenderer, /body\.className = structured \? "message-body message-body-structured" : "message-body"/);
+  assert.match(shellRenderer, /body\.dataset\.quickAction = action/);
+  assert.match(terminalRenderer, /message\?\.is_recalled/);
+  assert.match(terminalRenderer, /body\.textContent = "消息已撤回"/);
+  assert.match(terminalRenderer, /message\?\.moderation_status === 'blocked'/);
+  assert.match(plainRenderer, /body\.textContent = message\.text/);
+  assert.match(fieldRenderer, /label\.textContent = field\.label/);
+  assert.match(fieldRenderer, /value\.textContent = field\.value/);
+  assert.match(notesRenderer, /notes\.textContent = structured\.notes\.join\("\\n"\)/);
+  assert.match(followUpRenderer, /quickActionFollowUpLabel\(action, quickState\)/);
+  assert.match(followUpRenderer, /copy\.textContent = followUpCopy/);
+  assert.match(sheetRenderer, /appendMessageQuickSheetFields\(sheet, structured\)/);
+  assert.match(sheetRenderer, /appendMessageQuickSheetNotes\(sheet, structured\)/);
+  assert.match(sheetRenderer, /appendMessageQuickSheetFollowUp\(sheet, action, quickState\)/);
+  assert.match(bodyRenderer, /const body = createMessageBodyShell\(structured, action\)/);
+  assert.match(bodyRenderer, /if \(applyMessageBodyTerminalState\(body, message\)\) return body/);
+  assert.match(bodyRenderer, /return appendPlainMessageBodyText\(body, message\)/);
+  assert.match(bodyRenderer, /return appendStructuredMessageBodySheet\(body, structured, action, quickState\)/);
+  assert.doesNotMatch(bodyRenderer, /message-quick-sheet-row/);
+  assert.doesNotMatch(bodyRenderer, /quickActionFollowUpLabel\(action, quickState\)/);
+});
+
 test("room inline preview controls and actions consume clickable render specs", async () => {
   const source = await readShellModule("app.js");
+  const helperSource = sliceBetween(
+    source,
+    "function applyInlineClickableDomSpec(node, clickableSpec) {",
+    "function createRoomInlineActions(room) {",
+  );
   const inlineActionsSource = sliceBetween(
     source,
     "function createRoomInlineActions(room) {",
-    "  const appendAction = (label, role, onClick) => {",
-  );
-  const controlsRenderer = sliceBetween(
-    inlineActionsSource,
-    "const renderInlineCardControls = (childModel) => {",
-    "const renderInlineCardFieldRows = (childModel) => {",
+    "  appendRoomInlineActionNodes(rail, room, inlineActionsModel);",
   );
   const actionsRenderer = sliceBetween(
-    inlineActionsSource,
-    "const renderInlineCardActions = (childModel) => {",
-    "const inlineCardChildRenderers = {",
+    source,
+    "function appendInlineCardActions(inlineCard, childModel, inlineActionHandlers) {",
+    "function appendInlineCardFieldRows(inlineCard, childModel) {",
+  );
+  const metaRenderer = sliceBetween(
+    source,
+    "function appendInlineCardMeta(inlineCard, childModel, attachInlineMetaModelAction) {",
+    "function appendInlineCardActions(inlineCard, childModel, inlineActionHandlers) {",
+  );
+  const headerRenderer = sliceBetween(
+    source,
+    "function appendInlineCardHeader(inlineCard, childModel) {",
+    "function appendInlineCardMeta(inlineCard, childModel, attachInlineMetaModelAction) {",
+  );
+  const hintClickableApplier = sliceBetween(
+    source,
+    "function createInlineHintClickableApplier(room, preview, inlineHintHandlers) {",
+    "function createRoomInlineProgressNode(progressDomSpec) {",
+  );
+  const controlsRenderer = sliceBetween(
+    source,
+    "function appendInlineCardControls(inlineCard, childModel, onInlineCardControlAction) {",
+    "function createInlineHintNode(inlineHintDomModel, applyInlineHintClickable) {",
   );
   const buttonRenderer = sliceBetween(
-    inlineActionsSource,
-    "const createInlineCardButtonNode = (buttonSpec) => {",
-    "const renderInlineCardHeader = (childModel) => {",
+    source,
+    "function createInlineCardButtonNode(buttonSpec) {",
+    "function createRoomInlineActions(room) {",
   );
 
   assert.match(buttonRenderer, /applyInlineClickableDomSpec\(button, buttonSpec\.clickable\)/);
@@ -763,44 +1264,360 @@ test("room inline preview controls and actions consume clickable render specs", 
   assert.match(actionsRenderer, /const button = createInlineCardButtonNode\(buttonSpec\)/);
 });
 
-test("room inline preview header consumes generic child render specs", async () => {
+test("room inline progress rendering is delegated out of createRoomInlineActions", async () => {
   const source = await readShellModule("app.js");
+  const progressRenderer = sliceBetween(
+    source,
+    "function createRoomInlineProgressNode(progressDomSpec) {",
+    "function createRoomInlineActions(room) {",
+  );
   const inlineActionsSource = sliceBetween(
     source,
     "function createRoomInlineActions(room) {",
-    "  const appendAction = (label, role, onClick) => {",
+    "  if (!appendRoomInlinePreviewPanel(rail, room, action)) return rail;",
+  );
+
+  assert.match(progressRenderer, /document\.createElement\(progressDomSpec\.type \|\| "div"\)/);
+  assert.match(progressRenderer, /\(progressDomSpec\.children \|\| \[\]\)\.forEach\(\(childSpec\) => \{/);
+  assert.match(inlineActionsSource, /const progress = appendRoomInlineProgressNode\(rail, room, action, state, progressDomSpec\)/);
+  assert.doesNotMatch(inlineActionsSource, /const progress = createRoomInlineProgressNode\(progressDomSpec\)/);
+  assert.doesNotMatch(inlineActionsSource, /\(progressDomSpec\.children \|\| \[\]\)\.forEach/);
+});
+
+test("room inline progress action append is delegated out of createRoomInlineActions", async () => {
+  const source = await readShellModule("app.js");
+  const progressAppender = sliceBetween(
+    source,
+    "function appendRoomInlineProgressNode(rail, room, action, state, progressDomSpec) {",
+    "function createRoomInlineActionNode(action, label, role, onActivate) {",
+  );
+  const inlineActionsSource = sliceBetween(
+    source,
+    "function createRoomInlineActions(room) {",
+    "  if (!appendRoomInlinePreviewPanel(rail, room, action)) return rail;",
+  );
+
+  assert.match(progressAppender, /const progress = createRoomInlineProgressNode\(progressDomSpec\)/);
+  assert.match(progressAppender, /progress\.addEventListener\("click", \(event\) => \{/);
+  assert.match(progressAppender, /latestRoomQuickSnapshotIndex\(room\.id, action, state\) >= 0/);
+  assert.match(progressAppender, /previewRoomQuickStage\(/);
+  assert.match(progressAppender, /rail\.appendChild\(progress\)/);
+  assert.match(progressAppender, /return progress/);
+  assert.match(inlineActionsSource, /const progress = appendRoomInlineProgressNode\(rail, room, action, state, progressDomSpec\)/);
+  assert.doesNotMatch(inlineActionsSource, /createRoomInlineProgressNode\(progressDomSpec\)/);
+  assert.doesNotMatch(inlineActionsSource, /progress\.addEventListener\("click"/);
+});
+
+test("room inline card DOM primitives are delegated out of createRoomInlineActions", async () => {
+  const source = await readShellModule("app.js");
+  const helperSource = sliceBetween(
+    source,
+    "function applyInlineClickableDomSpec(node, clickableSpec) {",
+    "function createRoomInlineActions(room) {",
+  );
+  const inlineActionsSource = sliceBetween(
+    source,
+    "function createRoomInlineActions(room) {",
+    "  appendRoomInlineActionNodes(rail, room, inlineActionsModel);",
+  );
+  const actionsRenderer = sliceBetween(
+    source,
+    "function appendInlineCardActions(inlineCard, childModel, inlineActionHandlers) {",
+    "function appendInlineCardFieldRows(inlineCard, childModel) {",
+  );
+  const metaRenderer = sliceBetween(
+    source,
+    "function appendInlineCardMeta(inlineCard, childModel, attachInlineMetaModelAction) {",
+    "function appendInlineCardActions(inlineCard, childModel, inlineActionHandlers) {",
   );
   const headerRenderer = sliceBetween(
-    inlineActionsSource,
-    "const renderInlineCardHeader = (childModel) => {",
-    "const renderInlineCardMeta = (childModel) => {",
+    source,
+    "function appendInlineCardHeader(inlineCard, childModel) {",
+    "function appendInlineCardMeta(inlineCard, childModel, attachInlineMetaModelAction) {",
+  );
+  const hintClickableApplier = sliceBetween(
+    source,
+    "function createInlineHintClickableApplier(room, preview, inlineHintHandlers) {",
+    "function createRoomInlineProgressNode(progressDomSpec) {",
+  );
+
+  assertInOrder(
+    helperSource,
+    [
+      "function applyInlineClickableDomSpec(node, clickableSpec) {",
+      "function createInlineCardContainerNode(containerSpec) {",
+      "function createInlineCardSimpleChildNode(childSpec) {",
+      "function createInlineCardButtonNode(buttonSpec) {",
+    ],
+    "room inline card DOM primitives",
+  );
+  assert.doesNotMatch(inlineActionsSource, /const applyInlineClickableDomSpec =/);
+  assert.doesNotMatch(inlineActionsSource, /const createInlineCardContainerNode =/);
+  assert.doesNotMatch(inlineActionsSource, /const createInlineCardSimpleChildNode =/);
+  assert.doesNotMatch(inlineActionsSource, /const createInlineCardButtonNode =/);
+  assert.match(hintClickableApplier, /applyInlineClickableDomSpec\(node, part\.clickable\)/);
+  assert.doesNotMatch(inlineActionsSource, /applyInlineClickableDomSpec\(node, part\.clickable\)/);
+  assert.match(metaRenderer, /createInlineCardContainerNode\(inlineMetaDomModel\)/);
+  assert.doesNotMatch(inlineActionsSource, /createInlineCardContainerNode\(inlineMetaDomModel\)/);
+  assert.match(headerRenderer, /createInlineCardSimpleChildNode\(childSpec\)/);
+  assert.doesNotMatch(inlineActionsSource, /createInlineCardSimpleChildNode\(childSpec\)/);
+  assert.match(actionsRenderer, /createInlineCardButtonNode\(buttonSpec\)/);
+  assert.doesNotMatch(inlineActionsSource, /createInlineCardButtonNode\(buttonSpec\)/);
+});
+
+test("room list toolbar and empty state are delegated out of renderRooms", async () => {
+  const source = await readShellModule("app.js");
+  const toolbarRenderer = sliceBetween(
+    source,
+    "function updateRoomListToolbarNote(rooms, stats, activeVisible, shellPage) {",
+    "function createRoomListEmptyNode() {",
+  );
+  const emptyRenderer = sliceBetween(
+    source,
+    "function createRoomListEmptyNode() {",
+    "function createRoomAvatarNode(room, kind, shellPage, headline) {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderRooms() {",
+    "  const groups = roomGroupBlueprints(shellPage, rooms);",
+  );
+
+  assert.match(toolbarRenderer, /if \(!roomToolbarNoteEl\) return/);
+  assert.match(toolbarRenderer, /roomToolbarNoteSpec\(\{/);
+  assert.match(toolbarRenderer, /visibleCount: rooms\.length/);
+  assert.match(toolbarRenderer, /roomToolbarNoteEl\.textContent = pieces\.join\(" · "\)/);
+  assert.match(emptyRenderer, /const empty = document\.createElement\("li"\)/);
+  assert.match(emptyRenderer, /empty\.className = "empty-note"/);
+  assert.match(emptyRenderer, /empty\.textContent = roomEmptyStateSpec\(gatewayUrl\)/);
+  assert.match(renderSource, /updateRoomListSearchVisibility\(\)/);
+  assert.match(renderSource, /updateRoomListToolbarNote\(rooms, stats, activeVisible, shellPage\)/);
+  assert.match(renderSource, /roomListEl\.appendChild\(createRoomListEmptyNode\(\)\)/);
+  assert.doesNotMatch(renderSource, /roomToolbarNoteEl\.textContent/);
+  assert.doesNotMatch(renderSource, /roomEmptyStateSpec\(gatewayUrl\)/);
+});
+
+test("room list item avatar, topline and tag row are delegated out of renderRooms", async () => {
+  const source = await readShellModule("app.js");
+  const avatarRenderer = sliceBetween(
+    source,
+    "function createRoomAvatarNode(room, kind, shellPage, headline) {",
+    "function createRoomTopLineNode(room, kind, shellPage, unread) {",
+  );
+  const topLineRenderer = sliceBetween(
+    source,
+    "function createRoomTopLineNode(room, kind, shellPage, unread) {",
+    "function createRoomTagRowNode(room) {",
+  );
+  const tagRowRenderer = sliceBetween(
+    source,
+    "function createRoomTagRowNode(room) {",
+    "function createRoomListItemNode(room, shellPage) {",
+  );
+  const itemRenderer = sliceBetween(
+    source,
+    "function createRoomListItemNode(room, shellPage) {",
+    "function createRoomSectionNode(group, shellPage) {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderRooms() {",
+    "function createConversationOverviewHeaderNode(room, shellPage, compactChatShell) {",
+  );
+
+  assert.match(avatarRenderer, /roomAvatarSpec\(\{ room, kind, shellPage, headline \}\)/);
+  assert.match(avatarRenderer, /directRoomPeerOnlineStatus\(room\)/);
+  assert.match(avatarRenderer, /confirmResidentRoomJump\(room\)/);
+  assert.match(topLineRenderer, /roomTitleStackSpec\(room, roomAudienceLabel\(room\)\)/);
+  assert.match(topLineRenderer, /createRoomUnreadBadgeNode\(unread\)/);
+  assert.match(topLineRenderer, /roomTopMetaSpec\(\{/);
+  assert.match(tagRowRenderer, /createRoomQuickActionPill\(room\)/);
+  assert.match(tagRowRenderer, /createRoomQuickPreviewPill\(room\)/);
+  assert.match(tagRowRenderer, /visiblePendingEchoCount\(room\)/);
+  assert.match(tagRowRenderer, /caretakerProfile\(room\)/);
+  assert.match(itemRenderer, /const button = document\.createElement\("button"\)/);
+  assert.match(itemRenderer, /roomButtonClassSpec\(\{ roomId: room\.id, activeRoomId, unread, kind \}\)/);
+  assert.match(itemRenderer, /createRoomAvatarNode\(room, kind, shellPage, headline\)/);
+  assert.match(itemRenderer, /createRoomTopLineNode\(room, kind, shellPage, unread\)/);
+  assert.match(itemRenderer, /createRoomTagRowNode\(room\)/);
+  assert.doesNotMatch(renderSource, /const avatar = document\.createElement\("div"\)/);
+  assert.doesNotMatch(renderSource, /const tagRow = document\.createElement\("div"\)/);
+  assert.doesNotMatch(renderSource, /roomButtonClassSpec\(\{ roomId: room\.id, activeRoomId, unread, kind \}\)/);
+});
+
+test("room preview context and DOM are delegated out of createRoomPreviewNode", async () => {
+  const source = await readShellModule("app.js");
+  const contextResolver = sliceBetween(
+    source,
+    "function roomPreviewContext(room) {",
+    "function createRoomPreviewFallbackNode(room) {",
+  );
+  const fallbackRenderer = sliceBetween(
+    source,
+    "function createRoomPreviewFallbackNode(room) {",
+    "function activateRoomPreviewSnapshot(room, preview, event) {",
+  );
+  const snapshotActivator = sliceBetween(
+    source,
+    "function activateRoomPreviewSnapshot(room, preview, event) {",
+    "function activateRoomPreviewHistorySnapshot(room, preview, index, event) {",
+  );
+  const historyActivator = sliceBetween(
+    source,
+    "function activateRoomPreviewHistorySnapshot(room, preview, index, event) {",
+    "function createRoomPreviewShellNode(preview, onActivate) {",
+  );
+  const shellRenderer = sliceBetween(
+    source,
+    "function createRoomPreviewShellNode(preview, onActivate) {",
+    "function createRoomPreviewHistoryChipNode(room, preview, snapshot, index) {",
+  );
+  const historyChipRenderer = sliceBetween(
+    source,
+    "function createRoomPreviewHistoryChipNode(room, preview, snapshot, index) {",
+    "function appendRoomPreviewHistoryNodes(shell, room, preview) {",
+  );
+  const historyAppender = sliceBetween(
+    source,
+    "function appendRoomPreviewHistoryNodes(shell, room, preview) {",
+    "function createRoomPreviewStageNode(field, previewView, onActivate) {",
+  );
+  const stageRenderer = sliceBetween(
+    source,
+    "function createRoomPreviewStageNode(field, previewView, onActivate) {",
+    "function createRoomPreviewSummaryNode(room, field, onActivate) {",
+  );
+  const summaryRenderer = sliceBetween(
+    source,
+    "function createRoomPreviewSummaryNode(room, field, onActivate) {",
+    "function appendRoomPreviewFieldNodes(shell, room, previewView, field, onActivate) {",
+  );
+  const fieldAppender = sliceBetween(
+    source,
+    "function appendRoomPreviewFieldNodes(shell, room, previewView, field, onActivate) {",
+    "function createRoomPreviewNode(room) {",
+  );
+  const previewRenderer = sliceBetween(
+    source,
+    "function createRoomPreviewNode(room) {",
+    "function renderTimelineSkeletonRows(count = 4) {",
+  );
+
+  assert.match(contextResolver, /const preview = resolveRoomQuickPreview\(room\)/);
+  assert.match(contextResolver, /roomQuickPreviewFieldView\(room\.id, preview\.action, preview\.state, preview\.snapshotIndex\)/);
+  assert.match(contextResolver, /field: previewView\?\.primaryField/);
+  assert.match(fallbackRenderer, /createLine\("room-preview", roomPreview\(room\)\)/);
+  assert.match(snapshotActivator, /focusRoom\(room\.id\)/);
+  assert.match(snapshotActivator, /renderRooms\(\)/);
+  assert.match(snapshotActivator, /quickActionStructuredDraft\(preview\.structured, preview\.action\)/);
+  assert.match(historyActivator, /renderTimeline\(\)/);
+  assert.match(historyActivator, /previewRoomQuickStage\(room\.id, preview\.action, preview\.state, index\)/);
+  assert.doesNotMatch(historyActivator, /seedComposerFromQuickAction/);
+  assert.match(shellRenderer, /shell\.className = "room-preview-shell is-interactive"/);
+  assert.match(shellRenderer, /shell\.addEventListener\("click", onActivate\)/);
+  assert.match(historyChipRenderer, /quickActionPreviewHistoryLabel\(snapshot, index, preview\.history\.length\)/);
+  assert.match(historyChipRenderer, /activateRoomPreviewHistorySnapshot\(room, preview, index, event\)/);
+  assert.match(historyAppender, /if \(!Array\.isArray\(preview\.history\) \|\| preview\.history\.length <= 1\) return/);
+  assert.match(historyAppender, /history\.appendChild\(createRoomPreviewHistoryChipNode\(room, preview, snapshot, index\)\)/);
+  assert.match(stageRenderer, /stage\.textContent = field\.label \|\| previewView\.state \|\| "预览"/);
+  assert.match(summaryRenderer, /summary\.textContent = field\.value \|\| field\.label \|\| roomPreview\(room\)/);
+  assert.match(fieldAppender, /shell\.appendChild\(createRoomPreviewStageNode\(field, previewView, onActivate\)\)/);
+  assert.match(fieldAppender, /shell\.appendChild\(createRoomPreviewSummaryNode\(room, field, onActivate\)\)/);
+  assert.match(previewRenderer, /const context = roomPreviewContext\(room\)/);
+  assert.match(previewRenderer, /if \(!context\.preview \|\| !context\.previewView \|\| !context\.field\) return createRoomPreviewFallbackNode\(room\)/);
+  assert.match(previewRenderer, /appendRoomPreviewHistoryNodes\(shell, room, context\.preview\)/);
+  assert.match(previewRenderer, /appendRoomPreviewFieldNodes\(shell, room, context\.previewView, context\.field, activatePreview\)/);
+  assert.doesNotMatch(previewRenderer, /quickActionStructuredDraft/);
+  assert.doesNotMatch(previewRenderer, /room-preview-history-chip/);
+});
+
+test("room group sections are delegated out of renderRooms", async () => {
+  const source = await readShellModule("app.js");
+  const sectionRenderer = sliceBetween(
+    source,
+    "function createRoomSectionNode(group, shellPage) {",
+    "function renderRooms() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderRooms() {",
+    "function createConversationOverviewHeaderNode(room, shellPage, compactChatShell) {",
+  );
+
+  assert.match(sectionRenderer, /const section = document\.createElement\("li"\)/);
+  assert.match(sectionRenderer, /section\.className = "room-section"/);
+  assert.match(sectionRenderer, /header\.className = "room-section-header"/);
+  assert.match(sectionRenderer, /createLine\("room-section-title", group\.title\)/);
+  assert.match(sectionRenderer, /for \(const room of group\.rooms\) \{/);
+  assert.match(sectionRenderer, /list\.appendChild\(createRoomListItemNode\(room, shellPage\)\)/);
+  assert.match(sectionRenderer, /return section/);
+  assert.match(renderSource, /for \(const group of groups\) \{\s*roomListEl\.appendChild\(createRoomSectionNode\(group, shellPage\)\);\s*\}/);
+  assert.doesNotMatch(renderSource, /room-section-header/);
+  assert.doesNotMatch(renderSource, /room-section-list/);
+});
+
+test("room inline preview header consumes generic child render specs", async () => {
+  const source = await readShellModule("app.js");
+  const headerRenderer = sliceBetween(
+    source,
+    "function appendInlineCardHeader(inlineCard, childModel) {",
+    "function appendInlineCardMeta(inlineCard, childModel, attachInlineMetaModelAction) {",
   );
 
   assert.match(headerRenderer, /inlineCard\.appendChild\(createInlineCardSimpleChildNode\(childSpec\)\)/);
   assert.doesNotMatch(headerRenderer, /createLine\(childSpec\.className, childSpec\.text\)/);
 });
 
-test("room inline preview simple children share one DOM renderer", async () => {
+test("room inline card header DOM is delegated out of createRoomInlineActions", async () => {
   const source = await readShellModule("app.js");
+  const headerRenderer = sliceBetween(
+    source,
+    "function appendInlineCardHeader(inlineCard, childModel) {",
+    "function appendInlineCardMeta(inlineCard, childModel, attachInlineMetaModelAction) {",
+  );
+  const cardAppender = sliceBetween(
+    source,
+    "function appendRoomInlinePreviewCard(rail, room, preview, inlinePanelRenderDomModel, inlineActionHandlers) {",
+    "function createRoomInlineActionNode(action, label, role, onActivate) {",
+  );
   const inlineActionsSource = sliceBetween(
     source,
     "function createRoomInlineActions(room) {",
-    "  const appendAction = (label, role, onClick) => {",
+    "  appendRoomInlineActionNodes(rail, room, inlineActionsModel);",
+  );
+
+  assert.match(headerRenderer, /\(childModel\.children \|\| \[\]\)\.forEach\(\(childSpec\) => \{/);
+  assert.match(headerRenderer, /inlineCard\.appendChild\(createInlineCardSimpleChildNode\(childSpec\)\)/);
+  assert.match(cardAppender, /header: \(childModel\) => appendInlineCardHeader\(inlineCard, childModel\)/);
+  assert.doesNotMatch(inlineActionsSource, /createInlineCardSimpleChildNode\(childSpec\)/);
+});
+
+test("room inline preview simple children share one DOM renderer", async () => {
+  const source = await readShellModule("app.js");
+  const helperSource = sliceBetween(
+    source,
+    "function applyInlineClickableDomSpec(node, clickableSpec) {",
+    "function createRoomInlineActions(room) {",
+  );
+  const inlineActionsSource = sliceBetween(
+    source,
+    "function createRoomInlineActions(room) {",
+    "  appendRoomInlineActionNodes(rail, room, inlineActionsModel);",
   );
   const simpleChildRenderer = sliceBetween(
-    inlineActionsSource,
-    "const createInlineCardSimpleChildNode = (childSpec) => {",
-    "const renderInlineCardHeader = (childModel) => {",
+    helperSource,
+    "function createInlineCardSimpleChildNode(childSpec) {",
+    "function createInlineCardButtonNode(buttonSpec) {",
   );
   const headerRenderer = sliceBetween(
-    inlineActionsSource,
-    "const renderInlineCardHeader = (childModel) => {",
-    "const renderInlineCardMeta = (childModel) => {",
+    source,
+    "function appendInlineCardHeader(inlineCard, childModel) {",
+    "function appendInlineCardMeta(inlineCard, childModel, attachInlineMetaModelAction) {",
   );
   const fieldRowsRenderer = sliceBetween(
-    inlineActionsSource,
-    "const renderInlineCardFieldRows = (childModel) => {",
-    "const renderInlineCardActions = (childModel) => {",
+    source,
+    "function appendInlineCardFieldRows(inlineCard, childModel) {",
+    "function appendInlineCardControls(inlineCard, childModel, onInlineCardControlAction) {",
   );
 
   assert.match(simpleChildRenderer, /document\.createElement\(childSpec\.type \|\| "div"\)/);
@@ -811,25 +1628,30 @@ test("room inline preview simple children share one DOM renderer", async () => {
 
 test("room inline preview buttons share one DOM renderer", async () => {
   const source = await readShellModule("app.js");
+  const helperSource = sliceBetween(
+    source,
+    "function applyInlineClickableDomSpec(node, clickableSpec) {",
+    "function createRoomInlineActions(room) {",
+  );
   const inlineActionsSource = sliceBetween(
     source,
     "function createRoomInlineActions(room) {",
-    "  const appendAction = (label, role, onClick) => {",
+    "  appendRoomInlineActionNodes(rail, room, inlineActionsModel);",
   );
   const buttonRenderer = sliceBetween(
-    inlineActionsSource,
-    "const createInlineCardButtonNode = (buttonSpec) => {",
-    "const renderInlineCardHeader = (childModel) => {",
+    source,
+    "function createInlineCardButtonNode(buttonSpec) {",
+    "function createRoomInlineActions(room) {",
   );
   const controlsRenderer = sliceBetween(
-    inlineActionsSource,
-    "const renderInlineCardControls = (childModel) => {",
-    "const renderInlineCardFieldRows = (childModel) => {",
+    source,
+    "function appendInlineCardControls(inlineCard, childModel, onInlineCardControlAction) {",
+    "function createInlineHintNode(inlineHintDomModel, applyInlineHintClickable) {",
   );
   const actionsRenderer = sliceBetween(
-    inlineActionsSource,
-    "const renderInlineCardActions = (childModel) => {",
-    "const inlineCardChildRenderers = {",
+    source,
+    "function appendInlineCardActions(inlineCard, childModel, inlineActionHandlers) {",
+    "function appendInlineCardFieldRows(inlineCard, childModel) {",
   );
 
   assert.match(buttonRenderer, /document\.createElement\(buttonSpec\.type \|\| "button"\)/);
@@ -841,35 +1663,40 @@ test("room inline preview buttons share one DOM renderer", async () => {
 
 test("room inline preview containers share one DOM renderer", async () => {
   const source = await readShellModule("app.js");
+  const helperSource = sliceBetween(
+    source,
+    "function applyInlineClickableDomSpec(node, clickableSpec) {",
+    "function createRoomInlineActions(room) {",
+  );
   const inlineActionsSource = sliceBetween(
     source,
     "function createRoomInlineActions(room) {",
-    "  const appendAction = (label, role, onClick) => {",
+    "  appendRoomInlineActionNodes(rail, room, inlineActionsModel);",
   );
   const containerRenderer = sliceBetween(
-    inlineActionsSource,
-    "const createInlineCardContainerNode = (containerSpec) => {",
-    "const createInlineCardSimpleChildNode = (childSpec) => {",
+    helperSource,
+    "function createInlineCardContainerNode(containerSpec) {",
+    "function createInlineCardSimpleChildNode(childSpec) {",
   );
   const metaRenderer = sliceBetween(
-    inlineActionsSource,
-    "const renderInlineCardMeta = (childModel) => {",
-    "const renderInlineCardControls = (childModel) => {",
+    source,
+    "function appendInlineCardMeta(inlineCard, childModel, attachInlineMetaModelAction) {",
+    "function appendInlineCardActions(inlineCard, childModel, inlineActionHandlers) {",
   );
   const controlsRenderer = sliceBetween(
-    inlineActionsSource,
-    "const renderInlineCardControls = (childModel) => {",
-    "const renderInlineCardFieldRows = (childModel) => {",
+    source,
+    "function appendInlineCardControls(inlineCard, childModel, onInlineCardControlAction) {",
+    "function createInlineHintNode(inlineHintDomModel, applyInlineHintClickable) {",
   );
   const fieldRowsRenderer = sliceBetween(
-    inlineActionsSource,
-    "const renderInlineCardFieldRows = (childModel) => {",
-    "const renderInlineCardActions = (childModel) => {",
+    source,
+    "function appendInlineCardFieldRows(inlineCard, childModel) {",
+    "function appendInlineCardControls(inlineCard, childModel, onInlineCardControlAction) {",
   );
   const actionsRenderer = sliceBetween(
-    inlineActionsSource,
-    "const renderInlineCardActions = (childModel) => {",
-    "const inlineCardChildRenderers = {",
+    source,
+    "function appendInlineCardActions(inlineCard, childModel, inlineActionHandlers) {",
+    "function appendInlineCardFieldRows(inlineCard, childModel) {",
   );
 
   assert.match(containerRenderer, /document\.createElement\("div"\)/);
@@ -883,13 +1710,644 @@ test("room inline preview containers share one DOM renderer", async () => {
   assert.match(actionsRenderer, /const inlineActions = createInlineCardContainerNode\(inlineActionDomModel\)/);
 });
 
+test("room inline card field rows DOM is delegated out of createRoomInlineActions", async () => {
+  const source = await readShellModule("app.js");
+  const fieldRowsRenderer = sliceBetween(
+    source,
+    "function appendInlineCardFieldRows(inlineCard, childModel) {",
+    "function appendInlineCardControls(inlineCard, childModel, onInlineCardControlAction) {",
+  );
+  const cardAppender = sliceBetween(
+    source,
+    "function appendRoomInlinePreviewCard(rail, room, preview, inlinePanelRenderDomModel, inlineActionHandlers) {",
+    "function createRoomInlineActionNode(action, label, role, onActivate) {",
+  );
+  const inlineActionsSource = sliceBetween(
+    source,
+    "function createRoomInlineActions(room) {",
+    "  appendRoomInlineActionNodes(rail, room, inlineActionsModel);",
+  );
+
+  assert.match(fieldRowsRenderer, /const inlineFieldRowsDomModel = childModel\.model/);
+  assert.match(fieldRowsRenderer, /const fieldList = createInlineCardContainerNode\(inlineFieldRowsDomModel\)/);
+  assert.match(fieldRowsRenderer, /for \(const rowSpec of inlineFieldRowsDomModel\.rows\) \{/);
+  assert.match(fieldRowsRenderer, /const row = createInlineCardContainerNode\(rowSpec\)/);
+  assert.match(fieldRowsRenderer, /row\.appendChild\(createInlineCardSimpleChildNode\(childSpec\)\)/);
+  assert.match(fieldRowsRenderer, /inlineCard\.appendChild\(fieldList\)/);
+  assert.match(cardAppender, /fieldRows: \(childModel\) => appendInlineCardFieldRows\(inlineCard, childModel\)/);
+  assert.doesNotMatch(inlineActionsSource, /const fieldList = createInlineCardContainerNode\(inlineFieldRowsDomModel\)/);
+});
+
+test("room inline card action buttons DOM is delegated out of createRoomInlineActions", async () => {
+  const source = await readShellModule("app.js");
+  const actionsRenderer = sliceBetween(
+    source,
+    "function appendInlineCardActions(inlineCard, childModel, inlineActionHandlers) {",
+    "function appendInlineCardFieldRows(inlineCard, childModel) {",
+  );
+  const cardAppender = sliceBetween(
+    source,
+    "function appendRoomInlinePreviewCard(rail, room, preview, inlinePanelRenderDomModel, inlineActionHandlers) {",
+    "function createRoomInlineActionNode(action, label, role, onActivate) {",
+  );
+  const inlineActionsSource = sliceBetween(
+    source,
+    "function createRoomInlineActions(room) {",
+    "  appendRoomInlineActionNodes(rail, room, inlineActionsModel);",
+  );
+
+  assert.match(actionsRenderer, /const inlineActionDomModel = childModel\.model/);
+  assert.match(actionsRenderer, /const inlineActions = createInlineCardContainerNode\(inlineActionDomModel\)/);
+  assert.match(actionsRenderer, /const handler = inlineActionHandlers\[target\?\.type\]/);
+  assert.match(actionsRenderer, /const button = createInlineCardButtonNode\(buttonSpec\)/);
+  assert.match(actionsRenderer, /button\.addEventListener\("click", handler\)/);
+  assert.match(actionsRenderer, /inlineCard\.appendChild\(inlineActions\)/);
+  assert.match(cardAppender, /actions: \(childModel\) => appendInlineCardActions\(inlineCard, childModel, inlineActionHandlers\)/);
+  assert.doesNotMatch(inlineActionsSource, /const inlineActions = createInlineCardContainerNode\(inlineActionDomModel\)/);
+});
+
+test("room inline preview card assembly is delegated out of createRoomInlineActions", async () => {
+  const source = await readShellModule("app.js");
+  const cardAppender = sliceBetween(
+    source,
+    "function appendRoomInlinePreviewCard(rail, room, preview, inlinePanelRenderDomModel, inlineActionHandlers) {",
+    "function createRoomInlineActionNode(action, label, role, onActivate) {",
+  );
+  const previewPanelAppender = sliceBetween(
+    source,
+    "function appendRoomInlinePreviewPanel(rail, room, action) {",
+    "function createRoomInlineActions(room) {",
+  );
+  const inlineActionsSource = sliceBetween(
+    source,
+    "function createRoomInlineActions(room) {",
+    "  appendRoomInlineActionNodes(rail, room, inlineActionsModel);",
+  );
+
+  assert.match(cardAppender, /const inlineCard = document\.createElement\("div"\)/);
+  assert.match(cardAppender, /inlineCard\.className = inlineCardDomModel\.className/);
+  assert.match(cardAppender, /const attachInlineMetaModelAction = \(pill, target\) => \{/);
+  assert.match(cardAppender, /const inlineCardChildRenderers = \{/);
+  assert.match(cardAppender, /appendInlineCardHeader\(inlineCard, childModel\)/);
+  assert.match(cardAppender, /appendInlineCardMeta\(inlineCard, childModel, attachInlineMetaModelAction\)/);
+  assert.match(cardAppender, /appendInlineCardControls\(inlineCard, childModel, handleInlineCardControlAction\)/);
+  assert.match(cardAppender, /appendInlineCardActions\(inlineCard, childModel, inlineActionHandlers\)/);
+  assert.match(cardAppender, /rail\.appendChild\(inlineCard\)/);
+  assert.match(previewPanelAppender, /appendRoomInlinePreviewCard\(rail, room, preview, inlinePanelRenderDomModel, inlineActionHandlers\)/);
+  assert.match(inlineActionsSource, /appendRoomInlinePreviewPanel\(rail, room, action\)/);
+  assert.doesNotMatch(inlineActionsSource, /const inlineCard = document\.createElement\("div"\)/);
+  assert.doesNotMatch(inlineActionsSource, /const inlineCardChildRenderers = \{/);
+});
+
+test("room inline rail and preview context are delegated out of createRoomInlineActions", async () => {
+  const source = await readShellModule("app.js");
+  const railRenderer = sliceBetween(
+    source,
+    "function createRoomInlineRailNode(railDomSpec) {",
+    "function roomInlinePreviewContext(room, action) {",
+  );
+  const previewContext = sliceBetween(
+    source,
+    "function roomInlinePreviewContext(room, action) {",
+    "function createRoomInlinePreviewHandlers(room, preview) {",
+  );
+  const previewHandlers = sliceBetween(
+    source,
+    "function createRoomInlinePreviewHandlers(room, preview) {",
+    "function appendRoomInlinePreviewPanel(rail, room, action) {",
+  );
+  const previewPanelAppender = sliceBetween(
+    source,
+    "function appendRoomInlinePreviewPanel(rail, room, action) {",
+    "function createRoomInlineActions(room) {",
+  );
+  const inlineActionsSource = sliceBetween(
+    source,
+    "function createRoomInlineActions(room) {",
+    "function roomPreviewContext(room) {",
+  );
+
+  assert.match(railRenderer, /const rail = document\.createElement\("div"\)/);
+  assert.match(railRenderer, /rail\.className = railDomSpec\.className/);
+  assert.match(railRenderer, /setDatasetFlag\(rail, key, value\)/);
+  assert.match(previewContext, /const preview = resolveRoomQuickPreview\(room, action\)/);
+  assert.match(previewContext, /const selectedFieldView = preview/);
+  assert.match(previewContext, /buildQuickActionInlinePreviewPanelModel\(\{/);
+  assert.match(previewHandlers, /const activatePreviewSnapshot = \(event\) => \{/);
+  assert.match(previewHandlers, /quickActionStructuredDraft\(preview\.structured, preview\.action\)/);
+  assert.match(previewHandlers, /const activatePreviewWorkflow = \(event\) => \{/);
+  assert.match(previewHandlers, /return \{\s*snapshot: activatePreviewSnapshot,\s*workflow: activatePreviewWorkflow,\s*\}/);
+  assert.match(previewPanelAppender, /const previewContext = roomInlinePreviewContext\(room, action\)/);
+  assert.match(previewPanelAppender, /const inlineActionHandlers = createRoomInlinePreviewHandlers\(room, preview\)/);
+  assert.match(previewPanelAppender, /buildQuickActionInlinePreviewPanelRenderDomModel\(inlinePanelModel, quickActionIntensity\(action\)\)/);
+  assert.match(previewPanelAppender, /createInlineHintClickableApplier\(room, preview, inlineActionHandlers\)/);
+  assert.match(previewPanelAppender, /return false/);
+  assert.match(previewPanelAppender, /return true/);
+  assert.match(inlineActionsSource, /const rail = createRoomInlineRailNode\(railDomSpec\)/);
+  assert.match(inlineActionsSource, /if \(!appendRoomInlinePreviewPanel\(rail, room, action\)\) return rail/);
+  assert.doesNotMatch(inlineActionsSource, /buildQuickActionInlinePreviewPanelModel/);
+  assert.doesNotMatch(inlineActionsSource, /quickActionStructuredDraft/);
+});
+
+test("quick action preview card meta pills are delegated out of createQuickActionPreviewCard", async () => {
+  const source = await readShellModule("app.js");
+  const actionBinder = sliceBetween(
+    source,
+    "function attachQuickActionPreviewMetaPillAction(pill, title, onActivate) {",
+    "function createQuickActionPreviewPillNode(pillSpec, history, options) {",
+  );
+  const pillRenderer = sliceBetween(
+    source,
+    "function createQuickActionPreviewPillNode(pillSpec, history, options) {",
+    "function createQuickActionPreviewPillGroupLabelNode(labelSpec) {",
+  );
+  const cardRenderer = sliceBetween(
+    source,
+    "function createQuickActionPreviewCard(action, previewState = \"\", structured = null, options = {}) {",
+    "function latestRoomQuickState(room) {",
+  );
+
+  assert.match(actionBinder, /quickActionPreviewClickableDomSpec\(title\)/);
+  assert.match(actionBinder, /quickActionPreviewKeyActivates\(event\.key\)/);
+  assert.match(actionBinder, /onActivate\(\)/);
+  assert.match(pillRenderer, /pillSpec\.className \? document\.createElement\("span"\) : createPill\(pillSpec\.text, pillSpec\.tone\)/);
+  assert.match(pillRenderer, /pillActionTarget\?\.kind === "history"/);
+  assert.match(pillRenderer, /options\.onHistoryClick\(history\[pillActionTarget\.snapshotIndex\], pillActionTarget\.snapshotIndex\)/);
+  assert.match(pillRenderer, /pillActionTarget\?\.kind === "field-view"/);
+  assert.match(pillRenderer, /options\.onFieldViewChange\(pillActionTarget\.fieldView\)/);
+  assert.doesNotMatch(cardRenderer, /const attachPreviewMetaPillAction =/);
+  assert.doesNotMatch(cardRenderer, /const renderPillSpec =/);
+});
+
+test("quick action preview card header and pill groups are delegated out of createQuickActionPreviewCard", async () => {
+  const source = await readShellModule("app.js");
+  const headerAppender = sliceBetween(
+    source,
+    "function appendQuickActionPreviewHeader(card, previewRenderDomSpec, history, options) {",
+    "function createQuickActionPreviewControlButtonNode(buttonDomSpec, history, options) {",
+  );
+  const cardRenderer = sliceBetween(
+    source,
+    "function createQuickActionPreviewCard(action, previewState = \"\", structured = null, options = {}) {",
+    "function latestRoomQuickState(room) {",
+  );
+
+  assert.match(headerAppender, /const header = document\.createElement\("div"\)/);
+  assert.match(headerAppender, /header\.className = previewRenderDomSpec\.header\.headerClassName/);
+  assert.match(headerAppender, /heading\.appendChild\(createLine\(previewRenderDomSpec\.header\.kickerLine\.className/);
+  assert.match(headerAppender, /pills\.className = previewRenderDomSpec\.pillsWrapperClassName/);
+  assert.match(headerAppender, /previewRenderDomSpec\.pillSections\.forEach\(\(sectionSpec\) => \{/);
+  assert.match(headerAppender, /createQuickActionPreviewPillGroupNode\(sectionSpec\.group, history, options\)/);
+  assert.match(headerAppender, /card\.appendChild\(header\)/);
+  assert.match(cardRenderer, /appendQuickActionPreviewHeader\(card, previewRenderDomSpec, history, options\)/);
+  assert.doesNotMatch(cardRenderer, /previewRenderDomSpec\.pillSections\.forEach/);
+  assert.doesNotMatch(cardRenderer, /pills\.className = previewRenderDomSpec\.pillsWrapperClassName/);
+});
+
+test("quick action preview card controls and sheet are delegated out of createQuickActionPreviewCard", async () => {
+  const source = await readShellModule("app.js");
+  const controlsAppender = sliceBetween(
+    source,
+    "function appendQuickActionPreviewControlPanels(card, previewRenderDomSpec, history, options) {",
+    "function createQuickActionPreviewSheetNode(sheetRenderDomSpec) {",
+  );
+  const sheetRenderer = sliceBetween(
+    source,
+    "function createQuickActionPreviewSheetNode(sheetRenderDomSpec) {",
+    "function createQuickActionPreviewCard(action, previewState = \"\", structured = null, options = {}) {",
+  );
+  const cardRenderer = sliceBetween(
+    source,
+    "function createQuickActionPreviewCard(action, previewState = \"\", structured = null, options = {}) {",
+    "function latestRoomQuickState(room) {",
+  );
+
+  assert.match(controlsAppender, /previewRenderDomSpec\.controlPanels\.forEach\(\(panelSpec\) => \{/);
+  assert.match(controlsAppender, /const buttonNodes = panelSpec\.buttons\.map\(\(buttonDomSpec\) =>/);
+  assert.match(controlsAppender, /createQuickActionPreviewControlButtonNode\(buttonDomSpec, history, options\)/);
+  assert.match(controlsAppender, /card\.appendChild\(panel\)/);
+  assert.match(sheetRenderer, /if \(!sheetRenderDomSpec\) return null/);
+  assert.match(sheetRenderer, /const sheet = document\.createElement\("div"\)/);
+  assert.match(sheetRenderer, /if \(childSpec\.kind === "row"\) \{/);
+  assert.match(sheetRenderer, /row\.append\(label, value\)/);
+  assert.match(sheetRenderer, /if \(childSpec\.kind === "notes"\) \{/);
+  assert.match(sheetRenderer, /return sheet/);
+  assert.match(cardRenderer, /appendQuickActionPreviewControlPanels\(card, previewRenderDomSpec, history, options\)/);
+  assert.match(cardRenderer, /const sheet = createQuickActionPreviewSheetNode\(previewRenderDomSpec\.sheet\)/);
+  assert.doesNotMatch(cardRenderer, /previewRenderDomSpec\.controlPanels\.forEach/);
+  assert.doesNotMatch(cardRenderer, /for \(const childSpec of sheetRenderDomSpec\.children\)/);
+});
+
+test("user detail card projection branches are delegated out of userDetailCardProjection", async () => {
+  const source = await readShellModule("app.js");
+  const idleProjection = sliceBetween(
+    source,
+    "function userDetailCardIdleProjection() {",
+    "function userDetailCardMonogram(visual, projection) {",
+  );
+  const monogramResolver = sliceBetween(
+    source,
+    "function userDetailCardMonogram(visual, projection) {",
+    "function userDetailCardCustomProjection(room, visual, projection, detailCard, monogram, status) {",
+  );
+  const customProjection = sliceBetween(
+    source,
+    "function userDetailCardCustomProjection(room, visual, projection, detailCard, monogram, status) {",
+    "function userDetailCardCityProjection(room, projection, caretaker, monogram, status) {",
+  );
+  const cityProjection = sliceBetween(
+    source,
+    "function userDetailCardCityProjection(room, projection, caretaker, monogram, status) {",
+    "function userDetailCardHomeProjection(room, projection, caretaker, monogram, status) {",
+  );
+  const homeProjection = sliceBetween(
+    source,
+    "function userDetailCardHomeProjection(room, projection, caretaker, monogram, status) {",
+    "function userDetailCardProjection(room, visual, projection) {",
+  );
+  const projectionSource = sliceBetween(
+    source,
+    "function userDetailCardProjection(room, visual, projection) {",
+    "function seedComposerFromQuickAction(action, template = quickActionTemplate(action), options = {}) {",
+  );
+
+  assert.match(idleProjection, /variant: "idle"/);
+  assert.match(monogramResolver, /visual\.portrait\?\.visual\?\.monogram/);
+  assert.match(customProjection, /detailCard\.kicker/);
+  assert.match(customProjection, /Array\.isArray\(detailCard\.meta\)/);
+  assert.match(cityProjection, /variant: "city"/);
+  assert.match(cityProjection, /公共频道向导/);
+  assert.match(homeProjection, /variant: "home"/);
+  assert.match(homeProjection, /currentIdentity\(\) \|\| "当前住户"/);
+  assert.match(projectionSource, /return userDetailCardIdleProjection\(\)/);
+  assert.match(projectionSource, /const monogram = userDetailCardMonogram\(visual, projection\)/);
+  assert.match(projectionSource, /return userDetailCardCustomProjection\(room, visual, projection, detailCard, monogram, status\)/);
+  assert.match(projectionSource, /return userDetailCardCityProjection\(room, projection, caretaker, monogram, status\)/);
+  assert.match(projectionSource, /return userDetailCardHomeProjection\(room, projection, caretaker, monogram, status\)/);
+  assert.doesNotMatch(projectionSource, /公共频道向导/);
+  assert.doesNotMatch(projectionSource, /currentIdentity\(\) \|\| "当前住户"/);
+});
+
+test("user detail card shell state and meta rows are delegated out of syncUserDetailCard", async () => {
+  const source = await readShellModule("app.js");
+  const shellRenderer = sliceBetween(
+    source,
+    "function applyUserDetailCardShellState(card) {",
+    "function clearUserDetailCardTransientNodes() {",
+  );
+  const syncSource = sliceBetween(
+    source,
+    "function syncUserDetailCard(room, visual, projection) {",
+    "function ensureUserSceneChrome() {",
+  );
+
+  assert.match(shellRenderer, /setDatasetFlag\(chatDetailCardShellEl, "roomVariant", card\.variant\)/);
+  assert.match(shellRenderer, /setDatasetFlag\(chatDetailCardActionsEl, "roomMotif", card\.motif\)/);
+  assert.match(shellRenderer, /chatDetailCardKickerEl\.textContent = card\.kicker/);
+  assert.match(shellRenderer, /chatDetailCardAvatarEl\.textContent = card\.monogram/);
+  assert.match(shellRenderer, /clearChildren\(chatDetailCardMetaEl\)/);
+  assert.match(shellRenderer, /createChatDetailCardMetaRow\(item\.label, item\.value\)/);
+  assert.match(syncSource, /applyUserDetailCardShellState\(card\)/);
+  assert.doesNotMatch(syncSource, /chatDetailCardKickerEl\.textContent = card\.kicker/);
+  assert.doesNotMatch(syncSource, /createChatDetailCardMetaRow\(item\.label, item\.value\)/);
+});
+
+test("user detail card workflow and preview sections are delegated out of syncUserDetailCard", async () => {
+  const source = await readShellModule("app.js");
+  const clearRenderer = sliceBetween(
+    source,
+    "function clearUserDetailCardTransientNodes() {",
+    "function insertUserDetailCardTransientNode(node) {",
+  );
+  const insertRenderer = sliceBetween(
+    source,
+    "function insertUserDetailCardTransientNode(node) {",
+    "function createUserDetailCardWorkflowNode(room, quickAction, quickState) {",
+  );
+  const workflowRenderer = sliceBetween(
+    source,
+    "function createUserDetailCardWorkflowNode(room, quickAction, quickState) {",
+    "function createUserDetailCardPreviewNode(room, quickAction, preview) {",
+  );
+  const previewRenderer = sliceBetween(
+    source,
+    "function createUserDetailCardPreviewNode(room, quickAction, preview) {",
+    "function renderUserDetailCardDynamicSections(room, quickAction, quickState, preview) {",
+  );
+  const dynamicRenderer = sliceBetween(
+    source,
+    "function renderUserDetailCardDynamicSections(room, quickAction, quickState, preview) {",
+    "function createUserDetailCardActionButton(action) {",
+  );
+  const syncSource = sliceBetween(
+    source,
+    "function syncUserDetailCard(room, visual, projection) {",
+    "function ensureUserSceneChrome() {",
+  );
+
+  assert.match(clearRenderer, /querySelectorAll\("\.chat-detail-card-workflow"\)/);
+  assert.match(clearRenderer, /querySelectorAll\("\.chat-detail-card-preview"\)/);
+  assert.match(insertRenderer, /chatDetailCardShellEl\.insertBefore\(node, chatDetailCardActionsEl\)/);
+  assert.match(workflowRenderer, /createWorkflowProgress\(quickAction, quickState/);
+  assert.match(workflowRenderer, /previewRoomQuickStage\(room\?\.id \|\| activeRoomId, quickAction, stage\.label\)/);
+  assert.match(previewRenderer, /createQuickActionPreviewCard\(quickAction, previewState, previewStructured/);
+  assert.match(previewRenderer, /roomQuickPreviewCardFieldView\(/);
+  assert.match(previewRenderer, /setRoomQuickPreviewCardFieldView\(/);
+  assert.match(dynamicRenderer, /clearUserDetailCardTransientNodes\(\)/);
+  assert.match(dynamicRenderer, /insertUserDetailCardTransientNode\(workflow\)/);
+  assert.match(dynamicRenderer, /insertUserDetailCardTransientNode\(previewCard\)/);
+  assert.match(syncSource, /renderUserDetailCardDynamicSections\(room, quickAction, quickState, preview\)/);
+  assert.doesNotMatch(syncSource, /createWorkflowProgress\(quickAction, quickState/);
+  assert.doesNotMatch(syncSource, /createQuickActionPreviewCard\(quickAction, previewState, previewStructured/);
+});
+
+test("user detail card action buttons are delegated out of syncUserDetailCard", async () => {
+  const source = await readShellModule("app.js");
+  const buttonRenderer = sliceBetween(
+    source,
+    "function createUserDetailCardActionButton(action) {",
+    "function renderUserDetailCardActions(room, card) {",
+  );
+  const actionsRenderer = sliceBetween(
+    source,
+    "function renderUserDetailCardActions(room, card) {",
+    "function syncUserDetailCard(room, visual, projection) {",
+  );
+  const syncSource = sliceBetween(
+    source,
+    "function syncUserDetailCard(room, visual, projection) {",
+    "function ensureUserSceneChrome() {",
+  );
+
+  assert.match(buttonRenderer, /button\.className = "chat-detail-card-action"/);
+  assert.match(buttonRenderer, /button\.dataset\.cardAction = action/);
+  assert.match(buttonRenderer, /seedComposerFromQuickAction\(action\)/);
+  assert.match(actionsRenderer, /clearChildren\(chatDetailCardActionsEl\)/);
+  assert.match(actionsRenderer, /for \(const action of card\.actions\) \{/);
+  assert.match(actionsRenderer, /createUserDetailCardActionButton\(action\)/);
+  assert.match(actionsRenderer, /appendRoomQuickActionOverviewButton\(chatDetailCardActionsEl, room/);
+  assert.match(actionsRenderer, /appendRoomQuickStateAdvanceButton\(chatDetailCardActionsEl, room/);
+  assert.match(actionsRenderer, /syncUserQuickActionButtons\(room\?\.id \|\| activeRoomId\)/);
+  assert.match(syncSource, /renderUserDetailCardActions\(room, card\)/);
+  assert.doesNotMatch(syncSource, /button\.dataset\.cardAction = action/);
+  assert.doesNotMatch(syncSource, /appendRoomQuickActionOverviewButton\(chatDetailCardActionsEl, room/);
+});
+
+test("room inline action buttons are delegated out of createRoomInlineActions", async () => {
+  const source = await readShellModule("app.js");
+  const actionNodeSource = sliceBetween(
+    source,
+    "function createRoomInlineActionNode(action, label, role, onActivate) {",
+    "function appendRoomInlineActionNodes(rail, room, inlineActionsModel) {",
+  );
+  const actionAppender = sliceBetween(
+    source,
+    "function appendRoomInlineActionNodes(rail, room, inlineActionsModel) {",
+    "function createRoomInlineActions(room) {",
+  );
+  const inlineActionsSource = sliceBetween(
+    source,
+    "function createRoomInlineActions(room) {",
+    "  return rail;",
+  );
+
+  assert.match(actionNodeSource, /buildRoomInlineActionDomSpec\(action, label, role\)/);
+  assert.match(actionNodeSource, /document\.createElement\(actionDomSpec\.type \|\| "span"\)/);
+  assert.match(actionNodeSource, /setDatasetFlag\(actionNode, key, value\)/);
+  assert.match(actionNodeSource, /actionNode\.addEventListener\("click", \(event\) => \{/);
+  assert.doesNotMatch(inlineActionsSource, /const appendAction =/);
+  assert.match(actionAppender, /const primaryActionNode = createRoomInlineActionNode\(action, primaryLabel, "primary", \(\) => \{/);
+  assert.match(actionAppender, /const secondaryActionNode = createRoomInlineActionNode\(action, secondaryLabel, "secondary", \(\) => \{/);
+  assert.match(actionAppender, /if \(primaryActionNode\) rail\.appendChild\(primaryActionNode\)/);
+  assert.match(actionAppender, /if \(secondaryActionNode\) rail\.appendChild\(secondaryActionNode\)/);
+  assert.match(inlineActionsSource, /appendRoomInlineActionNodes\(rail, room, inlineActionsModel\)/);
+});
+
+test("room inline primary and secondary action append is delegated out of createRoomInlineActions", async () => {
+  const source = await readShellModule("app.js");
+  const actionAppender = sliceBetween(
+    source,
+    "function appendRoomInlineActionNodes(rail, room, inlineActionsModel) {",
+    "function createRoomInlineActions(room) {",
+  );
+  const inlineActionsSource = sliceBetween(
+    source,
+    "function createRoomInlineActions(room) {",
+    "  return rail;",
+  );
+
+  assert.match(actionAppender, /primarySpec,\s*secondarySpec,\s*primaryLabel,\s*secondaryLabel/);
+  assert.match(actionAppender, /const primaryActionNode = createRoomInlineActionNode\(action, primaryLabel, "primary", \(\) => \{/);
+  assert.match(actionAppender, /seedComposerFromQuickAction\(/);
+  assert.match(actionAppender, /const secondaryActionNode = createRoomInlineActionNode\(action, secondaryLabel, "secondary", \(\) => \{/);
+  assert.match(actionAppender, /setRoomQuickAction\(room\.id, nextAction\)/);
+  assert.match(actionAppender, /setRoomQuickState\(room\.id, nextAction, secondarySpec\.next_state\)/);
+  assert.match(actionAppender, /advanceRoomQuickState\(room\.id\)/);
+  assert.match(actionAppender, /if \(primaryActionNode\) rail\.appendChild\(primaryActionNode\)/);
+  assert.match(actionAppender, /if \(secondaryActionNode\) rail\.appendChild\(secondaryActionNode\)/);
+  assert.match(inlineActionsSource, /appendRoomInlineActionNodes\(rail, room, inlineActionsModel\)/);
+  assert.doesNotMatch(inlineActionsSource, /const primaryActionNode = createRoomInlineActionNode/);
+  assert.doesNotMatch(inlineActionsSource, /const secondaryActionNode = createRoomInlineActionNode/);
+});
+
+test("room inline hint DOM is delegated out of createRoomInlineActions", async () => {
+  const source = await readShellModule("app.js");
+  const hintRenderer = sliceBetween(
+    source,
+    "function createInlineHintNode(inlineHintDomModel, applyInlineHintClickable) {",
+    "function createRoomInlineProgressNode(progressDomSpec) {",
+  );
+  const inlineActionsSource = sliceBetween(
+    source,
+    "function createRoomInlineActions(room) {",
+    "  appendRoomInlineActionNodes(rail, room, inlineActionsModel);",
+  );
+
+  assert.match(hintRenderer, /document\.createElement\("div"\)/);
+  assert.match(hintRenderer, /hint\.className = inlineHintDomModel\.className/);
+  assert.match(hintRenderer, /Object\.entries\(inlineHintDomModel\.dataset\)/);
+  assert.match(hintRenderer, /if \(part\.kind === "separator"\) \{/);
+  assert.match(hintRenderer, /applyInlineHintClickable\(node, part\)/);
+  assert.match(inlineActionsSource, /appendRoomInlinePreviewPanel\(rail, room, action\)/);
+  assert.doesNotMatch(inlineActionsSource, /for \(const part of inlineHintDomModel\.parts\)/);
+  assert.doesNotMatch(inlineActionsSource, /hint\.appendChild\(node\)/);
+});
+
+test("room inline hint action binding is delegated out of createRoomInlineActions", async () => {
+  const source = await readShellModule("app.js");
+  const hintActionBinder = sliceBetween(
+    source,
+    "function bindInlineHintAction(node, target, room, preview, inlineHintHandlers) {",
+    "function createInlineHintClickableApplier(room, preview, inlineHintHandlers) {",
+  );
+  const hintClickableApplier = sliceBetween(
+    source,
+    "function createInlineHintClickableApplier(room, preview, inlineHintHandlers) {",
+    "function createRoomInlineProgressNode(progressDomSpec) {",
+  );
+  const inlineActionsSource = sliceBetween(
+    source,
+    "function createRoomInlineActions(room) {",
+    "  appendRoomInlineActionNodes(rail, room, inlineActionsModel);",
+  );
+
+  assert.match(hintActionBinder, /const handler = inlineHintHandlers\[target\?\.type\]/);
+  assert.match(hintActionBinder, /if \(typeof handler === "function"\) \{/);
+  assert.match(hintActionBinder, /node\.addEventListener\("click", handler\)/);
+  assert.match(hintActionBinder, /if \(target\?\.type === "history"\) \{/);
+  assert.match(hintActionBinder, /previewRoomQuickStage\(room\.id, preview\.action, preview\.state, target\.snapshotIndex\)/);
+  assert.match(hintClickableApplier, /applyInlineClickableDomSpec\(node, part\.clickable\)/);
+  assert.match(hintClickableApplier, /bindInlineHintAction\(node, part\.actionTarget, room, preview, inlineHintHandlers\)/);
+  assert.match(inlineActionsSource, /appendRoomInlinePreviewPanel\(rail, room, action\)/);
+  assert.doesNotMatch(inlineActionsSource, /const bindInlineHintAction =/);
+});
+
+test("room inline meta child DOM is delegated out of createRoomInlineActions", async () => {
+  const source = await readShellModule("app.js");
+  const metaChildRenderer = sliceBetween(
+    source,
+    "function createInlineMetaChildNode(childSpec, attachInlineMetaModelAction) {",
+    "function appendInlineCardMeta(inlineCard, childModel, attachInlineMetaModelAction) {",
+  );
+  const metaRenderer = sliceBetween(
+    source,
+    "function appendInlineCardMeta(inlineCard, childModel, attachInlineMetaModelAction) {",
+    "function appendInlineCardActions(inlineCard, childModel, inlineActionHandlers) {",
+  );
+  const inlineActionsSource = sliceBetween(
+    source,
+    "function createRoomInlineActions(room) {",
+    "  appendRoomInlineActionNodes(rail, room, inlineActionsModel);",
+  );
+
+  assert.match(metaChildRenderer, /document\.createElement\(childSpec\.type \|\| "span"\)/);
+  assert.match(metaChildRenderer, /node\.className = childSpec\.className/);
+  assert.match(metaChildRenderer, /node\.textContent = childSpec\.text \|\| ""/);
+  assert.match(metaChildRenderer, /attachInlineMetaModelAction\(node, \{/);
+  assert.match(metaChildRenderer, /clickable: childSpec\.clickable/);
+  assert.match(metaChildRenderer, /node\.appendChild\(createInlineMetaChildNode\(nestedSpec, attachInlineMetaModelAction\)\)/);
+  assert.match(metaRenderer, /inlineMeta\.appendChild\(createInlineMetaChildNode\(childSpec, attachInlineMetaModelAction\)\)/);
+  assert.doesNotMatch(inlineActionsSource, /const createInlineMetaChildNode =/);
+  assert.doesNotMatch(inlineActionsSource, /inlineMeta\.appendChild\(createInlineMetaChildNode/);
+});
+
+test("room inline card meta DOM is delegated out of createRoomInlineActions", async () => {
+  const source = await readShellModule("app.js");
+  const metaRenderer = sliceBetween(
+    source,
+    "function appendInlineCardMeta(inlineCard, childModel, attachInlineMetaModelAction) {",
+    "function appendInlineCardActions(inlineCard, childModel, inlineActionHandlers) {",
+  );
+  const cardAppender = sliceBetween(
+    source,
+    "function appendRoomInlinePreviewCard(rail, room, preview, inlinePanelRenderDomModel, inlineActionHandlers) {",
+    "function createRoomInlineActionNode(action, label, role, onActivate) {",
+  );
+  const inlineActionsSource = sliceBetween(
+    source,
+    "function createRoomInlineActions(room) {",
+    "  appendRoomInlineActionNodes(rail, room, inlineActionsModel);",
+  );
+
+  assert.match(metaRenderer, /const inlineMetaDomModel = childModel\.model/);
+  assert.match(metaRenderer, /const inlineMeta = createInlineCardContainerNode\(inlineMetaDomModel\)/);
+  assert.match(metaRenderer, /inlineMetaDomModel\.sections\.forEach\(\(section\) => \{/);
+  assert.match(metaRenderer, /inlineMeta\.appendChild\(createInlineMetaChildNode\(childSpec, attachInlineMetaModelAction\)\)/);
+  assert.match(metaRenderer, /inlineCard\.appendChild\(inlineMeta\)/);
+  assert.match(cardAppender, /appendInlineCardMeta\(inlineCard, childModel, attachInlineMetaModelAction\)/);
+  assert.doesNotMatch(inlineActionsSource, /createInlineCardContainerNode\(inlineMetaDomModel\)/);
+});
+
+test("room inline meta pill activation is delegated out of createRoomInlineActions", async () => {
+  const source = await readShellModule("app.js");
+  const metaPillBinder = sliceBetween(
+    source,
+    "function attachInlineMetaPillAction(pill, clickableSpec, onActivate) {",
+    "function createInlineMetaChildNode(childSpec, attachInlineMetaModelAction) {",
+  );
+  const inlineActionsSource = sliceBetween(
+    source,
+    "function createRoomInlineActions(room) {",
+    "  appendRoomInlineActionNodes(rail, room, inlineActionsModel);",
+  );
+
+  assert.match(metaPillBinder, /if \(!pill \|\| typeof onActivate !== "function"\) return/);
+  assert.match(metaPillBinder, /applyInlineClickableDomSpec\(pill, clickableSpec\)/);
+  assert.match(metaPillBinder, /pill\.addEventListener\("click", \(event\) => \{/);
+  assert.match(metaPillBinder, /event\.preventDefault\(\)/);
+  assert.match(metaPillBinder, /event\.stopPropagation\(\)/);
+  assert.match(metaPillBinder, /quickActionPreviewKeyActivates\(event\.key\)/);
+  assert.doesNotMatch(inlineActionsSource, /const attachInlineMetaPillAction =/);
+});
+
+test("room inline card controls DOM is delegated out of createRoomInlineActions", async () => {
+  const source = await readShellModule("app.js");
+  const controlsRenderer = sliceBetween(
+    source,
+    "function appendInlineCardControls(inlineCard, childModel, onInlineCardControlAction) {",
+    "function createInlineHintNode(inlineHintDomModel, applyInlineHintClickable) {",
+  );
+  const cardAppender = sliceBetween(
+    source,
+    "function appendRoomInlinePreviewCard(rail, room, preview, inlinePanelRenderDomModel, inlineActionHandlers) {",
+    "function createRoomInlineActionNode(action, label, role, onActivate) {",
+  );
+  const inlineActionsSource = sliceBetween(
+    source,
+    "function createRoomInlineActions(room) {",
+    "  appendRoomInlineActionNodes(rail, room, inlineActionsModel);",
+  );
+
+  assert.match(controlsRenderer, /const inlineControlsDomModel = childModel\.model/);
+  assert.match(controlsRenderer, /inlineControlsDomModel\.groups\.forEach\(\(group\) => \{/);
+  assert.match(controlsRenderer, /const container = createInlineCardContainerNode\(group\)/);
+  assert.match(controlsRenderer, /const button = createInlineCardButtonNode\(buttonSpec\)/);
+  assert.match(controlsRenderer, /onInlineCardControlAction\(buttonSpec\.actionTarget\)/);
+  assert.match(controlsRenderer, /inlineCard\.appendChild\(container\)/);
+  assert.match(cardAppender, /appendInlineCardControls\(inlineCard, childModel, handleInlineCardControlAction\)/);
+  assert.doesNotMatch(inlineActionsSource, /const renderInlineCardControls =/);
+});
+
 test("gateway send clears pending echo only after successful refresh", async () => {
   const source = await readShellModule("app.js");
+  const postRenderer = sliceBetween(
+    source,
+    "async function postGatewayMessageAndRefresh(roomId, payload, onPosted) {",
+    "function handleGatewaySendFailure(roomId, pendingEchoId, posted, error) {",
+  );
 
   assert.match(
-    source,
-    /await postGatewayJson\("\/v1\/shell\/message", payload\);\s*posted = true;\s*delete roomSendErrors\[roomId\];\s*await refreshFromGateway\(\{ requireShell: true \}\);\s*clearPendingEchoes\(roomId\);/,
+    postRenderer,
+    /await postGatewayJson\("\/v1\/shell\/message", payload\);\s*onPosted\?\.\(\);\s*delete roomSendErrors\[roomId\];\s*await refreshFromGateway\(\{ requireShell: true \}\);\s*clearPendingEchoes\(roomId\);/,
   );
+});
+
+test("sendMessage delegates local send side effects and gateway send lifecycle", async () => {
+  const source = await readShellModule("app.js");
+  const sendRenderer = sliceBetween(
+    source,
+    "async function sendMessage(text, { quickAction = \"\" } = {}) {",
+    "async function editMessage(roomId, messageId, text) {",
+  );
+
+  assert.match(source, /function appendLocalRoomMessage\(roomId, text, quickAction\) \{/);
+  assert.match(source, /function clearComposerAfterSend\(roomId, text\) \{/);
+  assert.match(source, /function renderAfterSend\(\{ composerFirst = false \} = \{\}\) \{/);
+  assert.match(source, /function commitLocalSend\(roomId, text, quickAction\) \{/);
+  assert.match(source, /function gatewayMessagePayload\(roomId, text, quickAction\) \{/);
+  assert.match(source, /function prepareGatewaySend\(roomId, text, quickAction\) \{/);
+  assert.match(source, /async function postGatewayMessageAndRefresh\(roomId, payload, onPosted\) \{/);
+  assert.match(source, /function handleGatewaySendFailure\(roomId, pendingEchoId, posted, error\) \{/);
+  assert.match(source, /function finishGatewaySendAttempt\(\) \{/);
+
+  assert.match(sendRenderer, /commitLocalSend\(roomId, text, quickAction\)/);
+  assert.match(sendRenderer, /const payload = gatewayMessagePayload\(roomId, text, quickAction\)/);
+  assert.match(sendRenderer, /const pendingEchoId = prepareGatewaySend\(roomId, text, quickAction\)/);
+  assert.match(sendRenderer, /await postGatewayMessageAndRefresh\(roomId, payload, \(\) => \{/);
+  assert.match(sendRenderer, /handleGatewaySendFailure\(roomId, pendingEchoId, posted, error\)/);
+  assert.match(sendRenderer, /finishGatewaySendAttempt\(\)/);
+  assert.doesNotMatch(sendRenderer, /room\.messages\.push/);
+  assert.doesNotMatch(sendRenderer, /await postGatewayJson\("\/v1\/shell\/message", payload\)/);
 });
 
 test("gateway render hides pending echo once committed copy is present", async () => {
@@ -905,18 +2363,190 @@ test("gateway render hides pending echo once committed copy is present", async (
 
 test("gateway send failure keeps composer cleared and stops pending typing", async () => {
   const source = await readShellModule("app.js");
+  const renderSource = await readShellModule("shell-message-render.js");
 
   assert.doesNotMatch(source, /if \(!posted\) \{\s*updateRoomDraft\(roomId, text\);\s*composerInputEl\.value = text;/);
-  assert.match(source, /if \(pending\.some\(\(message\) => !message\.failed\)\) \{/);
+  assert.match(source, /timelineTypingIndicatorSpec\(flowSpec\.pending\)/);
+  assert.match(renderSource, /pending\.some\(\(message\) => !message\?\.failed\)/);
 });
 
 test("composer submit ignores duplicate send while a message is in flight", async () => {
   const source = await readShellModule("app.js");
-
-  assert.match(
+  const blockedRenderer = sliceBetween(
     source,
-    /async function submitComposerMessage\(\) \{\s*if \(isSendingMessage\) \{\s*updateComposerState\(\);\s*return false;\s*\}/,
+    "function composerSubmitBlocked() {",
+    "function composerSubmitDraft() {",
   );
+
+  assert.match(blockedRenderer, /if \(isSendingMessage\) \{\s*updateComposerState\(\);\s*return true;\s*\}/);
+  assert.match(source, /async function submitComposerMessage\(\) \{\s*if \(composerSubmitBlocked\(\)\) return false;/);
+});
+
+test("composer submit edit and send paths are delegated out of submitComposerMessage", async () => {
+  const source = await readShellModule("app.js");
+  const submitRenderer = sliceBetween(
+    source,
+    "async function submitComposerMessage() {",
+    "function composerSubmitBlocked() {",
+  );
+  const editRenderer = sliceBetween(
+    source,
+    "async function submitComposerEditTarget(text) {",
+    "async function submitComposerNewMessage(text, quickAction) {",
+  );
+  const sendRenderer = sliceBetween(
+    source,
+    "async function submitComposerNewMessage(text, quickAction) {",
+    "function governanceWorldStewardInputElements() {",
+  );
+
+  assert.match(submitRenderer, /const draft = composerSubmitDraft\(\)/);
+  assert.match(submitRenderer, /if \(editingMessageTarget\) return submitComposerEditTarget\(draft\.text\)/);
+  assert.match(submitRenderer, /return submitComposerNewMessage\(draft\.text, draft\.quickAction\)/);
+  assert.match(editRenderer, /await editMessage\(target\.roomId, target\.messageId, text\)/);
+  assert.match(editRenderer, /clearMessageEditTarget\(\{ clearInput: true \}\)/);
+  assert.match(editRenderer, /renderComposerSubmitSurfaces\(\)/);
+  assert.match(sendRenderer, /await sendMessage\(text, \{ quickAction \}\)/);
+  assert.match(sendRenderer, /localizedRuntimeError\(error, "消息发送失败"\)/);
+  assert.match(sendRenderer, /renderComposerSubmitFailure\(activeRoomId, message\)/);
+  assert.doesNotMatch(submitRenderer, /await editMessage/);
+  assert.doesNotMatch(submitRenderer, /await sendMessage/);
+  assert.doesNotMatch(submitRenderer, /localizedRuntimeError/);
+});
+
+test("composer state model and form dataset are delegated out of updateComposerState", async () => {
+  const source = await readShellModule("app.js");
+  const modelRenderer = sliceBetween(
+    source,
+    "function composerStateModel(room) {",
+    "function applyComposerFormState(room, shellPage, composerAvailability) {",
+  );
+  const formRenderer = sliceBetween(
+    source,
+    "function applyComposerFormState(room, shellPage, composerAvailability) {",
+    "function composerPlaceholderForState(room, shellPage, compactChatShell, composerAvailability) {",
+  );
+  const stateRenderer = sliceBetween(
+    source,
+    "function updateComposerState() {",
+    "async function submitComposerMessage() {",
+  );
+
+  assert.match(modelRenderer, /const shellPage = currentShellPage\(\)/);
+  assert.match(modelRenderer, /const draftText = composerInputEl\?\.value\.trim\(\) \|\| ""/);
+  assert.match(modelRenderer, /computeComposerAvailability\(\{/);
+  assert.match(modelRenderer, /gatewayUnavailable: gatewayUnavailableForComposer\(\)/);
+  assert.match(formRenderer, /composerFormEl\.dataset\.shellMode = shellMode/);
+  assert.match(formRenderer, /composerFormEl\.dataset\.draftState = composerAvailability\.draftState/);
+  assert.match(formRenderer, /setDatasetFlag\(composerFormEl, "quickAction", room \? roomQuickAction\(room\.id\) : ""\)/);
+  assert.match(stateRenderer, /const \{ shellPage, compactChatShell, composerAvailability \} = composerStateModel\(room\)/);
+  assert.match(stateRenderer, /applyComposerFormState\(room, shellPage, composerAvailability\)/);
+  assert.doesNotMatch(stateRenderer, /computeComposerAvailability\(\{/);
+  assert.doesNotMatch(stateRenderer, /composerFormEl\.dataset\.draftState/);
+});
+
+test("composer input state and downstream renders are delegated out of updateComposerState", async () => {
+  const source = await readShellModule("app.js");
+  const placeholderRenderer = sliceBetween(
+    source,
+    "function composerPlaceholderForState(room, shellPage, compactChatShell, composerAvailability) {",
+    "function applyComposerInputState(room, shellPage, compactChatShell, composerAvailability) {",
+  );
+  const inputRenderer = sliceBetween(
+    source,
+    "function applyComposerInputState(room, shellPage, compactChatShell, composerAvailability) {",
+    "function renderComposerDependentSurfaces(room) {",
+  );
+  const downstreamRenderer = sliceBetween(
+    source,
+    "function renderComposerDependentSurfaces(room) {",
+    "function updateComposerState() {",
+  );
+  const stateRenderer = sliceBetween(
+    source,
+    "function updateComposerState() {",
+    "async function submitComposerMessage() {",
+  );
+
+  assert.match(placeholderRenderer, /if \(isSendingMessage\) \{/);
+  assert.match(placeholderRenderer, /gatewayUnavailableForComposer\(\)/);
+  assert.match(placeholderRenderer, /residentGatewayLoginRequired\(\)/);
+  assert.match(placeholderRenderer, /placeholder \+= gatewayUrl \? "（会先保存在本地，等待同步）" : "（会先进入本地时间线）"/);
+  assert.match(placeholderRenderer, /if \(editingMessageTarget\) \{/);
+  assert.match(inputRenderer, /composerInputEl\.disabled = !composerAvailability\.canDraft \|\| isSendingMessage/);
+  assert.match(inputRenderer, /composerSendEl\.disabled = !composerAvailability\.canSend/);
+  assert.match(inputRenderer, /composerInputEl\.placeholder = placeholder/);
+  assert.match(inputRenderer, /composerSendEl\.textContent = isSendingMessage/);
+  assert.match(downstreamRenderer, /syncUserQuickActionButtons\(room\?\.id \|\| activeRoomId\)/);
+  assert.match(downstreamRenderer, /renderComposerHero\(room\)/);
+  assert.match(downstreamRenderer, /renderComposerMeta\(room\)/);
+  assert.match(stateRenderer, /applyComposerInputState\(room, shellPage, compactChatShell, composerAvailability\)/);
+  assert.match(stateRenderer, /renderComposerDependentSurfaces\(room\)/);
+  assert.doesNotMatch(stateRenderer, /composerInputEl\.placeholder = placeholder/);
+  assert.doesNotMatch(stateRenderer, /renderComposerHero\(room\)/);
+});
+
+test("composer context model and DOM are delegated out of updateComposerContext", async () => {
+  const source = await readShellModule("app.js");
+  const inputStateRenderer = sliceBetween(
+    source,
+    "function composerContextInputStatusItem(room) {",
+    "function composerContextUserRoomItems(room) {",
+  );
+  const userItemsRenderer = sliceBetween(
+    source,
+    "function composerContextUserRoomItems(room) {",
+    "function composerContextRoomItems(room, shellPage) {",
+  );
+  const roomItemsRenderer = sliceBetween(
+    source,
+    "function composerContextRoomItems(room, shellPage) {",
+    "function composerContextEmptyItems(shellPage) {",
+  );
+  const emptyItemsRenderer = sliceBetween(
+    source,
+    "function composerContextEmptyItems(shellPage) {",
+    "function composerContextItems(room, shellPage) {",
+  );
+  const itemsRenderer = sliceBetween(
+    source,
+    "function composerContextItems(room, shellPage) {",
+    "function createComposerContextItemNode(item) {",
+  );
+  const itemNodeRenderer = sliceBetween(
+    source,
+    "function createComposerContextItemNode(item) {",
+    "function renderComposerContextItems(items) {",
+  );
+  const listRenderer = sliceBetween(
+    source,
+    "function renderComposerContextItems(items) {",
+    "function updateComposerContext(room) {",
+  );
+  const contextRenderer = sliceBetween(
+    source,
+    "function updateComposerContext(room) {",
+    "function updateComposerTip() {",
+  );
+
+  assert.match(inputStateRenderer, /isSendingMessage \? "发送中" : roomSendErrors\[room\.id\] \? "待重发" : "可发送"/);
+  assert.match(userItemsRenderer, /label: "发送到"/);
+  assert.match(userItemsRenderer, /composerContextInputStatusItem\(room\)/);
+  assert.match(roomItemsRenderer, /if \(shellPage === "user"\) return composerContextUserRoomItems\(room\)/);
+  assert.match(roomItemsRenderer, /label: shellPage === "admin" \? "线程" : "会话标题"/);
+  assert.match(roomItemsRenderer, /roomQueueSummary\(room\)/);
+  assert.match(roomItemsRenderer, /composerContextInputStatusItem\(room\)/);
+  assert.match(emptyItemsRenderer, /gatewayUrl \? "先打开一个会话" : "等待网关"/);
+  assert.match(itemsRenderer, /return room \? composerContextRoomItems\(room, shellPage\) : composerContextEmptyItems\(shellPage\)/);
+  assert.match(itemNodeRenderer, /block\.className = "composer-context-item"/);
+  assert.match(itemNodeRenderer, /createLine\("composer-context-label", item\.label\)/);
+  assert.match(itemNodeRenderer, /value\.textContent = item\.value/);
+  assert.match(listRenderer, /clearChildren\(composerContextEl\)/);
+  assert.match(listRenderer, /composerContextEl\.appendChild\(createComposerContextItemNode\(item\)\)/);
+  assert.match(contextRenderer, /const shellPage = currentShellPage\(\)/);
+  assert.match(contextRenderer, /renderComposerContextItems\(composerContextItems\(room, shellPage\)\)/);
+  assert.doesNotMatch(contextRenderer, /const block = document\.createElement\("div"\)/);
+  assert.doesNotMatch(contextRenderer, /roomQueueSummary\(room\)/);
 });
 
 test("gateway errors read transport Error message and localize common send failures", async () => {
@@ -940,6 +2570,58 @@ test("gateway polling and unhandled rejections report runtime failures", async (
   assert.match(source, /localizedRuntimeError\(event\.reason, "前端运行异常"\)/);
 });
 
+test("gateway realtime lifecycle is delegated out of startGatewayRealtime", async () => {
+  const source = await readShellModule("app.js");
+  const supportHelper = sliceBetween(
+    source,
+    "function gatewayRealtimeSupported() {",
+    "function openGatewayShellEventSource(afterVersion) {",
+  );
+  const opener = sliceBetween(
+    source,
+    "function openGatewayShellEventSource(afterVersion) {",
+    "function gatewayRealtimeStateVersion(payload) {",
+  );
+  const versionResolver = sliceBetween(
+    source,
+    "function gatewayRealtimeStateVersion(payload) {",
+    "async function handleGatewayRealtimeShellStateEvent(event) {",
+  );
+  const shellStateHandler = sliceBetween(
+    source,
+    "async function handleGatewayRealtimeShellStateEvent(event) {",
+    "function handleGatewayRealtimeError(hasReceivedSnapshot) {",
+  );
+  const errorHandler = sliceBetween(
+    source,
+    "function handleGatewayRealtimeError(hasReceivedSnapshot) {",
+    "function startGatewayRealtime({ afterVersion = lastShellStateVersion } = {}) {",
+  );
+  const starter = sliceBetween(
+    source,
+    "function startGatewayRealtime({ afterVersion = lastShellStateVersion } = {}) {",
+    "async function refreshOnForeground(reason = \"foreground\") {",
+  );
+
+  assert.match(supportHelper, /return Boolean\(gatewayUrl && typeof EventSource === "function"\)/);
+  assert.match(opener, /new EventSource\(gatewayShellEventsUrl\(\{ afterVersion \}\)\)/);
+  assert.match(opener, /shellEventSource = eventSource/);
+  assert.match(versionResolver, /typeof payload\?\.state_version === "string"/);
+  assert.match(shellStateHandler, /JSON\.parse\(event\.data \|\| "\{\}"\)/);
+  assert.match(shellStateHandler, /const incomingStateVersion = gatewayRealtimeStateVersion\(payload\)/);
+  assert.match(shellStateHandler, /applyGatewayShellStatePayload\(payload, \{ persist: true \}\)/);
+  assert.match(shellStateHandler, /scheduleGatewayRealtimeRestart\(incomingStateVersion\)/);
+  assert.match(errorHandler, /if \(!hasReceivedSnapshot\) \{/);
+  assert.match(errorHandler, /void refreshFromGateway\(\)/);
+  assert.match(errorHandler, /startGatewayPolling\(\)/);
+  assert.match(starter, /if \(!gatewayRealtimeSupported\(\)\) \{/);
+  assert.match(starter, /const eventSource = openGatewayShellEventSource\(afterVersion\)/);
+  assert.match(starter, /hasReceivedSnapshot = \(await handleGatewayRealtimeShellStateEvent\(event\)\) \|\| hasReceivedSnapshot/);
+  assert.match(starter, /eventSource\.onerror = \(\) => handleGatewayRealtimeError\(hasReceivedSnapshot\)/);
+  assert.doesNotMatch(starter, /JSON\.parse\(event\.data/);
+  assert.doesNotMatch(starter, /applyGatewayShellStatePayload\(payload/);
+});
+
 test("qa identity query can isolate same-origin browser tabs", async () => {
   const source = await readShellModule("app.js");
 
@@ -947,18 +2629,1776 @@ test("qa identity query can isolate same-origin browser tabs", async () => {
   assert.match(source, /if \(queryIdentity\) \{\s*senderIdentity = queryIdentity;\s*\} else \{/);
 });
 
-test("chat-scene pages do not collapse avatars through message grouping", async () => {
+test("app shell reuses identity helper module instead of local duplicates", async () => {
   const source = await readShellModule("app.js");
 
-  assert.match(source, /const allowMessageGrouping = shellPage !== "hub" && shellPage !== "user";/);
-  assert.match(source, /if \(allowMessageGrouping && isGrouped\) \{\s*row\.setAttribute\("data-grouped", "true"\);/);
+  assert.match(source, /from "\.\/shell-identity\.js";/);
+  assert.doesNotMatch(source, /function isVisitorIdentity\(/);
+  assert.doesNotMatch(source, /function residentScopedShellStatePage\(/);
+  assert.doesNotMatch(source, /function translateClientDisplayName\(/);
+  assert.doesNotMatch(source, /function translateRoutePrefix\(/);
+});
+
+test("app shell reuses export utility module instead of local duplicates", async () => {
+  const source = await readShellModule("app.js");
+
+  assert.match(source, /from "\.\/shell-export-utils\.js";/);
+  assert.doesNotMatch(source, /function exportFileExtension\(/);
+  assert.doesNotMatch(source, /function exportMimeType\(/);
+  assert.doesNotMatch(source, /function downloadContent\(/);
+});
+
+test("chat-scene pages do not collapse avatars through message grouping", async () => {
+  const source = await readShellModule("app.js");
+  const messageRenderSource = await readShellModule("shell-message-render.js");
+
+  assert.match(source, /timelineMessageFlowSpec\(\{/);
+  assert.match(source, /timelineMessageRowSpec\(\{/);
+  assert.match(source, /allowMessageGrouping,\s*staggerBase,\s*staggerCap,/);
+  assert.match(source, /if \(rowSpec\.grouped\) \{\s*row\.setAttribute\("data-grouped", "true"\);/);
+  assert.match(messageRenderSource, /allowMessageGrouping: shellPage !== "hub" && shellPage !== "user",/);
 });
 
 test("chat-scene pages do not insert unread divider copy into the scene", async () => {
   const source = await readShellModule("app.js");
+  const messageRenderSource = await readShellModule("shell-message-render.js");
 
-  assert.match(source, /const allowUnreadDivider = shellPage !== "hub" && shellPage !== "user";/);
-  assert.match(source, /const unreadForDivider = allowUnreadDivider \? unreadCount\(room\) : 0;/);
+  assert.match(source, /timelineMessageFlowSpec\(\{/);
+  assert.match(source, /timelineFlowSpecForRoom\(room, localPreviewMessages, shellPage, unread\)/);
+  assert.match(source, /unread,\s*shellPage,/);
+  assert.match(messageRenderSource, /const allowUnreadDivider = shellPage !== "hub" && shellPage !== "user";/);
+  assert.match(messageRenderSource, /const unreadForDivider = allowUnreadDivider \? unread : 0;/);
+});
+
+test("timeline no-room empty card DOM is delegated out of renderTimeline", async () => {
+  const source = await readShellModule("app.js");
+  const emptyRenderer = sliceBetween(
+    source,
+    "function createTimelineEmptyStateNode(cardSpec) {",
+    "function renderTimelineNoRoomState(shellPage) {",
+  );
+  const noRoomRenderer = sliceBetween(
+    source,
+    "function renderTimelineNoRoomState(shellPage) {",
+    "function renderTimeline() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderTimeline() {",
+    "  const unread = unreadCount(room);",
+  );
+
+  assert.match(emptyRenderer, /document\.createElement\("div"\)/);
+  assert.match(emptyRenderer, /emptyTitle\.textContent = cardSpec\.titleText/);
+  assert.match(emptyRenderer, /emptyCopy\.textContent = cardSpec\.copyText/);
+  assert.match(emptyRenderer, /emptyAction\.textContent = cardSpec\.actionText/);
+  assert.match(noRoomRenderer, /timelineNoRoomEmptyStateSpec\(\{ gatewayUrl, shellPage \}\)/);
+  assert.match(noRoomRenderer, /renderConversationMetaChips\(null, emptyStateSpec\.metaChips\)/);
+  assert.match(noRoomRenderer, /renderThreadStatusRail\(null\)/);
+  assert.match(noRoomRenderer, /const empty = createTimelineEmptyStateNode\(emptyStateSpec\.card\)/);
+  assert.match(noRoomRenderer, /timelineEl\.appendChild\(empty\)/);
+  assert.match(renderSource, /renderTimelineNoRoomState\(shellPage\)/);
+  assert.doesNotMatch(renderSource, /emptyTitle\.className/);
+  assert.doesNotMatch(renderSource, /emptyCopy\.className/);
+  assert.doesNotMatch(renderSource, /emptyAction\.className/);
+  assert.doesNotMatch(renderSource, /createTimelineEmptyStateNode\(emptyStateSpec\.card\)/);
+});
+
+test("timeline typing indicator DOM is delegated out of renderTimeline", async () => {
+  const source = await readShellModule("app.js");
+  const typingRenderer = sliceBetween(
+    source,
+    "function createTimelineTypingIndicatorNode(typingSpec) {",
+    "function appendTimelineTypingIndicator(flowSpec) {",
+  );
+  const typingAppender = sliceBetween(
+    source,
+    "function appendTimelineTypingIndicator(flowSpec) {",
+    "function finishTimelineRender(room, flowSpec, wasNearBottom) {",
+  );
+  const finishRenderer = sliceBetween(
+    source,
+    "function finishTimelineRender(room, flowSpec, wasNearBottom) {",
+    "function renderTimeline() {",
+  );
+  const renderSource = sliceBetween(source, "function renderTimeline() {", "function renderGovernanceOfflineState() {");
+
+  assert.match(typingRenderer, /document\.createElement\("div"\)/);
+  assert.match(typingRenderer, /dotsEl\.className = typingSpec\.dotsClassName/);
+  assert.match(typingRenderer, /for \(let i = 0; i < typingSpec\.dotCount; i\+\+\) \{/);
+  assert.match(typingRenderer, /label\.textContent = typingSpec\.labelText/);
+  assert.match(typingAppender, /const typingSpec = timelineTypingIndicatorSpec\(flowSpec\.pending\)/);
+  assert.match(typingAppender, /const typingEl = createTimelineTypingIndicatorNode\(typingSpec\)/);
+  assert.match(typingAppender, /timelineEl\.appendChild\(typingEl\)/);
+  assert.match(finishRenderer, /appendTimelineTypingIndicator\(flowSpec\)/);
+  assert.doesNotMatch(renderSource, /createTimelineTypingIndicatorNode\(typingSpec\)/);
+  assert.doesNotMatch(renderSource, /dotsEl\.appendChild\(dot\)/);
+  assert.doesNotMatch(renderSource, /label\.textContent = typingSpec\.labelText/);
+});
+
+test("timeline metadata and flow setup are delegated out of renderTimeline", async () => {
+  const source = await readShellModule("app.js");
+  const metaRenderer = sliceBetween(
+    source,
+    "function timelineMetaChipsForRoom(room, shellPage, unread, pendingCount) {",
+    "function renderTimelineSkeletonIfNeeded(room, localPreviewMessages, shellPage) {",
+  );
+  const skeletonRenderer = sliceBetween(
+    source,
+    "function renderTimelineSkeletonIfNeeded(room, localPreviewMessages, shellPage) {",
+    "function timelineFlowSpecForRoom(room, localPreviewMessages, shellPage, unread) {",
+  );
+  const flowRenderer = sliceBetween(
+    source,
+    "function timelineFlowSpecForRoom(room, localPreviewMessages, shellPage, unread) {",
+    "function appendTimelineTypingIndicator(flowSpec) {",
+  );
+  const renderSource = sliceBetween(source, "function renderTimeline() {", "function renderGovernanceOfflineState() {");
+
+  assert.match(metaRenderer, /timelineMetaChips\(\{/);
+  assert.match(metaRenderer, /pendingCount,/);
+  assert.match(skeletonRenderer, /shouldRenderTimelineSkeletonRowsForContext\(\{/);
+  assert.match(skeletonRenderer, /renderTimelineSkeletonRows\(4\)/);
+  assert.match(flowRenderer, /timelineMessageFlowSpec\(\{/);
+  assert.match(flowRenderer, /pendingMessages: visiblePendingEchoesForRoom\(room\)/);
+  assert.match(renderSource, /timelineMetaChipsForRoom\(room, shellPage, unread, pendingCount\)/);
+  assert.match(renderSource, /renderTimelineSkeletonIfNeeded\(room, localPreviewMessages, shellPage\)/);
+  assert.match(renderSource, /timelineFlowSpecForRoom\(room, localPreviewMessages, shellPage, unread\)/);
+  assert.match(renderSource, /finishTimelineRender\(room, flowSpec, wasNearBottom\)/);
+  assert.doesNotMatch(renderSource, /timelineMetaChips\(\{/);
+  assert.doesNotMatch(renderSource, /shouldRenderTimelineSkeletonRowsForContext\(\{/);
+});
+
+test("timeline committed message row frame and header are delegated out of createTimelineMessageRowNode", async () => {
+  const source = await readShellModule("app.js");
+  const frameRenderer = sliceBetween(
+    source,
+    "function createTimelineMessageRowFrameNode(rowSpec) {",
+    "function createTimelineMessageAvatarNode(message, room, rowSpec) {",
+  );
+  const avatarRenderer = sliceBetween(
+    source,
+    "function createTimelineMessageAvatarNode(message, room, rowSpec) {",
+    "function createTimelineMessageQuickContext(room, message) {",
+  );
+  const metaRenderer = sliceBetween(
+    source,
+    "function createTimelineMessageMetaNode(message, room, rowSpec, quickContext) {",
+    "function createTimelineMessageTimestampNode(message) {",
+  );
+  const headerRenderer = sliceBetween(
+    source,
+    "function createTimelineMessageHeaderNode(message, room, rowSpec, quickContext) {",
+    "function createTimelineReplyPreviewNode(message, messages) {",
+  );
+  const rowRenderer = sliceBetween(
+    source,
+    "function createTimelineMessageRowNode({",
+    "function appendTimelineCommittedMessageRows(room, messages, flowSpec) {",
+  );
+
+  assert.match(frameRenderer, /row\.className = rowSpec\.className/);
+  assert.match(frameRenderer, /Object\.assign\(row\.dataset, rowSpec\.dataset\)/);
+  assert.match(frameRenderer, /row\.setAttribute\("data-grouped", "true"\)/);
+  assert.match(frameRenderer, /row\.setAttribute\("style", rowSpec\.style\)/);
+  assert.match(avatarRenderer, /messageAvatarTone\(message, room, isSelf\)/);
+  assert.match(avatarRenderer, /badgeToken\(/);
+  assert.match(avatarRenderer, /applyAvatarStyle\(avatar, message\.sender\)/);
+  assert.match(metaRenderer, /messageRoleLabel\(message, room, isSelf\)/);
+  assert.match(metaRenderer, /appendTimelineMessageQuickChips\(meta, message, quickContext\)/);
+  assert.match(headerRenderer, /createTimelineMessageMetaNode\(message, room, rowSpec, quickContext\)/);
+  assert.match(headerRenderer, /createTimelineMessageTimestampNode\(message\)/);
+  assert.match(rowRenderer, /createTimelineMessageRowFrameNode\(rowSpec\)/);
+  assert.match(rowRenderer, /createTimelineMessageAvatarNode\(message, room, rowSpec\)/);
+  assert.doesNotMatch(rowRenderer, /messageAvatarTone\(message, room, isSelf\)/);
+  assert.doesNotMatch(rowRenderer, /messageRoleLabel\(message, room, isSelf\)/);
+});
+
+test("timeline committed message article body is delegated out of createTimelineMessageRowNode", async () => {
+  const source = await readShellModule("app.js");
+  const replyRenderer = sliceBetween(
+    source,
+    "function createTimelineReplyPreviewNode(message, messages) {",
+    "function createTimelineMessageArticleNode(message, room, messages, rowSpec, quickContext) {",
+  );
+  const articleRenderer = sliceBetween(
+    source,
+    "function createTimelineMessageArticleNode(message, room, messages, rowSpec, quickContext) {",
+    "function createTimelineMessageStackNode(article) {",
+  );
+  const stackRenderer = sliceBetween(
+    source,
+    "function createTimelineMessageStackNode(article) {",
+    "function createTimelineMessageRowNode({",
+  );
+  const rowRenderer = sliceBetween(
+    source,
+    "function createTimelineMessageRowNode({",
+    "function appendTimelineCommittedMessageRows(room, messages, flowSpec) {",
+  );
+
+  assert.match(replyRenderer, /buildReplyPreview\(message, messages\)/);
+  assert.match(replyRenderer, /replyEl\.className = "message-reply-preview"/);
+  assert.match(articleRenderer, /article\.dataset\.messageKind = messageKind/);
+  assert.match(articleRenderer, /createTimelineMessageHeaderNode\(message, room, rowSpec, quickContext\)/);
+  assert.match(articleRenderer, /createTimelineReplyPreviewNode\(message, messages\)/);
+  assert.match(articleRenderer, /createMessageBodyNode\(message, \{\s*quickState: quickContext\.quickState,/);
+  assert.match(articleRenderer, /createMessageOwnerActions\(room, message, \{ isSelf, messageKind \}\)/);
+  assert.match(stackRenderer, /stack\.className = "message-stack"/);
+  assert.match(stackRenderer, /stack\.appendChild\(article\)/);
+  assert.match(rowRenderer, /createTimelineMessageQuickContext\(room, message\)/);
+  assert.match(rowRenderer, /createTimelineMessageArticleNode\(message, room, messages, rowSpec, quickContext\)/);
+  assert.match(rowRenderer, /createTimelineMessageStackNode\(article\)/);
+  assert.doesNotMatch(rowRenderer, /document\.createElement\("article"\)/);
+  assert.doesNotMatch(rowRenderer, /createMessageBodyNode\(message/);
+  assert.doesNotMatch(rowRenderer, /buildReplyPreview\(message, messages\)/);
+});
+
+test("timeline committed message row DOM is delegated out of renderTimeline", async () => {
+  const source = await readShellModule("app.js");
+  const messageRowRenderer = sliceBetween(
+    source,
+    "function createTimelineMessageRowNode({",
+    "function appendTimelineCommittedMessageRows(room, messages, flowSpec) {",
+  );
+  const committedRowsRenderer = sliceBetween(
+    source,
+    "function appendTimelineCommittedMessageRows(room, messages, flowSpec) {",
+    "function appendTimelinePendingMessageRows(room, pending) {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderTimeline() {",
+    "function renderGovernanceOfflineState() {",
+  );
+
+  assert.match(messageRowRenderer, /timelineMessageRowSpec\(\{/);
+  assert.match(messageRowRenderer, /createTimelineMessageRowFrameNode\(rowSpec\)/);
+  assert.match(messageRowRenderer, /createTimelineMessageAvatarNode\(message, room, rowSpec\)/);
+  assert.match(messageRowRenderer, /createTimelineMessageArticleNode\(message, room, messages, rowSpec, quickContext\)/);
+  assert.match(messageRowRenderer, /createTimelineMessageStackNode\(article\)/);
+  assert.match(messageRowRenderer, /return row/);
+  assert.match(committedRowsRenderer, /for \(const \[index, message\] of messages\.entries\(\)\) \{/);
+  assert.match(committedRowsRenderer, /timelineDividerSpecsForMessage\(\{/);
+  assert.match(committedRowsRenderer, /const row = createTimelineMessageRowNode\(\{/);
+  assert.match(committedRowsRenderer, /timelineEl\.appendChild\(row\)/);
+  assert.match(renderSource, /const flowSpec = timelineFlowSpecForRoom\(room, localPreviewMessages, shellPage, unread\)/);
+  assert.match(renderSource, /appendTimelineMessageFlowRows\(room, flowSpec\)/);
+  assert.doesNotMatch(messageRowRenderer, /createMessageBodyNode\(message/);
+  assert.doesNotMatch(messageRowRenderer, /createMessageOwnerActions\(room, message/);
+  assert.doesNotMatch(renderSource, /for \(const \[index, message\] of messages\.entries\(\)\)/);
+  assert.doesNotMatch(renderSource, /timelineMessageFlowSpec\(\{/);
+  assert.doesNotMatch(renderSource, /message-avatar-/);
+  assert.doesNotMatch(renderSource, /createMessageBodyNode\(message/);
+  assert.doesNotMatch(renderSource, /createMessageOwnerActions\(room, message/);
+});
+
+test("timeline pending message row frame and header are delegated out of createTimelinePendingMessageRowNode", async () => {
+  const source = await readShellModule("app.js");
+  const frameRenderer = sliceBetween(
+    source,
+    "function createTimelinePendingMessageRowFrameNode(rowSpec) {",
+    "function createTimelinePendingMessageAvatarNode(rowSpec) {",
+  );
+  const avatarRenderer = sliceBetween(
+    source,
+    "function createTimelinePendingMessageAvatarNode(rowSpec) {",
+    "function createTimelinePendingMessageMetaNode(rowSpec, message, quickContext) {",
+  );
+  const metaRenderer = sliceBetween(
+    source,
+    "function createTimelinePendingMessageMetaNode(rowSpec, message, quickContext) {",
+    "function createTimelinePendingMessageHeaderNode(rowSpec, message, quickContext) {",
+  );
+  const headerRenderer = sliceBetween(
+    source,
+    "function createTimelinePendingMessageHeaderNode(rowSpec, message, quickContext) {",
+    "function createTimelinePendingRetryActionsNode(room, message, rowSpec) {",
+  );
+  const rowRenderer = sliceBetween(
+    source,
+    "function createTimelinePendingMessageRowNode(room, message) {",
+    "function createTimelineMessageRowFrameNode(rowSpec) {",
+  );
+
+  assert.match(frameRenderer, /row\.className = rowSpec\.rowClassName/);
+  assert.match(frameRenderer, /Object\.assign\(row\.dataset, rowSpec\.rowDataset\)/);
+  assert.match(avatarRenderer, /avatar\.className = rowSpec\.avatarClassName/);
+  assert.match(avatarRenderer, /avatar\.textContent = rowSpec\.avatarText/);
+  assert.match(avatarRenderer, /applyAvatarStyle\(avatar, currentIdentity\(\)\)/);
+  assert.match(metaRenderer, /sender\.textContent = rowSpec\.senderText/);
+  assert.match(metaRenderer, /role\.textContent = rowSpec\.roleText/);
+  assert.match(metaRenderer, /appendTimelineMessageQuickChips\(meta, message, quickContext\)/);
+  assert.match(headerRenderer, /createTimelinePendingMessageMetaNode\(rowSpec, message, quickContext\)/);
+  assert.match(headerRenderer, /timestamp\.textContent = rowSpec\.timestampText/);
+  assert.match(rowRenderer, /createTimelinePendingMessageRowFrameNode\(rowSpec\)/);
+  assert.match(rowRenderer, /createTimelinePendingMessageAvatarNode\(rowSpec\)/);
+  assert.doesNotMatch(rowRenderer, /avatar\.className = rowSpec\.avatarClassName/);
+  assert.doesNotMatch(rowRenderer, /sender\.textContent = rowSpec\.senderText/);
+});
+
+test("timeline pending message article and retry controls are delegated out of createTimelinePendingMessageRowNode", async () => {
+  const source = await readShellModule("app.js");
+  const retryRenderer = sliceBetween(
+    source,
+    "function createTimelinePendingRetryActionsNode(room, message, rowSpec) {",
+    "function createTimelinePendingMessageArticleNode(room, message, rowSpec, quickContext) {",
+  );
+  const articleRenderer = sliceBetween(
+    source,
+    "function createTimelinePendingMessageArticleNode(room, message, rowSpec, quickContext) {",
+    "function createTimelinePendingMessageRowNode(room, message) {",
+  );
+  const rowRenderer = sliceBetween(
+    source,
+    "function createTimelinePendingMessageRowNode(room, message) {",
+    "function createTimelineMessageRowFrameNode(rowSpec) {",
+  );
+
+  assert.match(retryRenderer, /if \(!rowSpec\.showRetry\) return null/);
+  assert.match(retryRenderer, /retryButton\.dataset\.pendingAction = "retry"/);
+  assert.match(retryRenderer, /retryButton\.disabled = true/);
+  assert.match(retryRenderer, /retryPendingEcho\(room\.id, message\.id\)/);
+  assert.match(articleRenderer, /article\.className = rowSpec\.articleClassName/);
+  assert.match(articleRenderer, /Object\.assign\(article\.dataset, rowSpec\.articleDataset\)/);
+  assert.match(articleRenderer, /createTimelinePendingMessageHeaderNode\(rowSpec, message, quickContext\)/);
+  assert.match(articleRenderer, /createMessageBodyNode\(message, \{\s*quickState: quickContext\.quickState,/);
+  assert.match(articleRenderer, /createTimelinePendingRetryActionsNode\(room, message, rowSpec\)/);
+  assert.match(rowRenderer, /createTimelineMessageQuickContext\(room, message\)/);
+  assert.match(rowRenderer, /createTimelinePendingMessageArticleNode\(room, message, rowSpec, quickContext\)/);
+  assert.match(rowRenderer, /createTimelineMessageStackNode\(article\)/);
+  assert.doesNotMatch(rowRenderer, /document\.createElement\("article"\)/);
+  assert.doesNotMatch(rowRenderer, /createMessageBodyNode\(message/);
+  assert.doesNotMatch(rowRenderer, /retryButton\.dataset\.pendingAction/);
+});
+
+test("timeline pending message row DOM is delegated out of renderTimeline", async () => {
+  const source = await readShellModule("app.js");
+  const pendingRenderer = sliceBetween(
+    source,
+    "function createTimelinePendingMessageRowNode(room, message) {",
+    "function createTimelineMessageRowFrameNode(rowSpec) {",
+  );
+  const pendingRowsRenderer = sliceBetween(
+    source,
+    "function appendTimelinePendingMessageRows(room, pending) {",
+    "function appendTimelineMessageFlowRows(room, flowSpec) {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderTimeline() {",
+    "function renderGovernanceOfflineState() {",
+  );
+
+  assert.match(pendingRenderer, /timelinePendingMessageRowSpec\(\{/);
+  assert.match(pendingRenderer, /createTimelinePendingMessageRowFrameNode\(rowSpec\)/);
+  assert.match(pendingRenderer, /createTimelinePendingMessageAvatarNode\(rowSpec\)/);
+  assert.match(pendingRenderer, /createTimelinePendingMessageArticleNode\(room, message, rowSpec, quickContext\)/);
+  assert.match(pendingRenderer, /createTimelineMessageStackNode\(article\)/);
+  assert.match(pendingRowsRenderer, /for \(const message of pending\) \{/);
+  assert.match(pendingRowsRenderer, /const pendingRow = createTimelinePendingMessageRowNode\(room, message\)/);
+  assert.match(pendingRowsRenderer, /timelineEl\.appendChild\(pendingRow\)/);
+  assert.match(renderSource, /const flowSpec = timelineFlowSpecForRoom\(room, localPreviewMessages, shellPage, unread\)/);
+  assert.match(renderSource, /appendTimelineMessageFlowRows\(room, flowSpec\)/);
+  assert.doesNotMatch(pendingRenderer, /createMessageBodyNode\(message/);
+  assert.doesNotMatch(pendingRenderer, /retryButton\.dataset\.pendingAction/);
+  assert.doesNotMatch(renderSource, /for \(const message of pending\) \{/);
+  assert.doesNotMatch(renderSource, /timelineMessageFlowSpec\(\{/);
+  assert.doesNotMatch(renderSource, /retryButton\.dataset\.pendingAction/);
+  assert.doesNotMatch(renderSource, /timelinePendingMessageRowSpec\(\{/);
+});
+
+test("world safety empty and mirror cards are delegated out of renderWorldSafety", async () => {
+  const source = await readShellModule("app.js");
+  const emptyRenderer = sliceBetween(
+    source,
+    "function renderWorldSafetyEmptyState() {",
+    "function createWorldSafetyMirrorCard(safety) {",
+  );
+  const mirrorRenderer = sliceBetween(
+    source,
+    "function createWorldSafetyMirrorCard(safety) {",
+    "function createWorldSafetyAdvisoryCard(advisory) {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderWorldSafety() {",
+    "function renderResidents() {",
+  );
+
+  assert.match(emptyRenderer, /empty\.textContent = gatewayUrl/);
+  assert.match(emptyRenderer, /worldSafetyListEl\.appendChild\(empty\)/);
+  assert.match(mirrorRenderer, /createLine\(\s*"city-name",\s*`镜像城市 \$\{safety\.mirrors\?\.filter/);
+  assert.match(mirrorRenderer, /translateTrustState\(mirror\.trust_state\)/);
+  assert.match(mirrorRenderer, /治理员：\$\{\(safety\.stewards \|\| \[\]\)\.join\("、"\) \|\| "暂无"\}/);
+  assert.match(renderSource, /if \(!safety\) \{\s*renderWorldSafetyEmptyState\(\);\s*return;\s*\}/);
+  assert.match(renderSource, /worldSafetyListEl\.appendChild\(createWorldSafetyMirrorCard\(safety\)\)/);
+  assert.doesNotMatch(renderSource, /镜像城市/);
+  assert.doesNotMatch(renderSource, /世界安全动态暂不可用/);
+});
+
+test("world safety advisory and summary cards are delegated out of renderWorldSafety", async () => {
+  const source = await readShellModule("app.js");
+  const advisoryRenderer = sliceBetween(
+    source,
+    "function createWorldSafetyAdvisoryCard(advisory) {",
+    "function appendWorldSafetyAdvisoryCards(safety) {",
+  );
+  const advisoryAppender = sliceBetween(
+    source,
+    "function appendWorldSafetyAdvisoryCards(safety) {",
+    "function createWorldSafetySanctionSummaryCard(residentSanctions, blacklistEntries) {",
+  );
+  const sanctionSummaryRenderer = sliceBetween(
+    source,
+    "function createWorldSafetySanctionSummaryCard(residentSanctions, blacklistEntries) {",
+    "function createWorldSafetyReportSummaryCard(reports) {",
+  );
+  const reportSummaryRenderer = sliceBetween(
+    source,
+    "function createWorldSafetyReportSummaryCard(reports) {",
+    "function createWorldSafetySanctionCard(sanction) {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderWorldSafety() {",
+    "function renderResidents() {",
+  );
+
+  assert.match(advisoryRenderer, /translateAdvisoryAction\(advisory\.action\)/);
+  assert.match(advisoryRenderer, /translateSubjectKind\(advisory\.subject_kind\)/);
+  assert.match(advisoryAppender, /const activeAdvisories = safety\.advisories \|\| \[\]/);
+  assert.match(advisoryAppender, /当前没有生效中的世界安全通告/);
+  assert.match(advisoryAppender, /createWorldSafetyAdvisoryCard\(advisory\)/);
+  assert.match(sanctionSummaryRenderer, /居民制裁 \$\{residentSanctions\.length\}/);
+  assert.match(sanctionSummaryRenderer, /黑名单哈希条目 \$\{blacklistEntries\.length\}/);
+  assert.match(reportSummaryRenderer, /举报记录 \$\{reports\.length\}/);
+  assert.match(reportSummaryRenderer, /最新时间 \$\{formatDateTime\(reports\[0\]\.reported_at_ms\)\}/);
+  assert.match(renderSource, /appendWorldSafetyAdvisoryCards\(safety\)/);
+  assert.match(renderSource, /worldSafetyListEl\.appendChild\(createWorldSafetySanctionSummaryCard\(residentSanctions, blacklistEntries\)\)/);
+  assert.match(renderSource, /worldSafetyListEl\.appendChild\(createWorldSafetyReportSummaryCard\(reports\)\)/);
+  assert.doesNotMatch(renderSource, /当前没有生效中的世界安全通告/);
+  assert.doesNotMatch(renderSource, /居民制裁 \$\{residentSanctions\.length\}/);
+});
+
+test("world safety sanction and report detail cards are delegated out of renderWorldSafety", async () => {
+  const source = await readShellModule("app.js");
+  const sanctionRenderer = sliceBetween(
+    source,
+    "function createWorldSafetySanctionCard(sanction) {",
+    "function createWorldSafetyReportCard(report) {",
+  );
+  const reportRenderer = sliceBetween(
+    source,
+    "function createWorldSafetyReportCard(report) {",
+    "function appendWorldSafetySanctionCards(residentSanctions) {",
+  );
+  const sanctionAppender = sliceBetween(
+    source,
+    "function appendWorldSafetySanctionCards(residentSanctions) {",
+    "function appendWorldSafetyReportCards(reports) {",
+  );
+  const reportAppender = sliceBetween(
+    source,
+    "function appendWorldSafetyReportCards(reports) {",
+    "function renderWorldSafety() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderWorldSafety() {",
+    "function renderResidents() {",
+  );
+
+  assert.match(sanctionRenderer, /translateReportStatus\(sanction\.status\)/);
+  assert.match(sanctionRenderer, /translatePortability\(\s*sanction\.portability_revoked,\s*\)/);
+  assert.match(sanctionRenderer, /formatDateTime\(sanction\.issued_at_ms\)/);
+  assert.match(reportRenderer, /translateReportStatus\(report\.status \|\| "Pending"\)/);
+  assert.match(reportRenderer, /translateTargetKind\(report\.target_kind\)/);
+  assert.match(reportRenderer, /formatDateTime\(report\.reported_at_ms\)/);
+  assert.match(sanctionAppender, /for \(const sanction of residentSanctions\.slice\(0, 6\)\) \{/);
+  assert.match(sanctionAppender, /createWorldSafetySanctionCard\(sanction\)/);
+  assert.match(reportAppender, /for \(const report of reports\.slice\(0, 6\)\) \{/);
+  assert.match(reportAppender, /createWorldSafetyReportCard\(report\)/);
+  assert.match(renderSource, /appendWorldSafetySanctionCards\(residentSanctions\)/);
+  assert.match(renderSource, /appendWorldSafetyReportCards\(reports\)/);
+  assert.doesNotMatch(renderSource, /sanction\.resident_id/);
+  assert.doesNotMatch(renderSource, /report\.target_ref/);
+});
+
+test("resident directory card DOM is delegated out of renderResidents", async () => {
+  const source = await readShellModule("app.js");
+  const emptyRenderer = sliceBetween(
+    source,
+    "function createResidentDirectoryEmptyNode() {",
+    "function residentDirectoryDisplayName(resident) {",
+  );
+  const displayNameResolver = sliceBetween(
+    source,
+    "function residentDirectoryDisplayName(resident) {",
+    "function appendResidentDirectoryTitleRow(li, resident) {",
+  );
+  const titleRenderer = sliceBetween(
+    source,
+    "function appendResidentDirectoryTitleRow(li, resident) {",
+    "function appendResidentDirectoryMetaRows(li, resident) {",
+  );
+  const metaRenderer = sliceBetween(
+    source,
+    "function appendResidentDirectoryMetaRows(li, resident) {",
+    "function createResidentDirectActionButton(resident) {",
+  );
+  const directButtonRenderer = sliceBetween(
+    source,
+    "function createResidentDirectActionButton(resident) {",
+    "function appendResidentDirectoryActions(li, resident) {",
+  );
+  const actionsRenderer = sliceBetween(
+    source,
+    "function appendResidentDirectoryActions(li, resident) {",
+    "function createResidentDirectoryCardNode(resident) {",
+  );
+  const cardRenderer = sliceBetween(
+    source,
+    "function createResidentDirectoryCardNode(resident) {",
+    "function renderResidents() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderResidents() {",
+    "/** Render compact resident directory in creative.html sidebar */",
+  );
+
+  assert.match(emptyRenderer, /empty\.textContent = gatewayUrl/);
+  assert.match(displayNameResolver, /resident\.nickname \|\| resident\.resident_id/);
+  assert.match(titleRenderer, /titleRow\.className = "city-card-title"/);
+  assert.match(titleRenderer, /translateResidentLabel\(resident\.resident_id\)/);
+  assert.match(metaRenderer, /joinOrFallback\(resident\.active_cities \|\| \[\], "暂无"\)/);
+  assert.match(metaRenderer, /resident\.pending_cities\.join\("、"\)/);
+  assert.match(metaRenderer, /\(resident\.roles \|\| \[\]\)\.map\(translateRole\)/);
+  assert.match(directButtonRenderer, /directButton\.textContent = "发起私聊"/);
+  assert.match(directButtonRenderer, /enterResidentRoom\(resident\)/);
+  assert.match(actionsRenderer, /actions\.className = "city-actions"/);
+  assert.match(actionsRenderer, /createResidentDirectActionButton\(resident\)/);
+  assert.match(cardRenderer, /appendResidentDirectoryTitleRow\(li, resident\)/);
+  assert.match(cardRenderer, /appendResidentDirectoryMetaRows\(li, resident\)/);
+  assert.match(cardRenderer, /appendResidentDirectoryActions\(li, resident\)/);
+  assert.match(renderSource, /residentListEl\.appendChild\(createResidentDirectoryEmptyNode\(\)\)/);
+  assert.match(renderSource, /residentListEl\.appendChild\(createResidentDirectoryCardNode\(resident\)\)/);
+  assert.doesNotMatch(renderSource, /directButton\.textContent = "发起私聊"/);
+  assert.doesNotMatch(renderSource, /titleRow\.className = "city-card-title"/);
+});
+
+test("compact resident list DOM is delegated out of renderResidentList", async () => {
+  const source = await readShellModule("app.js");
+  const visibilitySync = sliceBetween(
+    source,
+    "function syncResidentListSearchVisibility() {",
+    "function createCompactResidentEmptyNode(residents) {",
+  );
+  const emptyRenderer = sliceBetween(
+    source,
+    "function createCompactResidentEmptyNode(residents) {",
+    "function createCompactResidentFilteredEmptyNode(query) {",
+  );
+  const filteredEmptyRenderer = sliceBetween(
+    source,
+    "function createCompactResidentFilteredEmptyNode(query) {",
+    "function compactResidentListQuery() {",
+  );
+  const queryResolver = sliceBetween(
+    source,
+    "function compactResidentListQuery() {",
+    "function filteredCompactResidents(residents, identity, query) {",
+  );
+  const filterResolver = sliceBetween(
+    source,
+    "function filteredCompactResidents(residents, identity, query) {",
+    "function sortedCompactResidents(residents) {",
+  );
+  const sorter = sliceBetween(
+    source,
+    "function sortedCompactResidents(residents) {",
+    "function createCompactResidentAvatar(resident, displayName) {",
+  );
+  const avatarRenderer = sliceBetween(
+    source,
+    "function createCompactResidentAvatar(resident, displayName) {",
+    "function createCompactResidentTitleStack(resident, displayName) {",
+  );
+  const titleStackRenderer = sliceBetween(
+    source,
+    "function createCompactResidentTitleStack(resident, displayName) {",
+    "function createCompactResidentButtonContent(resident, displayName) {",
+  );
+  const buttonContentRenderer = sliceBetween(
+    source,
+    "function createCompactResidentButtonContent(resident, displayName) {",
+    "function createCompactResidentButton(resident) {",
+  );
+  const buttonRenderer = sliceBetween(
+    source,
+    "function createCompactResidentButton(resident) {",
+    "function createCompactResidentListItemNode(resident) {",
+  );
+  const itemRenderer = sliceBetween(
+    source,
+    "function createCompactResidentListItemNode(resident) {",
+    "function renderResidentList() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderResidentList() {",
+    "function bootTransportStatus() {",
+  );
+
+  assert.match(visibilitySync, /residentListEl\.style\.display = searchMode === "rooms" \? "none" : ""/);
+  assert.match(emptyRenderer, /empty\.textContent = residents/);
+  assert.match(filteredEmptyRenderer, /query \? `没有匹配「\$\{roomSearch\}」的居民` : "暂无其他居民"/);
+  assert.match(queryResolver, /roomSearch\.toLowerCase\(\)\.trim\(\)/);
+  assert.match(filterResolver, /r\.resident_id !== identity/);
+  assert.match(filterResolver, /r\.resident_id\.toLowerCase\(\)\.includes\(query\)/);
+  assert.match(sorter, /if \(a\.online !== b\.online\) return a\.online \? -1 : 1/);
+  assert.match(avatarRenderer, /applyAvatarStyle\(avatar, resident\.resident_id\)/);
+  assert.match(titleStackRenderer, /resident-status-dot/);
+  assert.match(titleStackRenderer, /statusDot\.setAttribute\("aria-label", resident\.online \? "在线" : "离线"\)/);
+  assert.match(buttonContentRenderer, /content\.className = "room-content"/);
+  assert.match(buttonContentRenderer, /createCompactResidentTitleStack\(resident, displayName\)/);
+  assert.match(buttonRenderer, /enterResidentRoom\(resident\)/);
+  assert.match(itemRenderer, /button\.appendChild\(createCompactResidentAvatar\(resident, displayName\)\)/);
+  assert.match(itemRenderer, /button\.appendChild\(createCompactResidentButtonContent\(resident, displayName\)\)/);
+  assert.match(renderSource, /syncResidentListSearchVisibility\(\)/);
+  assert.match(renderSource, /createCompactResidentEmptyNode\(residents\)/);
+  assert.match(renderSource, /filteredCompactResidents\(residents, identity, query\)/);
+  assert.match(renderSource, /sortedCompactResidents\(filtered\)/);
+  assert.match(renderSource, /createCompactResidentListItemNode\(resident\)/);
+  assert.doesNotMatch(renderSource, /resident-status-dot/);
+  assert.doesNotMatch(renderSource, /enterResidentRoom\(resident\)/);
+});
+
+test("caretaker panel DOM is delegated out of renderCaretakerPanel", async () => {
+  const source = await readShellModule("app.js");
+  const titleRenderer = sliceBetween(
+    source,
+    "function createCaretakerPanelTitleNode() {",
+    "function createCaretakerPanelHeaderNode() {",
+  );
+  const headerRenderer = sliceBetween(
+    source,
+    "function createCaretakerPanelHeaderNode() {",
+    "function createCaretakerPanelSummaryNode() {",
+  );
+  const summaryRenderer = sliceBetween(
+    source,
+    "function createCaretakerPanelSummaryNode() {",
+    "function createCaretakerMessageNode(item) {",
+  );
+  const messageRenderer = sliceBetween(
+    source,
+    "function createCaretakerMessageNode(item) {",
+    "function createCaretakerMessagesNode() {",
+  );
+  const messagesRenderer = sliceBetween(
+    source,
+    "function createCaretakerMessagesNode() {",
+    "function createCaretakerRulesNode() {",
+  );
+  const rulesRenderer = sliceBetween(
+    source,
+    "function createCaretakerRulesNode() {",
+    "function renderCaretakerPanel() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderCaretakerPanel() {",
+    "function ensureCaretakerBadge() {",
+  );
+
+  assert.match(titleRenderer, /panelTitle\.textContent = "OpenClaw 管家 · 小狗"/);
+  assert.match(headerRenderer, /CARETAKER_PROFILE\.displayName/);
+  assert.match(headerRenderer, /CARETAKER_PROFILE\.highlight/);
+  assert.match(summaryRenderer, /summary\.textContent = CARETAKER_PROFILE\.summary/);
+  assert.match(messageRenderer, /titleSpan\.textContent = item\.title/);
+  assert.match(messageRenderer, /timeSpan\.textContent = item\.time/);
+  assert.match(messagesRenderer, /for \(const item of CARETAKER_MESSAGES\) \{/);
+  assert.match(messagesRenderer, /createCaretakerMessageNode\(item\)/);
+  assert.match(rulesRenderer, /rulesTitle\.textContent = "自动回复 \/ 留言规则"/);
+  assert.match(rulesRenderer, /for \(const rule of CARETAKER_RULES\) \{/);
+  assert.match(renderSource, /caretakerPanelEl\.appendChild\(createCaretakerPanelTitleNode\(\)\)/);
+  assert.match(renderSource, /body\.appendChild\(createCaretakerPanelHeaderNode\(\)\)/);
+  assert.match(renderSource, /body\.appendChild\(createCaretakerMessagesNode\(\)\)/);
+  assert.match(renderSource, /body\.appendChild\(createCaretakerRulesNode\(\)\)/);
+  assert.doesNotMatch(renderSource, /CARETAKER_MESSAGES/);
+  assert.doesNotMatch(renderSource, /CARETAKER_RULES/);
+});
+
+test("governance offline empty state is delegated out of renderGovernance", async () => {
+  const source = await readShellModule("app.js");
+  const offlineRenderer = sliceBetween(
+    source,
+    "function renderGovernanceOfflineState() {",
+    "function renderGovernance() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderGovernance() {",
+    "function renderWorldDirectory() {",
+  );
+
+  assert.match(offlineRenderer, /setNodeText\(worldStateEl, "世界：离线"\)/);
+  assert.match(offlineRenderer, /worldDirectoryListEl,\s*worldMirrorSourceListEl,\s*worldSquareListEl,\s*worldSafetyListEl,/);
+  assert.match(offlineRenderer, /empty\.textContent = "世界层暂不可用"/);
+  assert.match(offlineRenderer, /cityEmpty\.textContent = "世界状态暂不可用"/);
+  assert.match(renderSource, /if \(!governance\.world\) \{\s*renderGovernanceOfflineState\(\);\s*return;\s*\}/);
+  assert.doesNotMatch(renderSource, /世界层暂不可用/);
+  assert.doesNotMatch(renderSource, /世界状态暂不可用/);
+});
+
+test("governance render flow delegates chrome and member filtering", async () => {
+  const source = await readShellModule("app.js");
+  const targetResolver = sliceBetween(
+    source,
+    "function hasGovernanceRenderTargets() {",
+    "function updateGovernanceWorldHeader() {",
+  );
+  const headerRenderer = sliceBetween(
+    source,
+    "function updateGovernanceWorldHeader() {",
+    "function appendGovernanceEmptyCityState() {",
+  );
+  const emptyRenderer = sliceBetween(
+    source,
+    "function appendGovernanceEmptyCityState() {",
+    "function governancePendingMembersForCity(city) {",
+  );
+  const pendingResolver = sliceBetween(
+    source,
+    "function governancePendingMembersForCity(city) {",
+    "function governanceActiveMembersForCity(city) {",
+  );
+  const activeResolver = sliceBetween(
+    source,
+    "function governanceActiveMembersForCity(city) {",
+    "function renderGovernance() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderGovernance() {",
+    "function renderWorldDirectory() {",
+  );
+
+  assert.match(targetResolver, /!cityListEl/);
+  assert.match(targetResolver, /!worldSafetyListEl/);
+  assert.match(headerRenderer, /setNodeText\(worldStateEl, `世界：\$\{displayWorldTitle\(governance\.world\.title\)\}`\)/);
+  assert.match(headerRenderer, /shellMode === "user"/);
+  assert.match(headerRenderer, /跨城私聊 \$\{governance\.world\.allows_cross_city_private_messages \? "开启" : "关闭"\}/);
+  assert.match(emptyRenderer, /empty\.textContent = "暂时还没有公开城市"/);
+  assert.match(pendingResolver, /item\.city_id === city\.city_id && item\.state === "PendingApproval"/);
+  assert.match(activeResolver, /item\.state === "Active"/);
+  assert.match(activeResolver, /item\.resident_id !== currentIdentity\(\)/);
+  assert.match(renderSource, /if \(!hasGovernanceRenderTargets\(\)\) return/);
+  assert.match(renderSource, /updateGovernanceWorldHeader\(\)/);
+  assert.match(renderSource, /appendGovernanceEmptyCityState\(\)/);
+  assert.match(renderSource, /const pendingMembers = governancePendingMembersForCity\(city\)/);
+  assert.match(renderSource, /const activeMembers = governanceActiveMembersForCity\(city\)/);
+  assert.doesNotMatch(renderSource, /worldSummaryEl, shellMode === "user"/);
+  assert.doesNotMatch(renderSource, /governance\.memberships\.filter/);
+});
+
+test("governance city card summary DOM is delegated out of renderGovernance", async () => {
+  const source = await readShellModule("app.js");
+  const cardBaseRenderer = sliceBetween(
+    source,
+    "function createGovernanceCityCardBaseNode(city, membership) {",
+    "function renderGovernance() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderGovernance() {",
+    "    if (rooms.length) {",
+  );
+
+  assert.match(cardBaseRenderer, /document\.createElement\("li"\)/);
+  assert.match(cardBaseRenderer, /li\.className = "city-card"/);
+  assert.match(cardBaseRenderer, /titleRow\.className = "city-card-title"/);
+  assert.match(cardBaseRenderer, /createLine\("city-name", displayCityTitle\(city\)\)/);
+  assert.match(cardBaseRenderer, /createLine\("city-slug", city\.slug\)/);
+  assert.match(cardBaseRenderer, /createLine\("city-sub", displayCityDescription\(city\)\)/);
+  assert.match(cardBaseRenderer, /createLine\("city-role", `你的状态：\$\{humanMembership\(membership\)\}`\)/);
+  assert.match(cardBaseRenderer, /city\.public_room_discovery_enabled \? "开启" : "关闭"/);
+  assert.match(renderSource, /const li = createGovernanceCityCardBaseNode\(city, membership\)/);
+  assert.doesNotMatch(renderSource, /titleRow\.className = "city-card-title"/);
+  assert.doesNotMatch(renderSource, /displayCityDescription\(city\)/);
+});
+
+test("governance city room list DOM is delegated out of renderGovernance", async () => {
+  const source = await readShellModule("app.js");
+  const openButtonRenderer = sliceBetween(
+    source,
+    "function createGovernanceRoomOpenButton(room) {",
+    "function createGovernanceRoomFreezeButton(city, room) {",
+  );
+  const freezeButtonRenderer = sliceBetween(
+    source,
+    "function createGovernanceRoomFreezeButton(city, room) {",
+    "function createGovernanceCityRoomEntryNode(city, membership, room) {",
+  );
+  const roomEntryRenderer = sliceBetween(
+    source,
+    "function createGovernanceCityRoomEntryNode(city, membership, room) {",
+    "function appendGovernanceCityRoomList(li, city, membership, rooms) {",
+  );
+  const roomListRenderer = sliceBetween(
+    source,
+    "function appendGovernanceCityRoomList(li, city, membership, rooms) {",
+    "function renderGovernance() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderGovernance() {",
+    "    if (pendingMembers.length) {",
+  );
+
+  assert.match(roomListRenderer, /roomList\.textContent = "公共房间"/);
+  assert.match(roomListRenderer, /roomWrap\.className = "city-room-wrap"/);
+  assert.match(roomListRenderer, /for \(const room of rooms\) \{/);
+  assert.match(openButtonRenderer, /openButton\.textContent = "打开"/);
+  assert.match(openButtonRenderer, /focusRoom\(room\.room_id\)/);
+  assert.match(freezeButtonRenderer, /submitFreezeRoom\(city\.slug, room\.slug, !room\.frozen\)/);
+  assert.match(roomEntryRenderer, /createGovernanceRoomOpenButton\(room\)/);
+  assert.match(roomEntryRenderer, /createGovernanceRoomFreezeButton\(city, room\)/);
+  assert.match(roomListRenderer, /createGovernanceCityRoomEntryNode\(city, membership, room\)/);
+  assert.match(renderSource, /if \(rooms\.length\) \{\s*appendGovernanceCityRoomList\(li, city, membership, rooms\);\s*\}/);
+  assert.doesNotMatch(renderSource, /roomList\.textContent = "公共房间"/);
+  assert.doesNotMatch(renderSource, /submitFreezeRoom\(city\.slug, room\.slug, !room\.frozen\)/);
+  assert.doesNotMatch(roomListRenderer, /focusRoom\(room\.room_id\)/);
+  assert.doesNotMatch(roomListRenderer, /submitFreezeRoom\(city\.slug, room\.slug, !room\.frozen\)/);
+});
+
+test("governance pending member list DOM is delegated out of renderGovernance", async () => {
+  const source = await readShellModule("app.js");
+  const pendingListRenderer = sliceBetween(
+    source,
+    "function appendGovernancePendingMemberList(li, city, membership, pendingMembers) {",
+    "function renderGovernance() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderGovernance() {",
+    "    if (activeMembers.length) {",
+  );
+
+  assert.match(pendingListRenderer, /pendingTitle\.textContent = "待审批居民"/);
+  assert.match(pendingListRenderer, /pendingWrap\.className = "city-room-wrap"/);
+  assert.match(pendingListRenderer, /for \(const pending of pendingMembers\) \{/);
+  assert.match(pendingListRenderer, /approveButton\.textContent = "批准"/);
+  assert.match(pendingListRenderer, /submitApproveResident\(city\.slug, pending\.resident_id\)/);
+  assert.match(renderSource, /if \(pendingMembers\.length\) \{\s*appendGovernancePendingMemberList\(li, city, membership, pendingMembers\);\s*\}/);
+  assert.doesNotMatch(renderSource, /pendingTitle\.textContent = "待审批居民"/);
+  assert.doesNotMatch(renderSource, /submitApproveResident\(city\.slug, pending\.resident_id\)/);
+});
+
+test("governance active member list DOM is delegated out of renderGovernance", async () => {
+  const source = await readShellModule("app.js");
+  const activeListRenderer = sliceBetween(
+    source,
+    "function appendGovernanceActiveMemberList(li, city, membership, activeMembers) {",
+    "function renderGovernance() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderGovernance() {",
+    "    appendGovernanceCityActions(li, city, membership, rooms);",
+  );
+
+  assert.match(activeListRenderer, /activeTitle\.textContent = "活跃居民"/);
+  assert.match(activeListRenderer, /activeWrap\.className = "city-room-wrap"/);
+  assert.match(activeListRenderer, /for \(const resident of activeMembers\) \{/);
+  assert.match(activeListRenderer, /label\.textContent = `\$\{resident\.resident_id\} · \$\{translateRole\(resident\.role\)\}`/);
+  assert.match(activeListRenderer, /stewardButton\.textContent = grant \? "设为执事" : "撤销执事"/);
+  assert.match(activeListRenderer, /submitStewardUpdate\(city\.slug, resident\.resident_id, grant\)/);
+  assert.match(renderSource, /if \(activeMembers\.length\) \{\s*appendGovernanceActiveMemberList\(li, city, membership, activeMembers\);\s*\}/);
+  assert.doesNotMatch(renderSource, /activeTitle\.textContent = "活跃居民"/);
+  assert.doesNotMatch(renderSource, /submitStewardUpdate\(city\.slug, resident\.resident_id, grant\)/);
+});
+
+test("governance city action controls DOM is delegated out of renderGovernance", async () => {
+  const source = await readShellModule("app.js");
+  const joinButtonRenderer = sliceBetween(
+    source,
+    "function createGovernanceJoinButton(city) {",
+    "function createGovernancePendingApprovalNotice() {",
+  );
+  const pendingNoticeRenderer = sliceBetween(
+    source,
+    "function createGovernancePendingApprovalNotice() {",
+    "function governanceLobbyRoom(rooms) {",
+  );
+  const lobbyResolver = sliceBetween(
+    source,
+    "function governanceLobbyRoom(rooms) {",
+    "function createGovernanceLobbyOpenButton(lobby) {",
+  );
+  const lobbyOpenButtonRenderer = sliceBetween(
+    source,
+    "function createGovernanceLobbyOpenButton(lobby) {",
+    "function createGovernanceCreateRoomButton(city) {",
+  );
+  const createRoomButtonRenderer = sliceBetween(
+    source,
+    "function createGovernanceCreateRoomButton(city) {",
+    "function appendGovernanceCityActions(li, city, membership, rooms) {",
+  );
+  const actionRenderer = sliceBetween(
+    source,
+    "function appendGovernanceCityActions(li, city, membership, rooms) {",
+    "function renderGovernance() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderGovernance() {",
+    "    appendGovernanceFederationPolicyControls(li, city, membership);",
+  );
+
+  assert.match(actionRenderer, /const actions = document\.createElement\("div"\)/);
+  assert.match(actionRenderer, /actions\.className = "city-actions"/);
+  assert.match(joinButtonRenderer, /joinButton\.textContent = "加入"/);
+  assert.match(joinButtonRenderer, /cityJoinInputEl\.value = city\.slug/);
+  assert.match(joinButtonRenderer, /await submitJoinCity\(city\.slug\)/);
+  assert.match(pendingNoticeRenderer, /pending\.textContent = "等待审批"/);
+  assert.match(lobbyResolver, /rooms\.find\(\(room\) => room\.slug === "lobby"\) \|\| rooms\[0\]/);
+  assert.match(lobbyOpenButtonRenderer, /openButton\.textContent = `打开 \$\{lobby\.slug\}`/);
+  assert.match(lobbyOpenButtonRenderer, /focusRoom\(lobby\.room_id\)/);
+  assert.match(createRoomButtonRenderer, /setGovernanceStatus\(`已准备在 \$\{city\.slug\} 中创建房间`\)/);
+  assert.match(actionRenderer, /actions\.appendChild\(createGovernanceJoinButton\(city\)\)/);
+  assert.match(actionRenderer, /actions\.appendChild\(createGovernancePendingApprovalNotice\(\)\)/);
+  assert.match(actionRenderer, /const lobby = governanceLobbyRoom\(rooms\)/);
+  assert.match(actionRenderer, /actions\.appendChild\(createGovernanceLobbyOpenButton\(lobby\)\)/);
+  assert.match(actionRenderer, /roleAllowsCreatePublicRoom\(membership\.role\)/);
+  assert.match(actionRenderer, /actions\.appendChild\(createGovernanceCreateRoomButton\(city\)\)/);
+  assert.match(actionRenderer, /li\.appendChild\(actions\)/);
+  assert.match(renderSource, /appendGovernanceCityActions\(li, city, membership, rooms\)/);
+  assert.doesNotMatch(renderSource, /const actions = document\.createElement\("div"\)/);
+  assert.doesNotMatch(renderSource, /submitJoinCity\(city\.slug\)/);
+  assert.doesNotMatch(renderSource, /roomTitleInputEl\.focus\(\)/);
+  assert.doesNotMatch(actionRenderer, /await submitJoinCity\(city\.slug\)/);
+  assert.doesNotMatch(actionRenderer, /focusRoom\(lobby\.room_id\)/);
+  assert.doesNotMatch(actionRenderer, /roomTitleInputEl\.focus\(\)/);
+});
+
+test("governance federation policy controls are delegated out of renderGovernance", async () => {
+  const source = await readShellModule("app.js");
+  const federationRenderer = sliceBetween(
+    source,
+    "function appendGovernanceFederationPolicyControls(li, city, membership) {",
+    "function renderGovernance() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderGovernance() {",
+    "    cityListEl.appendChild(li);",
+  );
+
+  assert.match(federationRenderer, /roleAllowsUpdateFederation\(membership\.role\)/);
+  assert.match(federationRenderer, /federationLabel\.textContent = `联邦策略 · \$\{translateFederationPolicy\(city\.federation_policy\)\}`/);
+  assert.match(federationRenderer, /const policies = \[/);
+  assert.match(federationRenderer, /\["Open", "开放互联"\]/);
+  assert.match(federationRenderer, /\["Selective", "选择互联"\]/);
+  assert.match(federationRenderer, /\["Isolated", "孤城断联"\]/);
+  assert.match(federationRenderer, /applyButton\.textContent =\s*city\.federation_policy === policyValue \? "当前" : "应用"/);
+  assert.match(federationRenderer, /await submitFederationPolicy\(city\.slug, policyValue\)/);
+  assert.match(federationRenderer, /setGovernanceStatus\(localizedRuntimeError\(error, "联邦策略更新失败"\), true\)/);
+  assert.match(federationRenderer, /li\.appendChild\(federationWrap\)/);
+  assert.match(renderSource, /appendGovernanceFederationPolicyControls\(li, city, membership\)/);
+  assert.doesNotMatch(renderSource, /const federationLabel = document\.createElement\("div"\)/);
+  assert.doesNotMatch(renderSource, /submitFederationPolicy\(city\.slug, policyValue\)/);
+  assert.doesNotMatch(renderSource, /const policies = \[/);
+});
+
+test("governance form input enablement is delegated out of updateGovernanceFormState", async () => {
+  const source = await readShellModule("app.js");
+  const stewardInputs = sliceBetween(
+    source,
+    "function governanceWorldStewardInputElements() {",
+    "function governanceManagedInputElements() {",
+  );
+  const managedInputs = sliceBetween(
+    source,
+    "function governanceManagedInputElements() {",
+    "function updateGovernanceManagedInputs(enabled, worldStewardEnabled) {",
+  );
+  const inputUpdater = sliceBetween(
+    source,
+    "function updateGovernanceManagedInputs(enabled, worldStewardEnabled) {",
+    "function governanceButtonStateDescriptors(enabled, worldStewardEnabled) {",
+  );
+  const formUpdater = sliceBetween(
+    source,
+    "function updateGovernanceFormState() {",
+    "function updateAuthFormState() {",
+  );
+
+  assert.match(stewardInputs, /return new Set\(\[/);
+  assert.match(stewardInputs, /worldMirrorUrlInputEl/);
+  assert.match(stewardInputs, /worldResidentReasonInputEl/);
+  assert.match(managedInputs, /return \[/);
+  assert.match(managedInputs, /providerUrlInputEl/);
+  assert.match(managedInputs, /worldReportEvidenceInputEl/);
+  assert.match(inputUpdater, /const worldStewardInputs = governanceWorldStewardInputElements\(\)/);
+  assert.match(inputUpdater, /for \(const element of governanceManagedInputElements\(\)\) \{/);
+  assert.match(inputUpdater, /element\.disabled = worldStewardInputs\.has\(element\) \? !worldStewardEnabled : !enabled/);
+  assert.match(formUpdater, /updateGovernanceManagedInputs\(enabled, worldStewardEnabled\)/);
+  assert.doesNotMatch(formUpdater, /new Set\(\[/);
+  assert.doesNotMatch(formUpdater, /worldMirrorUrlInputEl,\s*worldNoticeTitleInputEl/);
+});
+
+test("governance form button enablement is delegated out of updateGovernanceFormState", async () => {
+  const source = await readShellModule("app.js");
+  const buttonDescriptors = sliceBetween(
+    source,
+    "function governanceButtonStateDescriptors(enabled, worldStewardEnabled) {",
+    "function updateGovernanceManagedButtons(enabled, worldStewardEnabled) {",
+  );
+  const buttonUpdater = sliceBetween(
+    source,
+    "function updateGovernanceManagedButtons(enabled, worldStewardEnabled) {",
+    "function updateGovernanceFormState() {",
+  );
+  const formUpdater = sliceBetween(
+    source,
+    "function updateGovernanceFormState() {",
+    "function updateAuthFormState() {",
+  );
+
+  assert.match(buttonDescriptors, /cityCreateFormEl\?\.querySelector\("button"\)/);
+  assert.match(buttonDescriptors, /providerDisconnectButtonEl/);
+  assert.match(buttonDescriptors, /disabled: !enabled \|\| !provider\.base_url/);
+  assert.match(buttonDescriptors, /worldMirrorFormEl\?\.querySelector\("button"\)/);
+  assert.match(buttonDescriptors, /worldResidentSanctionFormEl\?\.querySelector\("button"\)/);
+  assert.match(buttonDescriptors, /disabled: !worldStewardEnabled/);
+  assert.match(buttonUpdater, /for \(const \{ element, disabled \} of governanceButtonStateDescriptors\(enabled, worldStewardEnabled\)\) \{/);
+  assert.match(buttonUpdater, /if \(element\) element\.disabled = disabled/);
+  assert.match(formUpdater, /updateGovernanceManagedButtons\(enabled, worldStewardEnabled\)/);
+  assert.doesNotMatch(formUpdater, /querySelector\("button"\)/);
+  assert.doesNotMatch(formUpdater, /providerDisconnectButtonEl\.disabled/);
+});
+
+test("room digest metrics title and copy are delegated out of renderRoomDigest", async () => {
+  const source = await readShellModule("app.js");
+  const metricsRenderer = sliceBetween(
+    source,
+    "function roomDigestMetrics() {",
+    "function createRoomDigestTitleNode(rooms) {",
+  );
+  const titleRenderer = sliceBetween(
+    source,
+    "function createRoomDigestTitleNode(rooms) {",
+    "function createRoomDigestCopyNode(activeRoom, shellPage) {",
+  );
+  const copyRenderer = sliceBetween(
+    source,
+    "function createRoomDigestCopyNode(activeRoom, shellPage) {",
+    "function appendRoomDigestBaseChips(chips, shellPage, metrics) {",
+  );
+  const digestRenderer = sliceBetween(
+    source,
+    "function renderRoomDigest(rooms) {",
+    "function renderThreadStatusRail(room) {",
+  );
+
+  assert.match(metricsRenderer, /activeRoom: activeRoomId \? state\.rooms\.find/);
+  assert.match(metricsRenderer, /directCount: state\.rooms\.filter\(\(room\) => roomKind\(room\) === "direct"\)\.length/);
+  assert.match(metricsRenderer, /unreadTotal: state\.rooms\.reduce\(\(sum, room\) => sum \+ unreadCount\(room\), 0\)/);
+  assert.match(titleRenderer, /title\.className = "room-digest-title"/);
+  assert.match(titleRenderer, /rooms\.length \? `最近会话 · \$\{rooms\.length\}` : "最近会话 · 暂无"/);
+  assert.match(copyRenderer, /copy\.className = "room-digest-copy"/);
+  assert.match(copyRenderer, /shellPage === "admin"\s*\?\s*roomThreadHeadline\(activeRoom\)/);
+  assert.match(copyRenderer, /roomContextSummary\(activeRoom\)/);
+  assert.match(digestRenderer, /const metrics = roomDigestMetrics\(\)/);
+  assert.match(digestRenderer, /roomDigestEl\.appendChild\(createRoomDigestTitleNode\(rooms\)\)/);
+  assert.match(digestRenderer, /roomDigestEl\.appendChild\(createRoomDigestCopyNode\(metrics\.activeRoom, shellPage\)\)/);
+  assert.doesNotMatch(digestRenderer, /const directCount = state\.rooms\.filter/);
+  assert.doesNotMatch(digestRenderer, /copy\.className = "room-digest-copy"/);
+});
+
+test("room digest chip groups are delegated out of renderRoomDigest", async () => {
+  const source = await readShellModule("app.js");
+  const baseChipAppender = sliceBetween(
+    source,
+    "function appendRoomDigestBaseChips(chips, shellPage, metrics) {",
+    "function appendRoomDigestActiveRoomChips(chips, activeRoom, shellPage) {",
+  );
+  const activeChipAppender = sliceBetween(
+    source,
+    "function appendRoomDigestActiveRoomChips(chips, activeRoom, shellPage) {",
+    "function createRoomDigestChipsNode(shellPage, metrics) {",
+  );
+  const chipsRenderer = sliceBetween(
+    source,
+    "function createRoomDigestChipsNode(shellPage, metrics) {",
+    "function renderRoomDigest(rooms) {",
+  );
+  const digestRenderer = sliceBetween(
+    source,
+    "function renderRoomDigest(rooms) {",
+    "function renderThreadStatusRail(room) {",
+  );
+
+  assert.match(baseChipAppender, /if \(shellPage === "admin"\) \{/);
+  assert.match(baseChipAppender, /`\$\{metrics\.followUpCount\} 个待跟进`/);
+  assert.match(baseChipAppender, /`\$\{metrics\.unreadTotal\} 条未读`/);
+  assert.match(baseChipAppender, /metrics\.systemCount > 0/);
+  assert.match(activeChipAppender, /if \(!activeRoom\) return/);
+  assert.match(activeChipAppender, /createPill\(roomThreadHeadline\(activeRoom\), "muted"\)/);
+  assert.match(activeChipAppender, /roomChatStatusSummary\(activeRoom\)/);
+  assert.match(activeChipAppender, /roomQueueSummary\(activeRoom\)/);
+  assert.match(activeChipAppender, /const caretaker = caretakerProfile\(activeRoom\)/);
+  assert.match(chipsRenderer, /chips\.className = "room-digest-chips"/);
+  assert.match(chipsRenderer, /appendRoomDigestBaseChips\(chips, shellPage, metrics\)/);
+  assert.match(chipsRenderer, /appendRoomDigestActiveRoomChips\(chips, metrics\.activeRoom, shellPage\)/);
+  assert.match(digestRenderer, /roomDigestEl\.appendChild\(createRoomDigestChipsNode\(shellPage, metrics\)\)/);
+  assert.doesNotMatch(digestRenderer, /followUpCount > 0 \? "warm" : "muted"/);
+  assert.doesNotMatch(digestRenderer, /roomChatStatusSummary\(activeRoom\)/);
+});
+
+test("thread status rail visibility and items are delegated out of renderThreadStatusRail", async () => {
+  const source = await readShellModule("app.js");
+  const hiddenHelper = sliceBetween(
+    source,
+    "function shouldHideThreadStatusRail(room, shellPage) {",
+    "function threadStatusBaseItems(room, shellPage) {",
+  );
+  const baseItemsHelper = sliceBetween(
+    source,
+    "function threadStatusBaseItems(room, shellPage) {",
+    "function appendThreadStatusDraftItem(items, room) {",
+  );
+  const draftAppender = sliceBetween(
+    source,
+    "function appendThreadStatusDraftItem(items, room) {",
+    "function appendThreadStatusCaretakerItems(items, room) {",
+  );
+  const caretakerAppender = sliceBetween(
+    source,
+    "function appendThreadStatusCaretakerItems(items, room) {",
+    "function threadStatusRailItems(room, shellPage) {",
+  );
+  const itemsHelper = sliceBetween(
+    source,
+    "function threadStatusRailItems(room, shellPage) {",
+    "function composerMetaStatusForRoom(room) {",
+  );
+  const railRenderer = sliceBetween(
+    source,
+    "function renderThreadStatusRail(room) {",
+    "function renderComposerMeta(room) {",
+  );
+
+  assert.match(hiddenHelper, /return !room \|\| shellPage === "user"/);
+  assert.match(baseItemsHelper, /label: shellPage === "admin" \? "线程" : "会话标题"/);
+  assert.match(baseItemsHelper, /value: roomThreadHeadline\(room\)/);
+  assert.match(baseItemsHelper, /roomChatStatusSummary\(room\)/);
+  assert.match(baseItemsHelper, /roomQueueSummary\(room\)/);
+  assert.match(draftAppender, /if \(!roomHasDraft\(room\.id\)\) return/);
+  assert.match(draftAppender, /`\$\{draftForRoom\(room\.id\)\.trim\(\)\.length\} 字`/);
+  assert.match(caretakerAppender, /const caretaker = caretakerProfile\(room\)/);
+  assert.match(caretakerAppender, /caretakerNotificationCount\(room\) > 0/);
+  assert.match(itemsHelper, /const items = threadStatusBaseItems\(room, shellPage\)/);
+  assert.match(itemsHelper, /appendThreadStatusDraftItem\(items, room\)/);
+  assert.match(itemsHelper, /appendThreadStatusCaretakerItems\(items, room\)/);
+  assert.doesNotMatch(itemsHelper, /roomChatStatusSummary\(room\)/);
+  assert.doesNotMatch(itemsHelper, /caretakerNotificationCount\(room\) > 0/);
+  assert.match(railRenderer, /if \(shouldHideThreadStatusRail\(room, shellPage\)\) \{/);
+  assert.match(railRenderer, /for \(const item of threadStatusRailItems\(room, shellPage\)\) \{/);
+  assert.doesNotMatch(railRenderer, /const items = \[/);
+  assert.doesNotMatch(railRenderer, /roomChatStatusSummary\(room\)/);
+});
+
+test("thread status item DOM is delegated out of renderThreadStatusRail", async () => {
+  const source = await readShellModule("app.js");
+  const itemRenderer = sliceBetween(
+    source,
+    "function createThreadStatusItemNode(item) {",
+    "function renderThreadStatusRail(room) {",
+  );
+  const railRenderer = sliceBetween(
+    source,
+    "function renderThreadStatusRail(room) {",
+    "function renderComposerMeta(room) {",
+  );
+
+  assert.match(itemRenderer, /document\.createElement\("div"\)/);
+  assert.match(itemRenderer, /chip\.className = `thread-status-item thread-status-item-\$\{item\.tone\}`/);
+  assert.match(itemRenderer, /createLine\("thread-status-label", item\.label\)/);
+  assert.match(itemRenderer, /createLine\("thread-status-value", item\.value\)/);
+  assert.match(itemRenderer, /return chip/);
+  assert.match(railRenderer, /threadStatusRailEl\.appendChild\(createThreadStatusItemNode\(item\)\)/);
+  assert.doesNotMatch(railRenderer, /document\.createElement\("div"\)/);
+});
+
+test("composer meta model and DOM are delegated out of renderComposerMeta", async () => {
+  const source = await readShellModule("app.js");
+  const statusResolver = sliceBetween(
+    source,
+    "function composerMetaStatusForRoom(room) {",
+    "function composerMetaUserItems(room, baseStatus) {",
+  );
+  const userItemsRenderer = sliceBetween(
+    source,
+    "function composerMetaUserItems(room, baseStatus) {",
+    "function composerMetaNonUserItems(room, shellPage, baseStatus) {",
+  );
+  const nonUserItemsRenderer = sliceBetween(
+    source,
+    "function composerMetaNonUserItems(room, shellPage, baseStatus) {",
+    "function appendComposerMetaCaretakerItem(items, room, shellPage) {",
+  );
+  const caretakerAppender = sliceBetween(
+    source,
+    "function appendComposerMetaCaretakerItem(items, room, shellPage) {",
+    "function composerMetaItems(room, shellPage) {",
+  );
+  const itemsRenderer = sliceBetween(
+    source,
+    "function composerMetaItems(room, shellPage) {",
+    "function createComposerMetaItemNode(item) {",
+  );
+  const itemNodeRenderer = sliceBetween(
+    source,
+    "function createComposerMetaItemNode(item) {",
+    "function renderComposerMetaItems(items) {",
+  );
+  const listRenderer = sliceBetween(
+    source,
+    "function renderComposerMetaItems(items) {",
+    "function renderComposerMeta(room) {",
+  );
+  const metaRenderer = sliceBetween(
+    source,
+    "function renderComposerMeta(room) {",
+    "function createChatDetailHeroNode(room, shellPage) {",
+  );
+
+  assert.match(statusResolver, /composerMetaBaseStatus\(/);
+  assert.match(statusResolver, /room \? roomSendErrors\[room\.id\] : null/);
+  assert.match(userItemsRenderer, /label: "当前会话"/);
+  assert.match(userItemsRenderer, /roomSyncLabel\(\)/);
+  assert.match(nonUserItemsRenderer, /label: shellPage === "admin" \? "线程" : "会话标题"/);
+  assert.match(nonUserItemsRenderer, /roomRouteLabel\(room\)/);
+  assert.match(nonUserItemsRenderer, /roomQueueSummary\(room\)/);
+  assert.match(nonUserItemsRenderer, /currentIdentity\(\) \|\| "访客"/);
+  assert.match(caretakerAppender, /const caretaker = room \? caretakerProfile\(room\) : null/);
+  assert.match(caretakerAppender, /label: shellPage === "admin" \? "巡检\/管家" : "管家"/);
+  assert.match(
+    itemsRenderer,
+    /const items =\s+shellPage === "user"\s+\?\s+composerMetaUserItems\(room, baseStatus\)\s+:\s+composerMetaNonUserItems\(room, shellPage, baseStatus\)/,
+  );
+  assert.match(itemsRenderer, /appendComposerMetaCaretakerItem\(items, room, shellPage\)/);
+  assert.match(itemsRenderer, /composerMetaQuickHint\(shellMode\)/);
+  assert.match(itemNodeRenderer, /block\.className = "composer-meta-item"/);
+  assert.match(itemNodeRenderer, /createLine\("composer-meta-label", item\.label\)/);
+  assert.match(itemNodeRenderer, /createLine\("composer-meta-value", item\.value\)/);
+  assert.match(listRenderer, /clearChildren\(composerMetaEl\)/);
+  assert.match(listRenderer, /composerMetaEl\.appendChild\(createComposerMetaItemNode\(item\)\)/);
+  assert.match(metaRenderer, /renderComposerMetaItems\(composerMetaItems\(room, shellPage\)\)/);
+  assert.doesNotMatch(metaRenderer, /const items =/);
+  assert.doesNotMatch(metaRenderer, /composerMetaBaseStatus\(/);
+});
+
+test("chat detail hero DOM is delegated out of renderChatDetailPanel", async () => {
+  const source = await readShellModule("app.js");
+  const heroRenderer = sliceBetween(
+    source,
+    "function createChatDetailHeroNode(room, shellPage) {",
+    "function renderChatDetailPanel() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderChatDetailPanel() {",
+    "  const runtime = createChatRuntimeDetailSection(room, shellPage);",
+  );
+
+  assert.match(heroRenderer, /document\.createElement\("section"\)/);
+  assert.match(heroRenderer, /hero\.className = "chat-detail-hero"/);
+  assert.match(heroRenderer, /createLine\("chat-detail-title", roomThreadHeadline\(room\)\)/);
+  assert.match(heroRenderer, /createLine\("chat-detail-copy", roomContextSummary\(room\)\)/);
+  assert.match(heroRenderer, /translateRoomKindForShellPage\(roomKind\(room\), shellPage\)/);
+  assert.match(heroRenderer, /pills\.className = "chat-detail-pills"/);
+  assert.match(heroRenderer, /pills\.appendChild\(createPill\(`身份 \$\{currentIdentity\(\)\}`, "muted"\)\)/);
+  assert.match(renderSource, /const hero = createChatDetailHeroNode\(room, shellPage\)/);
+  assert.match(renderSource, /chatDetailContentEl\.appendChild\(hero\)/);
+  assert.doesNotMatch(renderSource, /document\.createElement\("section"\)/);
+  assert.doesNotMatch(renderSource, /chat-detail-pills/);
+});
+
+test("chat detail runtime status DOM is delegated out of renderChatDetailPanel", async () => {
+  const source = await readShellModule("app.js");
+  const runtimeRenderer = sliceBetween(
+    source,
+    "function createChatRuntimeDetailSection(room, shellPage) {",
+    "function chatDetailRoomContextModel(room) {",
+  );
+  const shellRowsRenderer = sliceBetween(
+    source,
+    "function appendChatRuntimeShellRows(runtime, room, shellPage) {",
+    "function appendChatRuntimeSyncRows(runtime, room) {",
+  );
+  const quickRowsRenderer = sliceBetween(
+    source,
+    "function appendChatRuntimeQuickActionRows(runtime, room) {",
+    "function appendChatRuntimeProviderRows(runtime, room) {",
+  );
+  const previewCardRenderer = sliceBetween(
+    source,
+    "function createChatRuntimePreviewCardNode(room, preview, previewFieldView) {",
+    "function appendChatRuntimePreviewRows(runtime, room, preview) {",
+  );
+  const providerRowsRenderer = sliceBetween(
+    source,
+    "function appendChatRuntimeProviderRows(runtime, room) {",
+    "function createChatRuntimeDetailSection(room, shellPage) {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderChatDetailPanel() {",
+    "  const caretakerSection = createCaretakerDetailSection(room);",
+  );
+
+  assert.match(runtimeRenderer, /const runtime = createDetailSection\("聊天状态"\)/);
+  assert.match(runtimeRenderer, /appendChatRuntimeShellRows\(runtime, room, shellPage\)/);
+  assert.match(runtimeRenderer, /appendChatRuntimeSyncRows\(runtime, room\)/);
+  assert.match(runtimeRenderer, /appendChatRuntimeQuickActionRows\(runtime, room\)/);
+  assert.match(runtimeRenderer, /appendChatRuntimeProviderRows\(runtime, room\)/);
+  assert.match(shellRowsRenderer, /if \(shellPage === "user"\) return/);
+  assert.match(shellRowsRenderer, /createDetailRow\(shellPage === "admin" \? "线程" : "会话标题", roomThreadHeadline\(room\)\)/);
+  assert.match(quickRowsRenderer, /const quickContext = chatRuntimeQuickActionContext\(room\)/);
+  assert.match(quickRowsRenderer, /appendChatRuntimePreviewRows\(runtime, room, preview\)/);
+  assert.match(providerRowsRenderer, /createDetailRow\(\s*"消息来源"/);
+  assert.match(providerRowsRenderer, /createDetailRow\(\s*"输入状态"/);
+  assert.match(previewCardRenderer, /createQuickActionPreviewCard\(preview\.action, preview\.state, preview\.structured/);
+  assert.match(previewCardRenderer, /previewRoomQuickStage\(room\.id, preview\.action, preview\.state, index\)/);
+  assert.match(previewCardRenderer, /setRoomQuickPreviewFieldView\(room\.id, preview\.action, preview\.state, preview\.snapshotIndex, viewId\)/);
+  assert.match(renderSource, /const runtime = createChatRuntimeDetailSection\(room, shellPage\)/);
+  assert.match(renderSource, /chatDetailContentEl\.appendChild\(runtime\)/);
+  assert.doesNotMatch(runtimeRenderer, /createQuickActionPreviewCard\(preview\.action, preview\.state, preview\.structured/);
+  assert.doesNotMatch(runtimeRenderer, /translateProviderMode\(provider\.mode/);
+  assert.doesNotMatch(renderSource, /createDetailSection\("聊天状态"\)/);
+  assert.doesNotMatch(renderSource, /chat-detail-preview-card/);
+});
+
+test("chat detail quick actions DOM is delegated out of renderChatDetailPanel", async () => {
+  const source = await readShellModule("app.js");
+  const actionsRenderer = sliceBetween(
+    source,
+    "function createChatDetailActionsSection(room, shellPage) {",
+    "function renderChatDetailPanel() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderChatDetailPanel() {",
+    "function createTimelineEmptyStateNode(cardSpec) {",
+  );
+
+  assert.match(actionsRenderer, /const actions = createDetailSection\("快捷动作"\)/);
+  assert.match(actionsRenderer, /actionRow\.className = "chat-detail-actions"/);
+  assert.match(actionsRenderer, /refreshButton\.textContent = "刷新"/);
+  assert.match(actionsRenderer, /await refreshFromGateway\(\)/);
+  assert.match(actionsRenderer, /exportButton\.textContent = "导出当前"/);
+  assert.match(actionsRenderer, /exportCurrentConversation\("导出当前会话失败"\)/);
+  assert.match(actionsRenderer, /if \(shellPage !== "user"\) \{/);
+  assert.match(actionsRenderer, /worldButton\.textContent = roomKind\(room\) === "direct" \? "去找人" : "去找房间"/);
+  assert.match(actionsRenderer, /return actions/);
+  assert.match(renderSource, /const actions = createChatDetailActionsSection\(room, shellPage\)/);
+  assert.match(renderSource, /chatDetailContentEl\.appendChild\(actions\)/);
+  assert.doesNotMatch(renderSource, /createDetailSection\("快捷动作"\)/);
+  assert.doesNotMatch(renderSource, /refreshButton\.textContent = "刷新"/);
+  assert.doesNotMatch(renderSource, /exportButton\.textContent = "导出当前"/);
+});
+
+test("chat detail caretaker section DOM is delegated out of renderChatDetailPanel", async () => {
+  const source = await readShellModule("app.js");
+  const caretakerRenderer = sliceBetween(
+    source,
+    "function createCaretakerDetailSection(room) {",
+    "function createChatDetailActionsSection(room, shellPage) {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderChatDetailPanel() {",
+    "function createTimelineEmptyStateNode(cardSpec) {",
+  );
+
+  assert.match(caretakerRenderer, /const caretaker = caretakerProfile\(room\)/);
+  assert.match(caretakerRenderer, /if \(!caretaker\) return null/);
+  assert.match(caretakerRenderer, /const caretakerSection = createDetailSection\(/);
+  assert.match(caretakerRenderer, /createDetailRow\("人设", caretaker\.persona \|\| "未设定"\)/);
+  assert.match(caretakerRenderer, /createDetailRow\("短期记忆", caretaker\.memory \|\| "暂无记录"\)/);
+  assert.match(caretakerRenderer, /createDetailRow\("自动回复", caretaker\.auto_reply \|\| "未设定"\)/);
+  assert.match(caretakerRenderer, /for \(const message of caretaker\.messages\.slice\(0, 3\)\) \{/);
+  assert.match(caretakerRenderer, /item\.className = "caretaker-note"/);
+  assert.match(caretakerRenderer, /for \(const note of caretaker\.notifications\.slice\(0, 2\)\) \{/);
+  assert.match(caretakerRenderer, /item\.className = "caretaker-note caretaker-note-alert"/);
+  assert.match(caretakerRenderer, /return caretakerSection/);
+  assert.match(renderSource, /const caretakerSection = createCaretakerDetailSection\(room\)/);
+  assert.match(renderSource, /if \(caretakerSection\) \{\s*chatDetailContentEl\.appendChild\(caretakerSection\);\s*\}/);
+  assert.doesNotMatch(renderSource, /for \(const message of caretaker\.messages\.slice\(0, 3\)\)/);
+  assert.doesNotMatch(renderSource, /for \(const note of caretaker\.notifications\.slice\(0, 2\)\)/);
+});
+
+test("chat detail room context sections are delegated out of renderChatDetailPanel", async () => {
+  const source = await readShellModule("app.js");
+  const contextResolver = sliceBetween(
+    source,
+    "function chatDetailRoomContextModel(room) {",
+    "function createChatDetailCityContextSection(context) {",
+  );
+  const cityRenderer = sliceBetween(
+    source,
+    "function createChatDetailCityContextSection(context) {",
+    "function createChatDetailSiblingRoomsSection(context) {",
+  );
+  const siblingRenderer = sliceBetween(
+    source,
+    "function createChatDetailSiblingRoomsSection(context) {",
+    "function createChatDetailDirectContextSection(room) {",
+  );
+  const directRenderer = sliceBetween(
+    source,
+    "function createChatDetailDirectContextSection(room) {",
+    "function appendChatDetailRoomContextSections(container, room) {",
+  );
+  const contextRenderer = sliceBetween(
+    source,
+    "function appendChatDetailRoomContextSections(container, room) {",
+    "function createCaretakerDetailSection(room) {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderChatDetailPanel() {",
+    "function createTimelineEmptyStateNode(cardSpec) {",
+  );
+
+  assert.match(contextResolver, /const publicRoom = publicRoomRecordForConversation\(room\.id\)/);
+  assert.match(contextResolver, /const cityState = cityStateForConversation\(room\.id\)/);
+  assert.match(contextResolver, /const directoryCity = publicRoom \? worldDirectoryCity\(publicRoom\.city_id\) : null/);
+  assert.match(contextResolver, /const membership = publicRoom \? membershipForCity\(publicRoom\.city_id\) : null/);
+  assert.match(contextResolver, /siblingRooms: publicRoom \? publicRoomsForCity\(publicRoom\.city_id\)\.filter/);
+  assert.match(cityRenderer, /const citySection = createDetailSection\(\s*"城市 \/ 频道资料"/);
+  assert.match(cityRenderer, /createDetailRow\("城市", displayCityTitle\(cityProfile\)\)/);
+  assert.match(cityRenderer, /translateTrustState\(directoryCity\.trust_state\)/);
+  assert.match(cityRenderer, /translateFederationPolicy\(cityState\.profile\.federation_policy\)/);
+  assert.match(cityRenderer, /return citySection/);
+  assert.match(siblingRenderer, /if \(!context\.siblingRooms\.length\) return null/);
+  assert.match(siblingRenderer, /for \(const sibling of context\.siblingRooms\.slice\(0, 5\)\) \{/);
+  assert.match(siblingRenderer, /focusRoom\(sibling\.room_id\)/);
+  assert.match(siblingRenderer, /return related/);
+  assert.match(directRenderer, /const direct = createDetailSection\(\s*"私信窗口"/);
+  assert.match(directRenderer, /room\.peer_label \|\| room\.participant_label \|\| roomAudienceLabel\(room\)/);
+  assert.match(directRenderer, /return direct/);
+  assert.match(contextRenderer, /const context = chatDetailRoomContextModel\(room\)/);
+  assert.match(contextRenderer, /container\.appendChild\(createChatDetailCityContextSection\(context\)\)/);
+  assert.match(contextRenderer, /const siblingSection = createChatDetailSiblingRoomsSection\(context\)/);
+  assert.match(contextRenderer, /container\.appendChild\(createChatDetailDirectContextSection\(room\)\)/);
+  assert.match(renderSource, /appendChatDetailRoomContextSections\(chatDetailContentEl, room\)/);
+  assert.doesNotMatch(contextRenderer, /publicRoomRecordForConversation\(room\.id\)/);
+  assert.doesNotMatch(contextRenderer, /createDetailSection\(\s*"城市 \/ 频道资料"/);
+  assert.doesNotMatch(contextRenderer, /createDetailSection\(\s*"私信窗口"/);
+  assert.doesNotMatch(renderSource, /publicRoomRecordForConversation\(room\.id\)/);
+  assert.doesNotMatch(renderSource, /createDetailSection\(\s*"城市 \/ 频道资料"/);
+  assert.doesNotMatch(renderSource, /createDetailSection\(\s*"私信窗口"/);
+});
+
+test("conversation callout model and DOM are delegated out of updateConversationCallout", async () => {
+  const source = await readShellModule("app.js");
+  const userModel = sliceBetween(
+    source,
+    "function conversationCalloutUserModel(room, caretaker) {",
+    "function conversationCalloutAdminModel(room) {",
+  );
+  const adminModel = sliceBetween(
+    source,
+    "function conversationCalloutAdminModel(room) {",
+    "function conversationCalloutUnifiedModel(room) {",
+  );
+  const renderer = sliceBetween(
+    source,
+    "function renderConversationCalloutContent(model) {",
+    "function updateConversationCallout() {",
+  );
+  const updateRenderer = sliceBetween(
+    source,
+    "function updateConversationCallout() {",
+    "function syncRoomStageCanvas(room) {",
+  );
+
+  assert.match(userModel, /variant: "user"/);
+  assert.match(userModel, /caretakerPendingCount\(room\)/);
+  assert.match(adminModel, /variant: "admin"/);
+  assert.match(adminModel, /roomChatStatusSummary\(room\)/);
+  assert.match(renderer, /conversationCalloutEl\.dataset\.variant = model\.variant/);
+  assert.match(renderer, /clearChildren\(conversationCalloutEl\)/);
+  assert.match(renderer, /document\.createElement\("strong"\)/);
+  assert.match(renderer, /createConversationCalloutParagraphNode\(paragraph\)/);
+  assert.match(updateRenderer, /updateConversationCalloutStageTitle\(room\)/);
+  assert.match(updateRenderer, /const model = conversationCalloutModel\(room, caretaker\)/);
+  assert.match(updateRenderer, /renderConversationCalloutContent\(model\)/);
+  assert.doesNotMatch(updateRenderer, /document\.createElement\("p"\)/);
+  assert.doesNotMatch(updateRenderer, /clearChildren\(conversationCalloutEl\)/);
+  assert.doesNotMatch(updateRenderer, /conversationCalloutEl\.dataset\.variant =/);
+});
+
+test("conversation overview header DOM is delegated out of renderConversationOverview", async () => {
+  const source = await readShellModule("app.js");
+  const headerRenderer = sliceBetween(
+    source,
+    "function createConversationOverviewHeaderNode(room, shellPage, compactChatShell) {",
+    "function renderConversationOverviewEmptyState() {",
+  );
+  const emptyStateRenderer = sliceBetween(
+    source,
+    "function renderConversationOverviewEmptyState() {",
+    "function appendNonUserConversationOverview(room, shellPage, compactChatShell) {",
+  );
+  const nonUserRenderer = sliceBetween(
+    source,
+    "function appendNonUserConversationOverview(room, shellPage, compactChatShell) {",
+    "function renderConversationOverview() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderConversationOverview() {",
+    "function createChatDetailHeroNode(room, shellPage) {",
+  );
+
+  assert.match(headerRenderer, /document\.createElement\("div"\)/);
+  assert.match(headerRenderer, /header\.className = "overview-header"/);
+  assert.match(headerRenderer, /titleWrap\.className = "overview-title-wrap"/);
+  assert.match(headerRenderer, /createLine\("overview-title", overviewTitle\)/);
+  assert.match(headerRenderer, /badgeWrap\.className = "overview-meta"/);
+  assert.match(headerRenderer, /translateRoomKind\(roomKind\(room\)\)/);
+  assert.match(headerRenderer, /if \(!compactChatShell\) \{/);
+  assert.match(headerRenderer, /createPill\(`身份 \$\{currentIdentity\(\)\}`, "muted"\)/);
+  assert.match(emptyStateRenderer, /createLine\("overview-title", "还没有打开聊天"\)/);
+  assert.match(emptyStateRenderer, /gatewayUrl/);
+  assert.match(emptyStateRenderer, /updateConversationCallout\(\)/);
+  assert.doesNotMatch(nonUserRenderer, /createConversationOverviewHeaderNode\(room, shellPage, compactChatShell\)/);
+  assert.match(renderSource, /const header = createConversationOverviewHeaderNode\(room, shellPage, compactChatShell\)/);
+  assert.match(renderSource, /conversationOverviewEl\.appendChild\(header\)/);
+  assert.match(renderSource, /if \(!room\) \{\s*renderConversationOverviewEmptyState\(\);\s*return;\s*\}/);
+  assert.match(renderSource, /appendNonUserConversationOverview\(room, shellPage, compactChatShell\)/);
+  assert.doesNotMatch(renderSource, /overview-title-wrap/);
+  assert.doesNotMatch(renderSource, /overview-meta/);
+  assert.doesNotMatch(renderSource, /createLine\("overview-title", "还没有打开聊天"\)/);
+});
+
+test("conversation overview user branch is delegated out of renderConversationOverview", async () => {
+  const source = await readShellModule("app.js");
+  const userRenderer = sliceBetween(
+    source,
+    "function appendUserConversationOverview(room) {",
+    "function createConversationOverviewContextNode(room, shellPage) {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderConversationOverview() {",
+    "  appendNonUserConversationOverview(room, shellPage, compactChatShell);",
+  );
+
+  assert.match(userRenderer, /conversationOverviewEl\.appendChild\(createLine\("overview-summary", roomOverviewSummary\(room\)\)\)/);
+  assert.match(userRenderer, /appendUserConversationQuickPreview\(room, preview\)/);
+  assert.match(userRenderer, /conversationOverviewEl\.appendChild\(createUserConversationStatusNode\(room\)\)/);
+  assert.match(userRenderer, /const userWorkflow = createUserConversationWorkflowNode\(room\)/);
+  assert.match(userRenderer, /conversationOverviewEl\.appendChild\(createUserConversationActionsNode\(room\)\)/);
+  assert.match(userRenderer, /syncRoomViewToggleButton\(\)/);
+  assert.match(userRenderer, /updateConversationCallout\(\)/);
+  assert.match(renderSource, /if \(shellPage === "user"\) \{\s*appendUserConversationOverview\(room\);\s*return;\s*\}/);
+  assert.doesNotMatch(userRenderer, /createQuickActionPreviewCard\(preview\.action/);
+  assert.doesNotMatch(userRenderer, /userStatus\.className = "overview-status"/);
+  assert.doesNotMatch(userRenderer, /refreshButton\.textContent = "刷新聊天"/);
+  assert.doesNotMatch(renderSource, /overview-preview-card/);
+  assert.doesNotMatch(renderSource, /userStatus\.className = "overview-status"/);
+});
+
+test("conversation overview user preview and status are delegated out of appendUserConversationOverview", async () => {
+  const source = await readShellModule("app.js");
+  const previewRenderer = sliceBetween(
+    source,
+    "function appendUserConversationQuickPreview(room, preview) {",
+    "function createUserConversationStatusNode(room) {",
+  );
+  const statusRenderer = sliceBetween(
+    source,
+    "function createUserConversationStatusNode(room) {",
+    "function createUserConversationWorkflowNode(room) {",
+  );
+
+  assert.match(previewRenderer, /roomQuickPreviewFieldView\(/);
+  assert.match(previewRenderer, /className: "overview-summary overview-summary-preview quick-action-preview-summary"/);
+  assert.match(previewRenderer, /createQuickActionPreviewCard\(preview\.action, preview\.state, preview\.structured/);
+  assert.match(previewRenderer, /previewRoomQuickStage\(room\.id, preview\.action, preview\.state, index\)/);
+  assert.match(previewRenderer, /setRoomQuickPreviewFieldView\(room\.id, preview\.action, preview\.state, preview\.snapshotIndex, viewId\)/);
+  assert.match(statusRenderer, /userStatus\.className = "overview-status"/);
+  assert.match(statusRenderer, /createPill\(roomSyncLabel\(\), refreshInProgress \? "warm" : "accent"\)/);
+  assert.match(statusRenderer, /const unread = unreadCount\(room\)/);
+  assert.match(statusRenderer, /createRoomQuickActionPill\(room\)/);
+  assert.match(statusRenderer, /caretakerPendingCount\(room\) > 0 \? "warm" : "accent"/);
+  assert.match(statusRenderer, /roomHasDraft\(room\.id\)/);
+  assert.match(statusRenderer, /roomSendErrors\[room\.id\]/);
+  assert.match(statusRenderer, /return userStatus/);
+});
+
+test("conversation overview user workflow and actions are delegated out of appendUserConversationOverview", async () => {
+  const source = await readShellModule("app.js");
+  const workflowRenderer = sliceBetween(
+    source,
+    "function createUserConversationWorkflowNode(room) {",
+    "function createUserConversationActionsNode(room) {",
+  );
+  const actionsRenderer = sliceBetween(
+    source,
+    "function createUserConversationActionsNode(room) {",
+    "function syncRoomViewToggleButton() {",
+  );
+  const toggleRenderer = sliceBetween(
+    source,
+    "function syncRoomViewToggleButton() {",
+    "function appendUserConversationOverview(room) {",
+  );
+
+  assert.match(workflowRenderer, /createWorkflowProgress\(latestRoomQuickAction\(room\), latestRoomQuickState\(room\)/);
+  assert.match(workflowRenderer, /className: "overview-workflow-progress"/);
+  assert.match(workflowRenderer, /previewRoomQuickStage\(room\.id, action, stage\.label\)/);
+  assert.match(workflowRenderer, /seedComposerFromQuickAction\(action, quickActionWorkflowTemplate\(action, stage\.label\), \{ force: true \}\)/);
+  assert.match(actionsRenderer, /userActions\.className = "overview-actions"/);
+  assert.match(actionsRenderer, /refreshButton\.textContent = "刷新聊天"/);
+  assert.match(actionsRenderer, /await refreshFromGateway\(\)/);
+  assert.match(actionsRenderer, /appendRoomQuickActionOverviewButton\(userActions, room\)/);
+  assert.match(actionsRenderer, /appendRoomQuickStateAdvanceButton\(userActions, room\)/);
+  assert.match(actionsRenderer, /return userActions/);
+  assert.match(toggleRenderer, /if \(roomViewToggleButtonEl\) \{/);
+  assert.match(toggleRenderer, /roomViewToggleButtonEl\.textContent = chatPaneMode === "list" \? "返回会话" : "会话列表"/);
+});
+
+test("conversation overview non-user context DOM is delegated out of renderConversationOverview", async () => {
+  const source = await readShellModule("app.js");
+  const contextRenderer = sliceBetween(
+    source,
+    "function createConversationOverviewContextNode(room, shellPage) {",
+    "function createConversationOverviewStatusNode(room, shellPage, compactChatShell) {",
+  );
+  const nonUserRenderer = sliceBetween(
+    source,
+    "function appendNonUserConversationOverview(room, shellPage, compactChatShell) {",
+    "  const status = createConversationOverviewStatusNode(room, shellPage, compactChatShell);",
+  );
+
+  assert.match(contextRenderer, /document\.createElement\("div"\)/);
+  assert.match(contextRenderer, /context\.className = "overview-context"/);
+  assert.match(contextRenderer, /shellPage === "admin" \? `后台摘要 · \$\{roomSummaryLine\(room\)\}` : roomSummaryLine\(room\)/);
+  assert.match(contextRenderer, /createLine\("overview-context-copy", roomContextSummary\(room\)\)/);
+  assert.match(contextRenderer, /createLine\("overview-context-copy", roomStatusLine\(room\)\)/);
+  assert.match(contextRenderer, /return context/);
+  assert.match(nonUserRenderer, /const context = createConversationOverviewContextNode\(room, shellPage\)/);
+  assert.match(nonUserRenderer, /conversationOverviewEl\.appendChild\(context\)/);
+  assert.doesNotMatch(nonUserRenderer, /context\.className = "overview-context"/);
+  assert.doesNotMatch(nonUserRenderer, /roomStatusLine\(room\)/);
+});
+
+test("conversation overview non-user status and actions are delegated out of renderConversationOverview", async () => {
+  const source = await readShellModule("app.js");
+  const statusRenderer = sliceBetween(
+    source,
+    "function createConversationOverviewStatusNode(room, shellPage, compactChatShell) {",
+    "function appendConversationOverviewBaseStatusPills(status, room, compactChatShell) {",
+  );
+  const baseStatusAppender = sliceBetween(
+    source,
+    "function appendConversationOverviewBaseStatusPills(status, room, compactChatShell) {",
+    "function appendConversationOverviewRoomStatePills(status, room) {",
+  );
+  const roomStateAppender = sliceBetween(
+    source,
+    "function appendConversationOverviewRoomStatePills(status, room) {",
+    "function appendConversationOverviewCaretakerStatusPill(status, room) {",
+  );
+  const caretakerStatusAppender = sliceBetween(
+    source,
+    "function appendConversationOverviewCaretakerStatusPill(status, room) {",
+    "function appendConversationOverviewRuntimeStatusPills(status, room) {",
+  );
+  const runtimeStatusAppender = sliceBetween(
+    source,
+    "function appendConversationOverviewRuntimeStatusPills(status, room) {",
+    "function createConversationOverviewRefreshButton(shellPage) {",
+  );
+  const refreshButtonRenderer = sliceBetween(
+    source,
+    "function createConversationOverviewRefreshButton(shellPage) {",
+    "function createConversationOverviewExportButton(shellPage) {",
+  );
+  const exportButtonRenderer = sliceBetween(
+    source,
+    "function createConversationOverviewExportButton(shellPage) {",
+    "function createConversationOverviewWorldButton(room, shellPage) {",
+  );
+  const worldButtonRenderer = sliceBetween(
+    source,
+    "function createConversationOverviewWorldButton(room, shellPage) {",
+    "function appendConversationOverviewNavigationButtons(actions, room, shellPage) {",
+  );
+  const navigationAppender = sliceBetween(
+    source,
+    "function appendConversationOverviewNavigationButtons(actions, room, shellPage) {",
+    "function createConversationOverviewActionsNode(room, shellPage) {",
+  );
+  const actionsRenderer = sliceBetween(
+    source,
+    "function createConversationOverviewActionsNode(room, shellPage) {",
+    "function renderConversationOverviewEmptyState() {",
+  );
+  const nonUserRenderer = sliceBetween(
+    source,
+    "function appendNonUserConversationOverview(room, shellPage, compactChatShell) {",
+    "  if (roomViewToggleButtonEl) {",
+  );
+
+  assert.match(statusRenderer, /status\.className = "overview-status"/);
+  assert.match(statusRenderer, /appendConversationOverviewBaseStatusPills\(status, room, compactChatShell\)/);
+  assert.match(statusRenderer, /appendConversationOverviewRoomStatePills\(status, room\)/);
+  assert.match(statusRenderer, /appendConversationOverviewCaretakerStatusPill\(status, room\)/);
+  assert.match(statusRenderer, /appendConversationOverviewRuntimeStatusPills\(status, room\)/);
+  assert.match(statusRenderer, /return status/);
+  assert.doesNotMatch(statusRenderer, /roomChatStatusSummary\(room\)/);
+  assert.match(baseStatusAppender, /roomChatStatusSummary\(room\)/);
+  assert.match(baseStatusAppender, /roomQueueSummary\(room\)/);
+  assert.match(baseStatusAppender, /roomRouteLabel\(room\)/);
+  assert.match(baseStatusAppender, /if \(!compactChatShell\) \{/);
+  assert.match(roomStateAppender, /const roomActionPill = createRoomQuickActionPill\(room\)/);
+  assert.match(roomStateAppender, /if \(roomHasDraft\(room\.id\)\) \{/);
+  assert.match(caretakerStatusAppender, /const caretaker = caretakerProfile\(room\)/);
+  assert.match(caretakerStatusAppender, /caretakerPendingCount\(room\) > 0 \? "warm" : "accent"/);
+  assert.match(runtimeStatusAppender, /if \(isSendingMessage\) \{/);
+  assert.match(runtimeStatusAppender, /if \(roomSendErrors\[room\.id\]\) \{/);
+  assert.match(runtimeStatusAppender, /if \(lastRefreshErrorMessage\) \{/);
+  assert.match(refreshButtonRenderer, /refreshButton\.textContent = shellPage === "admin" \? "刷新会话" : "刷新聊天"/);
+  assert.match(refreshButtonRenderer, /await refreshFromGateway\(\)/);
+  assert.match(exportButtonRenderer, /exportButton\.textContent = shellPage === "admin" \? "导出会话" : "导出聊天"/);
+  assert.match(exportButtonRenderer, /exportCurrentConversation\(shellPage === "admin" \? "导出会话失败" : "导出聊天失败"\)/);
+  assert.match(worldButtonRenderer, /worldButton\.textContent =/);
+  assert.match(worldButtonRenderer, /setWorkspace\("world"\)/);
+  assert.match(navigationAppender, /if \(shellPage !== "user"\) \{/);
+  assert.match(navigationAppender, /actions\.appendChild\(createConversationOverviewWorldButton\(room, shellPage\)\)/);
+  assert.match(navigationAppender, /governanceButton\.textContent = "更多"/);
+  assert.match(actionsRenderer, /actions\.className = "overview-actions"/);
+  assert.match(actionsRenderer, /actions\.appendChild\(createConversationOverviewRefreshButton\(shellPage\)\)/);
+  assert.match(actionsRenderer, /actions\.appendChild\(createConversationOverviewExportButton\(shellPage\)\)/);
+  assert.match(actionsRenderer, /appendConversationOverviewNavigationButtons\(actions, room, shellPage\)/);
+  assert.match(actionsRenderer, /return actions/);
+  assert.doesNotMatch(actionsRenderer, /document\.createElement\("button"\)/);
+  assert.match(nonUserRenderer, /const status = createConversationOverviewStatusNode\(room, shellPage, compactChatShell\)/);
+  assert.match(nonUserRenderer, /const actions = createConversationOverviewActionsNode\(room, shellPage\)/);
+  assert.doesNotMatch(nonUserRenderer, /status\.className = "overview-status"/);
+  assert.doesNotMatch(nonUserRenderer, /refreshButton\.textContent/);
+  assert.doesNotMatch(nonUserRenderer, /exportButton\.textContent/);
 });
 
 test("pixel scene chrome uses shared dark rail and local time of day", async () => {
@@ -967,8 +4407,13 @@ test("pixel scene chrome uses shared dark rail and local time of day", async () 
   const pixelCss = await readShellModule("styles.pixel-map.css");
   const worldCss = await readShellModule("styles.world-entry.css");
   const squareCss = await readShellModule("styles.world-square.css");
-  const baseCss = await readShellModule("styles.css") + "\n" + await readShellModule("styles.scene.css");
+  const baseCss = await readShellModule("styles.css");
+  const sceneCss = await readShellModule("styles.scene.css");
+  const creativeCss = await readShellModule("styles.creative.css");
 
+  assert.ok(baseCss.split("\n").length < 7000, "styles.css must stay reduced after split extraction");
+  assert.doesNotMatch(baseCss, /2026-04-24 scene-first pixel city revision/);
+  assert.doesNotMatch(creativeCss, /radial-gradient\(circle at 52% 44%, rgba\(255, 214, 139/);
   assert.match(source, /applyLocalTimeOfDayState,[\s\S]*from "\.\/shell-shared\.js";/);
   assert.match(sharedSource, /function localTimeOfDay\(date = new Date\(\)\)/);
   assert.match(sharedSource, /body\.dataset\.timeOfDay = localTimeOfDay\(date\)/);
@@ -979,9 +4424,9 @@ test("pixel scene chrome uses shared dark rail and local time of day", async () 
   assert.match(pixelCss, /creative-stage::before,[\s\S]*content: none !important/);
   assert.match(pixelCss, /creative-chat-frame \{[\s\S]*background: transparent !important/);
   assert.doesNotMatch(pixelCss, /creative-chat-frame \{[\s\S]{0,260}linear-gradient\(180deg, rgba\(13, 8, 5, 0\.10\)/);
-  assert.match(pixelCss, /public-square-rail,[\s\S]*creative-rail[\s\S]*linear-gradient\(180deg, rgba\(45, 28, 15, 0\.96\)/);
-  assert.match(baseCss, /public-square-rail \{[\s\S]*linear-gradient\(180deg, rgba\(45, 28, 15, 0\.96\)/);
-  assert.match(baseCss, /public-square-rail \.rail-item \{[\s\S]*color: #fff2c9/);
+  assert.match(pixelCss, /public-square-rail,[\s\S]*creative-rail[\s\S]*linear-gradient\(180deg, rgba\(22, 16, 12, 0\.96\)/);
+  assert.match(sceneCss, /public-square-rail \{[\s\S]*linear-gradient\(180deg, rgba\(45, 28, 15, 0\.96\)/);
+  assert.match(sceneCss, /public-square-rail \.rail-item \{[\s\S]*color: #fff2c9/);
   assert.doesNotMatch(pixelCss, /body\[data-time-of-day="day"\]\[data-shell-page="hub"\]\[data-shell-variant="public-square"\] \.public-square-stage \{[\s\S]*hub-main-city-scene-v1-day-draft\.avif/);
   assert.match(pixelCss, /body\[data-time-of-day="day"\]\[data-shell-page="hub"\]\[data-shell-variant="public-square"\] \.public-square-stage \{[\s\S]*hub-main-city-scene-v1-day-256\.png/);
   assert.match(pixelCss, /body\[data-time-of-day="day"\]\[data-shell-variant="creative-terminal"\] \.creative-stage \{[\s\S]*creative-room-scene-v2-day-256\.png/);
@@ -992,13 +4437,13 @@ test("pixel scene chrome uses shared dark rail and local time of day", async () 
   assert.match(squareCss, /body\[data-time-of-day="day"\] \.world-square-scene/);
   assert.doesNotMatch(squareCss, /body\[data-time-of-day="day"\] \.world-square-scene::after/);
   assert.doesNotMatch(squareCss, /body\[data-time-of-day="day"\][\s\S]*mix-blend-mode: screen/);
-  assert.match(baseCss, /\.hud-title \{[\s\S]*font-family: "Noto Sans SC"/);
-  assert.match(baseCss, /\.hud-title \{[\s\S]*align-items: center/);
+  assert.match(sceneCss, /\.hud-title \{[\s\S]*font-family: "Noto Sans SC"/);
+  assert.match(sceneCss, /\.hud-title \{[\s\S]*align-items: center/);
 });
 
 test("scene pages keep one desktop rail width and stretch the stage frame", async () => {
   const pixelCss = await readShellModule("styles.pixel-map.css");
-  const publicCss = await readShellModule("styles.css") + "\n" + await readShellModule("styles.scene.css");
+  const publicCss = await readShellModule("styles.scene.css");
   const worldCss = await readShellModule("styles.world-square.css");
 
   assert.match(

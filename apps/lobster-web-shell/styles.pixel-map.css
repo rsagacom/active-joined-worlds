@@ -6,6 +6,7 @@
 
 :root {
   --scene-z-base: 0;
+  --scene-z-label: 2;
   --scene-z-hotspot: 3;
   --scene-z-chat: 6;
   --scene-z-popover: 12;
@@ -69,10 +70,9 @@ body[data-shell-variant="creative-terminal"] .creative-hud {
   min-height: 50px;
   padding: 8px 14px;
   background:
-    linear-gradient(90deg, rgba(42, 27, 14, 0.94), rgba(77, 48, 22, 0.88)),
-    repeating-linear-gradient(90deg, rgba(255, 232, 159, 0.10) 0 2px, transparent 2px 18px);
-  border: 2px solid #f1c978;
-  box-shadow: 0 0 0 3px rgba(28, 16, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32);
+    linear-gradient(90deg, rgba(20, 16, 14, 0.94), rgba(34, 28, 24, 0.88));
+  border: 2px solid #2c2622;
+  box-shadow: 0 0 0 3px rgba(12, 10, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32);
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-layout,
@@ -91,10 +91,9 @@ body[data-shell-variant="creative-terminal"] .creative-rail {
   padding: 10px 8px;
   overflow: auto;
   background:
-    linear-gradient(180deg, rgba(45, 28, 15, 0.96), rgba(24, 14, 8, 0.98)),
-    repeating-linear-gradient(90deg, rgba(255, 230, 150, 0.07) 0 1px, transparent 1px 22px);
-  border: 2px solid var(--scene-gold, #f1c978);
-  box-shadow: 0 0 0 3px rgba(28, 16, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32);
+    linear-gradient(180deg, rgba(22, 16, 12, 0.96), rgba(14, 10, 8, 0.98));
+  border: 2px solid var(--scene-rail-border, #2c2622);
+  box-shadow: 0 0 0 3px rgba(12, 10, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32);
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail-head,
@@ -157,7 +156,7 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-s
 body[data-time-of-day="day"][data-shell-page="hub"][data-shell-variant="public-square"] .public-square-stage {
   background:
     url("assets/pixel/composed/hub-main-city-scene-v1-day-256.png") center / cover no-repeat,
-    #c7b88c;
+    #15130f;
 }
 
 body[data-shell-variant="creative-terminal"] .creative-stage {
@@ -169,7 +168,7 @@ body[data-shell-variant="creative-terminal"] .creative-stage {
 body[data-time-of-day="day"][data-shell-variant="creative-terminal"] .creative-stage {
   background:
     var(--creative-scene-image, url("assets/pixel/composed/creative-room-scene-v2-day-256.png")) center / contain no-repeat,
-    #c9b58c;
+    #15130f;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-stage::before,
@@ -478,9 +477,8 @@ body[data-shell-variant="creative-terminal"] .creative-composer {
   gap: 8px;
   align-items: end;
   background:
-    linear-gradient(180deg, rgba(255, 236, 171, 0.96), rgba(214, 165, 84, 0.94)),
-    repeating-linear-gradient(90deg, rgba(46, 28, 13, 0.10) 0 2px, transparent 2px 28px);
-  border: 3px solid #f2c879;
+    linear-gradient(180deg, rgba(20, 16, 14, 0.92), rgba(12, 9, 7, 0.94));
+  border: 3px solid #2c2622;
   box-shadow: 0 0 0 3px rgba(33, 19, 10, 0.94), 0 7px 0 rgba(0, 0, 0, 0.32);
 }
 
@@ -960,8 +958,7 @@ body[data-shell-variant="creative-terminal"] .creative-composer {
   padding: 8px;
   grid-template-columns: minmax(0, 1fr) auto;
   background:
-    linear-gradient(180deg, rgba(255, 231, 157, 0.94), rgba(209, 153, 70, 0.92)),
-    repeating-linear-gradient(90deg, rgba(46, 28, 13, 0.10) 0 2px, transparent 2px 28px);
+    linear-gradient(180deg, rgba(20, 16, 14, 0.92), rgba(12, 9, 7, 0.94));
 }
 
 body[data-shell-variant="creative-terminal"] .creative-composer-actions {
@@ -1068,9 +1065,8 @@ body[data-shell-variant="creative-terminal"] .creative-composer #composer-send {
 body[data-shell-variant="creative-terminal"] .creative-hud {
   min-height: 54px;
   background:
-    linear-gradient(180deg, rgba(63, 40, 20, 0.96), rgba(29, 18, 10, 0.98)),
-    repeating-linear-gradient(90deg, rgba(255, 230, 150, 0.08) 0 1px, transparent 1px 24px) !important;
-  border-color: #f1c978;
+    linear-gradient(180deg, rgba(22, 16, 12, 0.96), rgba(12, 8, 6, 0.98)) !important;
+  border-color: #2c2622;
 }
 
 body[data-shell-variant="creative-terminal"] .creative-hud::before {
@@ -1723,7 +1719,7 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-c
     min-height: 100% !important;
   }
 
-  /* Mobile uses cropped scene art today; keep only non-interactive visible-scene labels. */
+  /* Mobile: hotspots stay interactive and hug their label chip (one-ring margin, 64×34). */
   body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspots,
   body[data-shell-variant="creative-terminal"] .scene-hotspots {
     display: block !important;
@@ -1732,8 +1728,8 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-c
 
   body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot,
   body[data-shell-variant="creative-terminal"] .scene-hotspot {
-    display: none !important;
-    pointer-events: none !important;
+    display: grid !important;
+    pointer-events: auto !important;
   }
 
   body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot--plaza {
@@ -1763,7 +1759,7 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-c
   body[data-time-of-day="day"][data-shell-page="hub"][data-shell-variant="public-square"] .public-square-stage {
     background:
       url("assets/pixel/composed/hub-main-city-scene-v1-mobile-day-256.png") center / cover no-repeat,
-      #c7b88c !important;
+      #15130f !important;
   }
 
   body[data-shell-variant="creative-terminal"] .creative-stage {
@@ -1775,9 +1771,8 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-c
 
   body[data-time-of-day="day"][data-shell-variant="creative-terminal"] .creative-stage {
     background:
-      linear-gradient(180deg, rgba(255, 231, 178, 0.03), rgba(255, 231, 178, 0.08)),
       var(--creative-scene-image, url("assets/pixel/composed/creative-room-scene-v2-mobile-day-256.png")) center / cover no-repeat,
-      #c9b58c !important;
+      #15130f !important;
   }
 }
 
@@ -2025,18 +2020,16 @@ body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .messag
 /* 2026-04-26: keep main-city chrome consistent with room/world-entry and let room clear-screen open fully. */
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hud {
   background:
-    linear-gradient(90deg, rgba(42, 27, 14, 0.96), rgba(77, 48, 22, 0.90)),
-    repeating-linear-gradient(90deg, rgba(255, 232, 159, 0.10) 0 2px, transparent 2px 18px) !important;
-  border: 2px solid #f1c978 !important;
-  box-shadow: 0 0 0 3px rgba(28, 16, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32) !important;
+    linear-gradient(90deg, rgba(20, 16, 14, 0.96), rgba(34, 28, 24, 0.90)) !important;
+  border: 2px solid #2c2622 !important;
+  box-shadow: 0 0 0 3px rgba(12, 10, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32) !important;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail {
   background:
-    linear-gradient(180deg, rgba(242, 218, 151, 0.96), rgba(181, 139, 73, 0.92)),
-    repeating-linear-gradient(0deg, rgba(43, 27, 14, 0.10) 0 2px, transparent 2px 24px) !important;
-  border: 2px solid #2b1c11 !important;
-  box-shadow: 0 0 0 3px rgba(246, 219, 151, 0.55), 0 8px 0 rgba(0, 0, 0, 0.28) !important;
+    linear-gradient(180deg, rgba(22, 16, 12, 0.96), rgba(14, 10, 8, 0.98)) !important;
+  border: 2px solid #2c2622 !important;
+  box-shadow: 0 0 0 3px rgba(12, 10, 8, 0.55), 0 8px 0 rgba(0, 0, 0, 0.28) !important;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .rail-item {
@@ -2054,9 +2047,9 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-r
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer {
   align-items: end !important;
   background:
-    linear-gradient(180deg, rgba(255, 232, 159, 0.96), rgba(202, 151, 80, 0.92)) !important;
-  border: 2px solid #2b1c11 !important;
-  box-shadow: 0 0 0 3px rgba(246, 219, 151, 0.60), 0 8px 0 rgba(0, 0, 0, 0.28) !important;
+    linear-gradient(180deg, rgba(20, 16, 14, 0.96), rgba(12, 9, 7, 0.92)) !important;
+  border: 2px solid #2c2622 !important;
+  box-shadow: 0 0 0 3px rgba(12, 10, 8, 0.60), 0 8px 0 rgba(0, 0, 0, 0.28) !important;
 }
 
 /* 2026-04-28: shared IM scene chrome baseline. */
@@ -2097,10 +2090,9 @@ body[data-shell-variant="creative-terminal"] .hud-kicker {
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail,
 body[data-shell-variant="creative-terminal"] .creative-rail {
   background:
-    linear-gradient(180deg, rgba(45, 28, 15, 0.96), rgba(24, 14, 8, 0.98)),
-    repeating-linear-gradient(90deg, rgba(255, 230, 150, 0.07) 0 1px, transparent 1px 22px) !important;
-  border: 2px solid #f1c978 !important;
-  box-shadow: 0 0 0 3px rgba(28, 16, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32) !important;
+    linear-gradient(180deg, rgba(22, 16, 12, 0.96), rgba(14, 10, 8, 0.98)) !important;
+  border: 2px solid #2c2622 !important;
+  box-shadow: 0 0 0 3px rgba(12, 10, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32) !important;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .rail-item,
@@ -2280,9 +2272,9 @@ body[data-shell-variant="creative-terminal"] .composer-symbol-menu {
   transform: none !important;
   font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans Symbols 2", "Apple Color Emoji", sans-serif !important;
   background:
-    linear-gradient(180deg, rgba(255, 240, 190, 0.98), rgba(225, 181, 104, 0.96)) !important;
-  border: 2px solid #2b1c11 !important;
-  box-shadow: 0 0 0 3px rgba(246, 219, 151, 0.55), 0 10px 0 rgba(0, 0, 0, 0.32) !important;
+    linear-gradient(180deg, rgba(20, 16, 14, 0.98), rgba(12, 9, 7, 0.96)) !important;
+  border: 2px solid #2c2622 !important;
+  box-shadow: 0 0 0 3px rgba(12, 10, 8, 0.55), 0 10px 0 rgba(0, 0, 0, 0.32) !important;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .composer-symbol-menu[hidden],
@@ -2750,13 +2742,13 @@ body[data-shell-variant="creative-terminal"] .scene-hotspot {
 body[data-time-of-day="day"][data-shell-page="hub"][data-shell-variant="public-square"] .public-square-stage {
   background:
     url("assets/pixel/composed/hub-main-city-scene-v1-day-256.png") center / cover no-repeat,
-    #c7b88c !important;
+    #15130f !important;
 }
 
 body[data-time-of-day="day"][data-shell-variant="creative-terminal"] .creative-stage {
   background:
     var(--creative-scene-image, url("assets/pixel/composed/creative-room-scene-v2-day-256.png")) center / contain no-repeat,
-    #c9b58c !important;
+    #15130f !important;
 }
 
 @media (max-width: 820px) {
@@ -2775,14 +2767,13 @@ body[data-time-of-day="day"][data-shell-variant="creative-terminal"] .creative-s
   body[data-time-of-day="day"][data-shell-page="hub"][data-shell-variant="public-square"] .public-square-stage {
     background:
       url("assets/pixel/composed/hub-main-city-scene-v1-mobile-day-256.png") center / cover no-repeat,
-      #c7b88c !important;
+      #15130f !important;
   }
 
   body[data-time-of-day="day"][data-shell-variant="creative-terminal"] .creative-stage {
     background:
-      linear-gradient(180deg, rgba(255, 231, 178, 0.03), rgba(255, 231, 178, 0.08)),
       var(--creative-scene-image, url("assets/pixel/composed/creative-room-scene-v2-mobile-day-256.png")) center / cover no-repeat,
-      #c9b58c !important;
+      #15130f !important;
   }
 }
 
@@ -2844,4 +2835,169 @@ body[data-time-of-day="day"][data-shell-variant="creative-terminal"] .creative-s
     min-height: 36px;
     font-size: 12px;
   }
+}
+
+/* 2026-06-14: 热点层透明化 + 缩到 1/4 面积
+   - 方块本身位置（left/top/width/height）保留，靠 transform: scale(0.5) 把视觉与命中区都缩到原矩形中心
+   - 任何状态都禁止显露边框、底色、阴影、outline
+   - label span 反向放大 2x 抵消父级缩放，保持原可读字号 */
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot,
+body[data-shell-variant="creative-terminal"] .scene-hotspot {
+  transform: scale(0.5);
+  transform-origin: center;
+  background: transparent !important;
+  border-color: transparent !important;
+  border-width: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot:hover,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot:focus-visible,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot[aria-expanded="true"],
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot.is-near-pointer,
+body[data-shell-variant="creative-terminal"] .scene-hotspot:hover,
+body[data-shell-variant="creative-terminal"] .scene-hotspot:focus-visible,
+body[data-shell-variant="creative-terminal"] .scene-hotspot[aria-expanded="true"],
+body[data-shell-variant="creative-terminal"] .scene-hotspot.is-near-pointer {
+  background: transparent !important;
+  border-color: transparent !important;
+  border-width: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot span,
+body[data-shell-variant="creative-terminal"] .scene-hotspot span {
+  transform: scale(2);
+  transform-origin: center;
+}
+
+/* 2026-06-16: final four-layer scene interaction contract.
+   Background art -> label text layer -> transparent label-sized hotspots -> floating chat/dialog chrome. */
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot-label-layer,
+body[data-shell-variant="creative-terminal"] .scene-hotspot-label-layer {
+  position: absolute;
+  inset: 0;
+  z-index: var(--scene-z-label);
+  pointer-events: none;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot-label-chip,
+body[data-shell-variant="creative-terminal"] .scene-hotspot-label-chip {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 3px 8px;
+  opacity: 0;
+  visibility: hidden;
+  color: #fff2c9;
+  font-family: var(--creative-font-body, "Noto Sans SC", sans-serif);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  background: rgba(18, 11, 7, 0.86);
+  border: 1px solid rgba(247, 210, 118, 0.78);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.38);
+  transition: opacity 90ms linear, visibility 90ms linear;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot-label-chip.is-near-pointer,
+body[data-shell-variant="creative-terminal"] .scene-hotspot-label-chip.is-near-pointer,
+body.scene-hotspot-labels-visible[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot-label-chip,
+body.scene-hotspot-labels-visible[data-shell-variant="creative-terminal"] .scene-hotspot-label-chip {
+  opacity: 1;
+  visibility: visible;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspots,
+body[data-shell-variant="creative-terminal"] .scene-hotspots {
+  z-index: var(--scene-z-hotspot);
+  pointer-events: none !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspots .scene-hotspot,
+body[data-shell-variant="creative-terminal"] .scene-hotspots .scene-hotspot {
+  width: 64px !important;
+  height: 34px !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  transform: translate(-50%, -50%) !important;
+  pointer-events: auto !important;
+  color: transparent !important;
+  background: transparent !important;
+  border-color: transparent !important;
+  border-width: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot:hover,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot:focus-visible,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot[aria-expanded="true"],
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot.is-near-pointer,
+body[data-shell-variant="creative-terminal"] .scene-hotspot:hover,
+body[data-shell-variant="creative-terminal"] .scene-hotspot:focus-visible,
+body[data-shell-variant="creative-terminal"] .scene-hotspot[aria-expanded="true"],
+body[data-shell-variant="creative-terminal"] .scene-hotspot.is-near-pointer {
+  background: transparent !important;
+  border-color: transparent !important;
+  border-width: 0 !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot > span,
+body[data-shell-variant="creative-terminal"] .scene-hotspot > span {
+  display: none !important;
+}
+
+body[data-shell-variant="creative-terminal"] .scene-hotspot--window {
+  left: 13% !important;
+  top: 25% !important;
+}
+
+body[data-shell-variant="creative-terminal"] .scene-hotspot--desk {
+  left: 37% !important;
+  top: 28% !important;
+  width: 64px !important;
+  height: 34px !important;
+}
+
+body[data-shell-variant="creative-terminal"] .scene-hotspot--coffee {
+  left: 76% !important;
+  top: 27% !important;
+}
+
+body[data-shell-variant="creative-terminal"] .scene-hotspot--shelf {
+  left: 93% !important;
+  top: 26% !important;
+}
+
+body[data-shell-variant="creative-terminal"] .scene-hotspot--stairs {
+  left: 11% !important;
+  top: 76% !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot--metro {
+  left: 11% !important;
+  top: 45% !important;
+  width: 64px !important;
+  height: 34px !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot--plaza {
+  left: 48% !important;
+  top: 62% !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot--board {
+  left: 41% !important;
+  top: 37% !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot--shop {
+  left: 84% !important;
+  top: 41% !important;
 }

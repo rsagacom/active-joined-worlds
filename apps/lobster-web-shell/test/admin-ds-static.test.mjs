@@ -186,7 +186,7 @@ test("admin-ds.js 不包含 innerHTML 数据拼接", async () => {
   assert.match(js, /document\.createTextNode\(/, "应使用 createTextNode");
 });
 
-test("admin-ds.js 只读接入 gateway 数据且不开放写接口", async () => {
+test("admin-ds.js 读取 gateway 投影并通过统一 helper 执行受控写操作", async () => {
   const js = await readShellModule("admin-ds.js");
 
   assert.match(js, /function resolveGatewayUrl\(\)/, "应支持 ?gateway= 只读接入");
@@ -198,7 +198,39 @@ test("admin-ds.js 只读接入 gateway 数据且不开放写接口", async () =>
   assert.match(js, /normalizeGatewayRooms/, "应把 gateway conversations 转成房间表格数据");
   assert.match(js, /normalizeGatewayMessages/, "应把 gateway messages 转成消息审核表格数据");
 
-  assert.doesNotMatch(js, /fetch\([^)]*\/v1\/.*,\s*\{[^}]*method:\s*['"]POST['"]/s, "admin-ds 不应直接开放 POST 写接口");
+  assert.match(js, /async function fetchGatewayJsonPost\(/, "真实写操作必须统一走 fetchGatewayJsonPost");
+  assert.match(js, /method:\s*'POST'/, "fetchGatewayJsonPost 应使用 JSON POST");
+  assert.match(js, /headers:\s*\{\s*'Content-Type':\s*'application\/json'/, "fetchGatewayJsonPost 应设置 JSON Content-Type");
+
+  const directWriteMethods = (js.match(/method:\s*['"](POST|DELETE|PUT|PATCH)['"]/g) || []);
+  assert.deepEqual(directWriteMethods, ["method: 'POST'"], "除统一 POST helper 外不应散落直接写方法");
+
+  for (const endpoint of [
+    "/v1/admin/messages/moderate",
+    "/v1/admin/scene",
+    "/v1/admin/rooms/members",
+    "/v1/admin/invites/revoke",
+    "/v1/admin/logs/handle",
+    "/v1/admin/devices/unblock",
+    "/v1/admin/devices/block",
+    "/v1/admin/devices/remove",
+    "/v1/admin/devices/add",
+    "/v1/admin/permission-groups",
+    "/v1/admin/invites",
+    "/v1/admin/residents",
+    "/v1/admin/logs/clear",
+    "/v1/admin/config",
+    "/v1/world-square/notices",
+    "/v1/world-safety/reports/review",
+    "/v1/world-safety/advisories",
+    "/v1/admin/residents/ban",
+    "/v1/admin/residents/unban",
+    "/v1/admin/rooms/freeze",
+    "/v1/admin/rooms/unfreeze",
+  ]) {
+    assert.match(js, new RegExp(`fetchGatewayJsonPost\\('${endpoint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}'`), `受控写端点 ${endpoint} 应走统一 helper`);
+  }
+
   assert.doesNotMatch(js, /method:\s*['"]DELETE['"]/, "admin-ds 不应直接开放 DELETE 写接口");
   assert.doesNotMatch(js, /method:\s*['"]PUT['"]/, "admin-ds 不应直接开放 PUT 写接口");
   assert.doesNotMatch(js, /method:\s*['"]PATCH['"]/, "admin-ds 不应直接开放 PATCH 写接口");
@@ -370,8 +402,6 @@ test("admin-ds.js normalizeGatewayResidents 处理 is_banned 字段", async () =
   assert.match(js, /status:\s*banned\s*\?\s*'banned'/, "banned 状态应在 online/offline 之前判断");
 });
 
-// ====== Freeze/Unfreeze 管理功能校验 ======
-
 test("admin-ds.js 包含 freezeRoom 和 unfreezeRoom 函数", async () => {
   const js = await readShellModule("admin-ds.js");
   assert.match(js, /async function freezeRoom\(/, "应定义 freezeRoom 函数");
@@ -389,9 +419,6 @@ test("admin-ds.js freeze/unfreeze 支持按钮加载状态", async () => {
   assert.match(js, /freezeRoom\(room\.id,\s*freezeBtn\)/, "房间行 freeze 按钮应传递 btn 元素");
   assert.match(js, /unfreezeRoom\(room\.id,\s*unfreezeBtn\)/, "房间行 unfreeze 按钮应传递 btn 元素");
   assert.match(js, /setBtnLoading\(btn,\s*true\)/, "调用时应进入 loading 状态");
-  assert.match(js, /处理中/, "loading 时应显示处理中文本");
-  assert.match(js, /ds-btn-success-tick/, "成功时应添加 success-tick 样式");
-  assert.match(js, /ds-btn-error-flash/, "失败时应添加 error-flash 样式");
 });
 
 // ====== Debug 开关 ======

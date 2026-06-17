@@ -52,11 +52,11 @@ If you are using the current local preview, the same pages are also available at
 
 - `index.html` 第一眼应读成“中国现代城区里的公共群聊”，不是说明墙、总览页或后台。
 - 顶部 HUD 只保留居中标题 `MAIN CITY / 主城` 与轻状态；场景内不再放大副标题块。
-- 左侧只保留 `住宅`、`主城`、`世界入口` 三个动线入口。
+- 左侧只保留 `住宅`、`主城`、`世界`（`world-square.html`）三个动线入口；`unified.html`（世界入口 / 候车站）作为可选独立候车站页，不经主 rail。
 - 消息流按微信式左右布局：对方在左，己方在右，头像常驻，昵称、时间和气泡间距稳定。
 - 底部输入区包含 `@用户名`、颜文字按钮、可拖拽高度文本框和发送按钮。颜文字面板应是上排分类 tab，不应要求用户在长列表中上下找分类。
 - 点击场景空白区域应进入清屏模式，场景铺满 UI 区域；再点空白区域恢复聊天层。
-- 地铁口热点应跳转 `unified.html`。
+- 地铁口热点应跳转 `world-square.html`（世界广场）。
 
 ### 2. 住宅 / 私聊
 
@@ -88,7 +88,7 @@ If you are using the current local preview, the same pages are also available at
 - 页面应展示三类轻量摘要：`公告`、`公共讨论`、`跨城发现`。如果功能暂不可用，应显示 `只读预览` / disabled 状态，不使用空链接或无效按钮。
 - 三类轻量摘要默认应收起到小的 `广场信息` 入口；用户主动展开后才显示，避免说明卡长期遮挡像素场景。
 - 背景图运行时使用 `assets/pixel/concepts/world-square-concept-20260427-256.png` 或压缩 AVIF 版本；原始概念 PNG 只保存在外盘归档区，不应重新放回 web runtime。
-- 世界广场不能混进 `unified.html`；`unified.html` 仍是地铁候车站式世界入口，负责线路导航和进入世界广场。
+- 世界广场（`world-square.html`）是 rail 第三项"世界"，由地铁口热点直达；`unified.html`（世界入口 / 候车站）作为可选独立候车站页保留，承载世界线路图，经直链访问。两个页面各自独立，不互相混入。
 
 ## 交互验收
 

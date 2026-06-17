@@ -31,16 +31,22 @@ body[data-shell-page="world-square"] {
 .world-square-rail {
   grid-column: 1;
   grid-row: 2;
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 10px;
   min-height: 0;
   padding: 10px 8px;
-  background:
-    linear-gradient(180deg, rgba(45, 27, 13, 0.96), rgba(25, 13, 7, 0.98));
-  border: 2px solid #f1c978;
-  box-shadow: 0 0 0 3px rgba(28, 16, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32);
+  background: linear-gradient(180deg, rgba(23, 18, 16, 0.96), rgba(16, 12, 11, 0.98));
+  border: 1px solid rgba(220, 185, 106, 0.22);
+  box-shadow: none;
   overflow: auto;
+}
+
+.world-square-rail .creative-rail-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .world-square-rail .rail-actions {
@@ -49,11 +55,21 @@ body[data-shell-page="world-square"] {
   gap: 8px;
 }
 
+.world-square-rail .creative-rail-divider {
+  display: grid;
+  gap: 6px;
+  padding-top: 2px;
+  border-top: 1px solid rgba(220, 185, 106, 0.14);
+  color: rgba(220, 185, 106, 0.58);
+  font-size: 14px;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+}
+
 .world-square-rail-search {
   width: 100%;
   min-height: 30px;
   padding: 6px 8px;
-  margin-bottom: 4px;
   border: 1px solid rgba(220, 185, 106, 0.34);
   background: rgba(12, 9, 8, 0.78);
   color: #fff2c9;
@@ -71,44 +87,54 @@ body[data-shell-page="world-square"] {
   box-shadow: 0 0 0 1px rgba(120, 191, 209, 0.32);
 }
 
-.world-square-rail-title {
-  min-height: 34px;
+.rail-title {
+  min-height: 28px;
   display: grid;
   place-items: center;
-  color: #fff4c9;
-  font-size: 18px;
+  color: rgba(220, 185, 106, 0.74);
+  font-size: 14px;
   font-weight: 900;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .world-square-rail .rail-item {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-height: 50px;
-  padding: 6px 4px;
+  padding: 0 4px;
   text-align: center;
-  color: #21140b;
+  color: #fff2c9;
   text-decoration: none;
-  background: rgba(255, 239, 178, 0.82);
-  border: 2px solid rgba(40, 25, 13, 0.84);
-  box-shadow: inset 0 -3px 0 rgba(78, 45, 20, 0.26), 0 4px 0 rgba(0, 0, 0, 0.22);
+  background: rgba(36, 26, 22, 0.55);
+  border: 1px solid rgba(220, 185, 106, 0.22);
   font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', monospace;
   font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
   cursor: pointer;
 }
 
 .world-square-rail .rail-item:hover,
 .world-square-rail .rail-item:focus-visible {
-  border-color: #f1c978;
-  background: rgba(255, 239, 178, 0.94);
-  outline: 2px solid #78bfd1;
-  outline-offset: 2px;
+  color: #fff8d8;
+  background: rgba(203, 110, 67, 0.14);
+  border-color: rgba(220, 185, 106, 0.48);
+  outline: none;
 }
 
 .world-square-rail .rail-item.is-active {
-  color: #fff4c9;
-  background: #8d3d1b;
-  border-color: #fff1aa;
+  color: #fff8d8;
+  background: rgba(120, 191, 209, 0.16);
+  border-color: rgba(120, 191, 209, 0.58);
+}
+
+.world-square-rail .rail-label {
+  display: block;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 
 .world-square-stage {
@@ -208,6 +234,7 @@ body[data-shell-page="world-square"] {
 .world-square-scene {
   position: absolute;
   inset: 0;
+  z-index: 1;
   overflow: hidden;
   background: #15130f;
   pointer-events: none;
@@ -226,15 +253,14 @@ body[data-shell-page="world-square"] {
 }
 
 body[data-time-of-day="day"] .world-square-scene::before {
-  background:
-    linear-gradient(180deg, rgba(255, 232, 180, 0.04), rgba(255, 232, 180, 0) 42%, rgba(80, 58, 24, 0.08)),
-    url("./assets/pixel/concepts/world-square-concept-day-256.png") center / cover no-repeat;
+  background: url("./assets/pixel/concepts/world-square-concept-day-256.png") center / cover no-repeat;
 }
 
 .world-square-card {
   position: absolute;
   left: clamp(18px, 5vw, 72px);
   bottom: clamp(18px, 5vw, 72px);
+  z-index: 4;
   width: auto;
   max-width: min(410px, calc(100% - 36px));
   padding: 0;
@@ -367,7 +393,144 @@ body[data-time-of-day="day"] .world-square-scene::before {
   white-space: nowrap;
 }
 
-/* Gateway-connected cards: remove readonly styling */
+/* Utility: hide elements */
+.shell-hidden {
+  display: none !important;
+}
+
+/* HUD status pill and login toggle */
+.world-square-actions .hud-pill,
+.world-square-actions .hud-login-toggle {
+  min-height: 32px;
+  padding: 5px 12px;
+  display: inline-grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  border: 2px solid #f1c978;
+  box-shadow: inset 0 -3px 0 rgba(92, 50, 18, 0.24);
+}
+
+.world-square-actions .hud-pill {
+  color: #21140b;
+  background: #fff0b8;
+}
+
+.world-square-actions .hud-login-toggle {
+  color: #21140b;
+  background: #fff0b8;
+  cursor: pointer;
+}
+
+.world-square-actions .hud-login-toggle:hover,
+.world-square-actions .hud-login-toggle:focus-visible {
+  outline: 2px solid #78bfd1;
+  outline-offset: 2px;
+}
+
+/* Resident login modal */
+.resident-login-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(8, 5, 4, 0.78);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.resident-login-overlay[aria-hidden="true"],
+.resident-login-overlay.shell-hidden {
+  display: none;
+}
+
+.resident-login-card {
+  position: relative;
+  width: min(560px, 92vw);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  padding: 22px 24px 24px;
+  background: linear-gradient(180deg, rgba(42, 24, 12, 0.96), rgba(20, 12, 7, 0.98));
+  border: 2px solid #f1c978;
+  box-shadow: 0 12px 0 rgba(0, 0, 0, 0.36);
+}
+
+.resident-login-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  color: #f1c978;
+  font-size: 22px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.resident-login-copy {
+  margin-bottom: 16px;
+}
+
+.resident-login-kicker {
+  display: block;
+  color: #c7a369;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+#auth-status {
+  display: block;
+  margin-top: 4px;
+  color: #fff4c9;
+  font-size: 20px;
+}
+
+.resident-login-form {
+  display: grid;
+  gap: 12px;
+}
+
+.resident-login-field-label {
+  color: rgba(255, 242, 201, 0.78);
+  font-size: 13px;
+}
+
+.resident-login-form input {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  color: #fff2c9;
+  background: rgba(12, 9, 8, 0.78);
+  border: 1px solid rgba(220, 185, 106, 0.34);
+  outline: none;
+}
+
+.resident-login-form input:focus {
+  border-color: #78bfd1;
+  box-shadow: 0 0 0 1px rgba(120, 191, 209, 0.32);
+}
+
+.resident-login-form button[type="submit"] {
+  min-height: 40px;
+  padding: 8px 16px;
+  color: #21140b;
+  font-weight: 800;
+  background: #fff0b8;
+  border: 2px solid #f1c978;
+  cursor: pointer;
+}
+
+.resident-login-verify.shell-hidden {
+  display: none;
+}
 .world-square-readonly-item[data-source="gateway"] {
   pointer-events: auto;
   cursor: default;
@@ -425,7 +588,7 @@ body[data-time-of-day="day"] .world-square-scene::before {
     font-size: 14px;
   }
 
-  .world-square-rail-title {
+  .rail-title {
     min-height: 28px;
     font-size: 14px;
   }
@@ -515,44 +678,80 @@ body[data-shell-page="world-square"] {
 }
 
 /* ── Scene hotspots ── */
-.scene-hotspots {
+.world-square-label-layer {
   position: absolute;
   inset: 0;
-  z-index: 5;
+  z-index: 2;
   pointer-events: none;
 }
 
-.scene-hotspot {
+.world-square-label-layer .scene-hotspot-label-chip {
   position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 3px 8px;
+  opacity: 0;
+  visibility: hidden;
+  color: #fff4c9;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  background: rgba(14, 9, 6, 0.88);
+  border: 1px solid rgba(247, 210, 118, 0.78);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.38);
+  transition: opacity 90ms linear, visibility 90ms linear;
+}
+
+body.scene-hotspot-labels-visible[data-shell-page="world-square"] .world-square-label-layer .scene-hotspot-label-chip,
+.world-square-label-layer .scene-hotspot-label-chip.is-near-pointer {
+  opacity: 1;
+  visibility: visible;
+}
+
+.world-square-hotspots {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
   pointer-events: none;
-  border: 2px solid transparent;
-  border-radius: 6px;
+}
+
+.world-square-hotspots .scene-hotspot {
+  position: absolute;
+  /* 固定 64×34，对齐 ASSET_HANDOFF §5（单一信息源）与 hub/creative 统一四层契约；
+     废弃桌面 108px 偏离（2026-06-17 与 styles.pixel-map.css 收口一致）。 */
+  width: 64px;
+  height: 34px;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
   background: transparent;
+  border: 2px solid transparent;
+  border-color: transparent;
+  border-radius: 6px;
   cursor: pointer;
   transition: border-color 0.2s, background 0.2s;
 }
 
-.scene-hotspot:hover,
-.scene-hotspot:focus-visible,
-.scene-hotspot.is-active {
-  border-color: rgba(241, 201, 120, 0.72);
-  background: rgba(241, 201, 120, 0.12);
+.world-square-hotspots .scene-hotspot:hover,
+.world-square-hotspots .scene-hotspot:focus-visible,
+.world-square-hotspots .scene-hotspot.is-active {
+  border-color: transparent;
+  background: transparent;
   outline: none;
 }
 
-.scene-hotspot-label {
-  position: absolute;
-  top: -22px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: rgba(14, 9, 6, 0.88);
-  color: #fff4c9;
-  font-size: 11px;
-  font-weight: 800;
-  white-space: nowrap;
-  pointer-events: none;
+.world-square-hotspot--notice {
+  left: 36%;
+  top: 26%;
+}
+
+.world-square-hotspot--discussion {
+  left: 66%;
+  top: 22%;
+}
+
+.world-square-hotspot--discovery {
+  left: 52%;
+  top: 63%;
 }
 
 /* ── Clear mode ── */
@@ -567,6 +766,6 @@ body.scene-clear-mode[data-shell-page="world-square"] .scene-hotspot {
 }
 
 body.scene-clear-mode[data-shell-page="world-square"] .scene-hotspot.is-active {
-  border-color: rgba(241, 201, 120, 0.72);
-  background: rgba(241, 201, 120, 0.12);
+  border-color: transparent;
+  background: transparent;
 }

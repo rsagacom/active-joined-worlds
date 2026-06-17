@@ -173,7 +173,7 @@ test("creative resident timeline follows only when user is already near bottom",
   }
 });
 
-test("creative resident empty conversation renders IM skeleton bubbles", serial, async () => {
+test("creative resident empty conversation keeps scene clear instead of skeleton bubbles", serial, async () => {
   const app = await loadUserShellApp({
     useGeneratedFixtures: true,
     generatedShellFixture: "generated/state.contract.json",
@@ -189,11 +189,12 @@ test("creative resident empty conversation renders IM skeleton bubbles", serial,
     await flushAsyncWork();
 
     const skeletonRows = document.querySelectorAll(".message-row.timeline-skeleton-row");
-    assert.equal(skeletonRows.length, 4);
+    const timeline = document.querySelector("#timeline");
+    assert.equal(skeletonRows.length, 0);
     assert.equal(document.querySelector(".timeline-empty"), null);
-    assert.equal(skeletonRows[0]?.dataset.messageKind, "skeleton");
-    assert.equal(skeletonRows[1]?.classList.contains("self"), true);
-    assert.ok(skeletonRows[0]?.querySelector(".timeline-skeleton-bubble"));
+    assert.equal(timeline?.querySelector(".timeline-skeleton-bubble"), null);
+    assert.equal(timeline?.querySelector(".message"), null);
+    assert.equal(timeline?.children.length, 0);
   } finally {
     app.cleanup();
   }
