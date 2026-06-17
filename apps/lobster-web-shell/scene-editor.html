@@ -125,6 +125,14 @@ let resizeCorner = null;
 let dragOffset = { x: 0, y: 0 };
 let resizeStart = { x: 0, y: 0, w: 0, h: 0 };
 let scale = 1;
+// 未保存追踪：用快照比较捕获任意热点/背景改动，加载/保存成功置基线；页面卸载时有改动则警告防丢失。
+let lastSavedSnapshot = null;
+function sceneSnapshot() {
+  return JSON.stringify({ hotspots: hotspots, day: $('dayUrl').value.trim(), night: $('nightUrl').value.trim() });
+}
+function markClean() { lastSavedSnapshot = sceneSnapshot(); }
+function isDirty() { return lastSavedSnapshot !== null && sceneSnapshot() !== lastSavedSnapshot; }
+window.addEventListener('beforeunload', function(e) { if (isDirty()) { e.preventDefault(); e.returnValue = ''; } });
 
 // Parse URL params
 const params = new URLSearchParams(location.search);
@@ -298,6 +306,7 @@ async function loadCurrentScene() {
     } else {
       status('未找到房间场景数据，将创建新场景', false);
     }
+    markClean(); // 加载完成（无论找到与否），当前状态作为干净基线
   } catch (e) {
     status('加载失败: ' + e.message, true);
   } finally {
@@ -416,6 +425,7 @@ $('saveBtn').onclick = async function() {
       status('✅ 已保存 (' + hotspots.length + ' 个热点)', false);
       btn.textContent = '✓ 已保存';
       setTimeout(function() { btn.textContent = orig; }, 1200);
+      markClean(); // 保存成功，当前状态作为干净基线
     }
   } catch (e) {
     status('保存失败: ' + e.message, true);
@@ -449,6 +459,7 @@ document.body.dataset.timeOfDay = (hour >= 6 && hour < 18) ? 'day' : 'night';
 if ($('roomId').value.trim() && $('gatewayUrl').value.trim()) {
   loadCurrentScene();
 }
+markClean(); // 初始基线：自动加载若成功会在其成功路径再次 markClean 更新为加载内容
 </script>
 </body>
 </html>
