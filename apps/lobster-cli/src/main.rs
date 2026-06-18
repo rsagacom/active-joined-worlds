@@ -25,6 +25,7 @@ enum Command {
     World(WorldQueryCommand),
     Square(WorldQueryCommand),
     Cities(WorldQueryCommand),
+    Safety(WorldQueryCommand),
     Help(Option<String>),
 }
 
@@ -435,6 +436,7 @@ where
         "world" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::World),
         "square" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Square),
         "cities" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Cities),
+        "safety" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Safety),
         "help" => Ok(Command::Help(iter.next())),
         other => Err(format!("unsupported command: {other}")),
     }
@@ -1297,6 +1299,7 @@ fn format_help_overview() -> String {
         "  world            世界治理总览  (城市 / 信任 / 公告 / 安全 / 管理员)",
         "  square           公共广场公告  (逐条标题 / 严重度 / 发布者)",
         "  cities           城市列表  (城市名 / 简介)",
+        "  safety           世界安全快照  (信任 / 公告 / 报告 / 制裁 / 黑名单)",
         "",
         "管理（需 admin 身份）:",
         "  ban / unban      封禁 / 解封居民  (--target <resident>)",
@@ -1337,6 +1340,7 @@ fn format_help_for_command(command: &str) -> String {
         "world",
         "square",
         "cities",
+        "safety",
     ];
     if known.contains(&command) {
         format!(
@@ -1519,6 +1523,52 @@ fn run_cities(command: WorldQueryCommand) -> Result<String, String> {
             .map_err(|error| format!("serialize cities response failed: {error}"))
     } else {
         Ok(format_cities(&payload))
+    }
+}
+
+// 调 Gateway GET /v1/world-safety（http_read_routes.rs:182，已存在端点，无需改 Gateway）。
+// 返回 WorldSafetySnapshot（字段名 stewards，与 GovernanceSnapshot.world_stewards 不同结构）。
+fn format_safety(safety: &serde_json::Value) -> String {
+    let stewards: Vec<&str> = safety["stewards"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+    let trust_count = safety["city_trust"]
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let advisory_count = safety["advisories"]
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let report_count = safety["reports"].as_array().map(|a| a.len()).unwrap_or(0);
+    let sanction_count = safety["resident_sanctions"]
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let blacklist_count = safety["registration_blacklist"]
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let mirror_count = safety["mirrors"].as_array().map(|a| a.len()).unwrap_or(0);
+
+    let mut lines = vec![format!(
+        "🛡 世界安全快照：信任 {trust_count} 条 · 公告 {advisory_count} 条 · 报告 {report_count} 条 · 制裁 {sanction_count} 条 · 注册黑名单 {blacklist_count} 条 · 镜像 {mirror_count} 个"
+    )];
+    if !stewards.is_empty() {
+        lines.push(format!("安全管理员：{}", stewards.join("、")));
+    }
+    lines.join("\n")
+}
+
+fn run_safety(command: WorldQueryCommand) -> Result<String, String> {
+    let url = format!("{}/v1/world-safety", command.gateway.trim_end_matches('/'));
+    let payload = run_query::<serde_json::Value>(&url)?;
+    if command.json {
+        serde_json::to_string(&payload)
+            .map_err(|error| format!("serialize safety response failed: {error}"))
+    } else {
+        Ok(format_safety(&payload))
     }
 }
 
@@ -1816,6 +1866,7 @@ fn run_command(command: Command) -> Result<String, String> {
         Command::World(command) => run_world(command),
         Command::Square(command) => run_square(command),
         Command::Cities(command) => run_cities(command),
+        Command::Safety(command) => run_safety(command),
         Command::Help(topic) => Ok(format_help(topic.as_deref())),
     }
 }
@@ -2892,5 +2943,45 @@ mod tests {
     fn parse_args_routes_cities_command() {
         let command = parse_args(["lobster-cli", "cities"]).expect("cities should parse");
         assert!(matches!(command, Command::Cities(_)));
+    }
+
+    #[test]
+    fn format_safety_summarizes_snapshot() {
+        let safety = serde_json::json!({
+            "stewards": ["user:safety-admin"],
+            "city_trust": [{}, {}],
+            "advisories": [],
+            "reports": [{}],
+            "resident_sanctions": [],
+            "registration_blacklist": [],
+            "mirrors": [{}, {}, {}]
+        });
+        let rendered = format_safety(&safety);
+        assert!(rendered.contains("信任 2 条"));
+        assert!(rendered.contains("报告 1 条"));
+        assert!(rendered.contains("镜像 3 个"));
+        assert!(rendered.contains("安全管理员：user:safety-admin"));
+    }
+
+    #[test]
+    fn format_safety_omits_admin_line_when_empty() {
+        let safety = serde_json::json!({
+            "stewards": [],
+            "city_trust": [],
+            "advisories": [],
+            "reports": [],
+            "resident_sanctions": [],
+            "registration_blacklist": [],
+            "mirrors": []
+        });
+        let rendered = format_safety(&safety);
+        assert!(rendered.contains("信任 0 条"));
+        assert!(!rendered.contains("安全管理员"));
+    }
+
+    #[test]
+    fn parse_args_routes_safety_command() {
+        let command = parse_args(["lobster-cli", "safety"]).expect("safety should parse");
+        assert!(matches!(command, Command::Safety(_)));
     }
 }
