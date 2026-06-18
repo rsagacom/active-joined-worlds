@@ -10,6 +10,10 @@ enum Command {
     Inbox(QueryCommand),
     Rooms(QueryCommand),
     Tail(TailCommand),
+    Search(SearchCommand),
+    Who(QueryCommand),
+    Read(ReadCommand),
+    Presence(QueryCommand),
     Ban(AdminCommand),
     Unban(IdentityCommand),
     Freeze(IdentityCommand),
@@ -18,6 +22,7 @@ enum Command {
     InviteRevoke(InviteRevokeCommand),
     AdminResidents(QueryCommand),
     AdminRooms(QueryCommand),
+    Help(Option<String>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -72,6 +77,23 @@ struct TailCommand {
     gateway: String,
     json: bool,
     follow: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SearchCommand {
+    query: String,
+    room_id: Option<String>,
+    limit: Option<u32>,
+    gateway: String,
+    json: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ReadCommand {
+    target: String,
+    conversation_id: String,
+    gateway: String,
+    json: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -173,6 +195,66 @@ struct CliTailResponse {
     identity: String,
     conversation_id: String,
     messages: Vec<CliTailMessage>,
+}
+
+// 对齐 Gateway ShellRoomMessage 子集（gateway_models.rs）。search 端点返回 Vec<ShellRoomMessage>。
+// 只反序列化展示需要的字段，Gateway 多余字段（recalled_by/edited_by/moderation_status 等）serde 默认忽略。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct CliSearchMessage {
+    message_id: String,
+    sender: String,
+    timestamp_ms: i64,
+    timestamp_label: String,
+    text: String,
+    #[serde(default)]
+    delivery_status: String,
+    is_recalled: bool,
+    is_edited: bool,
+}
+
+// /v1/residents 返回的居民目录条目子集（对齐 gateway_models.rs:296 ResidentDirectoryEntry）。
+// 网关 resident_id 为裸名（如 "rsaga"）；nickname/online/last_seen_at_ms/avatar_id/personal_room_id
+// 在网关侧 Option::is_none 时 skip 序列化，这里统一 #[serde(default)] 容错缺失字段。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct CliResidentEntry {
+    resident_id: String,
+    #[serde(default)]
+    nickname: Option<String>,
+    #[serde(default)]
+    active_cities: Vec<String>,
+    #[serde(default)]
+    pending_cities: Vec<String>,
+    #[serde(default)]
+    roles: Vec<String>,
+    #[serde(default)]
+    online: Option<bool>,
+    #[serde(default)]
+    last_seen_at_ms: Option<i64>,
+    #[serde(default)]
+    avatar_id: Option<String>,
+    #[serde(default)]
+    personal_room_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct CliMarkReadRequest {
+    resident_id: String,
+    conversation_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct CliReadResponse {
+    ok: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct CliPresenceRequest {
+    resident_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct CliPresenceResponse {
+    ok: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -296,7 +378,7 @@ where
     let mut iter = args.into_iter().map(Into::into);
     let _bin = iter.next();
     let Some(command) = iter.next() else {
-        return Err("missing command".into());
+        return Ok(Command::Help(None));
     };
 
     match command.as_str() {
@@ -307,6 +389,10 @@ where
         "inbox" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::Inbox),
         "rooms" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::Rooms),
         "tail" => parse_tail_command(iter.collect::<Vec<_>>()).map(Command::Tail),
+        "search" => parse_search_command(iter.collect::<Vec<_>>()).map(Command::Search),
+        "who" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::Who),
+        "read" => parse_read_command(iter.collect::<Vec<_>>()).map(Command::Read),
+        "presence" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::Presence),
         "ban" => parse_admin_command(iter.collect::<Vec<_>>()).map(Command::Ban),
         "unban" => parse_identity_command(iter.collect::<Vec<_>>()).map(Command::Unban),
         "freeze" => parse_identity_command(iter.collect::<Vec<_>>()).map(Command::Freeze),
@@ -319,6 +405,7 @@ where
         }
         "residents" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminResidents),
         "rooms-admin" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminRooms),
+        "help" => Ok(Command::Help(iter.next())),
         other => Err(format!("unsupported command: {other}")),
     }
 }
@@ -522,6 +609,114 @@ fn parse_query_command(args: Vec<String>) -> Result<QueryCommand, String> {
         gateway,
         json,
     })
+}
+
+fn parse_search_command(args: Vec<String>) -> Result<SearchCommand, String> {
+    // 位置参数（非 -- 开头）拼接为搜索关键词；--flag 走显式解析。
+    // 同时支持 `search 晚上吃饭 --room r --limit 5` 与 `search --room r 晚上吃饭` 两种顺序。
+    let mut query_parts: Vec<String> = Vec::new();
+    let mut room_id = None;
+    let mut limit = None;
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--room" | "--room-id" | "--conversation-id" => {
+                room_id = iter.next();
+            }
+            "--limit" => {
+                let raw = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --limit".to_string())?;
+                limit = Some(parse_search_limit(&raw)?);
+            }
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?;
+            }
+            "--json" => json = true,
+            other => {
+                if let Some(rest) = other.strip_prefix("--limit=") {
+                    limit = Some(parse_search_limit(rest)?);
+                } else if let Some(rest) = other.strip_prefix("--room=") {
+                    room_id = Some(rest.to_string());
+                } else if other.starts_with("--") {
+                    return Err(format!("unsupported search flag: {other}"));
+                } else {
+                    query_parts.push(other.to_string());
+                }
+            }
+        }
+    }
+
+    let query = query_parts.join(" ").trim().to_string();
+    if query.is_empty() {
+        return Err(
+            "missing search keyword (usage: search <keyword> [--room <id>] [--limit N])".into(),
+        );
+    }
+    Ok(SearchCommand {
+        query,
+        room_id,
+        limit,
+        gateway,
+        json,
+    })
+}
+
+fn parse_read_command(args: Vec<String>) -> Result<ReadCommand, String> {
+    // read --for <resident> --conversation-id <id> [--gateway <url>] [--json]
+    // 标记某会话已读，配合 inbox/tail 形成未读闭环。
+    let mut target = None;
+    let mut conversation_id = None;
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--for" => target = iter.next(),
+            "--conversation-id" | "--conversation" | "--room" | "--room-id" => {
+                conversation_id = iter.next();
+            }
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?;
+            }
+            "--json" => json = true,
+            other => return Err(format!("unsupported read flag: {other}")),
+        }
+    }
+
+    let target = target.ok_or_else(|| {
+        "missing required flag --for (usage: read --for <resident> --conversation-id <id>)"
+            .to_string()
+    })?;
+    let conversation_id = conversation_id.ok_or_else(|| {
+        "missing required flag --conversation-id (usage: read --for <resident> --conversation-id <id>)"
+            .to_string()
+    })?;
+    if target.trim().is_empty() {
+        return Err("--for must not be empty".into());
+    }
+    if conversation_id.trim().is_empty() {
+        return Err("--conversation-id must not be empty".into());
+    }
+    Ok(ReadCommand {
+        target,
+        conversation_id,
+        gateway,
+        json,
+    })
+}
+
+fn parse_search_limit(raw: &str) -> Result<u32, String> {
+    raw.parse::<u32>()
+        .map_err(|_| format!("--limit must be a non-negative number, not `{raw}`"))
 }
 
 fn parse_tail_command(args: Vec<String>) -> Result<TailCommand, String> {
@@ -763,6 +958,39 @@ fn format_tail(response: &CliTailResponse) -> String {
     lines.join("\n")
 }
 
+fn format_search_message(query: &str, message: &CliSearchMessage) -> String {
+    let status = if message.is_recalled {
+        "[已撤回] "
+    } else if message.is_edited {
+        "[已编辑] "
+    } else {
+        ""
+    };
+    format!(
+        "[{}] {status}{}: {}",
+        message.timestamp_label,
+        message.sender,
+        highlight_keyword(query, &message.text)
+    )
+}
+
+fn format_search_results(query: &str, messages: &[CliSearchMessage]) -> String {
+    let mut lines = vec![format!("搜索「{}」命中 {} 条", query, messages.len())];
+    for message in messages {
+        lines.push(format_search_message(query, message));
+    }
+    lines.join("\n")
+}
+
+// 用 «» 角括号标记命中片段，纯文本终端友好（不引入颜色转义依赖）。
+// 精确子串匹配，对中文够用；大小写不敏感首版不做（会丢失原大小写）。
+fn highlight_keyword(query: &str, text: &str) -> String {
+    if query.is_empty() {
+        return text.to_string();
+    }
+    text.replace(query, &format!("«{query}»"))
+}
+
 fn format_export(response: &CliExportResponse) -> String {
     response.content.clone()
 }
@@ -934,6 +1162,215 @@ fn run_rooms(command: QueryCommand) -> Result<String, String> {
             .map_err(|error| format!("serialize rooms response failed: {error}"))
     } else {
         Ok(format_rooms(&payload))
+    }
+}
+
+// 调 Gateway GET /v1/shell/messages/search?q=<kw>&room_id=<id>&limit=<n>（http_router.rs:161，
+// 已存在端点，无需改 Gateway）。query/room_id 经 query_escape 编码（含空格/中文/特殊字符）。
+fn run_search(command: SearchCommand) -> Result<String, String> {
+    let mut url = format!(
+        "{}/v1/shell/messages/search?q={}",
+        command.gateway.trim_end_matches('/'),
+        query_escape(&command.query)
+    );
+    if let Some(room_id) = &command.room_id {
+        url.push_str("&room_id=");
+        url.push_str(&query_escape(room_id));
+    }
+    if let Some(limit) = command.limit {
+        url.push_str(&format!("&limit={limit}"));
+    }
+    let payload = run_query::<Vec<CliSearchMessage>>(&url)?;
+    if command.json {
+        serde_json::to_string(&payload)
+            .map_err(|error| format!("serialize search response failed: {error}"))
+    } else if payload.is_empty() {
+        Ok(format!("未找到匹配「{}」的消息", command.query))
+    } else {
+        Ok(format_search_results(&command.query, &payload))
+    }
+}
+
+fn format_who(entry: &CliResidentEntry) -> String {
+    let display_name = entry.nickname.as_deref().unwrap_or(&entry.resident_id);
+    let presence = match entry.online {
+        Some(true) => "● 在线",
+        Some(false) => "○ 离线",
+        None => "状态未知",
+    };
+    let mut lines = vec![
+        format!("居民 {} ({})", display_name, entry.resident_id),
+        format!("  状态: {}", presence),
+    ];
+    if !entry.roles.is_empty() {
+        lines.push(format!("  角色: {}", entry.roles.join(", ")));
+    }
+    if !entry.active_cities.is_empty() {
+        lines.push(format!("  活跃城市: {}", entry.active_cities.join(", ")));
+    }
+    if let Some(room_id) = &entry.personal_room_id {
+        lines.push(format!("  个人房间: {}", room_id));
+    }
+    lines.join("\n")
+}
+
+fn format_help(topic: Option<&str>) -> String {
+    match topic {
+        Some(command) => format_help_for_command(command),
+        None => format_help_overview(),
+    }
+}
+
+fn format_help_overview() -> String {
+    let lines = [
+        "lobster-cli — 单城中心化 IM 客户端",
+        "",
+        "消息:",
+        "  send             发送消息  (--from <id> --to <id> --text <msg>)",
+        "  edit             编辑消息  (--actor <id> --conversation-id <id> --message-id <id> --text <msg>)",
+        "  recall           撤回消息  (--actor <id> --conversation-id <id> --message-id <id>)",
+        "  search           搜索历史  (<keyword> [--room <id>] [--limit N])",
+        "",
+        "会话:",
+        "  inbox            未读会话摘要  (--for <resident>)",
+        "  rooms            可见会话列表  (--for <resident>)",
+        "  tail             拉取新消息  (--for <resident> [--conversation-id <id>] [--follow])",
+        "  export           导出聊天记录  (--for <resident> [--conversation-id <id>] [--format md|jsonl|txt])",
+        "",
+        "身份与状态:",
+        "  who              居民在线名片  (--for <resident>)",
+        "  read             标记会话已读  (--for <resident> --conversation-id <id>)",
+        "  presence         上报在线  (--for <resident>)",
+        "",
+        "管理（需 admin 身份）:",
+        "  ban / unban      封禁 / 解封居民  (--target <resident>)",
+        "  freeze / unfreeze 冻结 / 解冻房间  (--target <room>)",
+        "  invite-create    生成邀请码  (--actor <admin> [--max-uses N])",
+        "  invite-revoke    撤销邀请码  (--actor <admin> --code <code>)",
+        "  residents        居民目录（admin 视角）",
+        "  rooms-admin      房间目录（admin 视角）",
+        "",
+        "通用标志: --gateway <url>   --json（机器可读输出）",
+        "默认网关: http://127.0.0.1:8787（或环境变量 LOBSTER_WAKU_GATEWAY_URL）",
+    ];
+    lines.join("\n")
+}
+
+fn format_help_for_command(command: &str) -> String {
+    // 已知命令：各 parse 函数在缺少必填标志时会打印 usage，故这里只引导，不重复维护。
+    let known = [
+        "send",
+        "edit",
+        "recall",
+        "search",
+        "inbox",
+        "rooms",
+        "tail",
+        "export",
+        "who",
+        "read",
+        "presence",
+        "ban",
+        "unban",
+        "freeze",
+        "unfreeze",
+        "invite-create",
+        "invite-revoke",
+        "residents",
+        "rooms-admin",
+    ];
+    if known.contains(&command) {
+        format!(
+            "`{command}` 的详细用法：运行 `lobster-cli {command}` 时若缺少必填标志会打印 usage；完整命令列表见 `lobster-cli help`。"
+        )
+    } else {
+        format!("未知命令 `{command}`。运行 `lobster-cli help` 查看全部命令。")
+    }
+}
+
+// 调 Gateway GET /v1/residents?q=<关键词>（http_router.rs:166，已存在端点，无需改 Gateway）。
+// 网关 resident_id 为裸名，CLI --for 接受 user:/agent:/裸名，先经 parse_actor_identity 剥前缀，
+// 再按裸名精确匹配；精确失败则列 q 命中的候选，全部落空提示未找到。
+fn run_who(command: QueryCommand) -> Result<String, String> {
+    let resident_key = parse_actor_identity(&command.target)?;
+    let url = format!(
+        "{}/v1/residents?q={}",
+        command.gateway.trim_end_matches('/'),
+        query_escape(&resident_key)
+    );
+    let payload = run_query::<Vec<CliResidentEntry>>(&url)?;
+    if command.json {
+        let matched = payload
+            .iter()
+            .find(|entry| entry.resident_id == resident_key)
+            .or_else(|| payload.first())
+            .cloned();
+        serde_json::to_string(&matched)
+            .map_err(|error| format!("serialize who response failed: {error}"))
+    } else if let Some(entry) = payload.iter().find(|e| e.resident_id == resident_key) {
+        Ok(format_who(entry))
+    } else if payload.is_empty() {
+        Ok(format!("未找到居民「{}」", command.target))
+    } else {
+        let mut lines = vec![format!(
+            "未精确匹配「{}」，相关候选 {} 个：",
+            command.target,
+            payload.len()
+        )];
+        for entry in &payload {
+            let name = entry.nickname.as_deref().unwrap_or(&entry.resident_id);
+            lines.push(format!("  - {} ({})", name, entry.resident_id));
+        }
+        Ok(lines.join("\n"))
+    }
+}
+
+fn build_mark_read_request(command: &ReadCommand) -> Result<CliMarkReadRequest, String> {
+    let resident_id = parse_actor_identity(&command.target)?;
+    Ok(CliMarkReadRequest {
+        resident_id,
+        conversation_id: command.conversation_id.clone(),
+    })
+}
+
+// 调 Gateway POST /v1/shell/read（http_router.rs:251，已存在端点，无需改 Gateway）。
+// 网关 resident_id 为裸名，--for 经 parse_actor_identity 剥前缀；conversation_id 原样透传。
+// 配合 inbox(未读数)/tail(拉新消息)：看完后标记会话已读，未读数归零，形成 IM 闭环。
+fn run_read(command: ReadCommand) -> Result<String, String> {
+    let request = build_mark_read_request(&command)?;
+    let url = format!("{}/v1/shell/read", command.gateway.trim_end_matches('/'));
+    let payload = post_json::<_, CliReadResponse>(&url, &request, "read")?;
+    if command.json {
+        serde_json::to_string(&payload)
+            .map_err(|error| format!("serialize read response failed: {error}"))
+    } else if payload.ok {
+        Ok(format!("已标记会话 {} 已读", command.conversation_id))
+    } else {
+        Ok(format!("标记会话 {} 已读失败", command.conversation_id))
+    }
+}
+
+fn build_presence_request(command: &QueryCommand) -> Result<CliPresenceRequest, String> {
+    let resident_id = parse_actor_identity(&command.target)?;
+    Ok(CliPresenceRequest { resident_id })
+}
+
+// 调 Gateway POST /v1/shell/presence（http_router.rs:248，已存在端点，无需改 Gateway）。
+// 上报此刻在线：record_presence 更新 last_seen，120s 内 who 命令可见 ●在线，闭环。
+fn run_presence(command: QueryCommand) -> Result<String, String> {
+    let request = build_presence_request(&command)?;
+    let url = format!(
+        "{}/v1/shell/presence",
+        command.gateway.trim_end_matches('/')
+    );
+    let payload = post_json::<_, CliPresenceResponse>(&url, &request, "presence")?;
+    if command.json {
+        serde_json::to_string(&payload)
+            .map_err(|error| format!("serialize presence response failed: {error}"))
+    } else if payload.ok {
+        Ok(format!("已上报 {} 在线", command.target))
+    } else {
+        Ok(format!("上报 {} 在线失败", command.target))
     }
 }
 
@@ -1167,6 +1604,10 @@ fn run_command(command: Command) -> Result<String, String> {
         Command::Inbox(command) => run_inbox(command),
         Command::Rooms(command) => run_rooms(command),
         Command::Tail(command) => run_tail(command),
+        Command::Search(command) => run_search(command),
+        Command::Who(command) => run_who(command),
+        Command::Read(command) => run_read(command),
+        Command::Presence(command) => run_presence(command),
         Command::Ban(command) => run_admin_ban(command),
         Command::Unban(command) => run_admin_unban(command),
         Command::Freeze(command) => run_admin_freeze(command),
@@ -1175,6 +1616,7 @@ fn run_command(command: Command) -> Result<String, String> {
         Command::InviteRevoke(command) => run_invite_revoke(command),
         Command::AdminResidents(command) => run_admin_residents(command),
         Command::AdminRooms(command) => run_admin_rooms(command),
+        Command::Help(topic) => Ok(format_help(topic.as_deref())),
     }
 }
 
@@ -1191,6 +1633,285 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_search_command_joins_positional_args_into_query() {
+        let command = parse_args(["lobster-cli", "search", "晚上", "吃饭", "--limit", "5"])
+            .expect("search command should parse");
+        match command {
+            Command::Search(s) => {
+                assert_eq!(s.query, "晚上 吃饭");
+                assert_eq!(s.limit, Some(5));
+                assert_eq!(s.room_id, None);
+            }
+            other => panic!("expected search command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_search_command_rejects_empty_query() {
+        let err = parse_args(["lobster-cli", "search"]).expect_err("empty query should fail");
+        assert!(err.contains("search keyword"));
+    }
+
+    #[test]
+    fn parse_search_command_rejects_non_numeric_limit() {
+        let err =
+            parse_args(["lobster-cli", "search", "foo", "--limit", "abc"]).expect_err("bad limit");
+        assert!(err.contains("--limit must be a non-negative number"));
+    }
+
+    #[test]
+    fn parse_search_command_supports_room_filter() {
+        let command = parse_args([
+            "lobster-cli",
+            "search",
+            "hello",
+            "--room",
+            "room:world:lobby",
+        ])
+        .expect("search with room should parse");
+        match command {
+            Command::Search(s) => assert_eq!(s.room_id.as_deref(), Some("room:world:lobby")),
+            other => panic!("expected search command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn search_output_renders_hits_with_keyword_highlight() {
+        let rendered = format_search_results(
+            "吃饭",
+            &[CliSearchMessage {
+                message_id: "msg-1".into(),
+                sender: "rsaga".into(),
+                timestamp_ms: 1_760_000_000_000,
+                timestamp_label: "06-17 12:00".into(),
+                text: "晚上一起吃饭吗".into(),
+                delivery_status: "delivered".into(),
+                is_recalled: false,
+                is_edited: false,
+            }],
+        );
+        assert!(rendered.contains("命中 1 条"));
+        assert!(rendered.contains("«吃饭»"));
+        assert!(rendered.contains("rsaga"));
+        assert!(rendered.contains("06-17 12:00"));
+    }
+
+    #[test]
+    fn search_output_reports_zero_hits_when_empty() {
+        let rendered = format_search_results("不存在", &[]);
+        assert!(rendered.contains("命中 0 条"));
+    }
+
+    #[test]
+    fn who_command_parses_target_and_gateway() {
+        let command = parse_args([
+            "lobster-cli",
+            "who",
+            "--for",
+            "user:rsaga",
+            "--gateway",
+            "http://127.0.0.1:8787",
+        ])
+        .expect("who command should parse");
+
+        match command {
+            Command::Who(who) => {
+                assert_eq!(who.target, "user:rsaga");
+                assert_eq!(who.gateway, "http://127.0.0.1:8787");
+            }
+            other => panic!("expected who command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn who_output_renders_full_resident_card() {
+        let rendered = format_who(&CliResidentEntry {
+            resident_id: "rsaga".into(),
+            nickname: Some("阿虾".into()),
+            active_cities: vec!["aurora-hub".into(), "core-harbor".into()],
+            pending_cities: vec![],
+            roles: vec!["Lord".into()],
+            online: Some(true),
+            last_seen_at_ms: Some(1_760_000_000_000),
+            avatar_id: Some("avatar:rsaga".into()),
+            personal_room_id: Some("dm:rsaga:private".into()),
+        });
+
+        assert!(rendered.contains("阿虾 (rsaga)"));
+        assert!(rendered.contains("● 在线"));
+        assert!(rendered.contains("角色: Lord"));
+        assert!(rendered.contains("活跃城市: aurora-hub, core-harbor"));
+        assert!(rendered.contains("个人房间: dm:rsaga:private"));
+    }
+
+    #[test]
+    fn who_output_handles_offline_and_missing_fields() {
+        let rendered = format_who(&CliResidentEntry {
+            resident_id: "tiyan".into(),
+            nickname: None,
+            active_cities: vec![],
+            pending_cities: vec![],
+            roles: vec![],
+            online: Some(false),
+            last_seen_at_ms: None,
+            avatar_id: None,
+            personal_room_id: None,
+        });
+
+        // nickname 缺失回退到 resident_id
+        assert!(rendered.contains("tiyan (tiyan)"));
+        assert!(rendered.contains("○ 离线"));
+        // 空字段不渲染对应行
+        assert!(!rendered.contains("角色"));
+        assert!(!rendered.contains("活跃城市"));
+        assert!(!rendered.contains("个人房间"));
+    }
+
+    #[test]
+    fn read_command_parses_target_and_conversation() {
+        let command = parse_args([
+            "lobster-cli",
+            "read",
+            "--for",
+            "user:rsaga",
+            "--conversation-id",
+            "room:world:lobby",
+            "--gateway",
+            "http://127.0.0.1:8787",
+        ])
+        .expect("read command should parse");
+
+        match command {
+            Command::Read(read) => {
+                assert_eq!(read.target, "user:rsaga");
+                assert_eq!(read.conversation_id, "room:world:lobby");
+                assert_eq!(read.gateway, "http://127.0.0.1:8787");
+            }
+            other => panic!("expected read command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn read_command_requires_conversation_id() {
+        let err = parse_args(["lobster-cli", "read", "--for", "user:rsaga"])
+            .expect_err("missing --conversation-id should fail");
+        assert!(err.contains("conversation-id"));
+    }
+
+    #[test]
+    fn build_mark_read_request_strips_identity_prefix() {
+        let command = ReadCommand {
+            target: "user:rsaga".into(),
+            conversation_id: "room:world:lobby".into(),
+            gateway: "http://127.0.0.1:8787".into(),
+            json: false,
+        };
+        let request = build_mark_read_request(&command).expect("build mark-read request");
+        assert_eq!(
+            request,
+            CliMarkReadRequest {
+                resident_id: "rsaga".into(),
+                conversation_id: "room:world:lobby".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn build_mark_read_request_rejects_room_actor() {
+        let command = ReadCommand {
+            target: "room:world:lobby".into(),
+            conversation_id: "room:world:lobby".into(),
+            gateway: "http://127.0.0.1:8787".into(),
+            json: false,
+        };
+        let err = build_mark_read_request(&command).expect_err("room actor should fail");
+        assert!(err.contains("actor must be an identity"));
+    }
+
+    #[test]
+    fn presence_command_parses_target() {
+        let command = parse_args([
+            "lobster-cli",
+            "presence",
+            "--for",
+            "user:rsaga",
+            "--gateway",
+            "http://127.0.0.1:8787",
+        ])
+        .expect("presence command should parse");
+
+        match command {
+            Command::Presence(p) => {
+                assert_eq!(p.target, "user:rsaga");
+                assert_eq!(p.gateway, "http://127.0.0.1:8787");
+            }
+            other => panic!("expected presence command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn build_presence_request_strips_identity_prefix() {
+        let command = QueryCommand {
+            target: "user:rsaga".into(),
+            gateway: "http://127.0.0.1:8787".into(),
+            json: false,
+        };
+        let request = build_presence_request(&command).expect("build presence request");
+        assert_eq!(
+            request,
+            CliPresenceRequest {
+                resident_id: "rsaga".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn build_presence_request_rejects_room_actor() {
+        let command = QueryCommand {
+            target: "room:world:lobby".into(),
+            gateway: "http://127.0.0.1:8787".into(),
+            json: false,
+        };
+        let err = build_presence_request(&command).expect_err("room actor should fail");
+        assert!(err.contains("actor must be an identity"));
+    }
+
+    #[test]
+    fn no_args_returns_help_overview() {
+        let command = parse_args(["lobster-cli"]).expect("no args should show help");
+        assert!(matches!(command, Command::Help(None)));
+    }
+
+    #[test]
+    fn help_command_with_topic_parses() {
+        let command = parse_args(["lobster-cli", "help", "send"]).expect("help <cmd> should parse");
+        assert!(matches!(command, Command::Help(Some(ref t)) if t == "send"));
+    }
+
+    #[test]
+    fn format_help_overview_lists_all_commands() {
+        let overview = format_help(None);
+        assert!(overview.contains("send"));
+        assert!(overview.contains("search"));
+        assert!(overview.contains("who"));
+        assert!(overview.contains("read"));
+        assert!(overview.contains("presence"));
+        assert!(overview.contains("管理"));
+    }
+
+    #[test]
+    fn format_help_for_known_command_guides_user() {
+        let detail = format_help(Some("send"));
+        assert!(detail.contains("send"));
+    }
+
+    #[test]
+    fn format_help_for_unknown_command_suggests_overview() {
+        let detail = format_help(Some("nonexistent"));
+        assert!(detail.contains("未知命令"));
+    }
 
     #[test]
     fn parse_send_command_rejects_missing_to() {

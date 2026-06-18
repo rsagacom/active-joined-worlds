@@ -14,12 +14,12 @@ fn cli_binary() -> Command {
 
 #[test]
 fn cli_smoke_help_and_error_output() {
-    // Test 1: no args produces error
+    // Test 1: no args prints help overview to stdout
     let out = cli_binary().output().expect("run");
-    let s = String::from_utf8_lossy(&out.stderr);
+    let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
-        s.contains("missing command") || s.contains("command"),
-        "should report missing command: {s}"
+        stdout.contains("消息") && stdout.contains("presence"),
+        "no args should print help overview: {stdout}"
     );
 
     // Test 2: invalid subcommand

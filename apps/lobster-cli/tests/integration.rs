@@ -8,13 +8,12 @@ fn cli_binary() -> Command {
 }
 
 #[test]
-fn no_args_reports_missing_command() {
+fn no_args_shows_help_overview() {
     let output = cli_binary().output().expect("run cli");
-    assert!(!output.status.success(), "should fail without args");
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stderr.contains("missing command") || stderr.contains("command"),
-        "should report missing command"
+        stdout.contains("消息") && stdout.contains("presence"),
+        "no args should print help overview: {stdout}"
     );
 }
 
