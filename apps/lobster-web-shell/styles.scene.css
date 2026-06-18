@@ -1207,10 +1207,15 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-r
   text-align: left;
 }
 
-body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-button:hover,
-body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-button.active {
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-button:hover {
   background: rgba(255, 239, 193, 0.38);
   border-color: rgba(24, 18, 14, 0.18);
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-button.active {
+  background: linear-gradient(90deg, rgba(220, 185, 106, 0.62) 0%, rgba(220, 185, 106, 0.22) 75%);
+  border-color: rgba(220, 185, 106, 0.7);
+  color: #1f1409;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .room-content,

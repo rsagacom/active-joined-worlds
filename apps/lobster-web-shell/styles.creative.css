@@ -627,15 +627,18 @@ body::before {
   gap: 6px;
   padding: 6px 8px;
   border: 1px solid var(--creative-line);
-  color: var(--creative-cream);
+  border-left: 2px solid transparent;
+  color: rgba(226, 201, 158, 0.8);
   text-decoration: none;
   background: rgba(36, 26, 22, 0.55);
   font-size: 20px;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
 .creative-rail .rail-item:hover {
   border-color: var(--creative-line-strong);
   background: rgba(203, 110, 67, 0.14);
+  color: var(--creative-cream);
 }
 
 .rail-glyph {
@@ -776,20 +779,28 @@ body::before {
   width: 100%;
   padding: 7px 8px;
   border: 1px solid transparent;
+  border-left: 2px solid transparent;
   background: rgba(36, 26, 22, 0.44);
-  color: rgba(243, 234, 215, 0.82);
+  color: rgba(226, 201, 158, 0.8);
   text-align: left;
   font-size: 19px;
   letter-spacing: 0.7px;
   line-height: 1.15;
   cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
-.creative-rail .room-button:hover,
-.creative-rail .room-button.active {
+.creative-rail .room-button:hover {
   border-color: var(--creative-line-strong);
-  background: rgba(120, 191, 209, 0.12);
+  background: rgba(203, 110, 67, 0.14);
   color: var(--creative-cream);
+}
+
+.creative-rail .room-button.active {
+  border-color: rgba(220, 185, 106, 0.7);
+  border-left-color: var(--creative-gold);
+  background: linear-gradient(90deg, rgba(220, 185, 106, 0.62) 0%, rgba(220, 185, 106, 0.22) 75%);
+  color: #1f1409;
 }
 
 .creative-rail .room-content,
@@ -1803,6 +1814,9 @@ body::before {
 .creative-rail.creative-rail .rail-item {
   min-height: 56px;
 }
+
+/* creative rail-item.is-active 的金底深字选中态由 styles.pixel-map.css:2114-2119
+   的 !important 规则统一提供(public-square + creative 共享 baseline)，此处无需重复定义。 */
 
 @media (max-width: 820px) {
   .creative-shell.creative-shell {

@@ -71,8 +71,12 @@ body[data-shell-variant="creative-terminal"] .creative-hud {
   padding: 8px 14px;
   background:
     linear-gradient(90deg, rgba(20, 16, 14, 0.94), rgba(34, 28, 24, 0.88));
-  border: 2px solid #2c2622;
-  box-shadow: 0 0 0 3px rgba(12, 10, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32);
+  /* 2026-06-18 三页 HUD 一致性：边框统一暖金 #f1c978 + 外发光暖暗 rgba(28,16,8)，
+     对齐 world-square.css:152（world-square-hud）。本 baseline 特异性 (0,3,1) 高于
+     creative-hud:1067 的 (0,2,1) 且 pixel-map 在 scene.css 之后加载，故实际控制
+     public-square + creative 顶栏边框/外发光。底色与 ::before 纹理各页保留。 */
+  border: 2px solid #f1c978;
+  box-shadow: 0 0 0 3px rgba(28, 16, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32);
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-layout,
@@ -1066,7 +1070,7 @@ body[data-shell-variant="creative-terminal"] .creative-hud {
   min-height: 54px;
   background:
     linear-gradient(180deg, rgba(22, 16, 12, 0.96), rgba(12, 8, 6, 0.98)) !important;
-  border-color: #2c2622;
+  border-color: #f1c978;
 }
 
 body[data-shell-variant="creative-terminal"] .creative-hud::before {
@@ -2021,8 +2025,11 @@ body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .messag
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hud {
   background:
     linear-gradient(90deg, rgba(20, 16, 14, 0.96), rgba(34, 28, 24, 0.90)) !important;
-  border: 2px solid #2c2622 !important;
-  box-shadow: 0 0 0 3px rgba(12, 10, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32) !important;
+  /* 2026-06-18 三页 HUD 一致性：边框暖金 #f1c978 + 外发光暖暗 rgba(28,16,8)，
+     对齐 creative-hud(baseline 68) + world-square-hud(world-square.css:152)。
+     bg 暗底保留以承载 scene.css:1031 的 ::before 像素纹理(hud_top_bar.avif)。 */
+  border: 2px solid #f1c978 !important;
+  box-shadow: 0 0 0 3px rgba(28, 16, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32) !important;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail {
