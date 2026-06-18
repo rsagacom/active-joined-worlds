@@ -22,6 +22,9 @@ enum Command {
     InviteRevoke(InviteRevokeCommand),
     AdminResidents(QueryCommand),
     AdminRooms(QueryCommand),
+    World(WorldQueryCommand),
+    Square(WorldQueryCommand),
+    Cities(WorldQueryCommand),
     Help(Option<String>),
 }
 
@@ -66,6 +69,13 @@ struct ExportCommand {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct QueryCommand {
     target: String,
+    gateway: String,
+    json: bool,
+}
+
+/// 世界治理 / 公共广场查询：无 target 的全局只读命令（仅需 --gateway / --json）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct WorldQueryCommand {
     gateway: String,
     json: bool,
 }
@@ -234,6 +244,23 @@ struct CliResidentEntry {
     avatar_id: Option<String>,
     #[serde(default)]
     personal_room_id: Option<String>,
+}
+
+/// 公共广场公告（对齐 gateway WorldSquareNotice；author_id 为 IdentityId newtype，序列化为字符串）。
+#[derive(Debug, Clone, Deserialize)]
+struct CliSquareNotice {
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    body: String,
+    #[serde(default)]
+    author_id: String,
+    #[serde(default)]
+    posted_at_ms: i64,
+    #[serde(default)]
+    severity: String,
+    #[serde(default)]
+    tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -405,6 +432,9 @@ where
         }
         "residents" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminResidents),
         "rooms-admin" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminRooms),
+        "world" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::World),
+        "square" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Square),
+        "cities" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Cities),
         "help" => Ok(Command::Help(iter.next())),
         other => Err(format!("unsupported command: {other}")),
     }
@@ -609,6 +639,27 @@ fn parse_query_command(args: Vec<String>) -> Result<QueryCommand, String> {
         gateway,
         json,
     })
+}
+
+/// 解析无 target 的全局只读命令（world / square）：仅接受 --gateway / --json。
+fn parse_world_query_command(args: Vec<String>) -> Result<WorldQueryCommand, String> {
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?
+            }
+            "--json" => json = true,
+            other => return Err(format!("unsupported flag: {other}")),
+        }
+    }
+
+    Ok(WorldQueryCommand { gateway, json })
 }
 
 fn parse_search_command(args: Vec<String>) -> Result<SearchCommand, String> {
@@ -1242,6 +1293,11 @@ fn format_help_overview() -> String {
         "  read             标记会话已读  (--for <resident> --conversation-id <id>)",
         "  presence         上报在线  (--for <resident>)",
         "",
+        "世界:",
+        "  world            世界治理总览  (城市 / 信任 / 公告 / 安全 / 管理员)",
+        "  square           公共广场公告  (逐条标题 / 严重度 / 发布者)",
+        "  cities           城市列表  (城市名 / 简介)",
+        "",
         "管理（需 admin 身份）:",
         "  ban / unban      封禁 / 解封居民  (--target <resident>)",
         "  freeze / unfreeze 冻结 / 解冻房间  (--target <room>)",
@@ -1278,6 +1334,9 @@ fn format_help_for_command(command: &str) -> String {
         "invite-revoke",
         "residents",
         "rooms-admin",
+        "world",
+        "square",
+        "cities",
     ];
     if known.contains(&command) {
         format!(
@@ -1322,6 +1381,144 @@ fn run_who(command: QueryCommand) -> Result<String, String> {
             lines.push(format!("  - {} ({})", name, entry.resident_id));
         }
         Ok(lines.join("\n"))
+    }
+}
+
+// 调 Gateway GET /v1/world（http_read_routes.rs:113，已存在端点，无需改 Gateway）。
+// /v1/world 返回完整 GovernanceSnapshot 对象；此处只读摘要字段并渲染人类可读总览。
+// 注意管理员字段名是 `world_stewards`（与 GovernanceSnapshot 字段名一致，非 `stewards`）。
+fn format_world(world: &serde_json::Value) -> String {
+    let title = world["world"]["title"].as_str().unwrap_or("未知世界");
+    let world_id = world["world"]["world_id"].as_str().unwrap_or("?");
+    let cities = world["cities"].as_array().map(|a| a.len()).unwrap_or(0);
+    let stewards: Vec<&str> = world["world_stewards"]
+        .as_array()
+        .map(|a| a.iter().filter_map(|v| v.as_str()).collect())
+        .unwrap_or_default();
+    let trust_count = world["city_trust"].as_array().map(|a| a.len()).unwrap_or(0);
+    let notice_count = world["world_square_notices"]
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let advisory_count = world["safety_advisories"]
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let report_count = world["safety_reports"]
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
+    let sanction_count = world["resident_sanctions"]
+        .as_array()
+        .map(|a| a.len())
+        .unwrap_or(0);
+
+    let mut lines = vec![
+        format!("🌍 {title}（{world_id}）"),
+        format!(
+            "城市 {cities} 座 · 信任记录 {trust_count} 条 · 广场公告 {notice_count} 条 · 安全公告 {advisory_count} 条 · 安全报告 {report_count} 条 · 制裁 {sanction_count} 条"
+        ),
+    ];
+    if !stewards.is_empty() {
+        lines.push(format!("世界管理员：{}", stewards.join("、")));
+    }
+    lines.join("\n")
+}
+
+fn run_world(command: WorldQueryCommand) -> Result<String, String> {
+    let url = format!("{}/v1/world", command.gateway.trim_end_matches('/'));
+    let payload = run_query::<serde_json::Value>(&url)?;
+    if command.json {
+        serde_json::to_string(&payload)
+            .map_err(|error| format!("serialize world response failed: {error}"))
+    } else {
+        Ok(format_world(&payload))
+    }
+}
+
+// 调 Gateway GET /v1/world-square（http_read_routes.rs:169，已存在端点，无需改 Gateway）。
+// 返回 Vec<WorldSquareNotice>；空数组提示无公告，非空逐条渲染。
+fn format_square(notices: &[CliSquareNotice]) -> String {
+    let mut lines = vec![format!("📢 公共广场公告（共 {} 条）", notices.len())];
+    for notice in notices {
+        let severity = if notice.severity.is_empty() {
+            String::new()
+        } else {
+            format!(" [{}]", notice.severity)
+        };
+        let tags = if notice.tags.is_empty() {
+            String::new()
+        } else {
+            format!(" #{}", notice.tags.join(" #"))
+        };
+        lines.push(format!("• {}{}{}", notice.title, severity, tags));
+        let author = if notice.author_id.is_empty() {
+            "匿名".to_string()
+        } else {
+            notice.author_id.clone()
+        };
+        lines.push(format!(
+            "  发布者 {author} · 时间戳 {}",
+            notice.posted_at_ms
+        ));
+        if !notice.body.is_empty() {
+            lines.push(format!("  {}", notice.body));
+        }
+    }
+    lines.join("\n")
+}
+
+fn run_square(command: WorldQueryCommand) -> Result<String, String> {
+    let url = format!("{}/v1/world-square", command.gateway.trim_end_matches('/'));
+    let payload = run_query::<serde_json::Value>(&url)?;
+    if command.json {
+        serde_json::to_string(&payload)
+            .map_err(|error| format!("serialize square response failed: {error}"))
+    } else {
+        let notices: Vec<CliSquareNotice> = serde_json::from_value(payload)
+            .map_err(|error| format!("decode square notices failed: {error}"))?;
+        if notices.is_empty() {
+            Ok("公共广场暂无公告".to_string())
+        } else {
+            Ok(format_square(&notices))
+        }
+    }
+}
+
+// 调 Gateway GET /v1/cities（http_read_routes.rs:124，已存在端点，无需改 Gateway）。
+// 返回 Vec<CityState>；city_id/title/description 嵌套在 profile 下（CityState { profile, features }），
+// CityState 本身无 state/reason 字段（信任状态在 /v1/world 的 city_trust）。
+fn format_cities(cities: &serde_json::Value) -> String {
+    let arr = cities.as_array();
+    let count = arr.map(|a| a.len()).unwrap_or(0);
+    if count == 0 {
+        return "世界暂无城市".to_string();
+    }
+    let mut lines = vec![format!("🏙 城市列表（共 {count} 座）")];
+    if let Some(arr) = arr {
+        for city in arr {
+            let id = city["profile"]["city_id"].as_str().unwrap_or("?");
+            let title = city["profile"]["title"].as_str().unwrap_or(id);
+            let desc = city["profile"]["description"].as_str().unwrap_or("");
+            let desc_str = if desc.is_empty() {
+                String::new()
+            } else {
+                format!(" — {desc}")
+            };
+            lines.push(format!("• {title}（{id}）{desc_str}"));
+        }
+    }
+    lines.join("\n")
+}
+
+fn run_cities(command: WorldQueryCommand) -> Result<String, String> {
+    let url = format!("{}/v1/cities", command.gateway.trim_end_matches('/'));
+    let payload = run_query::<serde_json::Value>(&url)?;
+    if command.json {
+        serde_json::to_string(&payload)
+            .map_err(|error| format!("serialize cities response failed: {error}"))
+    } else {
+        Ok(format_cities(&payload))
     }
 }
 
@@ -1616,6 +1813,9 @@ fn run_command(command: Command) -> Result<String, String> {
         Command::InviteRevoke(command) => run_invite_revoke(command),
         Command::AdminResidents(command) => run_admin_residents(command),
         Command::AdminRooms(command) => run_admin_rooms(command),
+        Command::World(command) => run_world(command),
+        Command::Square(command) => run_square(command),
+        Command::Cities(command) => run_cities(command),
         Command::Help(topic) => Ok(format_help(topic.as_deref())),
     }
 }
@@ -2548,5 +2748,149 @@ mod tests {
         assert!(rendered.contains("send"));
         let rendered2 = format_gateway_status_error("edit", 400, Some("bad request"));
         assert!(rendered2.contains("edit"));
+    }
+
+    #[test]
+    fn parse_world_query_command_defaults() {
+        let cmd = parse_world_query_command(Vec::new()).unwrap();
+        assert_eq!(cmd.gateway, "http://127.0.0.1:8787");
+        assert!(!cmd.json);
+    }
+
+    #[test]
+    fn parse_world_query_command_accepts_gateway_and_json() {
+        let cmd = parse_world_query_command(vec![
+            "--gateway".to_string(),
+            "http://example:9999".to_string(),
+            "--json".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(cmd.gateway, "http://example:9999");
+        assert!(cmd.json);
+    }
+
+    #[test]
+    fn parse_world_query_command_rejects_for_flag() {
+        let err = parse_world_query_command(vec!["--for".to_string(), "user:x".to_string()])
+            .expect_err("--for should be rejected");
+        assert!(err.contains("unsupported flag"));
+    }
+
+    #[test]
+    fn parse_args_routes_world_command() {
+        let command = parse_args(["lobster-cli", "world"]).expect("world should parse");
+        assert!(matches!(command, Command::World(_)));
+    }
+
+    #[test]
+    fn parse_args_routes_square_command_with_json() {
+        let command = parse_args(["lobster-cli", "square", "--json"]).expect("square should parse");
+        match command {
+            Command::Square(c) => assert!(c.json),
+            other => panic!("expected Square, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn format_world_summarizes_governance_snapshot() {
+        let world = serde_json::json!({
+            "world": { "title": "极光之城世界", "world_id": "world:aurora" },
+            "cities": [{}, {}, {}],
+            "world_stewards": ["user:steward1", "user:steward2"],
+            "city_trust": [{}],
+            "world_square_notices": [{}, {}],
+            "safety_advisories": [{}],
+            "safety_reports": [{}, {}, {}],
+            "resident_sanctions": []
+        });
+        let rendered = format_world(&world);
+        assert!(rendered.contains("极光之城世界"));
+        assert!(rendered.contains("world:aurora"));
+        assert!(rendered.contains("城市 3 座"));
+        assert!(rendered.contains("广场公告 2 条"));
+        assert!(rendered.contains("安全报告 3 条"));
+        assert!(rendered.contains("世界管理员：user:steward1、user:steward2"));
+    }
+
+    #[test]
+    fn format_world_omits_admin_line_without_stewards() {
+        let world = serde_json::json!({
+            "world": { "title": "空世界", "world_id": "world:empty" }
+        });
+        let rendered = format_world(&world);
+        assert!(rendered.contains("空世界"));
+        assert!(rendered.contains("城市 0 座"));
+        assert!(!rendered.contains("世界管理员"));
+    }
+
+    #[test]
+    fn format_square_renders_notices() {
+        let notices = vec![
+            CliSquareNotice {
+                title: "广场维护通知".into(),
+                body: "今晚 22:00 维护".into(),
+                author_id: "user:admin".into(),
+                posted_at_ms: 1700000000,
+                severity: "info".into(),
+                tags: vec!["维护".into()],
+            },
+            CliSquareNotice {
+                title: "匿名公告".into(),
+                body: String::new(),
+                author_id: String::new(),
+                posted_at_ms: 0,
+                severity: String::new(),
+                tags: Vec::new(),
+            },
+        ];
+        let rendered = format_square(&notices);
+        assert!(rendered.contains("共 2 条"));
+        assert!(rendered.contains("广场维护通知 [info] #维护"));
+        assert!(rendered.contains("发布者 user:admin · 时间戳 1700000000"));
+        assert!(rendered.contains("今晚 22:00 维护"));
+        assert!(rendered.contains("匿名公告"));
+        assert!(rendered.contains("发布者 匿名"));
+    }
+
+    #[test]
+    fn format_square_empty_shows_count_zero() {
+        let rendered = format_square(&[]);
+        assert!(rendered.contains("共 0 条"));
+    }
+
+    #[test]
+    fn format_cities_renders_profiles() {
+        let cities = serde_json::json!([
+            {
+                "profile": {
+                    "city_id": "city:aurora-hub",
+                    "title": "Aurora Hub",
+                    "description": "默认治理城市"
+                }
+            },
+            {
+                "profile": {
+                    "city_id": "city:sunset",
+                    "title": "Sunset Bay",
+                    "description": ""
+                }
+            }
+        ]);
+        let rendered = format_cities(&cities);
+        assert!(rendered.contains("共 2 座"));
+        assert!(rendered.contains("Aurora Hub（city:aurora-hub） — 默认治理城市"));
+        assert!(rendered.contains("Sunset Bay（city:sunset）"));
+    }
+
+    #[test]
+    fn format_cities_empty_shows_placeholder() {
+        let rendered = format_cities(&serde_json::json!([]));
+        assert!(rendered.contains("世界暂无城市"));
+    }
+
+    #[test]
+    fn parse_args_routes_cities_command() {
+        let command = parse_args(["lobster-cli", "cities"]).expect("cities should parse");
+        assert!(matches!(command, Command::Cities(_)));
     }
 }
