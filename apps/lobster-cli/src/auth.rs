@@ -4,6 +4,14 @@
 //! 缓存写入 `~/.lobster/cli-session.json`（手写 HOME/USERPROFILE，不引入 dirs crate；
 //! 原子写 + 0700/0600 权限）。复用 crate::post_json（login 的 request OTP 步骤无需 token）
 //! 与 crate::format_gateway_status_error。
+//!
+//! # 安全模型
+//! - 缓存文件含 session_token（敏感）：Unix 下文件 0600（仅属主可读）+ 目录 0700；Windows 无
+//!   等价保护（已知限制，建议文件系统 ACL / 受限用户帐户隔离）。
+//! - 原子写（`.tmp` → rename）避免 crash 留半截文件。
+//! - 人类可读输出（login 成功消息 / 错误）**绝不包含 token**；仅 `--json` 输出完整缓存
+//!   （含 session_token）供脚本机读——**勿将 `--json` 输出贴入日志 / issue / 聊天**。
+//! - 401 不自动清缓存（保守：避免误删仍有效的缓存 token）；提示重新 login，login 覆盖缓存。
 
 use crate::{format_gateway_status_error, post_json};
 use serde::{Deserialize, Serialize};

@@ -220,6 +220,30 @@ fn cli_set_nickname_without_token_hints_login() {
     assert!(s.contains("login"), "should hint to run login: {s}");
 }
 
+/// admin 命令同样走 token 架构：隔离 HOME（无缓存）+ 排除环境 token →
+/// ban 无 token 应报「请 login」，证明 admin 已从裸 post_json 迁移到 Bearer 鉴权（修复生产 401）。
+#[test]
+fn cli_admin_ban_without_token_hints_login() {
+    let home = tempfile::tempdir().unwrap();
+    let out = cli_binary()
+        .args([
+            "ban",
+            "--target",
+            "user:troublemaker",
+            "--actor",
+            "user:admin",
+            "--gateway",
+            "http://127.0.0.1:8787",
+        ])
+        .env("HOME", home.path())
+        .env_remove("LOBSTER_SESSION_TOKEN")
+        .output()
+        .expect("run");
+    assert!(!out.status.success(), "ban without any token should fail");
+    let s = combined_output(&out);
+    assert!(s.contains("login"), "should hint to run login: {s}");
+}
+
 /// logout 无 token 时跳过服务端 logout，只清本地缓存 → 设计为 Ok（gateway 不需在）。
 #[test]
 fn cli_logout_safe_without_token() {

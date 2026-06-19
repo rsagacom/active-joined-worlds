@@ -339,6 +339,8 @@ struct CliExportResponse {
 struct AdminCommand {
     target: String,
     reason: String,
+    actor: Option<String>,
+    token: Option<String>,
     gateway: String,
     json: bool,
 }
@@ -346,22 +348,26 @@ struct AdminCommand {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct IdentityCommand {
     target: String,
+    actor: Option<String>,
+    token: Option<String>,
     gateway: String,
     json: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct InviteCreateCommand {
-    actor: String,
+    actor: Option<String>,
     max_uses: u32,
+    token: Option<String>,
     gateway: String,
     json: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct InviteRevokeCommand {
-    actor: String,
+    actor: Option<String>,
     code: String,
+    token: Option<String>,
     gateway: String,
     json: bool,
 }
@@ -370,16 +376,19 @@ struct InviteRevokeCommand {
 struct AdminBanRequest {
     resident_id: String,
     reason: String,
+    actor_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct AdminTargetRequest {
     resident_id: String,
+    actor_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct AdminRoomTargetRequest {
     room_id: String,
+    actor_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -959,6 +968,8 @@ fn parse_tail_command(args: Vec<String>) -> Result<TailCommand, String> {
 fn parse_admin_command(args: Vec<String>) -> Result<AdminCommand, String> {
     let mut target = None;
     let mut reason = "从 CLI 封禁".to_string();
+    let mut actor = None;
+    let mut token = None;
     let mut gateway = default_gateway_url();
     let mut json = false;
 
@@ -967,6 +978,8 @@ fn parse_admin_command(args: Vec<String>) -> Result<AdminCommand, String> {
         match arg.as_str() {
             "--target" => target = iter.next(),
             "--reason" => reason = iter.next().unwrap_or_else(|| reason.clone()),
+            "--actor" => actor = iter.next(),
+            "--token" => token = iter.next(),
             "--gateway" => {
                 gateway = iter
                     .next()
@@ -980,6 +993,8 @@ fn parse_admin_command(args: Vec<String>) -> Result<AdminCommand, String> {
     Ok(AdminCommand {
         target: target.ok_or_else(|| "missing required flag --target".to_string())?,
         reason,
+        actor,
+        token,
         gateway,
         json,
     })
@@ -987,6 +1002,8 @@ fn parse_admin_command(args: Vec<String>) -> Result<AdminCommand, String> {
 
 fn parse_identity_command(args: Vec<String>) -> Result<IdentityCommand, String> {
     let mut target = None;
+    let mut actor = None;
+    let mut token = None;
     let mut gateway = default_gateway_url();
     let mut json = false;
 
@@ -994,6 +1011,8 @@ fn parse_identity_command(args: Vec<String>) -> Result<IdentityCommand, String> 
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--target" => target = iter.next(),
+            "--actor" => actor = iter.next(),
+            "--token" => token = iter.next(),
             "--gateway" => {
                 gateway = iter
                     .next()
@@ -1006,6 +1025,8 @@ fn parse_identity_command(args: Vec<String>) -> Result<IdentityCommand, String> 
 
     Ok(IdentityCommand {
         target: target.ok_or_else(|| "missing required flag --target".to_string())?,
+        actor,
+        token,
         gateway,
         json,
     })
@@ -1014,6 +1035,7 @@ fn parse_identity_command(args: Vec<String>) -> Result<IdentityCommand, String> 
 fn parse_invite_create_command(args: Vec<String>) -> Result<InviteCreateCommand, String> {
     let mut actor = None;
     let mut max_uses = 10u32;
+    let mut token = None;
     let mut gateway = default_gateway_url();
     let mut json = false;
 
@@ -1028,6 +1050,7 @@ fn parse_invite_create_command(args: Vec<String>) -> Result<InviteCreateCommand,
                         .map_err(|_| "invalid --max-uses value".to_string())?;
                 }
             }
+            "--token" => token = iter.next(),
             "--gateway" => {
                 gateway = iter
                     .next()
@@ -1039,8 +1062,9 @@ fn parse_invite_create_command(args: Vec<String>) -> Result<InviteCreateCommand,
     }
 
     Ok(InviteCreateCommand {
-        actor: actor.ok_or_else(|| "missing required flag --actor".to_string())?,
+        actor,
         max_uses,
+        token,
         gateway,
         json,
     })
@@ -1049,6 +1073,7 @@ fn parse_invite_create_command(args: Vec<String>) -> Result<InviteCreateCommand,
 fn parse_invite_revoke_command(args: Vec<String>) -> Result<InviteRevokeCommand, String> {
     let mut actor = None;
     let mut code = None;
+    let mut token = None;
     let mut gateway = default_gateway_url();
     let mut json = false;
 
@@ -1057,6 +1082,7 @@ fn parse_invite_revoke_command(args: Vec<String>) -> Result<InviteRevokeCommand,
         match arg.as_str() {
             "--actor" => actor = iter.next(),
             "--code" => code = iter.next(),
+            "--token" => token = iter.next(),
             "--gateway" => {
                 gateway = iter
                     .next()
@@ -1068,8 +1094,9 @@ fn parse_invite_revoke_command(args: Vec<String>) -> Result<InviteRevokeCommand,
     }
 
     Ok(InviteRevokeCommand {
-        actor: actor.ok_or_else(|| "missing required flag --actor".to_string())?,
+        actor,
         code: code.ok_or_else(|| "missing required flag --code".to_string())?,
+        token,
         gateway,
         json,
     })
@@ -1460,11 +1487,11 @@ fn format_help_overview() -> String {
         "  directory        世界黄页  (每城居民数 / 公共房 / 信任 / 镜像)",
         "  snapshot         世界治理快照  (可移植性 / 隐私治理 / checksum)",
         "",
-        "管理（需 admin 身份）:",
-        "  ban / unban      封禁 / 解封居民  (--target <resident>)",
-        "  freeze / unfreeze 冻结 / 解冻房间  (--target <room>)",
-        "  invite-create    生成邀请码  (--actor <admin> [--max-uses N])",
-        "  invite-revoke    撤销邀请码  (--actor <admin> --code <code>)",
+        "管理（需 admin 身份，login 后自动复用会话身份）:",
+        "  ban / unban      封禁 / 解封居民  (--target <resident> [--actor <admin>])",
+        "  freeze / unfreeze 冻结 / 解冻房间  (--target <room> [--actor <admin>])",
+        "  invite-create    生成邀请码  ([--actor <admin>] [--max-uses N])",
+        "  invite-revoke    撤销邀请码  (--code <code> [--actor <admin>])",
         "  residents        居民目录（admin 视角）",
         "  rooms-admin      房间目录（admin 视角）",
         "",
@@ -1996,16 +2023,35 @@ fn format_admin_rooms(payload: &[AdminRoomEntry]) -> String {
     lines.join("\n")
 }
 
+/// 解析 admin 操作的 actor 身份：显式 `--actor` > 登录缓存 resident_id > 报错。
+/// login 后所有 admin 命令自动复用会话身份，无需每次重传。
+fn resolve_admin_actor(explicit: Option<&str>) -> Result<String, String> {
+    if let Some(raw) = explicit {
+        return parse_actor_identity(raw);
+    }
+    match auth::read_cache().map_err(|e| format!("failed to read login cache: {e}"))? {
+        Some(cache) => Ok(cache.resident_id),
+        None => Err(
+            "missing admin identity: pass --actor <admin>, or run `lobster-cli login` to reuse your session"
+                .to_string(),
+        ),
+    }
+}
+
 fn run_admin_ban(command: AdminCommand) -> Result<String, String> {
+    let actor_id = resolve_admin_actor(command.actor.as_deref())?;
+    let token = auth::resolve_token(command.token.as_deref())?;
     let request = AdminBanRequest {
         resident_id: command.target,
         reason: command.reason,
+        actor_id,
     };
     let url = format!(
         "{}/v1/admin/residents/ban",
         command.gateway.trim_end_matches('/')
     );
-    let payload = post_json::<_, serde_json::Value>(&url, &request, "ban")?;
+    let payload =
+        auth::post_json_authenticated::<_, serde_json::Value>(&url, &request, &token, "ban")?;
     if command.json {
         serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
     } else {
@@ -2014,14 +2060,18 @@ fn run_admin_ban(command: AdminCommand) -> Result<String, String> {
 }
 
 fn run_admin_unban(command: IdentityCommand) -> Result<String, String> {
+    let actor_id = resolve_admin_actor(command.actor.as_deref())?;
+    let token = auth::resolve_token(command.token.as_deref())?;
     let request = AdminTargetRequest {
         resident_id: command.target,
+        actor_id,
     };
     let url = format!(
         "{}/v1/admin/residents/unban",
         command.gateway.trim_end_matches('/')
     );
-    let payload = post_json::<_, serde_json::Value>(&url, &request, "unban")?;
+    let payload =
+        auth::post_json_authenticated::<_, serde_json::Value>(&url, &request, &token, "unban")?;
     if command.json {
         serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
     } else {
@@ -2034,14 +2084,18 @@ fn run_admin_unban(command: IdentityCommand) -> Result<String, String> {
 }
 
 fn run_admin_freeze(command: IdentityCommand) -> Result<String, String> {
+    let actor_id = resolve_admin_actor(command.actor.as_deref())?;
+    let token = auth::resolve_token(command.token.as_deref())?;
     let request = AdminRoomTargetRequest {
         room_id: command.target,
+        actor_id,
     };
     let url = format!(
         "{}/v1/admin/rooms/freeze",
         command.gateway.trim_end_matches('/')
     );
-    let _payload = post_json::<_, serde_json::Value>(&url, &request, "freeze")?;
+    let _payload =
+        auth::post_json_authenticated::<_, serde_json::Value>(&url, &request, &token, "freeze")?;
     if command.json {
         serde_json::to_string(&serde_json::json!({"ok": true, "room_id": request.room_id}))
             .map_err(|e| format!("serialize response: {e}"))
@@ -2051,14 +2105,18 @@ fn run_admin_freeze(command: IdentityCommand) -> Result<String, String> {
 }
 
 fn run_admin_unfreeze(command: IdentityCommand) -> Result<String, String> {
+    let actor_id = resolve_admin_actor(command.actor.as_deref())?;
+    let token = auth::resolve_token(command.token.as_deref())?;
     let request = AdminRoomTargetRequest {
         room_id: command.target,
+        actor_id,
     };
     let url = format!(
         "{}/v1/admin/rooms/unfreeze",
         command.gateway.trim_end_matches('/')
     );
-    let _payload = post_json::<_, serde_json::Value>(&url, &request, "unfreeze")?;
+    let _payload =
+        auth::post_json_authenticated::<_, serde_json::Value>(&url, &request, &token, "unfreeze")?;
     if command.json {
         serde_json::to_string(&serde_json::json!({"ok": true, "room_id": request.room_id}))
             .map_err(|e| format!("serialize response: {e}"))
@@ -2068,12 +2126,19 @@ fn run_admin_unfreeze(command: IdentityCommand) -> Result<String, String> {
 }
 
 fn run_invite_create(command: InviteCreateCommand) -> Result<String, String> {
+    let actor_id = resolve_admin_actor(command.actor.as_deref())?;
+    let token = auth::resolve_token(command.token.as_deref())?;
     let request = AdminCreateInviteRequest {
-        actor_id: command.actor,
+        actor_id,
         max_uses: command.max_uses,
     };
     let url = format!("{}/v1/admin/invites", command.gateway.trim_end_matches('/'));
-    let payload = post_json::<_, AdminCreateInviteResponse>(&url, &request, "invite create")?;
+    let payload = auth::post_json_authenticated::<_, AdminCreateInviteResponse>(
+        &url,
+        &request,
+        &token,
+        "invite create",
+    )?;
     if command.json {
         serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
     } else {
@@ -2085,15 +2150,22 @@ fn run_invite_create(command: InviteCreateCommand) -> Result<String, String> {
 }
 
 fn run_invite_revoke(command: InviteRevokeCommand) -> Result<String, String> {
+    let actor_id = resolve_admin_actor(command.actor.as_deref())?;
+    let token = auth::resolve_token(command.token.as_deref())?;
     let request = AdminRevokeInviteRequest {
         code: command.code,
-        actor_id: command.actor,
+        actor_id,
     };
     let url = format!(
         "{}/v1/admin/invites/revoke",
         command.gateway.trim_end_matches('/')
     );
-    let _payload = post_json::<_, serde_json::Value>(&url, &request, "invite revoke")?;
+    let _payload = auth::post_json_authenticated::<_, serde_json::Value>(
+        &url,
+        &request,
+        &token,
+        "invite revoke",
+    )?;
     if command.json {
         serde_json::to_string(&serde_json::json!({"ok": true}))
             .map_err(|e| format!("serialize: {e}"))
@@ -2878,6 +2950,10 @@ mod tests {
             "user:troublemaker",
             "--reason",
             "spam",
+            "--actor",
+            "user:admin",
+            "--token",
+            "st_test_token",
         ])
         .expect("ban command should parse");
 
@@ -2885,6 +2961,8 @@ mod tests {
             Command::Ban(ban) => {
                 assert_eq!(ban.target, "user:troublemaker");
                 assert_eq!(ban.reason, "spam");
+                assert_eq!(ban.actor.as_deref(), Some("user:admin"));
+                assert_eq!(ban.token.as_deref(), Some("st_test_token"));
             }
             other => panic!("expected ban command, got {other:?}"),
         }
@@ -2951,7 +3029,7 @@ mod tests {
 
         match command {
             Command::InviteCreate(invite) => {
-                assert_eq!(invite.actor, "user:admin");
+                assert_eq!(invite.actor.as_deref(), Some("user:admin"));
                 assert_eq!(invite.max_uses, 5);
             }
             other => panic!("expected invite-create command, got {other:?}"),
@@ -2983,7 +3061,7 @@ mod tests {
 
         match command {
             Command::InviteRevoke(revoke) => {
-                assert_eq!(revoke.actor, "user:admin");
+                assert_eq!(revoke.actor.as_deref(), Some("user:admin"));
                 assert_eq!(revoke.code, "INVITE-ABC");
             }
             other => panic!("expected invite-revoke command, got {other:?}"),
