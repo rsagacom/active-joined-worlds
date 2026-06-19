@@ -27,6 +27,7 @@ enum Command {
     Cities(WorldQueryCommand),
     Safety(WorldQueryCommand),
     Directory(WorldQueryCommand),
+    Snapshot(WorldQueryCommand),
     Help(Option<String>),
 }
 
@@ -439,6 +440,7 @@ where
         "cities" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Cities),
         "safety" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Safety),
         "directory" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Directory),
+        "snapshot" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Snapshot),
         "help" => Ok(Command::Help(iter.next())),
         other => Err(format!("unsupported command: {other}")),
     }
@@ -1303,6 +1305,7 @@ fn format_help_overview() -> String {
         "  cities           城市列表  (城市名 / 简介)",
         "  safety           世界安全快照  (信任 / 公告 / 报告 / 制裁 / 黑名单)",
         "  directory        世界黄页  (每城居民数 / 公共房 / 信任 / 镜像)",
+        "  snapshot         世界治理快照  (可移植性 / 隐私治理 / checksum)",
         "",
         "管理（需 admin 身份）:",
         "  ban / unban      封禁 / 解封居民  (--target <resident>)",
@@ -1345,6 +1348,7 @@ fn format_help_for_command(command: &str) -> String {
         "cities",
         "safety",
         "directory",
+        "snapshot",
     ];
     if known.contains(&command) {
         format!(
@@ -1621,6 +1625,77 @@ fn run_directory(command: WorldQueryCommand) -> Result<String, String> {
             .map_err(|error| format!("serialize directory response failed: {error}"))
     } else {
         Ok(format_directory(&payload))
+    }
+}
+
+// 调 Gateway GET /v1/world-snapshot（http_router.rs:189，已存在端点，无需改 Gateway）。
+// 世界治理快照：聚焦独有维度——可移植性隐私治理（城市能否读私聊明文）+ checksum 完整性。
+// governance 内 world/cities 等明细已由 world/cities/safety/directory 命令覆盖，此处只取计数概览。
+fn snapshot_bool_mark(value: bool) -> &'static str {
+    if value { "✓" } else { "✗" }
+}
+
+fn snapshot_array_count(value: &serde_json::Value, key: &str) -> usize {
+    value[key].as_array().map(|a| a.len()).unwrap_or(0)
+}
+
+fn format_snapshot(snapshot: &serde_json::Value) -> String {
+    let governance = &snapshot["payload"]["governance"];
+    let title = governance["world"]["title"].as_str().unwrap_or("未知世界");
+    let world_id = governance["world"]["world_id"].as_str().unwrap_or("?");
+    let meta = &snapshot["meta"];
+    let snapshot_id = meta["snapshot_id"].as_str().unwrap_or("?");
+    let generated_at = meta["generated_at_ms"].as_i64().unwrap_or(0);
+    let checksum = meta["checksum_sha256"].as_str().unwrap_or("?");
+    let port = &governance["portability"];
+    let may_leave = port["may_leave_city"].as_bool().unwrap_or(false);
+    let may_join = port["may_join_other_cities"].as_bool().unwrap_or(false);
+    let may_keep = port["may_keep_private_relationships"]
+        .as_bool()
+        .unwrap_or(false);
+    let city_reads = port["city_can_read_private_plaintext"]
+        .as_bool()
+        .unwrap_or(false);
+    let privacy_note = if city_reads {
+        "⚠ 城市可读私聊明文"
+    } else {
+        "城市不可读私聊明文 ✓"
+    };
+    let short_checksum: String = checksum.chars().take(12).collect();
+    [
+        format!("📸 世界治理快照 {snapshot_id}（生成于 {generated_at} ms）"),
+        format!("🌍 {title}（{world_id}）"),
+        format!(
+            "🔐 可移植性：可离城 {} · 可加入他城 {} · 可保留私关系 {} · {privacy_note}",
+            snapshot_bool_mark(may_leave),
+            snapshot_bool_mark(may_join),
+            snapshot_bool_mark(may_keep),
+        ),
+        format!(
+            "📊 城市 {} · 成员关系 {} · 公共房 {} · 广场公告 {} · 安全公告 {} · 制裁 {}",
+            snapshot_array_count(governance, "cities"),
+            snapshot_array_count(governance, "memberships"),
+            snapshot_array_count(governance, "public_rooms"),
+            snapshot_array_count(governance, "world_square_notices"),
+            snapshot_array_count(governance, "safety_advisories"),
+            snapshot_array_count(governance, "resident_sanctions"),
+        ),
+        format!("🔑 校验 {short_checksum}"),
+    ]
+    .join("\n")
+}
+
+fn run_snapshot(command: WorldQueryCommand) -> Result<String, String> {
+    let url = format!(
+        "{}/v1/world-snapshot",
+        command.gateway.trim_end_matches('/')
+    );
+    let payload = run_query::<serde_json::Value>(&url)?;
+    if command.json {
+        serde_json::to_string(&payload)
+            .map_err(|error| format!("serialize world-snapshot response failed: {error}"))
+    } else {
+        Ok(format_snapshot(&payload))
     }
 }
 
@@ -1920,6 +1995,7 @@ fn run_command(command: Command) -> Result<String, String> {
         Command::Cities(command) => run_cities(command),
         Command::Safety(command) => run_safety(command),
         Command::Directory(command) => run_directory(command),
+        Command::Snapshot(command) => run_snapshot(command),
         Command::Help(topic) => Ok(format_help(topic.as_deref())),
     }
 }
@@ -3080,5 +3156,51 @@ mod tests {
     fn parse_args_routes_directory_command() {
         let command = parse_args(["lobster-cli", "directory"]).expect("directory should parse");
         assert!(matches!(command, Command::Directory(_)));
+    }
+
+    #[test]
+    fn format_snapshot_renders_portability_and_checksum() {
+        let snapshot = serde_json::json!({
+            "meta": {
+                "snapshot_id": "snapshot-abc",
+                "generated_at_ms": 1_700_000_000_000_i64,
+                "world_id": "world:lobster",
+                "world_title": "Lobster World",
+                "checksum_sha256": "825fca95e54b35285b8f393f"
+            },
+            "payload": {
+                "governance": {
+                    "world": { "title": "Lobster World", "world_id": "world:lobster" },
+                    "portability": {
+                        "may_leave_city": true,
+                        "may_join_other_cities": false,
+                        "may_keep_private_relationships": true,
+                        "city_can_read_private_plaintext": false
+                    },
+                    "cities": [{ "city_id": "city:a" }, { "city_id": "city:b" }],
+                    "memberships": [{ "m": 1 }],
+                    "public_rooms": [],
+                    "world_square_notices": [{ "n": 1 }, { "n": 2 }, { "n": 3 }],
+                    "safety_advisories": [],
+                    "resident_sanctions": []
+                }
+            }
+        });
+        let rendered = format_snapshot(&snapshot);
+        assert!(rendered.contains("世界治理快照 snapshot-abc"));
+        assert!(rendered.contains("🌍 Lobster World（world:lobster）"));
+        assert!(
+            rendered.contains("可离城 ✓ · 可加入他城 ✗ · 可保留私关系 ✓ · 城市不可读私聊明文 ✓")
+        );
+        assert!(
+            rendered.contains("城市 2 · 成员关系 1 · 公共房 0 · 广场公告 3 · 安全公告 0 · 制裁 0")
+        );
+        assert!(rendered.contains("🔑 校验 825fca95e54b"));
+    }
+
+    #[test]
+    fn parse_args_routes_snapshot_command() {
+        let command = parse_args(["lobster-cli", "snapshot"]).expect("snapshot should parse");
+        assert!(matches!(command, Command::Snapshot(_)));
     }
 }
