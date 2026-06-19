@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, thread, time::Duration};
 
+mod auth;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Command {
     Send(SendCommand),
@@ -28,6 +30,9 @@ enum Command {
     Safety(WorldQueryCommand),
     Directory(WorldQueryCommand),
     Snapshot(WorldQueryCommand),
+    Login(LoginCommand),
+    SetNickname(SetNicknameCommand),
+    Logout(LogoutCommand),
     Help(Option<String>),
 }
 
@@ -79,6 +84,32 @@ struct QueryCommand {
 /// 世界治理 / 公共广场查询：无 target 的全局只读命令（仅需 --gateway / --json）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct WorldQueryCommand {
+    gateway: String,
+    json: bool,
+}
+
+/// 邮箱 OTP 登录：拿 session_token 并缓存（详见 auth::login）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LoginCommand {
+    email: String,
+    gateway: String,
+    json: bool,
+}
+
+/// 设置当前居民昵称：resident 由 token session 决定，不接受 --for。
+/// nickname=None 表示清除（--clear 或无值）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SetNicknameCommand {
+    nickname: Option<String>,
+    token: Option<String>,
+    gateway: String,
+    json: bool,
+}
+
+/// 登出：清除本地缓存（+ best-effort 服务端 logout）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct LogoutCommand {
+    token: Option<String>,
     gateway: String,
     json: bool,
 }
@@ -441,6 +472,11 @@ where
         "safety" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Safety),
         "directory" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Directory),
         "snapshot" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Snapshot),
+        "login" => parse_login_command(iter.collect::<Vec<_>>()).map(Command::Login),
+        "set-nickname" => {
+            parse_set_nickname_command(iter.collect::<Vec<_>>()).map(Command::SetNickname)
+        }
+        "logout" => parse_logout_command(iter.collect::<Vec<_>>()).map(Command::Logout),
         "help" => Ok(Command::Help(iter.next())),
         other => Err(format!("unsupported command: {other}")),
     }
@@ -666,6 +702,118 @@ fn parse_world_query_command(args: Vec<String>) -> Result<WorldQueryCommand, Str
     }
 
     Ok(WorldQueryCommand { gateway, json })
+}
+
+/// 解析 login：--email 必填，--gateway / --json 可选。
+fn parse_login_command(args: Vec<String>) -> Result<LoginCommand, String> {
+    let mut email = None;
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--email" => {
+                email = Some(
+                    iter.next()
+                        .ok_or_else(|| "missing value for --email".to_string())?,
+                )
+            }
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?
+            }
+            "--json" => json = true,
+            other => return Err(format!("unsupported flag: {other}")),
+        }
+    }
+    let email = email.ok_or_else(|| "missing required flag: --email <addr>".to_string())?;
+    Ok(LoginCommand {
+        email,
+        gateway,
+        json,
+    })
+}
+
+/// 解析 set-nickname：--name 或位置值设昵称；--clear 清除；--token 可选；拒 --for。
+fn parse_set_nickname_command(args: Vec<String>) -> Result<SetNicknameCommand, String> {
+    let mut nickname: Option<String> = None;
+    let mut clear = false;
+    let mut token = None;
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+    let mut positional: Vec<String> = Vec::new();
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--name" => {
+                nickname = Some(
+                    iter.next()
+                        .ok_or_else(|| "missing value for --name".to_string())?,
+                )
+            }
+            "--clear" => clear = true,
+            "--token" => {
+                token = Some(
+                    iter.next()
+                        .ok_or_else(|| "missing value for --token".to_string())?,
+                )
+            }
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?
+            }
+            "--json" => json = true,
+            "--for" => return Err(
+                "set-nickname: nickname is set for the logged-in resident; --for is not accepted"
+                    .into(),
+            ),
+            other if other.starts_with("--") => return Err(format!("unsupported flag: {other}")),
+            other => positional.push(other.to_string()),
+        }
+    }
+    if clear {
+        nickname = None;
+    } else if nickname.is_none() && !positional.is_empty() {
+        nickname = Some(positional.join(" "));
+    }
+    Ok(SetNicknameCommand {
+        nickname,
+        token,
+        gateway,
+        json,
+    })
+}
+
+/// 解析 logout：--token 可选（决定是否同时登出服务端），--gateway / --json 可选。
+fn parse_logout_command(args: Vec<String>) -> Result<LogoutCommand, String> {
+    let mut token = None;
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--token" => {
+                token = Some(
+                    iter.next()
+                        .ok_or_else(|| "missing value for --token".to_string())?,
+                )
+            }
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?
+            }
+            "--json" => json = true,
+            other => return Err(format!("unsupported flag: {other}")),
+        }
+    }
+    Ok(LogoutCommand {
+        token,
+        gateway,
+        json,
+    })
 }
 
 fn parse_search_command(args: Vec<String>) -> Result<SearchCommand, String> {
@@ -1064,7 +1212,7 @@ fn query_escape(value: &str) -> String {
         .collect()
 }
 
-fn extract_gateway_error_message(body: &str) -> Option<String> {
+pub(crate) fn extract_gateway_error_message(body: &str) -> Option<String> {
     serde_json::from_str::<CliErrorResponse>(body)
         .ok()
         .and_then(|payload| payload.message.or(payload.error))
@@ -1072,7 +1220,7 @@ fn extract_gateway_error_message(body: &str) -> Option<String> {
         .filter(|message| !message.is_empty())
 }
 
-fn format_gateway_status_error(action: &str, status: u16, body: Option<&str>) -> String {
+pub(crate) fn format_gateway_status_error(action: &str, status: u16, body: Option<&str>) -> String {
     if let Some(message) = body.and_then(extract_gateway_error_message) {
         format!("{action} failed: {message}")
     } else {
@@ -1080,7 +1228,7 @@ fn format_gateway_status_error(action: &str, status: u16, body: Option<&str>) ->
     }
 }
 
-fn post_json<T, R>(url: &str, request: &T, action: &str) -> Result<R, String>
+pub(crate) fn post_json<T, R>(url: &str, request: &T, action: &str) -> Result<R, String>
 where
     T: Serialize,
     R: serde::de::DeserializeOwned,
@@ -1299,6 +1447,11 @@ fn format_help_overview() -> String {
         "  read             标记会话已读  (--for <resident> --conversation-id <id>)",
         "  presence         上报在线  (--for <resident>)",
         "",
+        "身份与认证:",
+        "  login            邮箱 OTP 登录  (--email <addr>) → 缓存 session",
+        "  set-nickname     设置当前居民昵称  (--name <昵称> | 位置昵称 | --clear)",
+        "  logout           清除本地 session 缓存  (--token 同时登出服务端)",
+        "",
         "世界:",
         "  world            世界治理总览  (城市 / 信任 / 公告 / 安全 / 管理员)",
         "  square           公共广场公告  (逐条标题 / 严重度 / 发布者)",
@@ -1349,6 +1502,9 @@ fn format_help_for_command(command: &str) -> String {
         "safety",
         "directory",
         "snapshot",
+        "login",
+        "set-nickname",
+        "logout",
     ];
     if known.contains(&command) {
         format!(
@@ -1996,8 +2152,28 @@ fn run_command(command: Command) -> Result<String, String> {
         Command::Safety(command) => run_safety(command),
         Command::Directory(command) => run_directory(command),
         Command::Snapshot(command) => run_snapshot(command),
+        Command::Login(command) => run_login(command),
+        Command::SetNickname(command) => run_set_nickname(command),
+        Command::Logout(command) => run_logout(command),
         Command::Help(topic) => Ok(format_help(topic.as_deref())),
     }
+}
+
+fn run_login(command: LoginCommand) -> Result<String, String> {
+    auth::login(&command.email, &command.gateway, command.json)
+}
+
+fn run_set_nickname(command: SetNicknameCommand) -> Result<String, String> {
+    auth::set_nickname(
+        command.nickname.as_deref(),
+        command.token.as_deref(),
+        &command.gateway,
+        command.json,
+    )
+}
+
+fn run_logout(command: LogoutCommand) -> Result<String, String> {
+    auth::logout(command.token.as_deref(), &command.gateway, command.json)
 }
 
 fn main() {
@@ -3202,5 +3378,67 @@ mod tests {
     fn parse_args_routes_snapshot_command() {
         let command = parse_args(["lobster-cli", "snapshot"]).expect("snapshot should parse");
         assert!(matches!(command, Command::Snapshot(_)));
+    }
+
+    #[test]
+    fn parse_login_requires_email() {
+        let err = parse_login_command(Vec::new()).unwrap_err();
+        assert!(err.contains("--email"));
+    }
+
+    #[test]
+    fn parse_login_accepts_email_and_gateway() {
+        let cmd = parse_login_command(vec![
+            "--email".into(),
+            "a@b.c".into(),
+            "--gateway".into(),
+            "http://g:9".into(),
+        ])
+        .expect("login should parse");
+        assert_eq!(cmd.email, "a@b.c");
+        assert_eq!(cmd.gateway, "http://g:9");
+    }
+
+    #[test]
+    fn parse_set_nickname_positional_value() {
+        let cmd = parse_set_nickname_command(vec!["阿虾".into()]).expect("set-nickname parses");
+        assert_eq!(cmd.nickname.as_deref(), Some("阿虾"));
+    }
+
+    #[test]
+    fn parse_set_nickname_name_flag() {
+        let cmd = parse_set_nickname_command(vec!["--name".into(), "阿虾".into()]).expect("parses");
+        assert_eq!(cmd.nickname.as_deref(), Some("阿虾"));
+    }
+
+    #[test]
+    fn parse_set_nickname_clear_flag_overrides_name() {
+        let cmd = parse_set_nickname_command(vec!["--name".into(), "x".into(), "--clear".into()])
+            .expect("parses");
+        assert_eq!(cmd.nickname, None);
+    }
+
+    #[test]
+    fn parse_set_nickname_rejects_for() {
+        let err = parse_set_nickname_command(vec!["--for".into(), "u".into()]).unwrap_err();
+        assert!(err.contains("--for"));
+    }
+
+    #[test]
+    fn parse_set_nickname_optional_token() {
+        let cmd = parse_set_nickname_command(vec![
+            "--token".into(),
+            "abc".into(),
+            "--name".into(),
+            "n".into(),
+        ])
+        .expect("parses");
+        assert_eq!(cmd.token.as_deref(), Some("abc"));
+    }
+
+    #[test]
+    fn parse_logout_optional_token() {
+        let cmd = parse_logout_command(vec!["--token".into(), "abc".into()]).expect("parses");
+        assert_eq!(cmd.token.as_deref(), Some("abc"));
     }
 }
