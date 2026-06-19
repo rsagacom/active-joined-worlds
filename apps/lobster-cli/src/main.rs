@@ -26,6 +26,7 @@ enum Command {
     Square(WorldQueryCommand),
     Cities(WorldQueryCommand),
     Safety(WorldQueryCommand),
+    Directory(WorldQueryCommand),
     Help(Option<String>),
 }
 
@@ -437,6 +438,7 @@ where
         "square" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Square),
         "cities" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Cities),
         "safety" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Safety),
+        "directory" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::Directory),
         "help" => Ok(Command::Help(iter.next())),
         other => Err(format!("unsupported command: {other}")),
     }
@@ -1300,6 +1302,7 @@ fn format_help_overview() -> String {
         "  square           公共广场公告  (逐条标题 / 严重度 / 发布者)",
         "  cities           城市列表  (城市名 / 简介)",
         "  safety           世界安全快照  (信任 / 公告 / 报告 / 制裁 / 黑名单)",
+        "  directory        世界黄页  (每城居民数 / 公共房 / 信任 / 镜像)",
         "",
         "管理（需 admin 身份）:",
         "  ban / unban      封禁 / 解封居民  (--target <resident>)",
@@ -1341,6 +1344,7 @@ fn format_help_for_command(command: &str) -> String {
         "square",
         "cities",
         "safety",
+        "directory",
     ];
     if known.contains(&command) {
         format!(
@@ -1569,6 +1573,54 @@ fn run_safety(command: WorldQueryCommand) -> Result<String, String> {
             .map_err(|error| format!("serialize safety response failed: {error}"))
     } else {
         Ok(format_safety(&payload))
+    }
+}
+
+// 调 Gateway GET /v1/world-directory（http_read_routes.rs，已存在端点，无需改 Gateway）。
+// 世界黄页：每座城市的居民数 / 公共房数 / 信任状态 / 镜像启用（world 与 cities 命令均无这些详情）。
+fn format_directory(directory: &serde_json::Value) -> String {
+    let title = directory["title"].as_str().unwrap_or("未知世界");
+    let world_id = directory["world_id"].as_str().unwrap_or("?");
+    let cities = directory["cities"].as_array();
+    let city_count = cities.map(|a| a.len()).unwrap_or(0);
+    let mirror_count = directory["mirror_count"].as_u64().unwrap_or(0);
+    let notice_count = directory["notice_count"].as_u64().unwrap_or(0);
+    let advisory_count = directory["advisory_count"].as_u64().unwrap_or(0);
+
+    let mut lines = vec![format!(
+        "📒 世界黄页：{title}（{world_id}）· 城市 {city_count} · 镜像 {mirror_count} · 公告 {notice_count} · 安全公告 {advisory_count}"
+    )];
+    if let Some(arr) = cities {
+        for city in arr {
+            let id = city["city_id"].as_str().unwrap_or("?");
+            let name = city["title"].as_str().unwrap_or(id);
+            let trust = city["trust_state"].as_str().unwrap_or("?");
+            let residents = city["resident_count"].as_u64().unwrap_or(0);
+            let rooms = city["public_room_count"].as_u64().unwrap_or(0);
+            let mirror = if city["mirror_enabled"].as_bool().unwrap_or(false) {
+                " · 镜像"
+            } else {
+                ""
+            };
+            lines.push(format!(
+                "• {name}（{id}）· 信任 {trust} · {residents}人 · {rooms}公共房{mirror}"
+            ));
+        }
+    }
+    lines.join("\n")
+}
+
+fn run_directory(command: WorldQueryCommand) -> Result<String, String> {
+    let url = format!(
+        "{}/v1/world-directory",
+        command.gateway.trim_end_matches('/')
+    );
+    let payload = run_query::<serde_json::Value>(&url)?;
+    if command.json {
+        serde_json::to_string(&payload)
+            .map_err(|error| format!("serialize directory response failed: {error}"))
+    } else {
+        Ok(format_directory(&payload))
     }
 }
 
@@ -1867,6 +1919,7 @@ fn run_command(command: Command) -> Result<String, String> {
         Command::Square(command) => run_square(command),
         Command::Cities(command) => run_cities(command),
         Command::Safety(command) => run_safety(command),
+        Command::Directory(command) => run_directory(command),
         Command::Help(topic) => Ok(format_help(topic.as_deref())),
     }
 }
@@ -2983,5 +3036,49 @@ mod tests {
     fn parse_args_routes_safety_command() {
         let command = parse_args(["lobster-cli", "safety"]).expect("safety should parse");
         assert!(matches!(command, Command::Safety(_)));
+    }
+
+    #[test]
+    fn format_directory_renders_city_details() {
+        let directory = serde_json::json!({
+            "title": "Lobster World",
+            "world_id": "world:lobster",
+            "city_count": 2,
+            "mirror_count": 1,
+            "notice_count": 3,
+            "advisory_count": 0,
+            "cities": [
+                {
+                    "city_id": "city:aurora-hub",
+                    "title": "Aurora Hub",
+                    "trust_state": "Healthy",
+                    "resident_count": 42,
+                    "public_room_count": 5,
+                    "mirror_enabled": true
+                },
+                {
+                    "city_id": "city:sunset",
+                    "title": "Sunset Bay",
+                    "trust_state": "Quarantined",
+                    "resident_count": 0,
+                    "public_room_count": 0,
+                    "mirror_enabled": false
+                }
+            ]
+        });
+        let rendered = format_directory(&directory);
+        assert!(rendered.contains("世界黄页：Lobster World（world:lobster）"));
+        assert!(rendered.contains("城市 2 · 镜像 1 · 公告 3"));
+        assert!(
+            rendered
+                .contains("Aurora Hub（city:aurora-hub）· 信任 Healthy · 42人 · 5公共房 · 镜像")
+        );
+        assert!(rendered.contains("Sunset Bay（city:sunset）· 信任 Quarantined · 0人 · 0公共房"));
+    }
+
+    #[test]
+    fn parse_args_routes_directory_command() {
+        let command = parse_args(["lobster-cli", "directory"]).expect("directory should parse");
+        assert!(matches!(command, Command::Directory(_)));
     }
 }
