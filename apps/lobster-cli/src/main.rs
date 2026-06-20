@@ -26,6 +26,7 @@ enum Command {
     RoomMember(RoomMemberCommand),
     CreateResident(CreateResidentCommand),
     Config(ConfigCommand),
+    AdminNickname(AdminNicknameCommand),
     AdminResidents(QueryCommand),
     AdminRooms(QueryCommand),
     World(WorldQueryCommand),
@@ -419,6 +420,17 @@ struct ConfigCommand {
     json: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AdminNicknameCommand {
+    /// 目标居民（admin 可改任意 resident 的昵称，区别于 set-nickname 改自己）
+    resident_id: String,
+    /// 新昵称；None 表示清除昵称（--clear）
+    nickname: Option<String>,
+    token: Option<String>,
+    gateway: String,
+    json: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct AdminBanRequest {
     resident_id: String,
@@ -480,6 +492,13 @@ struct AdminCreateResidentRequest {
 struct AdminConfigRequest {
     config: std::collections::HashMap<String, String>,
     actor_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct AdminNicknameRequest {
+    resident_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    nickname: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -560,6 +579,9 @@ where
             parse_create_resident_command(iter.collect::<Vec<_>>()).map(Command::CreateResident)
         }
         "config" => parse_config_command(iter.collect::<Vec<_>>()).map(Command::Config),
+        "admin-nickname" => {
+            parse_admin_nickname_command(iter.collect::<Vec<_>>()).map(Command::AdminNickname)
+        }
         "residents" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminResidents),
         "rooms-admin" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminRooms),
         "world" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::World),
@@ -1361,6 +1383,51 @@ fn parse_config_command(args: Vec<String>) -> Result<ConfigCommand, String> {
     })
 }
 
+fn parse_admin_nickname_command(args: Vec<String>) -> Result<AdminNicknameCommand, String> {
+    let mut resident_id = None;
+    let mut nickname = None;
+    let mut clear = false;
+    let mut token = None;
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--resident" => resident_id = iter.next(),
+            "--name" => nickname = iter.next(),
+            "--clear" => clear = true,
+            "--token" => token = iter.next(),
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?
+            }
+            "--json" => json = true,
+            other => return Err(format!("unsupported flag: {other}")),
+        }
+    }
+
+    if nickname.is_some() && clear {
+        return Err("--name and --clear are mutually exclusive".to_string());
+    }
+    // --clear → nickname=None；否则取 --name 值。两者皆无 → 报错引导。
+    let nickname = if clear { None } else { nickname };
+    if nickname.is_none() && !clear {
+        return Err(
+            "admin-nickname: specify --name <昵称> to set or --clear to remove".to_string(),
+        );
+    }
+
+    Ok(AdminNicknameCommand {
+        resident_id: resident_id.ok_or_else(|| "missing required flag --resident".to_string())?,
+        nickname,
+        token,
+        gateway,
+        json,
+    })
+}
+
 fn build_send_request(command: &SendCommand) -> CliSendRequest {
     CliSendRequest {
         from: command.from.clone(),
@@ -1755,6 +1822,7 @@ fn format_help_overview() -> String {
         "  room-member      加入/移除房间成员  (--room <id> --resident <id> --action <add|remove> [--actor <admin>])",
         "  create-resident  注册新居民  (--resident <id> --email <addr>，注册入口，无需 token)",
         "  config           查看/更新配置  (--get 查看 | --set KEY=VALUE 更新 [--actor <admin>])",
+        "  admin-nickname   改任意居民昵称  (--resident <id> --name <昵称> | --clear)",
         "  residents        居民目录（admin 视角）",
         "  rooms-admin      房间目录（admin 视角）",
         "",
@@ -1788,6 +1856,7 @@ fn format_help_for_command(command: &str) -> String {
         "room-member",
         "create-resident",
         "config",
+        "admin-nickname",
         "residents",
         "rooms-admin",
         "world",
@@ -2568,6 +2637,37 @@ fn run_admin_config(command: ConfigCommand) -> Result<String, String> {
     }
 }
 
+fn run_admin_nickname(command: AdminNicknameCommand) -> Result<String, String> {
+    // POST /v1/admin/residents/nickname：require_admin_auth（Bearer token），handler 不校验
+    // actor_id（请求体仅 resident_id + nickname），故只需 token，不调 resolve_admin_actor。
+    let token = auth::resolve_token(command.token.as_deref())?;
+    let request = AdminNicknameRequest {
+        resident_id: command.resident_id.clone(),
+        nickname: command.nickname.clone(),
+    };
+    let url = format!(
+        "{}/v1/admin/residents/nickname",
+        command.gateway.trim_end_matches('/')
+    );
+    let payload = auth::post_json_authenticated::<_, serde_json::Value>(
+        &url,
+        &request,
+        &token,
+        "admin-nickname",
+    )?;
+    if command.json {
+        serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
+    } else {
+        match &command.nickname {
+            Some(name) => Ok(format!(
+                "已设置 {} 的昵称为「{}」",
+                request.resident_id, name
+            )),
+            None => Ok(format!("已清除 {} 的昵称", request.resident_id)),
+        }
+    }
+}
+
 fn run_admin_residents(command: QueryCommand) -> Result<String, String> {
     let url = format!(
         "{}/v1/admin/residents",
@@ -2614,6 +2714,7 @@ fn run_command(command: Command) -> Result<String, String> {
         Command::RoomMember(command) => run_admin_room_member(command),
         Command::CreateResident(command) => run_create_resident(command),
         Command::Config(command) => run_admin_config(command),
+        Command::AdminNickname(command) => run_admin_nickname(command),
         Command::AdminResidents(command) => run_admin_residents(command),
         Command::AdminRooms(command) => run_admin_rooms(command),
         Command::World(command) => run_world(command),
@@ -3667,6 +3768,73 @@ mod tests {
     fn config_command_rejects_no_mode() {
         let result = parse_args(["lobster-cli", "config"]);
         assert!(result.is_err(), "config without --get/--set should fail");
+    }
+
+    #[test]
+    fn admin_nickname_command_parses_name() {
+        let command = parse_args([
+            "lobster-cli",
+            "admin-nickname",
+            "--resident",
+            "user:bob",
+            "--name",
+            "小虾米",
+        ])
+        .expect("admin-nickname --name should parse");
+
+        match command {
+            Command::AdminNickname(n) => {
+                assert_eq!(n.resident_id, "user:bob");
+                assert_eq!(n.nickname.as_deref(), Some("小虾米"));
+            }
+            other => panic!("expected admin-nickname command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn admin_nickname_command_parses_clear() {
+        let command = parse_args([
+            "lobster-cli",
+            "admin-nickname",
+            "--resident",
+            "user:bob",
+            "--clear",
+        ])
+        .expect("admin-nickname --clear should parse");
+
+        match command {
+            Command::AdminNickname(n) => {
+                assert_eq!(n.resident_id, "user:bob");
+                assert!(n.nickname.is_none(), "--clear should set nickname to None");
+            }
+            other => panic!("expected admin-nickname command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn admin_nickname_command_rejects_name_and_clear() {
+        let result = parse_args([
+            "lobster-cli",
+            "admin-nickname",
+            "--resident",
+            "user:bob",
+            "--name",
+            "x",
+            "--clear",
+        ]);
+        assert!(
+            result.is_err(),
+            "--name and --clear together should be rejected"
+        );
+    }
+
+    #[test]
+    fn admin_nickname_command_rejects_missing_required() {
+        let result = parse_args(["lobster-cli", "admin-nickname", "--resident", "user:bob"]);
+        assert!(
+            result.is_err(),
+            "admin-nickname without --name/--clear should fail"
+        );
     }
 
     #[test]

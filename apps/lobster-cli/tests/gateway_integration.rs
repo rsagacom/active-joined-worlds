@@ -331,6 +331,33 @@ fn cli_admin_config_set_without_token_hints_login() {
     assert!(s.contains("login"), "should hint to run login: {s}");
 }
 
+/// admin-nickname 是 admin 写入命令（改他人昵称），同样走 token 架构：无 token 应报「请 login」。
+/// 该命令只需 token（handler 不校验 actor_id），故不传 --actor。
+#[test]
+fn cli_admin_nickname_without_token_hints_login() {
+    let home = tempfile::tempdir().unwrap();
+    let out = cli_binary()
+        .args([
+            "admin-nickname",
+            "--resident",
+            "user:bob",
+            "--name",
+            "被改名",
+            "--gateway",
+            "http://127.0.0.1:8787",
+        ])
+        .env("HOME", home.path())
+        .env_remove("LOBSTER_SESSION_TOKEN")
+        .output()
+        .expect("run");
+    assert!(
+        !out.status.success(),
+        "admin-nickname without any token should fail"
+    );
+    let s = combined_output(&out);
+    assert!(s.contains("login"), "should hint to run login: {s}");
+}
+
 /// logout 无 token 时跳过服务端 logout，只清本地缓存 → 设计为 Ok（gateway 不需在）。
 #[test]
 fn cli_logout_safe_without_token() {

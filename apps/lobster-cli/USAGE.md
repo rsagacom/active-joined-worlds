@@ -129,6 +129,7 @@ admin 命令需要 Bearer token（`--token` 或登录缓存）与 admin 身份�
 | `room-member` | `--room <id> --resident <id> --action <add\|remove> [--actor <admin>]` |
 | `create-resident` | `--resident <id> --email <addr>`（注册入口，无需 token/admin 身份） |
 | `config` | `--get`（查看，无需 token）或 `--set KEY=VALUE [--set ...] [--actor <admin>]`（更新） |
+| `admin-nickname` | `--resident <id> (--name <昵称> \| --clear)`（admin 改任意 resident 昵称） |
 | `residents` / `rooms-admin` | admin 视角目录（无参数） |
 
 ### 元
@@ -140,7 +141,7 @@ admin 命令需要 Bearer token（`--token` 或登录缓存）与 admin 身份�
 
 ### Session token 三级回退
 
-`set-nickname` 与所有需鉴权 admin 命令（`ban`/`unban`/`freeze`/`unfreeze`/`invite-create`/`invite-revoke`/`moderate`/`room-member`/`config --set`）按以下顺序解析 token：
+`set-nickname` 与所有需鉴权 admin 命令（`ban`/`unban`/`freeze`/`unfreeze`/`invite-create`/`invite-revoke`/`moderate`/`room-member`/`config --set`/`admin-nickname`）按以下顺序解析 token：
 
 1. `--token <t>` 显式参数（CI / 单次调用）
 2. `LOBSTER_SESSION_TOKEN` 环境变量
