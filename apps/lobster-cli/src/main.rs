@@ -23,6 +23,8 @@ enum Command {
     InviteCreate(InviteCreateCommand),
     InviteRevoke(InviteRevokeCommand),
     Moderate(ModerateCommand),
+    RoomMember(RoomMemberCommand),
+    CreateResident(CreateResidentCommand),
     AdminResidents(QueryCommand),
     AdminRooms(QueryCommand),
     World(WorldQueryCommand),
@@ -385,6 +387,25 @@ struct ModerateCommand {
     json: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RoomMemberCommand {
+    room_id: String,
+    resident_id: String,
+    action: String,
+    actor: Option<String>,
+    token: Option<String>,
+    gateway: String,
+    json: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CreateResidentCommand {
+    resident_id: String,
+    email: String,
+    gateway: String,
+    json: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct AdminBanRequest {
     resident_id: String,
@@ -424,6 +445,22 @@ struct AdminModerateRequest {
     actor_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct AdminManageRoomMemberRequest {
+    room_id: String,
+    resident_id: String,
+    actor_id: String,
+    action: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct AdminCreateResidentRequest {
+    resident_id: String,
+    email: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    actor_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -497,6 +534,12 @@ where
             parse_invite_revoke_command(iter.collect::<Vec<_>>()).map(Command::InviteRevoke)
         }
         "moderate" => parse_moderate_command(iter.collect::<Vec<_>>()).map(Command::Moderate),
+        "room-member" => {
+            parse_room_member_command(iter.collect::<Vec<_>>()).map(Command::RoomMember)
+        }
+        "create-resident" => {
+            parse_create_resident_command(iter.collect::<Vec<_>>()).map(Command::CreateResident)
+        }
         "residents" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminResidents),
         "rooms-admin" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminRooms),
         "world" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::World),
@@ -1175,6 +1218,80 @@ fn parse_moderate_command(args: Vec<String>) -> Result<ModerateCommand, String> 
     })
 }
 
+fn parse_room_member_command(args: Vec<String>) -> Result<RoomMemberCommand, String> {
+    let mut room_id = None;
+    let mut resident_id = None;
+    let mut action = None;
+    let mut actor = None;
+    let mut token = None;
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--room" => room_id = iter.next(),
+            "--resident" => resident_id = iter.next(),
+            "--action" => action = iter.next(),
+            "--actor" => actor = iter.next(),
+            "--token" => token = iter.next(),
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?
+            }
+            "--json" => json = true,
+            other => return Err(format!("unsupported flag: {other}")),
+        }
+    }
+
+    let action = action.ok_or_else(|| "missing required flag --action".to_string())?;
+    if !matches!(action.as_str(), "add" | "remove") {
+        return Err(format!(
+            "invalid --action {action}: must be one of add|remove"
+        ));
+    }
+
+    Ok(RoomMemberCommand {
+        room_id: room_id.ok_or_else(|| "missing required flag --room".to_string())?,
+        resident_id: resident_id.ok_or_else(|| "missing required flag --resident".to_string())?,
+        action,
+        actor,
+        token,
+        gateway,
+        json,
+    })
+}
+
+fn parse_create_resident_command(args: Vec<String>) -> Result<CreateResidentCommand, String> {
+    let mut resident_id = None;
+    let mut email = None;
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--resident" => resident_id = iter.next(),
+            "--email" => email = iter.next(),
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?
+            }
+            "--json" => json = true,
+            other => return Err(format!("unsupported flag: {other}")),
+        }
+    }
+
+    Ok(CreateResidentCommand {
+        resident_id: resident_id.ok_or_else(|| "missing required flag --resident".to_string())?,
+        email: email.ok_or_else(|| "missing required flag --email".to_string())?,
+        gateway,
+        json,
+    })
+}
+
 fn build_send_request(command: &SendCommand) -> CliSendRequest {
     CliSendRequest {
         from: command.from.clone(),
@@ -1566,6 +1683,8 @@ fn format_help_overview() -> String {
         "  invite-create    生成邀请码  ([--actor <admin>] [--max-uses N])",
         "  invite-revoke    撤销邀请码  (--code <code> [--actor <admin>])",
         "  moderate         审核消息  (--message-id <id> --conversation-id <id> --action <approved|blocked|handled>)",
+        "  room-member      加入/移除房间成员  (--room <id> --resident <id> --action <add|remove> [--actor <admin>])",
+        "  create-resident  注册新居民  (--resident <id> --email <addr>，注册入口，无需 token)",
         "  residents        居民目录（admin 视角）",
         "  rooms-admin      房间目录（admin 视角）",
         "",
@@ -1596,6 +1715,8 @@ fn format_help_for_command(command: &str) -> String {
         "invite-create",
         "invite-revoke",
         "moderate",
+        "room-member",
+        "create-resident",
         "residents",
         "rooms-admin",
         "world",
@@ -2275,6 +2396,63 @@ fn run_admin_moderate(command: ModerateCommand) -> Result<String, String> {
     }
 }
 
+fn run_admin_room_member(command: RoomMemberCommand) -> Result<String, String> {
+    let actor_id = resolve_admin_actor(command.actor.as_deref())?;
+    let token = auth::resolve_token(command.token.as_deref())?;
+    let request = AdminManageRoomMemberRequest {
+        room_id: command.room_id.clone(),
+        resident_id: command.resident_id.clone(),
+        actor_id,
+        action: command.action.clone(),
+    };
+    let url = format!(
+        "{}/v1/admin/rooms/members",
+        command.gateway.trim_end_matches('/')
+    );
+    let payload = auth::post_json_authenticated::<_, serde_json::Value>(
+        &url,
+        &request,
+        &token,
+        "room-member",
+    )?;
+    if command.json {
+        serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
+    } else {
+        Ok(format!(
+            "已{}房间 {} 的成员 {}",
+            if command.action == "add" {
+                "加入"
+            } else {
+                "移除"
+            },
+            request.room_id,
+            request.resident_id
+        ))
+    }
+}
+
+fn run_create_resident(command: CreateResidentCommand) -> Result<String, String> {
+    // POST /v1/admin/residents 在 HEAD 网关无 require_admin_auth（注册入口），故用无 token 的 post_json。
+    let request = AdminCreateResidentRequest {
+        resident_id: command.resident_id.clone(),
+        email: command.email.clone(),
+        actor_id: None,
+    };
+    let url = format!(
+        "{}/v1/admin/residents",
+        command.gateway.trim_end_matches('/')
+    );
+    let payload = post_json::<_, serde_json::Value>(&url, &request, "create resident")?;
+    if command.json {
+        serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
+    } else {
+        Ok(format!(
+            "已创建居民 {}（{}）",
+            request.resident_id, request.email
+        ))
+    }
+}
+
 fn run_admin_residents(command: QueryCommand) -> Result<String, String> {
     let url = format!(
         "{}/v1/admin/residents",
@@ -2318,6 +2496,8 @@ fn run_command(command: Command) -> Result<String, String> {
         Command::InviteCreate(command) => run_invite_create(command),
         Command::InviteRevoke(command) => run_invite_revoke(command),
         Command::Moderate(command) => run_admin_moderate(command),
+        Command::RoomMember(command) => run_admin_room_member(command),
+        Command::CreateResident(command) => run_create_resident(command),
         Command::AdminResidents(command) => run_admin_residents(command),
         Command::AdminRooms(command) => run_admin_rooms(command),
         Command::World(command) => run_world(command),
@@ -3226,6 +3406,92 @@ mod tests {
         assert!(
             result.is_err(),
             "moderate without --message-id/--conversation-id should fail"
+        );
+    }
+
+    #[test]
+    fn room_member_command_parses_valid_action() {
+        let command = parse_args([
+            "lobster-cli",
+            "room-member",
+            "--room",
+            "room:world:lobby",
+            "--resident",
+            "user:bob",
+            "--action",
+            "add",
+            "--actor",
+            "user:admin",
+        ])
+        .expect("room-member command should parse");
+
+        match command {
+            Command::RoomMember(m) => {
+                assert_eq!(m.room_id, "room:world:lobby");
+                assert_eq!(m.resident_id, "user:bob");
+                assert_eq!(m.action, "add");
+                assert_eq!(m.actor.as_deref(), Some("user:admin"));
+            }
+            other => panic!("expected room-member command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn room_member_command_rejects_invalid_action() {
+        let result = parse_args([
+            "lobster-cli",
+            "room-member",
+            "--room",
+            "room:world:lobby",
+            "--resident",
+            "user:bob",
+            "--action",
+            "promote",
+        ]);
+        assert!(result.is_err(), "invalid --action should be rejected");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("add") && err.contains("remove"),
+            "error should list valid actions add|remove: {err}"
+        );
+    }
+
+    #[test]
+    fn room_member_command_rejects_missing_required() {
+        let result = parse_args(["lobster-cli", "room-member", "--action", "add"]);
+        assert!(
+            result.is_err(),
+            "room-member without --room/--resident should fail"
+        );
+    }
+
+    #[test]
+    fn create_resident_command_parses() {
+        let command = parse_args([
+            "lobster-cli",
+            "create-resident",
+            "--resident",
+            "user:carol",
+            "--email",
+            "carol@example.com",
+        ])
+        .expect("create-resident command should parse");
+
+        match command {
+            Command::CreateResident(c) => {
+                assert_eq!(c.resident_id, "user:carol");
+                assert_eq!(c.email, "carol@example.com");
+            }
+            other => panic!("expected create-resident command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn create_resident_command_rejects_missing_required() {
+        let result = parse_args(["lobster-cli", "create-resident", "--resident", "user:dave"]);
+        assert!(
+            result.is_err(),
+            "create-resident without --email should fail"
         );
     }
 

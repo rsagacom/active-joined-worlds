@@ -274,6 +274,36 @@ fn cli_admin_moderate_without_token_hints_login() {
     assert!(s.contains("login"), "should hint to run login: {s}");
 }
 
+/// room-member 同样走 token 架构：无 token 应报「请 login」（admin 治理命令统一鉴权）。
+#[test]
+fn cli_admin_room_member_without_token_hints_login() {
+    let home = tempfile::tempdir().unwrap();
+    let out = cli_binary()
+        .args([
+            "room-member",
+            "--room",
+            "room:world:lobby",
+            "--resident",
+            "user:bob",
+            "--action",
+            "add",
+            "--actor",
+            "user:admin",
+            "--gateway",
+            "http://127.0.0.1:8787",
+        ])
+        .env("HOME", home.path())
+        .env_remove("LOBSTER_SESSION_TOKEN")
+        .output()
+        .expect("run");
+    assert!(
+        !out.status.success(),
+        "room-member without any token should fail"
+    );
+    let s = combined_output(&out);
+    assert!(s.contains("login"), "should hint to run login: {s}");
+}
+
 /// logout 无 token 时跳过服务端 logout，只清本地缓存 → 设计为 Ok（gateway 不需在）。
 #[test]
 fn cli_logout_safe_without_token() {

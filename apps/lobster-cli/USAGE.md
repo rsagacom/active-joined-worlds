@@ -117,7 +117,7 @@ lobster-cli safety      # 安全快照（信任/公告/报告/制裁/黑名单�
 `world` · `square` · `cities` · `safety` · `directory` · `snapshot`（均无需身份参数）
 
 ### 管理（需 admin 身份 + Bearer token）
-admin 命令需要 Bearer token（`--token` 或登录缓存）与 admin 身份（`--actor`，缺省取登录缓存的 resident_id）。先 `login` 即可直接调用；token 失效返回 401 时按提示重新登录。
+admin 命令需要 Bearer token（`--token` 或登录缓存）与 admin 身份（`--actor`，缺省取登录缓存的 resident_id）。先 `login` 即可直接调用；token 失效返回 401 时按提示重新登录。例外：`create-resident` 是注册入口，不要求 token/admin 身份。
 
 | 命令 | 参数 |
 |------|------|
@@ -126,6 +126,8 @@ admin 命令需要 Bearer token（`--token` 或登录缓存）与 admin 身份�
 | `invite-create` | `[--actor <admin>] [--max-uses N]` |
 | `invite-revoke` | `--code <code> [--actor <admin>]` |
 | `moderate` | `--message-id <id> --conversation-id <id> --action <approved\|blocked\|handled> [--reason <r>]` |
+| `room-member` | `--room <id> --resident <id> --action <add\|remove> [--actor <admin>]` |
+| `create-resident` | `--resident <id> --email <addr>`（注册入口，无需 token/admin 身份） |
 | `residents` / `rooms-admin` | admin 视角目录（无参数） |
 
 ### 元
@@ -137,7 +139,7 @@ admin 命令需要 Bearer token（`--token` 或登录缓存）与 admin 身份�
 
 ### Session token 三级回退
 
-`set-nickname` 与所有 admin 命令（`ban`/`unban`/`freeze`/`unfreeze`/`invite-create`/`invite-revoke`）等需鉴权的命令按以下顺序解析 token：
+`set-nickname` 与所有需鉴权 admin 命令（`ban`/`unban`/`freeze`/`unfreeze`/`invite-create`/`invite-revoke`/`moderate`/`room-member`）按以下顺序解析 token：
 
 1. `--token <t>` 显式参数（CI / 单次调用）
 2. `LOBSTER_SESSION_TOKEN` 环境变量
