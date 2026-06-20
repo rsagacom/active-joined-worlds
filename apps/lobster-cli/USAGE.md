@@ -125,6 +125,7 @@ admin 命令需要 Bearer token（`--token` 或登录缓存）与 admin 身份�
 | `freeze` / `unfreeze` | `--target <room> [--actor <admin>]` |
 | `invite-create` | `[--actor <admin>] [--max-uses N]` |
 | `invite-revoke` | `--code <code> [--actor <admin>]` |
+| `moderate` | `--message-id <id> --conversation-id <id> --action <approved\|blocked\|handled> [--reason <r>]` |
 | `residents` / `rooms-admin` | admin 视角目录（无参数） |
 
 ### 元

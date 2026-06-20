@@ -22,6 +22,7 @@ enum Command {
     Unfreeze(IdentityCommand),
     InviteCreate(InviteCreateCommand),
     InviteRevoke(InviteRevokeCommand),
+    Moderate(ModerateCommand),
     AdminResidents(QueryCommand),
     AdminRooms(QueryCommand),
     World(WorldQueryCommand),
@@ -372,6 +373,18 @@ struct InviteRevokeCommand {
     json: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ModerateCommand {
+    message_id: String,
+    conversation_id: String,
+    action: String,
+    reason: Option<String>,
+    actor: Option<String>,
+    token: Option<String>,
+    gateway: String,
+    json: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct AdminBanRequest {
     resident_id: String,
@@ -401,6 +414,16 @@ struct AdminCreateInviteRequest {
 struct AdminRevokeInviteRequest {
     code: String,
     actor_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct AdminModerateRequest {
+    message_id: String,
+    conversation_id: String,
+    action: String,
+    actor_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -473,6 +496,7 @@ where
         "invite-revoke" => {
             parse_invite_revoke_command(iter.collect::<Vec<_>>()).map(Command::InviteRevoke)
         }
+        "moderate" => parse_moderate_command(iter.collect::<Vec<_>>()).map(Command::Moderate),
         "residents" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminResidents),
         "rooms-admin" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminRooms),
         "world" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::World),
@@ -1102,6 +1126,55 @@ fn parse_invite_revoke_command(args: Vec<String>) -> Result<InviteRevokeCommand,
     })
 }
 
+fn parse_moderate_command(args: Vec<String>) -> Result<ModerateCommand, String> {
+    let mut message_id = None;
+    let mut conversation_id = None;
+    let mut action = None;
+    let mut reason = None;
+    let mut actor = None;
+    let mut token = None;
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--message-id" => message_id = iter.next(),
+            "--conversation-id" => conversation_id = iter.next(),
+            "--action" => action = iter.next(),
+            "--reason" => reason = iter.next(),
+            "--actor" => actor = iter.next(),
+            "--token" => token = iter.next(),
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?
+            }
+            "--json" => json = true,
+            other => return Err(format!("unsupported flag: {other}")),
+        }
+    }
+
+    let action = action.ok_or_else(|| "missing required flag --action".to_string())?;
+    if !matches!(action.as_str(), "approved" | "blocked" | "handled") {
+        return Err(format!(
+            "invalid --action {action}: must be one of approved|blocked|handled"
+        ));
+    }
+
+    Ok(ModerateCommand {
+        message_id: message_id.ok_or_else(|| "missing required flag --message-id".to_string())?,
+        conversation_id: conversation_id
+            .ok_or_else(|| "missing required flag --conversation-id".to_string())?,
+        action,
+        reason,
+        actor,
+        token,
+        gateway,
+        json,
+    })
+}
+
 fn build_send_request(command: &SendCommand) -> CliSendRequest {
     CliSendRequest {
         from: command.from.clone(),
@@ -1492,6 +1565,7 @@ fn format_help_overview() -> String {
         "  freeze / unfreeze 冻结 / 解冻房间  (--target <room> [--actor <admin>])",
         "  invite-create    生成邀请码  ([--actor <admin>] [--max-uses N])",
         "  invite-revoke    撤销邀请码  (--code <code> [--actor <admin>])",
+        "  moderate         审核消息  (--message-id <id> --conversation-id <id> --action <approved|blocked|handled>)",
         "  residents        居民目录（admin 视角）",
         "  rooms-admin      房间目录（admin 视角）",
         "",
@@ -1521,6 +1595,7 @@ fn format_help_for_command(command: &str) -> String {
         "unfreeze",
         "invite-create",
         "invite-revoke",
+        "moderate",
         "residents",
         "rooms-admin",
         "world",
@@ -2174,6 +2249,32 @@ fn run_invite_revoke(command: InviteRevokeCommand) -> Result<String, String> {
     }
 }
 
+fn run_admin_moderate(command: ModerateCommand) -> Result<String, String> {
+    let actor_id = resolve_admin_actor(command.actor.as_deref())?;
+    let token = auth::resolve_token(command.token.as_deref())?;
+    let request = AdminModerateRequest {
+        message_id: command.message_id.clone(),
+        conversation_id: command.conversation_id.clone(),
+        action: command.action.clone(),
+        actor_id,
+        reason: command.reason.clone(),
+    };
+    let url = format!(
+        "{}/v1/admin/messages/moderate",
+        command.gateway.trim_end_matches('/')
+    );
+    let payload =
+        auth::post_json_authenticated::<_, serde_json::Value>(&url, &request, &token, "moderate")?;
+    if command.json {
+        serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
+    } else {
+        Ok(format!(
+            "已审核消息 {}@{}：{}",
+            request.message_id, request.conversation_id, request.action
+        ))
+    }
+}
+
 fn run_admin_residents(command: QueryCommand) -> Result<String, String> {
     let url = format!(
         "{}/v1/admin/residents",
@@ -2216,6 +2317,7 @@ fn run_command(command: Command) -> Result<String, String> {
         Command::Unfreeze(command) => run_admin_unfreeze(command),
         Command::InviteCreate(command) => run_invite_create(command),
         Command::InviteRevoke(command) => run_invite_revoke(command),
+        Command::Moderate(command) => run_admin_moderate(command),
         Command::AdminResidents(command) => run_admin_residents(command),
         Command::AdminRooms(command) => run_admin_rooms(command),
         Command::World(command) => run_world(command),
@@ -3066,6 +3168,65 @@ mod tests {
             }
             other => panic!("expected invite-revoke command, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn moderate_command_parses_valid_action() {
+        let command = parse_args([
+            "lobster-cli",
+            "moderate",
+            "--message-id",
+            "msg-1",
+            "--conversation-id",
+            "room:world:lobby",
+            "--action",
+            "blocked",
+            "--reason",
+            "垃圾消息",
+            "--actor",
+            "user:admin",
+        ])
+        .expect("moderate command should parse");
+
+        match command {
+            Command::Moderate(m) => {
+                assert_eq!(m.message_id, "msg-1");
+                assert_eq!(m.conversation_id, "room:world:lobby");
+                assert_eq!(m.action, "blocked");
+                assert_eq!(m.reason.as_deref(), Some("垃圾消息"));
+                assert_eq!(m.actor.as_deref(), Some("user:admin"));
+            }
+            other => panic!("expected moderate command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn moderate_command_rejects_invalid_action() {
+        let result = parse_args([
+            "lobster-cli",
+            "moderate",
+            "--message-id",
+            "msg-1",
+            "--conversation-id",
+            "room:world:lobby",
+            "--action",
+            "delete",
+        ]);
+        assert!(result.is_err(), "invalid --action should be rejected");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("approved") || err.contains("blocked"),
+            "error should list valid actions: {err}"
+        );
+    }
+
+    #[test]
+    fn moderate_command_rejects_missing_required() {
+        let result = parse_args(["lobster-cli", "moderate", "--action", "approved"]);
+        assert!(
+            result.is_err(),
+            "moderate without --message-id/--conversation-id should fail"
+        );
     }
 
     #[test]
