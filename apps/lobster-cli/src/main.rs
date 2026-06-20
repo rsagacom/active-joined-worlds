@@ -25,6 +25,7 @@ enum Command {
     Moderate(ModerateCommand),
     RoomMember(RoomMemberCommand),
     CreateResident(CreateResidentCommand),
+    Config(ConfigCommand),
     AdminResidents(QueryCommand),
     AdminRooms(QueryCommand),
     World(WorldQueryCommand),
@@ -406,6 +407,18 @@ struct CreateResidentCommand {
     json: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ConfigCommand {
+    /// `--set KEY=VALUE`（可重复，批量设置配置项）
+    set: Vec<String>,
+    /// `--get`（拉取当前配置）
+    get: bool,
+    actor: Option<String>,
+    token: Option<String>,
+    gateway: String,
+    json: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct AdminBanRequest {
     resident_id: String,
@@ -460,6 +473,12 @@ struct AdminCreateResidentRequest {
     resident_id: String,
     email: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    actor_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct AdminConfigRequest {
+    config: std::collections::HashMap<String, String>,
     actor_id: Option<String>,
 }
 
@@ -540,6 +559,7 @@ where
         "create-resident" => {
             parse_create_resident_command(iter.collect::<Vec<_>>()).map(Command::CreateResident)
         }
+        "config" => parse_config_command(iter.collect::<Vec<_>>()).map(Command::Config),
         "residents" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminResidents),
         "rooms-admin" => parse_query_command(iter.collect::<Vec<_>>()).map(Command::AdminRooms),
         "world" => parse_world_query_command(iter.collect::<Vec<_>>()).map(Command::World),
@@ -1292,6 +1312,55 @@ fn parse_create_resident_command(args: Vec<String>) -> Result<CreateResidentComm
     })
 }
 
+fn parse_config_command(args: Vec<String>) -> Result<ConfigCommand, String> {
+    let mut set: Vec<String> = Vec::new();
+    let mut get = false;
+    let mut actor = None;
+    let mut token = None;
+    let mut gateway = default_gateway_url();
+    let mut json = false;
+
+    let mut iter = args.into_iter();
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            "--set" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --set".to_string())?;
+                if !value.contains('=') {
+                    return Err(format!("--set expects KEY=VALUE, got: {value}"));
+                }
+                set.push(value);
+            }
+            "--get" => get = true,
+            "--actor" => actor = iter.next(),
+            "--token" => token = iter.next(),
+            "--gateway" => {
+                gateway = iter
+                    .next()
+                    .ok_or_else(|| "missing value for --gateway".to_string())?
+            }
+            "--json" => json = true,
+            other => return Err(format!("unsupported flag: {other}")),
+        }
+    }
+
+    if set.is_empty() && !get {
+        return Err(
+            "config: specify --get to view current config or --set KEY=VALUE to update".to_string(),
+        );
+    }
+
+    Ok(ConfigCommand {
+        set,
+        get,
+        actor,
+        token,
+        gateway,
+        json,
+    })
+}
+
 fn build_send_request(command: &SendCommand) -> CliSendRequest {
     CliSendRequest {
         from: command.from.clone(),
@@ -1685,6 +1754,7 @@ fn format_help_overview() -> String {
         "  moderate         审核消息  (--message-id <id> --conversation-id <id> --action <approved|blocked|handled>)",
         "  room-member      加入/移除房间成员  (--room <id> --resident <id> --action <add|remove> [--actor <admin>])",
         "  create-resident  注册新居民  (--resident <id> --email <addr>，注册入口，无需 token)",
+        "  config           查看/更新配置  (--get 查看 | --set KEY=VALUE 更新 [--actor <admin>])",
         "  residents        居民目录（admin 视角）",
         "  rooms-admin      房间目录（admin 视角）",
         "",
@@ -1717,6 +1787,7 @@ fn format_help_for_command(command: &str) -> String {
         "moderate",
         "room-member",
         "create-resident",
+        "config",
         "residents",
         "rooms-admin",
         "world",
@@ -2453,6 +2524,50 @@ fn run_create_resident(command: CreateResidentCommand) -> Result<String, String>
     }
 }
 
+fn run_admin_config(command: ConfigCommand) -> Result<String, String> {
+    let url = format!("{}/v1/admin/config", command.gateway.trim_end_matches('/'));
+    if command.set.is_empty() {
+        // GET /v1/admin/config 在 HEAD 网关无 require_admin_auth（只读），复用无 token 的 run_query。
+        let payload: std::collections::HashMap<String, String> = run_query(&url)?;
+        if command.json {
+            serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
+        } else if payload.is_empty() {
+            Ok("（无配置项）".to_string())
+        } else {
+            let mut keys: Vec<&String> = payload.keys().collect();
+            keys.sort();
+            let mut out = String::from("当前配置：");
+            for key in keys {
+                out.push_str(&format!("\n  {key} = {}", payload[key]));
+            }
+            Ok(out)
+        }
+    } else {
+        // POST /v1/admin/config：require_admin_auth + actor_id + CAP_ADMIN_CONFIG。
+        let actor_id = resolve_admin_actor(command.actor.as_deref())?;
+        let token = auth::resolve_token(command.token.as_deref())?;
+        let mut config = std::collections::HashMap::new();
+        for raw in &command.set {
+            let (key, value) = raw
+                .split_once('=')
+                .ok_or_else(|| format!("--set expects KEY=VALUE, got: {raw}"))?;
+            config.insert(key.to_string(), value.to_string());
+        }
+        let request = AdminConfigRequest {
+            config,
+            actor_id: Some(actor_id),
+        };
+        let payload = auth::post_json_authenticated::<_, serde_json::Value>(
+            &url, &request, &token, "config",
+        )?;
+        if command.json {
+            serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
+        } else {
+            Ok(format!("已更新 {} 项配置", command.set.len()))
+        }
+    }
+}
+
 fn run_admin_residents(command: QueryCommand) -> Result<String, String> {
     let url = format!(
         "{}/v1/admin/residents",
@@ -2498,6 +2613,7 @@ fn run_command(command: Command) -> Result<String, String> {
         Command::Moderate(command) => run_admin_moderate(command),
         Command::RoomMember(command) => run_admin_room_member(command),
         Command::CreateResident(command) => run_create_resident(command),
+        Command::Config(command) => run_admin_config(command),
         Command::AdminResidents(command) => run_admin_residents(command),
         Command::AdminRooms(command) => run_admin_rooms(command),
         Command::World(command) => run_world(command),
@@ -3493,6 +3609,64 @@ mod tests {
             result.is_err(),
             "create-resident without --email should fail"
         );
+    }
+
+    #[test]
+    fn config_command_parses_set_entries() {
+        let command = parse_args([
+            "lobster-cli",
+            "config",
+            "--set",
+            "theme=dark",
+            "--set",
+            "lang=zh",
+            "--actor",
+            "user:admin",
+        ])
+        .expect("config --set should parse");
+
+        match command {
+            Command::Config(c) => {
+                assert_eq!(c.set, vec!["theme=dark".to_string(), "lang=zh".to_string()]);
+                assert!(!c.get);
+                assert_eq!(c.actor.as_deref(), Some("user:admin"));
+            }
+            other => panic!("expected config command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn config_command_parses_get_flag() {
+        let command =
+            parse_args(["lobster-cli", "config", "--get"]).expect("config --get should parse");
+
+        match command {
+            Command::Config(c) => {
+                assert!(c.get);
+                assert!(
+                    c.set.is_empty(),
+                    "--get mode should not collect --set entries"
+                );
+            }
+            other => panic!("expected config command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn config_command_rejects_set_without_equals() {
+        let result = parse_args(["lobster-cli", "config", "--set", "novalue"]);
+        assert!(result.is_err(), "--set without = should be rejected");
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("KEY=VALUE"),
+            "error should explain KEY=VALUE format: {err}"
+        );
+    }
+
+    #[test]
+    fn config_command_rejects_no_mode() {
+        let result = parse_args(["lobster-cli", "config"]);
+        assert!(result.is_err(), "config without --get/--set should fail");
     }
 
     #[test]

@@ -304,6 +304,33 @@ fn cli_admin_room_member_without_token_hints_login() {
     assert!(s.contains("login"), "should hint to run login: {s}");
 }
 
+/// config --set 是写入型 admin 命令，同样走 token 架构：无 token 应报「请 login」。
+/// 注意 config --get 无需 token（只读），故只测 --set 写入路径。
+#[test]
+fn cli_admin_config_set_without_token_hints_login() {
+    let home = tempfile::tempdir().unwrap();
+    let out = cli_binary()
+        .args([
+            "config",
+            "--set",
+            "theme=dark",
+            "--actor",
+            "user:admin",
+            "--gateway",
+            "http://127.0.0.1:8787",
+        ])
+        .env("HOME", home.path())
+        .env_remove("LOBSTER_SESSION_TOKEN")
+        .output()
+        .expect("run");
+    assert!(
+        !out.status.success(),
+        "config --set without any token should fail"
+    );
+    let s = combined_output(&out);
+    assert!(s.contains("login"), "should hint to run login: {s}");
+}
+
 /// logout 无 token 时跳过服务端 logout，只清本地缓存 → 设计为 Ok（gateway 不需在）。
 #[test]
 fn cli_logout_safe_without_token() {
