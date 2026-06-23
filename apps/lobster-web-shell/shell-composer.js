@@ -1,7 +1,10 @@
 import { currentShellPage, normalizeProviderConnectionState, providerIndicatesGatewayOffline } from "./shell-shared.js";
-import { translateRoomKind } from "./shell-labels.js";
 import { caretakerPendingCount, caretakerProfile } from "./shell-room-profiles.js";
 import { gatewayQueryParam } from "./shell-gateway.js";
+import {
+  composerContextItemsForState,
+  composerHeroModelForState,
+} from "./shell-room-render.js";
 
 let _ctx = null;
 
@@ -135,75 +138,40 @@ export function ensureComposerTip() {
 export function renderComposerHero(room) {
   if (currentShellPage() === "user" || !_ctx.composerHeroEl) return;
   const shellPage = currentShellPage();
+  const model = composerHeroModelForState({
+    room,
+    shellPage,
+    roomKind: room ? roomKind(room) : "",
+    roomThreadHeadline: room ? _ctx.roomThreadHeadline(room) : "",
+    roomDisplayPeer: room ? _ctx.roomDisplayPeer(room) : "",
+    roomSyncLabel: room ? _ctx.roomSyncLabel() : "",
+    caretakerPendingCount: room ? caretakerPendingCount(room) : 0,
+    unreadCount: room ? unreadCount(room) : 0,
+    refreshInProgress: _ctx.refreshInProgress,
+    gatewayUrl: _ctx.gatewayUrl,
+  });
   clearChildren(_ctx.composerHeroEl);
-  _ctx.composerHeroEl.dataset.variant = shellPage;
+  _ctx.composerHeroEl.dataset.variant = model.variant;
 
   const kicker = document.createElement("div");
   kicker.className = "composer-hero-kicker";
-  kicker.textContent = shellPage === "admin"
-    ? "管理后台消息区"
-    : shellPage === "user"
-      ? "房间内聊天主界面"
-      : "城市外世界页";
+  kicker.textContent = model.kicker;
   _ctx.composerHeroEl.appendChild(kicker);
 
   const title = document.createElement("div");
   title.className = "composer-hero-title";
-  if (!room) {
-    title.textContent = shellPage === "user" ? "先选房间" : "先选会话";
-  } else if (shellPage === "admin") {
-    title.textContent = `发消息到 ${_ctx.roomThreadHeadline(room)}`;
-  } else if (roomKind(room) === "direct") {
-    const peerName = room.thread_headline || room.peer_label || room.participant_label || _ctx.roomDisplayPeer(room);
-    title.textContent = `发消息给 ${peerName}`;
-  } else {
-    title.textContent = `发消息到 ${_ctx.roomThreadHeadline(room)}`;
-  }
+  title.textContent = model.title;
   _ctx.composerHeroEl.appendChild(title);
 
   const note = document.createElement("div");
   note.className = "composer-hero-note";
-  if (!room) {
-    note.textContent =
-      shellPage === "admin"
-        ? "先选会话，再把记录和跟进像聊天一样写下。"
-        : shellPage === "user"
-          ? "先选会话，房间内聊天主界面才会点亮。"
-          : "先选会话，再开始发消息。";
-  } else if (shellPage === "admin") {
-    note.textContent = "这里优先写记录和跟进，手感仍然像聊天一样顺手。";
-  } else {
-    note.textContent = shellPage === "user"
-      ? "这里就是房间内聊天主界面的输入框，Enter 发送，Shift+Enter 换行。"
-      : "这里就是当前会话的输入框，Enter 发送，Shift+Enter 换行。";
-  }
+  note.textContent = model.note;
   _ctx.composerHeroEl.appendChild(note);
 
   const chips = document.createElement("div");
   chips.className = "composer-hero-chips";
-  if (!room) {
-    chips.appendChild(createPill(_ctx.gatewayUrl ? "等待会话" : "等待网关", "muted"));
-  } else {
-    chips.appendChild(
-      createPill(
-        translateRoomKind(roomKind(room)),
-        roomKind(room) === "direct" ? "accent" : "muted",
-      ),
-    );
-    chips.appendChild(createPill(_ctx.roomSyncLabel(), _ctx.refreshInProgress ? "warm" : "accent"));
-    if (shellPage === "admin") {
-      chips.appendChild(
-        createPill(
-          caretakerPendingCount(room) > 0
-            ? `${caretakerPendingCount(room)} 条待跟进`
-            : "当前窗口可继续记录",
-          caretakerPendingCount(room) > 0 ? "warm" : "muted",
-        ),
-      );
-    } else {
-      const unread = unreadCount(room);
-      chips.appendChild(createPill(unread > 0 ? `${unread} 条未读` : "当前已读", unread > 0 ? "warm" : "muted"));
-    }
+  for (const chip of model.chips) {
+    chips.appendChild(createPill(chip.text, chip.tone));
   }
   _ctx.composerHeroEl.appendChild(chips);
 }
@@ -215,59 +183,21 @@ export function updateComposerContext(room) {
   const shellPage = currentShellPage();
   clearChildren(_ctx.composerContextEl);
 
-  const items = room
-    ? shellPage === "user"
-      ? [
-          {
-            label: "发送到",
-            value: _ctx.roomThreadHeadline(room) || room.participant_label || room.title,
-            tone: "accent",
-          },
-          {
-            label: "状态",
-            value: _ctx.isSendingMessage ? "发送中" : _ctx.roomSendErrors[room.id] ? "待重发" : "可发送",
-            tone: _ctx.roomSendErrors[room.id] ? "danger" : _ctx.isSendingMessage ? "warm" : "accent",
-          },
-        ]
-      : [
-          {
-            label: shellPage === "admin" ? "线程" : "会话标题",
-            value: _ctx.roomThreadHeadline(room),
-            tone: "accent",
-          },
-          {
-            label: shellPage === "admin" ? "当前对象" : "聊天对象",
-            value: _ctx.roomAudienceLabel(room),
-            tone: "accent",
-          },
-          {
-            label: shellPage === "admin" ? "消息去向" : "投递路线",
-            value: _ctx.roomRouteLabel(room),
-            tone: _ctx.roomSendErrors[room.id] ? "danger" : "muted",
-          },
-          {
-            label: "聊天状态",
-            value: _ctx.roomChatStatusSummary(room),
-            tone: _ctx.roomSendErrors[room.id] ? "danger" : _ctx.visiblePendingEchoCount(room) ? "warm" : "accent",
-          },
-          {
-            label: "队列",
-            value: _ctx.roomQueueSummary(room),
-            tone: caretakerPendingCount(room) > 0 || unreadCount(room) > 0 ? "warm" : "muted",
-          },
-          {
-            label: "输入",
-            value: _ctx.isSendingMessage ? "发送中" : _ctx.roomSendErrors[room.id] ? "待重发" : "可发送",
-            tone: _ctx.roomSendErrors[room.id] ? "danger" : _ctx.isSendingMessage ? "warm" : "accent",
-          },
-        ]
-    : [
-        {
-          label: shellPage === "admin" ? "线程" : "会话标题",
-          value: _ctx.gatewayUrl ? "先打开一个会话" : "等待网关",
-          tone: "muted",
-        },
-      ];
+  const items = composerContextItemsForState({
+    room,
+    shellPage,
+    gatewayUrl: _ctx.gatewayUrl,
+    threadHeadline: room ? _ctx.roomThreadHeadline(room) : "",
+    audienceLabel: room ? _ctx.roomAudienceLabel(room) : "",
+    routeLabel: room ? _ctx.roomRouteLabel(room) : "",
+    chatStatusSummary: room ? _ctx.roomChatStatusSummary(room) : "",
+    queueSummary: room ? _ctx.roomQueueSummary(room) : "",
+    caretakerPendingCount: room ? caretakerPendingCount(room) : 0,
+    unreadCount: room ? unreadCount(room) : 0,
+    visiblePendingEchoCount: room ? _ctx.visiblePendingEchoCount(room) : 0,
+    sendError: room ? _ctx.roomSendErrors[room.id] : "",
+    isSendingMessage: _ctx.isSendingMessage,
+  });
 
   for (const item of items) {
     const block = document.createElement("div");
@@ -521,5 +451,3 @@ export function composerStatusState({
       : "离线预览态，草稿会保留。",
   };
 }
-
-

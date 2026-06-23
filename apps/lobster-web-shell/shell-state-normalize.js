@@ -105,3 +105,36 @@ export function synthesizeRoomsFromContracts(payload) {
     mergeRoomWithContract({}, conversation),
   );
 }
+
+export function governanceFromWorldSnapshotBundle(bundle) {
+  const payload = bundle?.payload;
+  if (!payload?.governance?.world) return null;
+  return {
+    world: payload.governance.world,
+    portability: payload.governance.portability,
+    cities: payload.governance.cities || [],
+    memberships: payload.governance.memberships || [],
+    public_rooms: payload.governance.public_rooms || [],
+    residents: Array.isArray(payload.residents) ? payload.residents : [],
+    world_directory: payload.directory || null,
+    world_mirror_sources: Array.isArray(payload.mirror_sources) ? payload.mirror_sources : [],
+    world_square: Array.isArray(payload.square) ? payload.square : [],
+    world_safety: payload.safety || null,
+  };
+}
+
+export function governanceFromWorldApiPayload(payload, residentsPayload) {
+  if (!payload?.world) return null;
+  return {
+    world: payload.world,
+    portability: payload.portability,
+    cities: payload.cities || [],
+    memberships: payload.memberships || [],
+    public_rooms: payload.public_rooms || [],
+    residents: Array.isArray(residentsPayload) ? residentsPayload : [],
+    world_directory: null,
+    world_mirror_sources: [],
+    world_square: [],
+    world_safety: null,
+  };
+}

@@ -7,12 +7,14 @@ const WEB_SHELL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 
 export const APP_LOCAL_IMPORT_PATHS = Object.freeze([
   "./composer-state.js",
+  "./shell-caretaker-panel.js",
   "./shell-composer.js",
   "./shell-avatar.js",
   "./shell-dom-helpers.js",
   "./shell-errors.js",
   "./shell-export-utils.js",
   "./shell-gateway.js",
+  "./shell-governance-render.js",
   "./shell-identity.js",
   "./shell-labels.js",
   "./shell-message-state.js",
@@ -22,6 +24,7 @@ export const APP_LOCAL_IMPORT_PATHS = Object.freeze([
   "./shell-quick-action-templates.js",
   "./shell-quick-action-preview.js",
   "./shell-room-render.js",
+  "./shell-room-stage.js",
   "./shell-quick-actions.js",
   "./shell-payload.js",
   "./shell-state-normalize.js",

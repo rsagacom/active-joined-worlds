@@ -5,12 +5,14 @@ import {
   messageStableId,
   isSystemSender,
   messageAvatarTone,
+  messageOwnerActionSpecs,
   messageThreadKind,
   messageRoleLabel,
   formatDateTime,
   escapeHtml,
   timelineMetaChips,
   timelineDividerSpecsForMessage,
+  timelineCommittedMessageRenderItems,
   timelineMessageFlowSpec,
   timelineMessageRowSpec,
   timelinePendingMessageRowSpec,
@@ -31,6 +33,46 @@ test("messageStableId: null/undefined 返回空字符串", () => {
   assert.equal(messageStableId(null), "");
   assert.equal(messageStableId(undefined), "");
   assert.equal(messageStableId({}), "");
+});
+
+// ====== messageOwnerActionSpecs ======
+
+test("messageOwnerActionSpecs: self committed message gets edit and recall", () => {
+  assert.deepEqual(
+    messageOwnerActionSpecs({
+      gatewayUrl: "http://gw",
+      isSelf: true,
+      message: { message_id: "msg-1" },
+      messageKind: "self",
+    }),
+    [
+      { action: "edit", className: "message-action", label: "编辑" },
+      { action: "recall", className: "message-action message-action-danger", label: "撤回" },
+    ],
+  );
+});
+
+test("messageOwnerActionSpecs: hides unavailable or unsafe actions", () => {
+  assert.deepEqual(
+    messageOwnerActionSpecs({ gatewayUrl: "", isSelf: true, message: { message_id: "msg-1" } }),
+    [],
+  );
+  assert.deepEqual(
+    messageOwnerActionSpecs({ gatewayUrl: "http://gw", isSelf: false, message: { message_id: "msg-1" } }),
+    [],
+  );
+  assert.deepEqual(
+    messageOwnerActionSpecs({ gatewayUrl: "http://gw", isSelf: true, message: { is_recalled: true, message_id: "msg-1" } }),
+    [],
+  );
+  assert.deepEqual(
+    messageOwnerActionSpecs({ gatewayUrl: "http://gw", isSelf: true, message: { moderation_status: "blocked", message_id: "msg-1" } }),
+    [],
+  );
+  assert.deepEqual(
+    messageOwnerActionSpecs({ gatewayUrl: "http://gw", isSelf: true, message: { message_id: "msg-1" }, messageKind: "system" }),
+    [],
+  );
 });
 
 // ====== isSystemSender ======
@@ -444,6 +486,97 @@ test("timelineDividerSpecsForMessage: 同时命中时保持未读分隔在日期
     { className: "timeline-divider", text: "以下是 1 条未读消息" },
     { className: "timeline-divider", text: "2026-06-16" },
   ]);
+});
+
+// ====== timelineCommittedMessageRenderItems ======
+
+test("timelineCommittedMessageRenderItems: flattens dividers before the matching committed row", () => {
+  const messages = [
+    { message_id: "m1", sender: "alice", timestamp_ms: Date.UTC(2024, 0, 1, 9) },
+    { message_id: "m2", sender: "bob", timestamp_ms: Date.UTC(2024, 0, 2, 9) },
+  ];
+
+  assert.deepEqual(
+    timelineCommittedMessageRenderItems({
+      messages,
+      flowSpec: {
+        unreadForDivider: 1,
+        unreadStartIndex: 1,
+        allowMessageGrouping: true,
+        staggerBase: 30,
+        staggerCap: 300,
+      },
+    }),
+    [
+      {
+        type: "message",
+        message: messages[0],
+        rowInput: {
+          message: messages[0],
+          prevMessage: null,
+          index: 0,
+          unreadStartIndex: 1,
+          messages,
+          allowMessageGrouping: true,
+          staggerBase: 30,
+          staggerCap: 300,
+        },
+      },
+      {
+        type: "divider",
+        divider: {
+          className: "timeline-divider",
+          text: "以下是 1 条未读消息",
+        },
+      },
+      {
+        type: "divider",
+        divider: {
+          className: "timeline-divider",
+          text: "2024-01-02",
+        },
+      },
+      {
+        type: "message",
+        message: messages[1],
+        rowInput: {
+          message: messages[1],
+          prevMessage: messages[0],
+          index: 1,
+          unreadStartIndex: 1,
+          messages,
+          allowMessageGrouping: true,
+          staggerBase: 30,
+          staggerCap: 300,
+        },
+      },
+    ],
+  );
+});
+
+test("timelineCommittedMessageRenderItems: tolerates missing flow spec and message arrays", () => {
+  assert.deepEqual(timelineCommittedMessageRenderItems(), []);
+  assert.deepEqual(
+    timelineCommittedMessageRenderItems({
+      messages: [{ message_id: "m1", sender: "alice" }],
+    }),
+    [
+      {
+        type: "message",
+        message: { message_id: "m1", sender: "alice" },
+        rowInput: {
+          message: { message_id: "m1", sender: "alice" },
+          prevMessage: null,
+          index: 0,
+          unreadStartIndex: -1,
+          messages: [{ message_id: "m1", sender: "alice" }],
+          allowMessageGrouping: false,
+          staggerBase: 0,
+          staggerCap: 0,
+        },
+      },
+    ],
+  );
 });
 
 // ====== timelineTypingIndicatorSpec ======

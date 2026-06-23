@@ -11,6 +11,29 @@ export function messageStableId(message) {
   return String(message?.message_id || message?.id || "").trim();
 }
 
+export function messageOwnerActionSpecs({
+  gatewayUrl = "",
+  isSelf = false,
+  message = null,
+  messageKind = "",
+} = {}) {
+  const messageId = messageStableId(message);
+  if (
+    !gatewayUrl ||
+    !isSelf ||
+    !messageId ||
+    message?.is_recalled ||
+    message?.moderation_status === "blocked" ||
+    messageKind === "system"
+  ) {
+    return [];
+  }
+  return [
+    { action: "edit", className: "message-action", label: "编辑" },
+    { action: "recall", className: "message-action message-action-danger", label: "撤回" },
+  ];
+}
+
 export function buildReplyPreview(message, messages) {
   const replyToId = message?.reply_to_message_id || message?.replyTo || message?.reply_to;
   if (!replyToId || !Array.isArray(messages)) return null;
@@ -64,6 +87,51 @@ export function timelineDividerSpecsForMessage({
     }
   }
   return dividers;
+}
+
+export function timelineCommittedMessageRenderItems({
+  messages = [],
+  flowSpec = {},
+} = {}) {
+  const sourceMessages = Array.isArray(messages) ? messages : [];
+  const {
+    unreadForDivider = 0,
+    unreadStartIndex = -1,
+    allowMessageGrouping = false,
+    staggerBase = 0,
+    staggerCap = 0,
+  } = flowSpec || {};
+  const items = [];
+
+  for (const [index, message] of sourceMessages.entries()) {
+    const prevMessage = index > 0 ? sourceMessages[index - 1] : null;
+    const dividerSpecs = timelineDividerSpecsForMessage({
+      index,
+      message,
+      prevMessage,
+      unreadStartIndex,
+      unreadForDivider,
+    });
+    for (const divider of dividerSpecs) {
+      items.push({ type: "divider", divider });
+    }
+    items.push({
+      type: "message",
+      message,
+      rowInput: {
+        message,
+        prevMessage,
+        index,
+        unreadStartIndex,
+        messages: sourceMessages,
+        allowMessageGrouping,
+        staggerBase,
+        staggerCap,
+      },
+    });
+  }
+
+  return items;
 }
 
 export function timelineTypingIndicatorSpec(pendingMessages = []) {

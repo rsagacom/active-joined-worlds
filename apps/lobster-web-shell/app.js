@@ -1,4 +1,8 @@
 import { computeComposerAvailability } from "./composer-state.js";
+import {
+  caretakerPanelModel,
+  caretakerStatusItems,
+} from "./shell-caretaker-panel.js";
 import { composerStatusState } from "./shell-composer.js";
 import { applyAvatarStyle } from "./shell-avatar.js";
 import {
@@ -30,23 +34,43 @@ import {
   resolveGatewayUrlCandidate,
 } from "./shell-gateway.js";
 import {
+  governanceActiveMemberListModel,
+  governanceCityActionsModel,
+  governanceCityCardBaseModel,
+  governanceCityRoomListModel,
+  governanceOfflineStateModel,
+  governancePendingMemberListModel,
+  governanceWorldHeaderModel,
+  governanceEmptyCityStateModel,
+  governanceFederationPolicyControlsModel,
+  mirrorSourceCardModel,
+  mirrorSourcesEmptyStateText,
+  residentDirectoryEmptyStateText,
+  residentDirectoryCardModel,
+  worldDirectoryCityCardModel,
+  worldDirectoryEmptyStateText,
+  worldSafetyAdvisoryCardModel,
+  worldSafetyAdvisoryEmptyStateText,
+  worldSafetyEmptyStateText,
+  worldSafetyMirrorCardModel,
+  worldSafetyReportCardModel,
+  worldSafetyReportSummaryCardModel,
+  worldSafetySanctionCardModel,
+  worldSafetySanctionSummaryCardModel,
+  worldSquareEmptyStateText,
+  worldSquareNoticeCardModel,
+} from "./shell-governance-render.js";
+import {
   displayCityDescription,
   displayCityTitle,
-  displayWorldTitle,
-  translateAdvisoryAction,
   translateFederationPolicy,
   translateMembershipState,
-  translatePortability,
   translateProviderHealth,
   translateProviderMode,
-  translateReportStatus,
   translateRole,
   translateRoomKind,
   translateRoomKindForShellPage,
-  translateSeverity,
   translateSourceKind,
-  translateSubjectKind,
-  translateTargetKind,
   translateTrustState,
 } from "./shell-labels.js";
 import {
@@ -58,8 +82,9 @@ import {
   formatDateTime,
   isSystemSender,
   messageAvatarTone,
+  messageOwnerActionSpecs,
   messageRoleLabel,
-  timelineDividerSpecsForMessage,
+  timelineCommittedMessageRenderItems,
   timelineMessageFlowSpec,
   timelineMessageRowSpec,
   timelinePendingMessageRowSpec,
@@ -68,7 +93,13 @@ import {
   messageThreadKind,
   timelineMetaChips,
 } from "./shell-message-render.js";
-import { buildSearchResultItemHtml } from "./shell-message-search.js";
+import {
+  messageSearchBarDomSpec,
+  messageSearchRequestModel,
+  messageSearchRowMatchesId,
+  searchEmptyStateDomSpec,
+  searchResultItemDomSpec,
+} from "./shell-message-search.js";
 import {
   quickActionContextCopy,
   quickActionDefaultSendLabel,
@@ -81,7 +112,6 @@ import {
   quickActionStage,
   buildWorkflowProgressDomSpec,
   quickActionStateStages,
-  quickActionStatusCopy,
   quickActionSummary,
   quickActionTone,
   buildRoomQuickActionPillDomSpec,
@@ -126,15 +156,23 @@ import {
   quickActionWorkflowStructured,
 } from "./shell-quick-action-preview.js";
 import {
-  composerHeroChipsData,
-  composerHeroKicker,
-  composerHeroNote,
-  composerHeroTitle,
+  chatRuntimeDetailModelForState,
+  composerContextItemsForState,
+  composerHeroModelForState,
   composerMetaBaseStatus,
   composerMetaQuickHint,
+  composerPlaceholderForState as resolveComposerPlaceholderForState,
   roomLastActivity as _roomLastActivity,
   roomPreview as _roomPreview,
+  threadStatusRailModelForState,
 } from "./shell-room-render.js";
+import {
+  roomStagePortraitChipsForState,
+  roomStagePortraitSummaryForState,
+  roomStagePortraitTitleForState,
+  roomStageSummaryForState,
+  userRoomProjectionForState,
+} from "./shell-room-stage.js";
 import {
   quickActionAdvanceLabel,
   quickActionContract,
@@ -156,6 +194,8 @@ import {
 } from "./shell-payload.js";
 import {
   contractConversationMap,
+  governanceFromWorldApiPayload,
+  governanceFromWorldSnapshotBundle,
   mergeRoomWithContract,
   synthesizeRoomsFromContracts,
 } from "./shell-state-normalize.js";
@@ -456,81 +496,44 @@ const SAMPLE_STATE = {
 };
 
 function roomStageSummary(room) {
-  if (!room) return "先选一个会话，房间场景会自动接上。";
-  const stage = stageProjection(room);
-  if (stage?.summary) return stage.summary;
-  const caretaker = caretakerProfile(room);
-  const summary = roomContextSummary(room);
-  if (caretaker?.auto_reply) {
-    return `${summary} · ${caretaker.auto_reply}`;
-  }
-  return summary;
+  return roomStageSummaryForState({
+    room,
+    stage: room ? stageProjection(room) : null,
+    caretaker: room ? caretakerProfile(room) : null,
+    contextSummary: room ? roomContextSummary(room) : "",
+  });
 }
 
 function roomStagePortraitSummary(room) {
-  if (!room) return "先从左侧选会话，角色资料会跟着出现。";
-  const portrait = portraitProjection(room);
-  if (portrait?.summary) return portrait.summary;
-  const caretaker = caretakerProfile(room);
-  if (caretaker) {
-    return joinOrFallback(
-      [
-        `${caretaker.name} · ${caretaker.role_label || "房间管家"}`,
-        caretaker.persona,
-        caretaker.memory,
-        caretaker.auto_reply,
-      ],
-      roomContextSummary(room),
-    );
-  }
-  return joinOrFallback(
-    [room.participant_label, room.overview_summary, room.preview_text, room.subtitle],
-    roomContextSummary(room),
-  );
+  return roomStagePortraitSummaryForState({
+    room,
+    portrait: room ? portraitProjection(room) : null,
+    caretaker: room ? caretakerProfile(room) : null,
+    contextSummary: room ? roomContextSummary(room) : "",
+  });
+}
+
+function roomStagePortraitTitle(room) {
+  return roomStagePortraitTitleForState({
+    room,
+    portrait: room ? portraitProjection(room) : null,
+    caretaker: room ? caretakerProfile(room) : null,
+  });
 }
 
 function roomStagePortraitChips(room) {
-  if (!room) {
-    return [{ text: "等待选中会话", tone: "muted" }];
-  }
-  const portrait = portraitProjection(room);
-  const caretaker = caretakerProfile(room);
-  const chips = [
-    {
-      text: portrait?.badge || room.scene_banner || translateRoomKindForShellPage(roomKind(room), "user"),
-      tone: "warm",
-    },
-    {
-      text: roomAudienceLabel(room),
-      tone: "muted",
-    },
-    {
-      text: `${roomMemberCount(room)} 人`,
-      tone: "muted",
-    },
-  ];
-  if (Array.isArray(room.search_terms) && room.search_terms.length) {
-    chips.push({ text: room.search_terms.join(" · "), tone: "muted" });
-  } else if (room.meta) {
-    chips.push({ text: room.meta, tone: "muted" });
-  }
-  if (caretaker) {
-    chips.push({
-      text: `${caretaker.name} · ${caretaker.role_label || "房间管家"}`,
-      tone: "accent",
-    });
-    chips.push({
-      text: portrait?.status || caretaker.status || "在岗",
-      tone: "muted",
-    });
-    if (caretakerPendingCount(room) > 0) {
-      chips.push({
-        text: `${caretakerPendingCount(room)} 条访客提醒`,
-        tone: "warm",
-      });
-    }
-  }
-  return chips;
+  const portrait = room ? portraitProjection(room) : null;
+  return roomStagePortraitChipsForState({
+    room,
+    portrait,
+    caretaker: room ? caretakerProfile(room) : null,
+    badgeText: room
+      ? portrait?.badge || room.scene_banner || translateRoomKindForShellPage(roomKind(room), "user")
+      : "",
+    audienceLabel: room ? roomAudienceLabel(room) : "",
+    memberCount: room ? roomMemberCount(room) : 0,
+    pendingCount: room ? caretakerPendingCount(room) : 0,
+  });
 }
 
 function appendRoomQuickStateAdvanceButton(actions, room, options = {}) {
@@ -576,46 +579,13 @@ function syncUserQuickActionButtons(roomId = activeRoomId) {
 }
 
 function userRoomProjection(room, visual) {
-  const fallback = shellModeConfig("user");
-  if (!room || !visual?.stage) {
-    return {
-      variant: "idle",
-      motif: "idle",
-      eyebrow: fallback.eyebrow,
-      title: fallback.title,
-      hero: fallback.hero,
-      detailTitle: "当前房间状态",
-      detailCopy: "角色资料会随着会话切换更新，消息输入保持清楚可见。",
-    };
-  }
-
-  const detailCard = detailCardProfile(room);
-  const caretaker = caretakerProfile(room);
-  if (visual.stage.variant === "home") {
-    return {
-      variant: "home",
-      motif: visual.stage.visual?.motif || "courtyard",
-      eyebrow: "龙虾聊天 · 住宅私聊",
-      title: "住宅私聊 / 房内聊天",
-      hero: "像回到住处一样继续一对一聊天；场景、角色和输入都围着当前房间走。",
-      detailTitle: detailCard?.summary_title || "住宅私聊 / 房内状态",
-      detailCopy: detailCard?.summary_copy || (caretaker
-        ? `${caretaker.name} 会帮你记住留言和提醒，适合续聊、记任务和直接追问。`
-        : "适合续聊、记任务和直接追问，右栏保留角色资料与输入。"),
-    };
-  }
-
-  return {
-    variant: "city",
-    motif: visual.stage.visual?.motif || "watchtower",
-    eyebrow: "龙虾聊天 · 公共频道",
-    title: "公共频道 / 群聊现场",
-    hero: "像走进公共频道一样继续聊天；公告、巡视和跨城讨论都围着当前窗口展开。",
-    detailTitle: detailCard?.summary_title || "公共频道 / 当前状态",
-    detailCopy: detailCard?.summary_copy || (caretaker
-      ? `${caretaker.name} 会盯住公共提醒和巡视结果，适合看公告、围观和跨城讨论。`
-      : "适合看公告、围观和跨城讨论，右栏保留频道状态与快捷动作。"),
-  };
+  return userRoomProjectionForState({
+    room,
+    visual,
+    fallback: shellModeConfig("user"),
+    detailCard: room ? detailCardProfile(room) : null,
+    caretaker: room ? caretakerProfile(room) : null,
+  });
 }
 
 const USER_SCENE_IMAGE_LAYER_PRESETS = new Map([
@@ -1010,71 +980,109 @@ function syncUserDetailCard(room, visual, projection) {
 
 function ensureUserSceneChrome() {
   if (currentShellPage() !== "user") return;
+  ensureRoomStageSideChrome();
+  ensureRoomStagePortraitCanvasChrome();
+  ensureRoomStageCanvasChrome();
+  ensureChatDetailPanelChrome();
+}
 
-  if (conversationStageEl && (!roomStageSideEl || !roomStageSideEl.isConnected)) {
-    roomStageSideEl = document.createElement("div");
-    roomStageSideEl.className = "conversation-stage-side";
-    setInlineStyle(roomStageSideEl, "display", "flex", true);
-    setInlineStyle(roomStageSideEl, "flex-direction", "column");
-    setInlineStyle(roomStageSideEl, "align-items", "flex-start");
-    setInlineStyle(roomStageSideEl, "gap", "8px");
-    roomStageSideEl.setAttribute("aria-label", "房间角色资料");
-    const sideAnchor = conversationStageCopyEl || conversationStageEl.firstChild || null;
-    if (sideAnchor && sideAnchor.parentNode === conversationStageEl) {
-      sideAnchor.insertAdjacentElement("afterend", roomStageSideEl);
-    } else {
-      conversationStageEl.appendChild(roomStageSideEl);
-    }
-  }
+function ensureRoomStageSideChrome() {
+  if (!conversationStageEl || (roomStageSideEl && roomStageSideEl.isConnected)) return;
+  roomStageSideEl = createRoomStageSideElement();
+  insertRoomStageSideElement();
+}
 
-  if (roomStageSideEl && (!roomStagePortraitCanvasEl || !roomStagePortraitCanvasEl.isConnected)) {
-    roomStagePortraitCanvasWrapEl = document.createElement("div");
-    roomStagePortraitCanvasWrapEl.className = "conversation-stage-canvas-wrap";
-    roomStagePortraitCanvasEl = document.createElement("canvas");
-    roomStagePortraitCanvasEl.id = "room-stage-portrait-canvas";
-    roomStagePortraitCanvasEl.className = "conversation-stage-canvas";
-    roomStagePortraitCanvasEl.setAttribute("aria-label", "房间角色资料画布");
-    roomStagePortraitCanvasWrapEl.appendChild(roomStagePortraitCanvasEl);
-    roomStageSideEl.appendChild(roomStagePortraitCanvasWrapEl);
-  }
+function createRoomStageSideElement() {
+  const side = document.createElement("div");
+  side.className = "conversation-stage-side";
+  setInlineStyle(side, "display", "flex", true);
+  setInlineStyle(side, "flex-direction", "column");
+  setInlineStyle(side, "align-items", "flex-start");
+  setInlineStyle(side, "gap", "8px");
+  side.setAttribute("aria-label", "房间角色资料");
+  return side;
+}
 
-  if (conversationStageCopyEl && (!roomStageCanvasEl || !roomStageCanvasEl.isConnected)) {
-    roomStageCanvasWrapEl = document.createElement("div");
-    roomStageCanvasWrapEl.className = "conversation-stage-canvas-wrap";
-    roomStageCanvasEl = document.createElement("canvas");
-    roomStageCanvasEl.id = "room-stage-canvas";
-    roomStageCanvasEl.className = "conversation-stage-canvas";
-    roomStageCanvasEl.setAttribute("aria-label", "房间场景文字画布");
-    roomStageCanvasWrapEl.appendChild(roomStageCanvasEl);
-    const noteAnchor = roomStageNoteEl?.isConnected ? roomStageNoteEl : null;
-    if (noteAnchor) {
-      noteAnchor.insertAdjacentElement("beforebegin", roomStageCanvasWrapEl);
-    } else {
-      conversationStageCopyEl.appendChild(roomStageCanvasWrapEl);
-    }
-  }
-
-  if (!chatDetailPanelEl || !chatDetailPanelEl.isConnected) {
-    chatDetailPanelEl = document.createElement("section");
-    chatDetailPanelEl.className = "panel chat-detail";
-    setInlineStyle(chatDetailPanelEl, "display", "block", true);
-    setInlineStyle(chatDetailPanelEl, "grid-column", "1 / -1", true);
-    const title = document.createElement("div");
-    title.className = "panel-title";
-    title.textContent = "房间资料";
-    chatDetailContentEl = document.createElement("div");
-    chatDetailContentEl.id = "chat-detail-content";
-    chatDetailContentEl.className = "chat-detail-content";
-    chatDetailPanelEl.append(title, chatDetailContentEl);
-    if (conversationPanelEl?.parentNode === layoutEl) {
-      conversationPanelEl.insertAdjacentElement("afterend", chatDetailPanelEl);
-    } else {
-      layoutEl?.appendChild(chatDetailPanelEl);
-    }
+function insertRoomStageSideElement() {
+  const sideAnchor = conversationStageCopyEl || conversationStageEl.firstChild || null;
+  if (sideAnchor && sideAnchor.parentNode === conversationStageEl) {
+    sideAnchor.insertAdjacentElement("afterend", roomStageSideEl);
   } else {
-    setInlineStyle(chatDetailPanelEl, "display", "block", true);
-    setInlineStyle(chatDetailPanelEl, "grid-column", "1 / -1", true);
+    conversationStageEl.appendChild(roomStageSideEl);
   }
+}
+
+function createRoomStageCanvasChrome(id, label) {
+  const wrap = document.createElement("div");
+  wrap.className = "conversation-stage-canvas-wrap";
+  const canvas = document.createElement("canvas");
+  canvas.id = id;
+  canvas.className = "conversation-stage-canvas";
+  canvas.setAttribute("aria-label", label);
+  wrap.appendChild(canvas);
+  return { wrap, canvas };
+}
+
+function ensureRoomStagePortraitCanvasChrome() {
+  if (!roomStageSideEl || (roomStagePortraitCanvasEl && roomStagePortraitCanvasEl.isConnected)) return;
+  const chrome = createRoomStageCanvasChrome("room-stage-portrait-canvas", "房间角色资料画布");
+  roomStagePortraitCanvasWrapEl = chrome.wrap;
+  roomStagePortraitCanvasEl = chrome.canvas;
+  roomStageSideEl.appendChild(roomStagePortraitCanvasWrapEl);
+}
+
+function ensureRoomStageCanvasChrome() {
+  if (!conversationStageCopyEl || (roomStageCanvasEl && roomStageCanvasEl.isConnected)) return;
+  const chrome = createRoomStageCanvasChrome("room-stage-canvas", "房间场景文字画布");
+  roomStageCanvasWrapEl = chrome.wrap;
+  roomStageCanvasEl = chrome.canvas;
+  insertRoomStageCanvasWrap();
+}
+
+function insertRoomStageCanvasWrap() {
+  const noteAnchor = roomStageNoteEl?.isConnected ? roomStageNoteEl : null;
+  if (noteAnchor) {
+    noteAnchor.insertAdjacentElement("beforebegin", roomStageCanvasWrapEl);
+  } else {
+    conversationStageCopyEl.appendChild(roomStageCanvasWrapEl);
+  }
+}
+
+function ensureChatDetailPanelChrome() {
+  if (!chatDetailPanelEl || !chatDetailPanelEl.isConnected) {
+    chatDetailPanelEl = createChatDetailPanelChrome();
+    insertChatDetailPanelChrome();
+    return;
+  }
+  showChatDetailPanelChrome();
+}
+
+function createChatDetailPanelChrome() {
+  const panel = document.createElement("section");
+  panel.className = "panel chat-detail";
+  setInlineStyle(panel, "display", "block", true);
+  setInlineStyle(panel, "grid-column", "1 / -1", true);
+  const title = document.createElement("div");
+  title.className = "panel-title";
+  title.textContent = "房间资料";
+  chatDetailContentEl = document.createElement("div");
+  chatDetailContentEl.id = "chat-detail-content";
+  chatDetailContentEl.className = "chat-detail-content";
+  panel.append(title, chatDetailContentEl);
+  return panel;
+}
+
+function insertChatDetailPanelChrome() {
+  if (conversationPanelEl?.parentNode === layoutEl) {
+    conversationPanelEl.insertAdjacentElement("afterend", chatDetailPanelEl);
+  } else {
+    layoutEl?.appendChild(chatDetailPanelEl);
+  }
+}
+
+function showChatDetailPanelChrome() {
+  setInlineStyle(chatDetailPanelEl, "display", "block", true);
+  setInlineStyle(chatDetailPanelEl, "grid-column", "1 / -1", true);
 }
 
 function renderRoomStagePortrait(room) {
@@ -1094,7 +1102,7 @@ function renderRoomStagePortrait(room) {
     room,
     roomStageSummary(room),
     {
-      title: portraitProjection(room)?.title || caretakerProfile(room)?.name || room?.participant_label || "人物",
+      title: roomStagePortraitTitle(room),
       summary: roomStagePortraitSummary(room),
     },
   );
@@ -1115,31 +1123,6 @@ function renderRoomStagePortrait(room) {
 const sidebarStackEl = document.querySelector(".sidebar-stack");
 let caretakerPanelEl = null;
 let caretakerStatusEl = null;
-const CARETAKER_PROFILE = {
-  displayName: "OpenClaw 小狗管家",
-  status: "巡检中 · 3/5 例行巡视",
-  summary:
-    "我会守住你的会话、记录访客留言，并把自动回复规则写在聊天区下方，确保你随时知道谁在呼叫。",
-  highlight: "自动提醒 · 访客留言 · /assistant 召唤",
-};
-const CARETAKER_MESSAGES = [
-  {
-    title: "访客留言",
-    detail: "访客「阿初」在世界广场问：今晚还要再跑一次设备配置吗？",
-    time: "1 分钟前",
-  },
-  {
-    title: "提醒",
-    detail: "你刚才提到 `/assistant`，我会自动回复「小狗在」并准备访客卡片。",
-    time: "刚刚",
-  },
-];
-const CARETAKER_RULES = [
-  "会话空闲 5 分钟自动回复「小狗在，继续说吧」，并通知你有人等候。",
-  "提到 `/owner` 或 `/assistant` 时记录访客留言并同步给待办。",
-];
-const CARETAKER_AUTOMATION_NOTE = CARETAKER_RULES[0];
-const CARETAKER_VISITOR_PREVIEW = CARETAKER_MESSAGES[0].detail;
 
 const roomListEl = document.querySelector("#room-list");
 const timelineEl = document.querySelector("#timeline");
@@ -1315,21 +1298,32 @@ const governanceAdminForms = [
   worldResidentSanctionFormEl,
 ].filter(Boolean);
 
+function createSearchDomNode(spec = {}) {
+  const node = document.createElement(spec.tag || "div");
+  if (spec.className) node.className = spec.className;
+  if (spec.type) node.type = spec.type;
+  if (spec.placeholder) node.placeholder = spec.placeholder;
+  if (spec.text !== undefined) node.textContent = spec.text;
+  if (spec.display !== undefined) node.style.display = spec.display;
+  if (spec.messageId) node.dataset.messageId = spec.messageId;
+  for (const child of spec.children || []) {
+    node.appendChild(createSearchDomNode(child));
+  }
+  return node;
+}
+
+function createMessageSearchBarNode() {
+  return createSearchDomNode(messageSearchBarDomSpec());
+}
+
 // === Message Search UI elements ===
 const searchToggleBtn = document.createElement("button");
 searchToggleBtn.className = "search-toggle-btn";
-searchToggleBtn.innerHTML = "🔍";
+searchToggleBtn.textContent = "🔍";
 searchToggleBtn.title = "搜索消息";
 searchToggleBtn.addEventListener("click", toggleMessageSearch);
 
-const searchBar = document.createElement("div");
-searchBar.className = "message-search-bar";
-searchBar.style.display = "none";
-searchBar.innerHTML = [
-  '<input type="search" class="message-search-input" placeholder="搜索消息..." />',
-  '<button class="message-search-close" type="button">✕</button>',
-  '<div class="message-search-results"></div>',
-].join("");
+const searchBar = createMessageSearchBarNode();
 
 // Insert search bar before timeline (once)
 if (timelineEl && timelineEl.parentNode) {
@@ -1813,32 +1807,32 @@ async function recallCommittedMessage(room, message, button = null) {
 }
 
 function createMessageOwnerActions(room, message, { isSelf, messageKind } = {}) {
-  const messageId = messageStableId(message);
-  if (!gatewayUrl || !isSelf || !messageId || message?.is_recalled || message?.moderation_status === 'blocked' || messageKind === "system") {
-    return null;
-  }
+  const actionSpecs = messageOwnerActionSpecs({ gatewayUrl, isSelf, message, messageKind });
+  if (!actionSpecs.length) return null;
   const actions = document.createElement("div");
   actions.className = "message-actions";
-
-  const editButton = document.createElement("button");
-  editButton.type = "button";
-  editButton.className = "message-action";
-  editButton.dataset.messageAction = "edit";
-  editButton.textContent = "编辑";
-  editButton.addEventListener("click", () => beginMessageEdit(room, message));
-  actions.appendChild(editButton);
-
-  const recallButton = document.createElement("button");
-  recallButton.type = "button";
-  recallButton.className = "message-action message-action-danger";
-  recallButton.dataset.messageAction = "recall";
-  recallButton.textContent = "撤回";
-  recallButton.addEventListener("click", () => {
-    void recallCommittedMessage(room, message, recallButton);
-  });
-  actions.appendChild(recallButton);
-
+  for (const spec of actionSpecs) {
+    actions.appendChild(createMessageOwnerActionButton(spec, room, message));
+  }
   return actions;
+}
+
+function createMessageOwnerActionButton(spec, room, message) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = spec.className;
+  button.dataset.messageAction = spec.action;
+  button.textContent = spec.label;
+  button.addEventListener("click", () => {
+    if (spec.action === "edit") {
+      beginMessageEdit(room, message);
+      return;
+    }
+    if (spec.action === "recall") {
+      void recallCommittedMessage(room, message, button);
+    }
+  });
+  return button;
 }
 
 async function retryPendingEcho(roomId, echoId) {
@@ -3540,37 +3534,38 @@ function ensureCaretakerPanel() {
   renderCaretakerPanel();
 }
 
-function createCaretakerPanelTitleNode() {
+function createCaretakerPanelTitleNode(model) {
   const panelTitle = document.createElement("div");
   panelTitle.className = "panel-title";
-  panelTitle.textContent = "OpenClaw 管家 · 小狗";
+  panelTitle.textContent = model.title;
   return panelTitle;
 }
 
-function createCaretakerPanelHeaderNode() {
+function createCaretakerPanelHeaderNode(model) {
+  const profile = model.profile;
   const header = document.createElement("div");
   header.className = "caretaker-header";
   const headerNames = document.createElement("div");
   const name = document.createElement("div");
   name.className = "caretaker-name";
-  name.textContent = CARETAKER_PROFILE.displayName;
+  name.textContent = profile.displayName;
   const status = document.createElement("div");
   status.className = "caretaker-status";
-  status.textContent = CARETAKER_PROFILE.status;
+  status.textContent = profile.status;
   headerNames.appendChild(name);
   headerNames.appendChild(status);
   const badge = document.createElement("span");
   badge.className = "caretaker-badge";
-  badge.textContent = CARETAKER_PROFILE.highlight;
+  badge.textContent = profile.highlight;
   header.appendChild(headerNames);
   header.appendChild(badge);
   return header;
 }
 
-function createCaretakerPanelSummaryNode() {
+function createCaretakerPanelSummaryNode(model) {
   const summary = document.createElement("p");
   summary.className = "caretaker-summary";
-  summary.textContent = CARETAKER_PROFILE.summary;
+  summary.textContent = model.profile.summary;
   return summary;
 }
 
@@ -3593,23 +3588,23 @@ function createCaretakerMessageNode(item) {
   return msg;
 }
 
-function createCaretakerMessagesNode() {
+function createCaretakerMessagesNode(model) {
   const messages = document.createElement("div");
   messages.className = "caretaker-messages";
-  for (const item of CARETAKER_MESSAGES) {
+  for (const item of model.messages) {
     messages.appendChild(createCaretakerMessageNode(item));
   }
   return messages;
 }
 
-function createCaretakerRulesNode() {
+function createCaretakerRulesNode(model) {
   const rules = document.createElement("div");
   rules.className = "caretaker-rules";
   const rulesTitle = document.createElement("div");
   rulesTitle.className = "caretaker-rules-title";
-  rulesTitle.textContent = "自动回复 / 留言规则";
+  rulesTitle.textContent = model.rulesTitle;
   const ruleList = document.createElement("ul");
-  for (const rule of CARETAKER_RULES) {
+  for (const rule of model.rules) {
     const li = document.createElement("li");
     li.textContent = rule;
     ruleList.appendChild(li);
@@ -3623,13 +3618,14 @@ function renderCaretakerPanel() {
   if (!caretakerPanelEl) return;
   clearChildren(caretakerPanelEl);
 
-  caretakerPanelEl.appendChild(createCaretakerPanelTitleNode());
+  const model = caretakerPanelModel();
+  caretakerPanelEl.appendChild(createCaretakerPanelTitleNode(model));
   const body = document.createElement("div");
   body.className = "caretaker-body";
-  body.appendChild(createCaretakerPanelHeaderNode());
-  body.appendChild(createCaretakerPanelSummaryNode());
-  body.appendChild(createCaretakerMessagesNode());
-  body.appendChild(createCaretakerRulesNode());
+  body.appendChild(createCaretakerPanelHeaderNode(model));
+  body.appendChild(createCaretakerPanelSummaryNode(model));
+  body.appendChild(createCaretakerMessagesNode(model));
+  body.appendChild(createCaretakerRulesNode(model));
 
   caretakerPanelEl.appendChild(body);
 }
@@ -3651,24 +3647,13 @@ function updateCaretakerStatus() {
     ? roomThreadHeadline(room)
     : "等待选中会话";
   clearChildren(caretakerStatusEl);
-  const strong = document.createElement("strong");
-  strong.textContent = CARETAKER_PROFILE.displayName;
-  caretakerStatusEl.appendChild(strong);
-  const status = document.createElement("span");
-  status.textContent = CARETAKER_PROFILE.status;
-  caretakerStatusEl.appendChild(status);
-  const roomSpan = document.createElement("span");
-  roomSpan.className = "caretaker-status-item";
-  roomSpan.textContent = roomLabel;
-  caretakerStatusEl.appendChild(roomSpan);
-  const ruleSpan = document.createElement("span");
-  ruleSpan.className = "caretaker-status-item";
-  ruleSpan.textContent = `规则：${CARETAKER_AUTOMATION_NOTE}`;
-  caretakerStatusEl.appendChild(ruleSpan);
-  const visitorSpan = document.createElement("span");
-  visitorSpan.className = "caretaker-status-item";
-  visitorSpan.textContent = `留言：${CARETAKER_VISITOR_PREVIEW}`;
-  caretakerStatusEl.appendChild(visitorSpan);
+  const items = caretakerStatusItems({ roomLabel });
+  for (const item of items) {
+    const node = document.createElement(item.element);
+    if (item.className) node.className = item.className;
+    node.textContent = item.text;
+    caretakerStatusEl.appendChild(node);
+  }
 }
 
 function ensureChatPriorityBadge() {
@@ -3899,67 +3884,87 @@ function updateConversationCallout() {
 }
 
 function syncRoomStageCanvas(room) {
-  if (currentShellPage() === "hub") {
+  const shellPage = currentShellPage();
+  if (shellPage === "hub") {
     syncHubStageCanvas(room);
     return;
   }
-  if (currentShellPage() !== "user") return;
+  if (shellPage !== "user") return;
   ensureUserSceneChrome();
   if (!roomStageCanvasEl) return;
 
   if (!room) {
-    const hudTitleEl = document.querySelector("#room-stage-title");
-    const defaultVisual = {
-      kind: "stage",
-      variant: "home",
-      title: "房间聊天",
-      summary: "回到住处后继续一对一交谈。",
-      theme: {
-        kicker: "住宅 / 私聊",
-        titleFont: '700 22px "Noto Serif SC", "Microsoft YaHei", serif',
-        bodyFont: '500 14px "Noto Sans SC", "Microsoft YaHei", sans-serif',
-        lineHeightTitle: 30,
-        lineHeightBody: 22,
-        background: "#4a3525",
-        accent: "#d38d4c",
-        panel: "rgba(90, 62, 42, 0.8)",
-        border: "rgba(211, 141, 76, 0.38)",
-        title: "#f7ead7",
-        body: "rgba(246, 231, 210, 0.88)",
-      },
-      visual: {
-        motif: "courtyard",
-        badge: "住宅 / 私聊",
-        signalCount: 2,
-      },
-    };
-    if (hudTitleEl) {
-      hudTitleEl.textContent = "房间聊天";
-    }
-    renderStageCanvas(roomStageCanvasEl, defaultVisual);
-    roomStageCanvasEl.dataset.variant = "home";
+    renderDefaultUserRoomStageCanvas();
     return;
   }
 
-  const visual = buildRoomVisualModel(
+  renderUserRoomStageCanvas(room);
+}
+
+function renderDefaultUserRoomStageCanvas() {
+  const hudTitleEl = document.querySelector("#room-stage-title");
+  const defaultVisual = defaultUserRoomStageVisual();
+  if (hudTitleEl) {
+    hudTitleEl.textContent = "房间聊天";
+  }
+  renderStageCanvas(roomStageCanvasEl, defaultVisual);
+  roomStageCanvasEl.dataset.variant = "home";
+}
+
+function defaultUserRoomStageVisual() {
+  return {
+    kind: "stage",
+    variant: "home",
+    title: "房间聊天",
+    summary: "回到住处后继续一对一交谈。",
+    theme: {
+      kicker: "住宅 / 私聊",
+      titleFont: '700 22px "Noto Serif SC", "Microsoft YaHei", serif',
+      bodyFont: '500 14px "Noto Sans SC", "Microsoft YaHei", sans-serif',
+      lineHeightTitle: 30,
+      lineHeightBody: 22,
+      background: "#4a3525",
+      accent: "#d38d4c",
+      panel: "rgba(90, 62, 42, 0.8)",
+      border: "rgba(211, 141, 76, 0.38)",
+      title: "#f7ead7",
+      body: "rgba(246, 231, 210, 0.88)",
+    },
+    visual: {
+      motif: "courtyard",
+      badge: "住宅 / 私聊",
+      signalCount: 2,
+    },
+  };
+}
+
+function buildUserRoomVisual(room) {
+  return buildRoomVisualModel(
     room,
     roomStageSummary(room),
     {
-      title: portraitProjection(room)?.title || caretakerProfile(room)?.name || room?.participant_label || "人物",
+      title: roomStagePortraitTitle(room),
       summary: roomStagePortraitSummary(room),
     },
   );
+}
+
+function renderUserRoomStageCanvas(room) {
+  const visual = buildUserRoomVisual(room);
   if (roomStageTitleEl) {
     roomStageTitleEl.textContent = visual.stage.title;
   }
   const rendered = renderStageCanvas(roomStageCanvasEl, visual.stage);
   roomStageCanvasEl.dataset.variant = visual.stage.variant;
   syncUserRoomProjection(room, visual);
-  if (roomStageNoteEl) {
-    roomStageNoteEl.textContent = visual.stage.summary;
-    roomStageNoteEl.style.display = rendered ? "none" : "";
-  }
+  updateRoomStageNote(rendered, visual.stage.summary);
   renderRoomStagePortrait(room);
+}
+
+function updateRoomStageNote(rendered, summary) {
+  if (!roomStageNoteEl) return;
+  roomStageNoteEl.textContent = summary;
+  roomStageNoteEl.style.display = rendered ? "none" : "";
 }
 
 function syncHubStageCanvas(room) {
@@ -4022,107 +4027,60 @@ function ensureComposerTip() {
 function renderComposerHero(room) {
   if (currentShellPage() === "user" || !composerHeroEl) return;
   const shellPage = currentShellPage();
+  const model = composerHeroModelForState({
+    room,
+    shellPage,
+    roomKind: room ? roomKind(room) : "",
+    roomThreadHeadline: room ? roomThreadHeadline(room) : "",
+    roomDisplayPeer: roomDisplayPeer(room),
+    roomSyncLabel: roomSyncLabel(),
+    caretakerPendingCount: room ? caretakerPendingCount(room) : 0,
+    unreadCount: room ? unreadCount(room) : 0,
+    refreshInProgress,
+    gatewayUrl,
+  });
   clearChildren(composerHeroEl);
-  composerHeroEl.dataset.variant = shellPage;
+  composerHeroEl.dataset.variant = model.variant;
 
   const kicker = document.createElement("div");
   kicker.className = "composer-hero-kicker";
-  kicker.textContent = composerHeroKicker(shellPage);
+  kicker.textContent = model.kicker;
   composerHeroEl.appendChild(kicker);
 
   const title = document.createElement("div");
   title.className = "composer-hero-title";
-  title.textContent = composerHeroTitle(
-    room, shellPage, room ? roomThreadHeadline(room) : "", roomDisplayPeer(room), roomKind(room),
-  );
+  title.textContent = model.title;
   composerHeroEl.appendChild(title);
 
   const note = document.createElement("div");
   note.className = "composer-hero-note";
-  note.textContent = composerHeroNote(room, shellPage);
+  note.textContent = model.note;
   composerHeroEl.appendChild(note);
 
   const chips = document.createElement("div");
   chips.className = "composer-hero-chips";
-  const chipData = composerHeroChipsData(
-    room,
-    shellPage,
-    room ? translateRoomKind(roomKind(room)) : "",
-    roomSyncLabel(),
-    room ? caretakerPendingCount(room) : 0,
-    room ? unreadCount(room) : 0,
-    refreshInProgress,
-    gatewayUrl,
-  );
-  for (const chip of chipData) {
+  for (const chip of model.chips) {
     chips.appendChild(createPill(chip.text, chip.tone));
   }
   composerHeroEl.appendChild(chips);
 }
 
-function composerContextInputStatusItem(room) {
-  return {
-    label: "输入",
-    value: isSendingMessage ? "发送中" : roomSendErrors[room.id] ? "待重发" : "可发送",
-    tone: roomSendErrors[room.id] ? "danger" : isSendingMessage ? "warm" : "accent",
-  };
-}
-
-function composerContextUserRoomItems(room) {
-  return [
-    {
-      label: "发送到",
-      value: roomThreadHeadline(room) || room.participant_label || room.title,
-      tone: "accent",
-    },
-    composerContextInputStatusItem(room),
-  ];
-}
-
-function composerContextRoomItems(room, shellPage) {
-  if (shellPage === "user") return composerContextUserRoomItems(room);
-  return [
-    {
-      label: shellPage === "admin" ? "线程" : "会话标题",
-      value: roomThreadHeadline(room),
-      tone: "accent",
-    },
-    {
-      label: shellPage === "admin" ? "当前对象" : "聊天对象",
-      value: roomAudienceLabel(room),
-      tone: "accent",
-    },
-    {
-      label: shellPage === "admin" ? "消息去向" : "投递路线",
-      value: roomRouteLabel(room),
-      tone: roomSendErrors[room.id] ? "danger" : "muted",
-    },
-    {
-      label: "聊天状态",
-      value: roomChatStatusSummary(room),
-      tone: roomSendErrors[room.id] ? "danger" : visiblePendingEchoCount(room) ? "warm" : "accent",
-    },
-    {
-      label: "队列",
-      value: roomQueueSummary(room),
-      tone: caretakerPendingCount(room) > 0 || unreadCount(room) > 0 ? "warm" : "muted",
-    },
-    composerContextInputStatusItem(room),
-  ];
-}
-
-function composerContextEmptyItems(shellPage) {
-  return [
-    {
-      label: shellPage === "admin" ? "线程" : "会话标题",
-      value: gatewayUrl ? "先打开一个会话" : "等待网关",
-      tone: "muted",
-    },
-  ];
-}
-
 function composerContextItems(room, shellPage) {
-  return room ? composerContextRoomItems(room, shellPage) : composerContextEmptyItems(shellPage);
+  return composerContextItemsForState({
+    room,
+    shellPage,
+    gatewayUrl,
+    threadHeadline: room ? roomThreadHeadline(room) : "",
+    audienceLabel: room ? roomAudienceLabel(room) : "",
+    routeLabel: room ? roomRouteLabel(room) : "",
+    chatStatusSummary: room ? roomChatStatusSummary(room) : "",
+    queueSummary: room ? roomQueueSummary(room) : "",
+    caretakerPendingCount: room ? caretakerPendingCount(room) : 0,
+    unreadCount: room ? unreadCount(room) : 0,
+    visiblePendingEchoCount: room ? visiblePendingEchoCount(room) : 0,
+    sendError: room ? roomSendErrors[room.id] : "",
+    isSendingMessage,
+  });
 }
 
 function createComposerContextItemNode(item) {
@@ -4356,6 +4314,16 @@ function queryGatewayUrl() {
 
 function currentIdentity() {
   return senderIdentity.trim() || "访客";
+}
+
+function applyRailVisibility() {
+  // 实现 HTML 中 [data-rail-visibility="owner-only"] 的访问控制：仅已登录居民
+  // （currentIdentity 非"访客"）可见，避免访客进入 scene-editor 等仅 owner 可用的
+  // 入口。此前该属性仅声明无消费者，访客可见编辑器链接。
+  const isOwner = currentIdentity() !== "访客";
+  document.querySelectorAll('[data-rail-visibility="owner-only"]').forEach((node) => {
+    node.style.display = isOwner ? "" : "none";
+  });
 }
 
 function residentGatewayLoginRequired() {
@@ -4858,69 +4826,29 @@ function renderRoomDigest(rooms) {
   roomDigestEl.appendChild(createRoomDigestChipsNode(shellPage, metrics));
 }
 
-function shouldHideThreadStatusRail(room, shellPage) {
-  return !room || shellPage === "user";
-}
-
-function threadStatusBaseItems(room, shellPage) {
-  return [
-    {
-      label: shellPage === "admin" ? "线程" : "会话标题",
-      value: roomThreadHeadline(room),
-      tone: "muted",
-    },
-    {
-      label: "聊天状态",
-      value: roomChatStatusSummary(room),
-      tone: roomSendErrors[room.id] ? "danger" : visiblePendingEchoCount(room) ? "warm" : "accent",
-    },
-    {
-      label: "队列",
-      value: roomQueueSummary(room),
-      tone: caretakerPendingCount(room) > 0 || unreadCount(room) > 0 ? "warm" : "muted",
-    },
-    { label: shellPage === "admin" ? "后台对象" : "聊天对象", value: roomAudienceLabel(room), tone: "accent" },
-    { label: "路由", value: roomRouteLabel(room), tone: roomSendErrors[room.id] ? "danger" : "muted" },
-    { label: "同步", value: roomSyncLabel(), tone: refreshInProgress ? "warm" : "muted" },
-    {
-      label: "输入",
-      value: isSendingMessage ? "发送中" : roomSendErrors[room.id] ? "待重发" : "可输入",
-      tone: roomSendErrors[room.id] ? "danger" : isSendingMessage ? "warm" : "accent",
-    },
-  ];
-}
-
-function appendThreadStatusDraftItem(items, room) {
-  if (!roomHasDraft(room.id)) return;
-  items.push({
-    label: "草稿",
-    value: `${draftForRoom(room.id).trim().length} 字`,
-    tone: "accent",
-  });
-}
-
-function appendThreadStatusCaretakerItems(items, room) {
+function threadStatusRailModel(room, shellPage) {
+  const sendError = room ? roomSendErrors[room.id] : "";
   const caretaker = caretakerProfile(room);
-  if (!caretaker) return;
-  items.push({
-    label: caretaker.role_label || "房间管家",
-    value: `${caretaker.name} · ${caretakerStatusLine(room)}`,
-    tone: caretakerPendingCount(room) > 0 ? "warm" : "accent",
+  return threadStatusRailModelForState({
+    room,
+    shellPage,
+    threadHeadline: room ? roomThreadHeadline(room) : "",
+    chatStatusSummary: room ? roomChatStatusSummary(room) : "",
+    queueSummary: room ? roomQueueSummary(room) : "",
+    audienceLabel: room ? roomAudienceLabel(room) : "",
+    routeLabel: room ? roomRouteLabel(room) : "",
+    syncLabel: room ? roomSyncLabel() : "",
+    sendError,
+    pendingEchoCount: room ? visiblePendingEchoCount(room) : 0,
+    caretakerPendingCount: caretakerPendingCount(room),
+    unreadCount: room ? unreadCount(room) : 0,
+    refreshInProgress,
+    isSendingMessage,
+    draftLength: room && roomHasDraft(room.id) ? draftForRoom(room.id).trim().length : 0,
+    caretaker,
+    caretakerStatus: caretakerStatusLine(room),
+    caretakerNotificationCount: caretakerNotificationCount(room),
   });
-  if (caretakerNotificationCount(room) > 0) {
-    items.push({
-      label: "提醒",
-      value: `${caretakerNotificationCount(room)} 条给主人`,
-      tone: "muted",
-    });
-  }
-}
-
-function threadStatusRailItems(room, shellPage) {
-  const items = threadStatusBaseItems(room, shellPage);
-  appendThreadStatusDraftItem(items, room);
-  appendThreadStatusCaretakerItems(items, room);
-  return items;
 }
 
 function composerMetaStatusForRoom(room) {
@@ -5019,13 +4947,14 @@ function renderThreadStatusRail(room) {
   if (!threadStatusRailEl) return;
   clearChildren(threadStatusRailEl);
   const shellPage = currentShellPage();
-  if (shouldHideThreadStatusRail(room, shellPage)) {
+  const model = threadStatusRailModel(room, shellPage);
+  if (!model.visible) {
     threadStatusRailEl.classList.add("surface-hidden");
     return;
   }
   threadStatusRailEl.classList.remove("surface-hidden");
 
-  for (const item of threadStatusRailItems(room, shellPage)) {
+  for (const item of model.items) {
     threadStatusRailEl.appendChild(createThreadStatusItemNode(item));
   }
 }
@@ -5333,22 +5262,9 @@ async function loadWorldState() {
     const snapshotResponse = await fetch(`${gatewayUrl}/v1/world-snapshot`);
     if (snapshotResponse.ok) {
       const bundle = await snapshotResponse.json();
-      const payload = bundle?.payload;
-      if (payload?.governance?.world) {
-        governance = {
-          world: payload.governance.world,
-          portability: payload.governance.portability,
-          cities: payload.governance.cities || [],
-          memberships: payload.governance.memberships || [],
-          public_rooms: payload.governance.public_rooms || [],
-          residents: Array.isArray(payload.residents) ? payload.residents : [],
-          world_directory: payload.directory || null,
-          world_mirror_sources: Array.isArray(payload.mirror_sources)
-            ? payload.mirror_sources
-            : [],
-          world_square: Array.isArray(payload.square) ? payload.square : [],
-          world_safety: payload.safety || null,
-        };
+      const snapshotGovernance = governanceFromWorldSnapshotBundle(bundle);
+      if (snapshotGovernance) {
+        governance = snapshotGovernance;
         return true;
       }
     }
@@ -5360,19 +5276,9 @@ async function loadWorldState() {
     if (!worldResponse.ok) return false;
     const payload = await worldResponse.json();
     const residentsPayload = residentsResponse.ok ? await residentsResponse.json() : [];
-    if (payload?.world) {
-      governance = {
-        world: payload.world,
-        portability: payload.portability,
-        cities: payload.cities || [],
-        memberships: payload.memberships || [],
-        public_rooms: payload.public_rooms || [],
-        residents: Array.isArray(residentsPayload) ? residentsPayload : [],
-        world_directory: null,
-        world_mirror_sources: [],
-        world_square: [],
-        world_safety: null,
-      };
+    const apiGovernance = governanceFromWorldApiPayload(payload, residentsPayload);
+    if (apiGovernance) {
+      governance = apiGovernance;
       return true;
     }
   } catch {
@@ -5572,6 +5478,7 @@ function loadSenderIdentity() {
   if (identityInputEl) {
     identityInputEl.value = senderIdentity;
   }
+  applyRailVisibility();
 }
 
 function persistSenderIdentity(value) {
@@ -5587,6 +5494,7 @@ function persistSenderIdentity(value) {
     roomSendErrors = {};
   }
   updateResidentLoginSurface();
+  applyRailVisibility();
 }
 
 async function refreshIdentityProjection() {
@@ -6225,20 +6133,6 @@ function createChatDetailHeroNode(room, shellPage) {
   return hero;
 }
 
-function appendChatRuntimeShellRows(runtime, room, shellPage) {
-  if (shellPage === "user") return;
-  runtime.appendChild(
-    createDetailRow(shellPage === "admin" ? "线程" : "会话标题", roomThreadHeadline(room)),
-  );
-  runtime.appendChild(createDetailRow("聊天状态", roomChatStatusSummary(room)));
-  runtime.appendChild(createDetailRow("队列", roomQueueSummary(room)));
-}
-
-function appendChatRuntimeSyncRows(runtime, room) {
-  runtime.appendChild(createDetailRow("同步", roomSyncLabel()));
-  runtime.appendChild(createDetailRow("消息数", `${room.messages?.length || 0} 条`));
-}
-
 function chatRuntimeQuickActionContext(room) {
   const latestAction = latestRoomQuickAction(room);
   if (!latestAction) return null;
@@ -6295,48 +6189,36 @@ function appendChatRuntimePreviewRows(runtime, room, preview) {
   }
 }
 
-function appendChatRuntimeQuickActionRows(runtime, room) {
-  const quickContext = chatRuntimeQuickActionContext(room);
-  if (!quickContext) return;
-  const { latestAction, quickState, preview } = quickContext;
-  runtime.appendChild(
-    createDetailRow("最近动作", `${latestAction} · ${quickActionStatusCopy(latestAction)}`),
-  );
-  runtime.appendChild(
-    createDetailRow("动作状态", `${quickActionFollowUpLabel(latestAction, quickState)} · ${quickActionFollowUpCopy(latestAction, quickState)}`),
-  );
-  appendChatRuntimePreviewRows(runtime, room, preview);
+function chatRuntimeDetailModel(room, shellPage) {
+  const caretaker = caretakerProfile(room);
+  return chatRuntimeDetailModelForState({
+    room,
+    shellPage,
+    threadHeadline: roomThreadHeadline(room),
+    chatStatusSummary: roomChatStatusSummary(room),
+    queueSummary: roomQueueSummary(room),
+    syncLabel: roomSyncLabel(),
+    quickContext: chatRuntimeQuickActionContext(room),
+    provider,
+    gatewayUrl,
+    isSendingMessage,
+    caretakerStatus: caretaker ? caretakerStatusLine(room) : "",
+    sendError: roomSendErrors[room.id] || "",
+  });
 }
 
-function appendChatRuntimeProviderRows(runtime, room) {
-  runtime.appendChild(
-    createDetailRow(
-      "消息来源",
-      `${translateProviderMode(provider.mode || "unknown")} · ${translateProviderConnectionState(
-        provider.connection_state,
-      )}`,
-    ),
-  );
-  runtime.appendChild(
-    createDetailRow(
-      "输入状态",
-      gatewayUrl ? (isSendingMessage ? "发送中" : "可发送") : "等待网关",
-    ),
-  );
-  if (caretakerProfile(room)) {
-    runtime.appendChild(createDetailRow("管家状态", caretakerStatusLine(room)));
-  }
-  if (roomSendErrors[room.id]) {
-    runtime.appendChild(createDetailRow("最近错误", roomSendErrors[room.id]));
+function appendChatRuntimeRows(runtime, rows) {
+  for (const row of rows) {
+    runtime.appendChild(createDetailRow(row.label, row.value));
   }
 }
 
 function createChatRuntimeDetailSection(room, shellPage) {
   const runtime = createDetailSection("聊天状态");
-  appendChatRuntimeShellRows(runtime, room, shellPage);
-  appendChatRuntimeSyncRows(runtime, room);
-  appendChatRuntimeQuickActionRows(runtime, room);
-  appendChatRuntimeProviderRows(runtime, room);
+  const model = chatRuntimeDetailModel(room, shellPage);
+  appendChatRuntimeRows(runtime, model.rowsBeforePreview);
+  appendChatRuntimePreviewRows(runtime, room, model.preview);
+  appendChatRuntimeRows(runtime, model.rowsAfterPreview);
   return runtime;
 }
 
@@ -6858,6 +6740,13 @@ function createTimelineMessageRowNode({
   return row;
 }
 
+function createTimelineDividerNode(dividerSpec) {
+  const divider = document.createElement("div");
+  divider.className = dividerSpec.className;
+  divider.textContent = dividerSpec.text;
+  return divider;
+}
+
 function renderTimelineNoRoomState(shellPage) {
   const emptyStateSpec = timelineNoRoomEmptyStateSpec({ gatewayUrl, shellPage });
   renderConversationMetaChips(null, emptyStateSpec.metaChips);
@@ -6867,39 +6756,17 @@ function renderTimelineNoRoomState(shellPage) {
 }
 
 function appendTimelineCommittedMessageRows(room, messages, flowSpec) {
-  const {
-    unreadForDivider,
-    unreadStartIndex,
-    allowMessageGrouping,
-    staggerBase,
-    staggerCap,
-  } = flowSpec;
-  for (const [index, message] of messages.entries()) {
-    const prevMessage = index > 0 ? messages[index - 1] : null;
-    const dividerSpecs = timelineDividerSpecsForMessage({
-      index,
-      message,
-      prevMessage,
-      unreadStartIndex,
-      unreadForDivider,
-    });
-    for (const dividerSpec of dividerSpecs) {
-      const divider = document.createElement("div");
-      divider.className = dividerSpec.className;
-      divider.textContent = dividerSpec.text;
-      timelineEl.appendChild(divider);
+  for (const item of timelineCommittedMessageRenderItems({
+    messages,
+    flowSpec,
+  })) {
+    if (item.type === "divider") {
+      timelineEl.appendChild(createTimelineDividerNode(item.divider));
+      continue;
     }
-
     const row = createTimelineMessageRowNode({
-      message,
-      prevMessage,
       room,
-      index,
-      unreadStartIndex,
-      messages,
-      allowMessageGrouping,
-      staggerBase,
-      staggerCap,
+      ...item.rowInput,
     });
     timelineEl.appendChild(row);
   }
@@ -7026,14 +6893,9 @@ function renderTimeline() {
 }
 
 function renderGovernanceOfflineState() {
-  setNodeText(worldStateEl, "世界：离线");
-  setNodeText(worldSummaryEl, shellMode === "user"
-    ? (gatewayUrl
-        ? "边缘抽屉已打开，正在等待世界外壳状态。"
-        : "边缘抽屉默认收起，连接网关后可查看世界外壳。")
-    : (gatewayUrl
-        ? "正在等待世界状态"
-        : "请先连接网关以加载世界与城市状态"));
+  const model = governanceOfflineStateModel({ gatewayUrl, shellMode });
+  setNodeText(worldStateEl, model.worldState);
+  setNodeText(worldSummaryEl, model.summary);
   clearChildren(worldDirectoryListEl);
   clearChildren(worldMirrorSourceListEl);
   clearChildren(worldSquareListEl);
@@ -7046,46 +6908,43 @@ function renderGovernanceOfflineState() {
   ]) {
     if (!element) continue;
     const empty = document.createElement("li");
-    empty.className = "empty-note";
-    empty.textContent = "世界层暂不可用";
+    empty.className = model.listEmptyClassName;
+    empty.textContent = model.listEmptyText;
     element.appendChild(empty);
   }
   clearChildren(cityListEl);
   if (cityListEl) {
     const cityEmpty = document.createElement("li");
-    cityEmpty.className = "empty-note";
-    cityEmpty.textContent = "世界状态暂不可用";
+    cityEmpty.className = model.cityEmptyClassName;
+    cityEmpty.textContent = model.cityEmptyText;
     cityListEl.appendChild(cityEmpty);
   }
 }
 
 function createGovernanceCityCardBaseNode(city, membership) {
+  const model = governanceCityCardBaseModel(city, membership, { membershipLabelFn: humanMembership });
   const li = document.createElement("li");
-  li.className = "city-card";
+  li.className = model.className;
 
   const titleRow = document.createElement("div");
-  titleRow.className = "city-card-title";
-  titleRow.appendChild(createLine("city-name", displayCityTitle(city)));
-  titleRow.appendChild(createLine("city-slug", city.slug));
+  titleRow.className = model.titleRowClassName;
+  titleRow.appendChild(createLine("city-name", model.title));
+  titleRow.appendChild(createLine("city-slug", model.slug));
   li.appendChild(titleRow);
-  li.appendChild(createLine("city-sub", displayCityDescription(city)));
-  li.appendChild(createLine("city-role", `你的状态：${humanMembership(membership)}`));
-  li.appendChild(
-    createLine(
-      "city-sub",
-      `公开发现 ${city.public_room_discovery_enabled ? "开启" : "关闭"} · 入城审批 ${city.approval_required ? "需要审批" : "开放加入"}`,
-    ),
-  );
+  li.appendChild(createLine("city-sub", model.description));
+  li.appendChild(createLine("city-role", model.role));
+  li.appendChild(createLine("city-sub", model.access));
   return li;
 }
 
 function createGovernanceRoomOpenButton(room) {
+  const model = room.openButton;
   const openButton = document.createElement("button");
-  openButton.type = "button";
-  openButton.className = "secondary mini-button";
-  openButton.textContent = "打开";
+  openButton.type = model.type;
+  openButton.className = model.className;
+  openButton.textContent = model.text;
   openButton.addEventListener("click", async () => {
-    focusRoom(room.room_id);
+    focusRoom(room.roomId);
     await loadGatewayState();
     renderRooms();
     renderTimeline();
@@ -7094,10 +6953,11 @@ function createGovernanceRoomOpenButton(room) {
 }
 
 function createGovernanceRoomFreezeButton(city, room) {
+  const model = room.freezeButton;
   const toggleButton = document.createElement("button");
-  toggleButton.type = "button";
-  toggleButton.className = "secondary mini-button";
-  toggleButton.textContent = room.frozen ? "解冻" : "冻结";
+  toggleButton.type = model.type;
+  toggleButton.className = model.className;
+  toggleButton.textContent = model.text;
   toggleButton.addEventListener("click", async () => {
     try {
       await submitFreezeRoom(city.slug, room.slug, !room.frozen);
@@ -7110,15 +6970,15 @@ function createGovernanceRoomFreezeButton(city, room) {
 
 function createGovernanceCityRoomEntryNode(city, membership, room) {
   const row = document.createElement("div");
-  row.className = "city-room-entry";
+  row.className = room.rowClassName;
   const label = document.createElement("span");
-  label.textContent = `${room.slug}${room.frozen ? " · 已冻结" : ""}`;
+  label.textContent = room.label;
   row.appendChild(label);
 
   const controls = document.createElement("div");
-  controls.className = "city-room-controls";
+  controls.className = room.controlsClassName;
   controls.appendChild(createGovernanceRoomOpenButton(room));
-  if (membership?.state === "Active" && roleAllowsFreezeRoom(membership.role)) {
+  if (room.freezeButton) {
     controls.appendChild(createGovernanceRoomFreezeButton(city, room));
   }
   row.appendChild(controls);
@@ -7126,42 +6986,44 @@ function createGovernanceCityRoomEntryNode(city, membership, room) {
 }
 
 function appendGovernanceCityRoomList(li, city, membership, rooms) {
+  const model = governanceCityRoomListModel(rooms, membership, { canFreezeRoomFn: roleAllowsFreezeRoom });
   const roomList = document.createElement("div");
-  roomList.className = "city-room-list";
-  roomList.textContent = "公共房间";
+  roomList.className = model.titleClassName;
+  roomList.textContent = model.title;
   li.appendChild(roomList);
 
   const roomWrap = document.createElement("div");
-  roomWrap.className = "city-room-wrap";
-  for (const room of rooms) {
+  roomWrap.className = model.wrapClassName;
+  for (const room of model.entries) {
     roomWrap.appendChild(createGovernanceCityRoomEntryNode(city, membership, room));
   }
   li.appendChild(roomWrap);
 }
 
 function appendGovernancePendingMemberList(li, city, membership, pendingMembers) {
+  const model = governancePendingMemberListModel(pendingMembers, membership, { canApproveJoinFn: roleAllowsApproveJoin });
   const pendingTitle = document.createElement("div");
-  pendingTitle.className = "city-room-list";
-  pendingTitle.textContent = "待审批居民";
+  pendingTitle.className = model.titleClassName;
+  pendingTitle.textContent = model.title;
   li.appendChild(pendingTitle);
 
   const pendingWrap = document.createElement("div");
-  pendingWrap.className = "city-room-wrap";
-  for (const pending of pendingMembers) {
+  pendingWrap.className = model.wrapClassName;
+  for (const pending of model.entries) {
     const row = document.createElement("div");
-    row.className = "city-room-entry";
+    row.className = pending.rowClassName;
     const label = document.createElement("span");
-    label.textContent = pending.resident_id;
+    label.textContent = pending.label;
     row.appendChild(label);
 
-    if (membership?.state === "Active" && roleAllowsApproveJoin(membership.role)) {
+    if (pending.approveButton) {
       const approveButton = document.createElement("button");
-      approveButton.type = "button";
-      approveButton.className = "secondary mini-button";
-      approveButton.textContent = "批准";
+      approveButton.type = pending.approveButton.type;
+      approveButton.className = pending.approveButton.className;
+      approveButton.textContent = pending.approveButton.text;
       approveButton.addEventListener("click", async () => {
         try {
-          await submitApproveResident(city.slug, pending.resident_id);
+          await submitApproveResident(city.slug, pending.residentId);
         } catch (error) {
           setGovernanceStatus(localizedRuntimeError(error, "批准居民失败"), true);
         }
@@ -7175,29 +7037,32 @@ function appendGovernancePendingMemberList(li, city, membership, pendingMembers)
 }
 
 function appendGovernanceActiveMemberList(li, city, membership, activeMembers) {
+  const model = governanceActiveMemberListModel(activeMembers, membership, {
+    canManageStewardsFn: roleAllowsManageStewards,
+    translateRoleFn: translateRole,
+  });
   const activeTitle = document.createElement("div");
-  activeTitle.className = "city-room-list";
-  activeTitle.textContent = "活跃居民";
+  activeTitle.className = model.titleClassName;
+  activeTitle.textContent = model.title;
   li.appendChild(activeTitle);
 
   const activeWrap = document.createElement("div");
-  activeWrap.className = "city-room-wrap";
-  for (const resident of activeMembers) {
+  activeWrap.className = model.wrapClassName;
+  for (const resident of model.entries) {
     const row = document.createElement("div");
-    row.className = "city-room-entry";
+    row.className = resident.rowClassName;
     const label = document.createElement("span");
-    label.textContent = `${resident.resident_id} · ${translateRole(resident.role)}`;
+    label.textContent = resident.label;
     row.appendChild(label);
 
-    if (membership?.state === "Active" && roleAllowsManageStewards(membership.role)) {
+    if (resident.stewardButton) {
       const stewardButton = document.createElement("button");
-      stewardButton.type = "button";
-      stewardButton.className = "secondary mini-button";
-      const grant = resident.role !== "Steward";
-      stewardButton.textContent = grant ? "设为执事" : "撤销执事";
+      stewardButton.type = resident.stewardButton.type;
+      stewardButton.className = resident.stewardButton.className;
+      stewardButton.textContent = resident.stewardButton.text;
       stewardButton.addEventListener("click", async () => {
         try {
-          await submitStewardUpdate(city.slug, resident.resident_id, grant);
+          await submitStewardUpdate(city.slug, resident.residentId, resident.stewardGrant);
         } catch (error) {
           setGovernanceStatus(localizedRuntimeError(error, "执事权限更新失败"), true);
         }
@@ -7210,36 +7075,32 @@ function appendGovernanceActiveMemberList(li, city, membership, activeMembers) {
   li.appendChild(activeWrap);
 }
 
-function createGovernanceJoinButton(city) {
+function createGovernanceJoinButton(action) {
   const joinButton = document.createElement("button");
-  joinButton.type = "button";
-  joinButton.className = "secondary";
-  joinButton.textContent = "加入";
+  joinButton.type = action.type;
+  joinButton.className = action.className;
+  joinButton.textContent = action.text;
   joinButton.addEventListener("click", async () => {
-    cityJoinInputEl.value = city.slug;
-    await submitJoinCity(city.slug);
+    cityJoinInputEl.value = action.citySlug;
+    await submitJoinCity(action.citySlug);
   });
   return joinButton;
 }
 
-function createGovernancePendingApprovalNotice() {
+function createGovernancePendingApprovalNotice(notice) {
   const pending = document.createElement("div");
-  pending.className = "city-role notice-pending";
-  pending.textContent = "等待审批";
+  pending.className = notice.className;
+  pending.textContent = notice.text;
   return pending;
-}
-
-function governanceLobbyRoom(rooms) {
-  return rooms.find((room) => room.slug === "lobby") || rooms[0];
 }
 
 function createGovernanceLobbyOpenButton(lobby) {
   const openButton = document.createElement("button");
-  openButton.type = "button";
-  openButton.className = "secondary";
-  openButton.textContent = `打开 ${lobby.slug}`;
+  openButton.type = lobby.type;
+  openButton.className = lobby.className;
+  openButton.textContent = lobby.text;
   openButton.addEventListener("click", async () => {
-    focusRoom(lobby.room_id);
+    focusRoom(lobby.roomId);
     await loadGatewayState();
     renderRooms();
     renderTimeline();
@@ -7247,75 +7108,71 @@ function createGovernanceLobbyOpenButton(lobby) {
   return openButton;
 }
 
-function createGovernanceCreateRoomButton(city) {
+function createGovernanceCreateRoomButton(action) {
   const roomButton = document.createElement("button");
-  roomButton.type = "button";
-  roomButton.textContent = "新建房间";
+  roomButton.type = action.type;
+  roomButton.textContent = action.text;
   roomButton.addEventListener("click", () => {
-    roomCityInputEl.value = city.slug;
+    roomCityInputEl.value = action.citySlug;
     roomTitleInputEl.focus();
-    setGovernanceStatus(`已准备在 ${city.slug} 中创建房间`);
+    setGovernanceStatus(action.statusText);
   });
   return roomButton;
 }
 
 function appendGovernanceCityActions(li, city, membership, rooms) {
+  const model = governanceCityActionsModel(city, membership, rooms, { canCreatePublicRoomFn: roleAllowsCreatePublicRoom });
+  if (!model.hasActions) return;
   const actions = document.createElement("div");
-  actions.className = "city-actions";
+  actions.className = model.className;
 
-  if (!membership) {
-    actions.appendChild(createGovernanceJoinButton(city));
-  } else if (membership.state === "PendingApproval") {
-    actions.appendChild(createGovernancePendingApprovalNotice());
+  if (model.joinButton) {
+    actions.appendChild(createGovernanceJoinButton(model.joinButton));
   }
 
-  const lobby = governanceLobbyRoom(rooms);
-  if (lobby) {
-    actions.appendChild(createGovernanceLobbyOpenButton(lobby));
+  if (model.pendingNotice) {
+    actions.appendChild(createGovernancePendingApprovalNotice(model.pendingNotice));
   }
 
-  if (membership?.state === "Active" && roleAllowsCreatePublicRoom(membership.role)) {
-    actions.appendChild(createGovernanceCreateRoomButton(city));
+  if (model.lobbyButton) {
+    actions.appendChild(createGovernanceLobbyOpenButton(model.lobbyButton));
   }
 
-  if ((actions.children?.length || 0) > 0) {
-    li.appendChild(actions);
+  if (model.createRoomButton) {
+    actions.appendChild(createGovernanceCreateRoomButton(model.createRoomButton));
   }
+
+  li.appendChild(actions);
 }
 
 function appendGovernanceFederationPolicyControls(li, city, membership) {
-  if (!(membership?.state === "Active" && roleAllowsUpdateFederation(membership.role))) return;
+  const model = governanceFederationPolicyControlsModel(city, membership, {
+    canUpdateFederationFn: roleAllowsUpdateFederation,
+    translateFederationPolicyFn: translateFederationPolicy,
+  });
+  if (!model) return;
   const federationLabel = document.createElement("div");
-  federationLabel.className = "city-room-list";
-  federationLabel.textContent = `联邦策略 · ${translateFederationPolicy(city.federation_policy)}`;
+  federationLabel.className = model.titleClassName;
+  federationLabel.textContent = model.title;
   li.appendChild(federationLabel);
 
   const federationWrap = document.createElement("div");
-  federationWrap.className = "city-room-wrap";
-  const policies = [
-    ["Open", "开放互联"],
-    ["Selective", "选择互联"],
-    ["Isolated", "孤城断联"],
-  ];
-  for (const [policyValue, label] of policies) {
+  federationWrap.className = model.wrapClassName;
+  for (const policy of model.entries) {
     const row = document.createElement("div");
-    row.className = "city-room-entry";
+    row.className = policy.rowClassName;
     const text = document.createElement("span");
-    text.textContent =
-      city.federation_policy === policyValue
-        ? `${label} · 当前生效`
-        : `${label} · 可切换`;
+    text.textContent = policy.label;
     row.appendChild(text);
 
     const applyButton = document.createElement("button");
-    applyButton.type = "button";
-    applyButton.className = "secondary mini-button";
-    applyButton.textContent =
-      city.federation_policy === policyValue ? "当前" : "应用";
-    applyButton.disabled = city.federation_policy === policyValue;
+    applyButton.type = policy.applyButton.type;
+    applyButton.className = policy.applyButton.className;
+    applyButton.textContent = policy.applyButton.text;
+    applyButton.disabled = policy.applyButton.disabled;
     applyButton.addEventListener("click", async () => {
       try {
-        await submitFederationPolicy(city.slug, policyValue);
+        await submitFederationPolicy(city.slug, policy.policyValue);
       } catch (error) {
         setGovernanceStatus(localizedRuntimeError(error, "联邦策略更新失败"), true);
       }
@@ -7337,18 +7194,23 @@ function hasGovernanceRenderTargets() {
 }
 
 function updateGovernanceWorldHeader() {
-  const directory = governance.world_directory;
-  setNodeText(worldStateEl, `世界：${displayWorldTitle(governance.world.title)}`);
-  setNodeText(worldSummaryEl, shellMode === "user"
-    ? `${displayWorldTitle(governance.world.title)} · 抽屉里放城市 ${directory?.city_count ?? governance.cities.length} 项 · 镜像 ${directory?.mirror_count ?? 0} 项`
-    : `${displayWorldTitle(governance.world.title)} · 城市 ${directory?.city_count ?? governance.cities.length} · 镜像 ${directory?.mirror_count ?? 0} · 公告 ${(governance.world_square || []).length} · 跨城私聊 ${governance.world.allows_cross_city_private_messages ? "开启" : "关闭"}`);
+  const model = governanceWorldHeaderModel({
+    world: governance.world,
+    directory: governance.world_directory,
+    cityCount: governance.cities.length,
+    worldSquareCount: (governance.world_square || []).length,
+    shellMode,
+  });
+  setNodeText(worldStateEl, model.worldState);
+  setNodeText(worldSummaryEl, model.summary);
 }
 
 function appendGovernanceEmptyCityState() {
   if (!cityListEl) return;
+  const model = governanceEmptyCityStateModel();
   const empty = document.createElement("li");
-  empty.className = "empty-note";
-  empty.textContent = "暂时还没有公开城市";
+  empty.className = model.className;
+  empty.textContent = model.text;
   cityListEl.appendChild(empty);
 }
 
@@ -7416,6 +7278,21 @@ function renderGovernance() {
   }
 }
 
+function createWorldDirectoryCityCardNode(model) {
+  const li = document.createElement("li");
+  li.className = model.className;
+
+  const titleRow = document.createElement("div");
+  titleRow.className = model.titleRowClassName;
+  titleRow.appendChild(createLine("city-name", model.title));
+  titleRow.appendChild(createLine("city-slug", model.slug));
+  li.appendChild(titleRow);
+  li.appendChild(createLine("city-sub", model.description));
+  li.appendChild(createLine("city-sub", model.metrics));
+  li.appendChild(createLine("city-role", model.mirror));
+  return li;
+}
+
 function renderWorldDirectory() {
   if (!worldDirectoryListEl) return;
   clearChildren(worldDirectoryListEl);
@@ -7423,39 +7300,28 @@ function renderWorldDirectory() {
   if (!snapshot?.cities?.length) {
     const empty = document.createElement("li");
     empty.className = "empty-note";
-    empty.textContent = gatewayUrl
-      ? "世界目录暂时还没有公开条目"
-      : "请先连接网关以加载世界目录";
+    empty.textContent = worldDirectoryEmptyStateText({ gatewayUrl });
     worldDirectoryListEl.appendChild(empty);
     return;
   }
 
   for (const city of snapshot.cities) {
-    const li = document.createElement("li");
-    li.className = "city-card micro-card";
-
-    const titleRow = document.createElement("div");
-    titleRow.className = "city-card-title";
-    titleRow.appendChild(createLine("city-name", displayCityTitle(city)));
-    titleRow.appendChild(
-      createLine("city-slug", `${city.slug} · ${translateSourceKind(city.source_kind)}`),
+    worldDirectoryListEl.appendChild(
+      createWorldDirectoryCityCardNode(worldDirectoryCityCardModel(city)),
     );
-    li.appendChild(titleRow);
-    li.appendChild(createLine("city-sub", displayCityDescription(city)));
-    li.appendChild(
-      createLine(
-        "city-sub",
-        `信任状态 ${translateTrustState(city.trust_state)} · 居民 ${city.resident_count} · 房间 ${city.public_room_count}`,
-      ),
-    );
-    li.appendChild(
-      createLine(
-        "city-role",
-        `镜像 ${city.mirror_enabled ? "已开启" : "未开启"} · 城市标识 ${city.city_id}`,
-      ),
-    );
-    worldDirectoryListEl.appendChild(li);
   }
+}
+
+function createMirrorSourceCardNode(model) {
+  const li = document.createElement("li");
+  li.className = model.className;
+  li.appendChild(createLine("city-name", model.title));
+  li.appendChild(createLine("city-sub", model.status));
+  li.appendChild(createLine("city-role", model.metrics));
+  if (model.lastSnapshot) {
+    li.appendChild(createLine("city-role", model.lastSnapshot));
+  }
+  return li;
 }
 
 function renderMirrorSources() {
@@ -7465,41 +7331,30 @@ function renderMirrorSources() {
   if (!sources.length) {
     const empty = document.createElement("li");
     empty.className = "empty-note";
-    empty.textContent = gatewayUrl
-      ? "暂时还没有配置世界镜像源"
-      : "请先连接网关以管理镜像源";
+    empty.textContent = mirrorSourcesEmptyStateText({ gatewayUrl });
     worldMirrorSourceListEl.appendChild(empty);
     return;
   }
 
   for (const source of sources) {
-    const li = document.createElement("li");
-    li.className = "city-card micro-card";
-    li.appendChild(createLine("city-name", source.base_url));
-    li.appendChild(
-      createLine(
-        "city-sub",
-        `${translateSourceKind(source.source_kind)} · ${source.enabled ? "已启用" : "未启用"} · ${
-          source.reachable ? "可达" : "不可达"
-        }`,
-      ),
+    worldMirrorSourceListEl.appendChild(
+      createMirrorSourceCardNode(mirrorSourceCardModel(source)),
     );
-    li.appendChild(
-      createLine(
-        "city-role",
-        `城市 ${source.city_count} · 公告 ${source.notice_count} · 通告 ${source.advisory_count}`,
-      ),
-    );
-    if (source.last_snapshot_at_ms) {
-      li.appendChild(
-        createLine(
-          "city-role",
-          `最近快照 ${formatDateTime(source.last_snapshot_at_ms)}`,
-        ),
-      );
-    }
-    worldMirrorSourceListEl.appendChild(li);
   }
+}
+
+function createWorldSquareNoticeCardNode(model) {
+  const li = document.createElement("li");
+  li.className = model.className;
+
+  const titleRow = document.createElement("div");
+  titleRow.className = model.titleRowClassName;
+  titleRow.appendChild(createLine("city-name", model.title));
+  titleRow.appendChild(createLine("city-slug", model.meta));
+  li.appendChild(titleRow);
+  li.appendChild(createLine("city-sub", model.body));
+  li.appendChild(createLine("city-role", model.tags));
+  return li;
 }
 
 function renderWorldSquare() {
@@ -7508,83 +7363,44 @@ function renderWorldSquare() {
   if (!governance.world_square?.length) {
     const empty = document.createElement("li");
     empty.className = "empty-note";
-    empty.textContent = gatewayUrl
-      ? "世界广场当前还没有新动态"
-      : "请先连接网关以加载世界广场公告";
+    empty.textContent = worldSquareEmptyStateText({ gatewayUrl });
     worldSquareListEl.appendChild(empty);
     return;
   }
 
   for (const notice of governance.world_square) {
-    const li = document.createElement("li");
-    li.className = "city-card micro-card";
-    const titleRow = document.createElement("div");
-    titleRow.className = "city-card-title";
-    titleRow.appendChild(createLine("city-name", notice.title));
-    titleRow.appendChild(
-      createLine("city-slug", `${translateSeverity(notice.severity || "info")} · ${notice.author_id}`),
+    worldSquareListEl.appendChild(
+      createWorldSquareNoticeCardNode(worldSquareNoticeCardModel(notice)),
     );
-    li.appendChild(titleRow);
-    li.appendChild(createLine("city-sub", notice.body));
-    li.appendChild(
-      createLine(
-        "city-role",
-        `标签：${(notice.tags || []).join("、") || "无"} · ${formatDateTime(notice.posted_at_ms)}`,
-      ),
-    );
-    worldSquareListEl.appendChild(li);
   }
 }
 
 function renderWorldSafetyEmptyState() {
   const empty = document.createElement("li");
   empty.className = "empty-note";
-  empty.textContent = gatewayUrl
-    ? "世界安全动态暂不可用"
-    : "请先连接网关以加载世界安全状态";
+  empty.textContent = worldSafetyEmptyStateText({ gatewayUrl });
   worldSafetyListEl.appendChild(empty);
 }
 
-function createWorldSafetyMirrorCard(safety) {
-  const mirrorCard = document.createElement("li");
-  mirrorCard.className = "city-card micro-card";
-  mirrorCard.appendChild(
-    createLine(
-      "city-name",
-      `镜像城市 ${safety.mirrors?.filter((item) => item.mirror_enabled).length || 0}`,
-    ),
-  );
-  mirrorCard.appendChild(
-    createLine(
-      "city-sub",
-      (safety.mirrors || [])
-        .map((mirror) => `${mirror.slug}：${translateTrustState(mirror.trust_state)}`)
-        .join(" · ") || "暂无镜像",
-    ),
-  );
-  mirrorCard.appendChild(
-    createLine("city-role", `治理员：${(safety.stewards || []).join("、") || "暂无"}`),
-  );
-  return mirrorCard;
+function createWorldSafetyMirrorCard(model) {
+  const li = document.createElement("li");
+  li.className = model.className;
+  li.appendChild(createLine("city-name", model.title));
+  li.appendChild(createLine("city-sub", model.mirrors));
+  li.appendChild(createLine("city-role", model.stewards));
+  return li;
 }
 
-function createWorldSafetyAdvisoryCard(advisory) {
+function createWorldSafetyAdvisoryCard(model) {
   const li = document.createElement("li");
-  li.className = "city-card micro-card";
+  li.className = model.className;
   const titleRow = document.createElement("div");
-  titleRow.className = "city-card-title";
-  titleRow.appendChild(createLine("city-name", advisory.subject_ref));
-  titleRow.appendChild(createLine("city-slug", translateAdvisoryAction(advisory.action)));
+  titleRow.className = model.titleRowClassName;
+  titleRow.appendChild(createLine("city-name", model.title));
+  titleRow.appendChild(createLine("city-slug", model.action));
   li.appendChild(titleRow);
-  li.appendChild(createLine("city-sub", advisory.reason));
-  li.appendChild(
-    createLine(
-      "city-role",
-      `${translateSubjectKind(advisory.subject_kind)} · ${advisory.issued_by} · ${formatDateTime(
-        advisory.issued_at_ms,
-      )}`,
-    ),
-  );
+  li.appendChild(createLine("city-sub", model.reason));
+  li.appendChild(createLine("city-role", model.meta));
   return li;
 }
 
@@ -7593,121 +7409,70 @@ function appendWorldSafetyAdvisoryCards(safety) {
   if (!activeAdvisories.length) {
     const empty = document.createElement("li");
     empty.className = "empty-note";
-    empty.textContent = "当前没有生效中的世界安全通告";
+    empty.textContent = worldSafetyAdvisoryEmptyStateText();
     worldSafetyListEl.appendChild(empty);
     return;
   }
   for (const advisory of activeAdvisories) {
-    worldSafetyListEl.appendChild(createWorldSafetyAdvisoryCard(advisory));
+    worldSafetyListEl.appendChild(
+      createWorldSafetyAdvisoryCard(worldSafetyAdvisoryCardModel(advisory)),
+    );
   }
 }
 
-function createWorldSafetySanctionSummaryCard(residentSanctions, blacklistEntries) {
-  const sanctionCard = document.createElement("li");
-  sanctionCard.className = "city-card micro-card";
-  sanctionCard.appendChild(
-    createLine("city-name", `居民制裁 ${residentSanctions.length}`),
-  );
-  sanctionCard.appendChild(
-    createLine(
-      "city-sub",
-      residentSanctions.length
-        ? residentSanctions
-            .slice(0, 4)
-            .map((item) => `${item.resident_id}：${translateReportStatus(item.status)}`)
-            .join(" · ")
-        : "当前没有已发布的居民制裁",
-    ),
-  );
-  sanctionCard.appendChild(
-    createLine("city-role", `黑名单哈希条目 ${blacklistEntries.length}`),
-  );
-  return sanctionCard;
-}
-
-function createWorldSafetyReportSummaryCard(reports) {
-  const reportCard = document.createElement("li");
-  reportCard.className = "city-card micro-card";
-  reportCard.appendChild(createLine("city-name", `举报记录 ${reports.length}`));
-  reportCard.appendChild(
-    createLine(
-      "city-sub",
-      reports.length
-        ? reports
-            .slice(0, 4)
-            .map(
-              (item) =>
-                `${translateTargetKind(item.target_kind)}：${item.target_ref}：${translateReportStatus(item.status)}`,
-            )
-            .join(" · ")
-        : "当前还没有世界安全举报",
-    ),
-  );
-  reportCard.appendChild(
-    createLine(
-      "city-role",
-      reports.length
-        ? `最新时间 ${formatDateTime(reports[0].reported_at_ms)}`
-        : "居民可以在这里举报群聊和公共空间违规",
-    ),
-  );
-  return reportCard;
-}
-
-function createWorldSafetySanctionCard(sanction) {
+function createWorldSafetySanctionSummaryCard(model) {
   const li = document.createElement("li");
-  li.className = "city-card micro-card";
-  const titleRow = document.createElement("div");
-  titleRow.className = "city-card-title";
-  titleRow.appendChild(createLine("city-name", sanction.resident_id));
-  titleRow.appendChild(
-    createLine(
-      "city-slug",
-      `${translateReportStatus(sanction.status)} · 迁移资格 ${translatePortability(
-        sanction.portability_revoked,
-      )}`,
-    ),
-  );
-  li.appendChild(titleRow);
-  li.appendChild(createLine("city-sub", sanction.reason));
-  li.appendChild(
-    createLine(
-      "city-role",
-      `${sanction.city_id || "世界层"} · ${formatDateTime(sanction.issued_at_ms)}`,
-    ),
-  );
+  li.className = model.className;
+  li.appendChild(createLine("city-name", model.title));
+  li.appendChild(createLine("city-sub", model.summary));
+  li.appendChild(createLine("city-role", model.meta));
   return li;
 }
 
-function createWorldSafetyReportCard(report) {
+function createWorldSafetyReportSummaryCard(model) {
   const li = document.createElement("li");
-  li.className = "city-card micro-card";
+  li.className = model.className;
+  li.appendChild(createLine("city-name", model.title));
+  li.appendChild(createLine("city-sub", model.summary));
+  li.appendChild(createLine("city-role", model.meta));
+  return li;
+}
+
+function createWorldSafetySanctionCard(model) {
+  const li = document.createElement("li");
+  li.className = model.className;
   const titleRow = document.createElement("div");
-  titleRow.className = "city-card-title";
-  titleRow.appendChild(createLine("city-name", report.target_ref));
-  titleRow.appendChild(createLine("city-slug", translateReportStatus(report.status || "Pending")));
+  titleRow.className = model.titleRowClassName;
+  titleRow.appendChild(createLine("city-name", model.title));
+  titleRow.appendChild(createLine("city-slug", model.status));
   li.appendChild(titleRow);
-  li.appendChild(createLine("city-sub", report.summary));
-  li.appendChild(
-    createLine(
-      "city-role",
-      `${translateTargetKind(report.target_kind)} · ${report.city || "世界层"} · ${
-        report.reporter_id
-      } · ${formatDateTime(report.reported_at_ms)}`,
-    ),
-  );
+  li.appendChild(createLine("city-sub", model.reason));
+  li.appendChild(createLine("city-role", model.meta));
+  return li;
+}
+
+function createWorldSafetyReportCard(model) {
+  const li = document.createElement("li");
+  li.className = model.className;
+  const titleRow = document.createElement("div");
+  titleRow.className = model.titleRowClassName;
+  titleRow.appendChild(createLine("city-name", model.title));
+  titleRow.appendChild(createLine("city-slug", model.status));
+  li.appendChild(titleRow);
+  li.appendChild(createLine("city-sub", model.summary));
+  li.appendChild(createLine("city-role", model.meta));
   return li;
 }
 
 function appendWorldSafetySanctionCards(residentSanctions) {
   for (const sanction of residentSanctions.slice(0, 6)) {
-    worldSafetyListEl.appendChild(createWorldSafetySanctionCard(sanction));
+    worldSafetyListEl.appendChild(createWorldSafetySanctionCard(worldSafetySanctionCardModel(sanction)));
   }
 }
 
 function appendWorldSafetyReportCards(reports) {
   for (const report of reports.slice(0, 6)) {
-    worldSafetyListEl.appendChild(createWorldSafetyReportCard(report));
+    worldSafetyListEl.appendChild(createWorldSafetyReportCard(worldSafetyReportCardModel(report)));
   }
 }
 
@@ -7720,14 +7485,20 @@ function renderWorldSafety() {
     return;
   }
 
-  worldSafetyListEl.appendChild(createWorldSafetyMirrorCard(safety));
+  worldSafetyListEl.appendChild(createWorldSafetyMirrorCard(worldSafetyMirrorCardModel(safety)));
   appendWorldSafetyAdvisoryCards(safety);
 
   const residentSanctions = safety.resident_sanctions || [];
   const blacklistEntries = safety.registration_blacklist || [];
   const reports = safety.reports || [];
-  worldSafetyListEl.appendChild(createWorldSafetySanctionSummaryCard(residentSanctions, blacklistEntries));
-  worldSafetyListEl.appendChild(createWorldSafetyReportSummaryCard(reports));
+  worldSafetyListEl.appendChild(
+    createWorldSafetySanctionSummaryCard(
+      worldSafetySanctionSummaryCardModel(residentSanctions, blacklistEntries),
+    ),
+  );
+  worldSafetyListEl.appendChild(
+    createWorldSafetyReportSummaryCard(worldSafetyReportSummaryCardModel(reports)),
+  );
   appendWorldSafetySanctionCards(residentSanctions);
   appendWorldSafetyReportCards(reports);
 }
@@ -7735,50 +7506,22 @@ function renderWorldSafety() {
 function createResidentDirectoryEmptyNode() {
   const empty = document.createElement("li");
   empty.className = "empty-note";
-  empty.textContent = gatewayUrl
-    ? "居民目录暂时还没有条目"
-    : "请先连接网关以加载居民目录";
+  empty.textContent = residentDirectoryEmptyStateText({ gatewayUrl });
   return empty;
 }
 
-function residentDirectoryDisplayName(resident) {
-  return resident.nickname || resident.resident_id;
-}
-
-function appendResidentDirectoryTitleRow(li, resident) {
-  const displayName = residentDirectoryDisplayName(resident);
+function appendResidentDirectoryTitleRow(li, model) {
   const titleRow = document.createElement("div");
-  titleRow.className = "city-card-title";
-  titleRow.appendChild(createLine("city-name", displayName));
-  if (resident.nickname) {
-    titleRow.appendChild(createLine("city-slug", resident.resident_id));
-  } else {
-    titleRow.appendChild(
-      createLine(
-        "city-slug",
-        translateResidentLabel(resident.resident_id),
-      ),
-    );
-  }
+  titleRow.className = model.titleRowClassName;
+  titleRow.appendChild(createLine("city-name", model.title));
+  titleRow.appendChild(createLine("city-slug", model.slug));
   li.appendChild(titleRow);
 }
 
-function appendResidentDirectoryMetaRows(li, resident) {
-  li.appendChild(
-    createLine(
-      "city-sub",
-      `已加入城市：${joinOrFallback(resident.active_cities || [], "暂无")}`,
-    ),
-  );
-  if (resident.pending_cities?.length) {
-    li.appendChild(createLine("city-sub", `待审批城市：${resident.pending_cities.join("、")}`));
+function appendResidentDirectoryMetaRows(li, model) {
+  for (const row of model.rows) {
+    li.appendChild(createLine(row.className, row.text));
   }
-  li.appendChild(
-    createLine(
-      "city-role",
-      `身份：${(resident.roles || []).map(translateRole).join("、") || "居民"}`,
-    ),
-  );
 }
 
 function createResidentDirectActionButton(resident) {
@@ -7802,10 +7545,13 @@ function appendResidentDirectoryActions(li, resident) {
 }
 
 function createResidentDirectoryCardNode(resident) {
+  const model = residentDirectoryCardModel(resident, {
+    translateResidentLabelFn: translateResidentLabel,
+  });
   const li = document.createElement("li");
-  li.className = "city-card";
-  appendResidentDirectoryTitleRow(li, resident);
-  appendResidentDirectoryMetaRows(li, resident);
+  li.className = model.className;
+  appendResidentDirectoryTitleRow(li, model);
+  appendResidentDirectoryMetaRows(li, model);
   if (resident.resident_id !== currentIdentity()) {
     appendResidentDirectoryActions(li, resident);
   }
@@ -8129,40 +7875,20 @@ function applyComposerFormState(room, shellPage, composerAvailability) {
 }
 
 function composerPlaceholderForState(room, shellPage, compactChatShell, composerAvailability) {
-  let placeholder;
-  if (isSendingMessage) {
-    placeholder = "正在发送消息...";
-  } else if (gatewayUnavailableForComposer()) {
-    placeholder = "连接离线，等待同步恢复";
-  } else if (residentGatewayLoginRequired()) {
-    placeholder = "请先登录后发送";
-  } else if (room) {
-    const kind = roomKind(room);
-    placeholder =
-      kind === "direct"
-        ? compactChatShell
-          ? `发消息给 ${room.thread_headline || room.peer_label || room.participant_label || roomDisplayPeer(room)}`
-          : `发给 ${room.thread_headline || room.peer_label || room.participant_label || roomDisplayPeer(room)}`
-        : kind === "public"
-          ? compactChatShell
-            ? `发到 ${roomThreadHeadline(room)}`
-            : `在 ${roomThreadHeadline(room)} 里说点什么`
-          : `回复 ${room.participant_label || room.route_label || room.title}`;
-  } else {
-    placeholder = compactChatShell
-      ? "先选会话，再输入第一句"
-      : "先选会话，再写跟进或公告";
-  }
-  if (!residentGatewayLoginRequired() && !isSendingMessage && room && !composerAvailability.canLiveSend) {
-    placeholder += gatewayUrl ? "（会先保存在本地，等待同步）" : "（会先进入本地时间线）";
-  }
-  if (shellPage === "hub" && !gatewayUnavailableForComposer() && !isSendingMessage) {
-    placeholder = "说点什么…";
-  }
-  if (editingMessageTarget) {
-    placeholder = "正在编辑已发送消息";
-  }
-  return placeholder;
+  return resolveComposerPlaceholderForState({
+    room,
+    shellPage,
+    compactChatShell,
+    composerAvailability,
+    isSendingMessage,
+    gatewayUnavailable: gatewayUnavailableForComposer(),
+    loginRequired: residentGatewayLoginRequired(),
+    gatewayUrl,
+    editingMessage: Boolean(editingMessageTarget),
+    roomKind: room ? roomKind(room) : "",
+    roomThreadHeadline: room ? roomThreadHeadline(room) : "",
+    roomDisplayPeer: room ? roomDisplayPeer(room) : "",
+  });
 }
 
 function applyComposerInputState(room, shellPage, compactChatShell, composerAvailability) {
@@ -8414,6 +8140,10 @@ function resolveGatewayUrl() {
 
 function handleGatewayAuthFailure(status) {
   return handleGatewayAuthFailureMod(status);
+}
+
+function sceneEditorGatewayUrl() {
+  return gatewayUrl || safeLocalStorageGet("lobster-gateway-url") || "";
 }
 
 async function postGatewayJson(path, payload) {
@@ -9182,7 +8912,7 @@ async function exportHistory({ conversationId = null, includePublic = true } = {
   setGovernanceStatus(`导出文件已准备好：${filename}`);
 }
 
-async function main() {
+function initializeLocalShellState() {
   initThemeToggle();
   chatFocusPreference = loadChatFocusPreference();
   setChatFocusMode(chatFocusPreference);
@@ -9193,30 +8923,66 @@ async function main() {
   roomQuickStates = loadRoomQuickStates();
   roomQuickSnapshots = loadRoomQuickSnapshots();
   syncChatPaneMode(resolveChatPaneMode(), { persist: false });
-  await loadBootstrap();
-  await loadCachedState();
-  await loadShellState();
-  loadSenderIdentity();
-  loadAuthDraft();
+}
+
+function updateInitialAuthStatus() {
   const authSession = getAuthSession();
   if (authSession.challengeId && authSession.maskedEmail) {
     setAuthStatus(`待完成验证码登录：${authSession.maskedEmail}`);
   } else {
     setAuthStatus("空闲");
   }
+}
+
+async function loadInitialRuntimeState() {
+  await loadBootstrap();
+  await loadCachedState();
+  await loadShellState();
+  loadSenderIdentity();
+  loadAuthDraft();
+  updateInitialAuthStatus();
   gatewayUrl = resolveGatewayUrl();
   await loadGatewayBootstrap();
   gatewayUrl = resolveGatewayUrl();
   await refreshFromGateway();
-  // Populate scene-editor link with current gateway URL and active room
+}
+
+function sceneEditorUrlForCurrentState() {
+  const editorGatewayUrl = sceneEditorGatewayUrl();
+  if (!editorGatewayUrl) return "";
+  const sessionToken = safeLocalStorageGet("lobster-session-token");
+  var editorUrl = "./scene-editor.html?gateway=" + encodeURIComponent(editorGatewayUrl);
+  if (activeRoomId) editorUrl += "&room=" + encodeURIComponent(activeRoomId);
+  if (sessionToken) editorUrl += "&token=" + encodeURIComponent(sessionToken);
+  return editorUrl;
+}
+
+function bindSceneEditorLink() {
+  // scene-editor 入口 URL：init 时用当前 activeRoomId 设 href（中键/新标签可用），
+  // 左键 click handler 实时刷新（owner 切换房间后跟随当前房间）。旧逻辑构造残缺
+  // "dm:" + id + ":"（缺对方 id），scene-editor 用它查 /v1/shell/state 永远匹配不到
+  // 房间 → owner 加载必空（P1 房间编辑器加载阻断）。
   const sceneEditorLink = document.getElementById("scene-editor-link");
-  if (sceneEditorLink && gatewayUrl) {
-    var editorUrl = "./scene-editor.html?gateway=" + encodeURIComponent(gatewayUrl);
-    var id = currentIdentity();
-    if (id && id !== "访客") editorUrl += "&room=" + encodeURIComponent("dm:" + id + ":");
+  if (!sceneEditorLink) return;
+  const editorUrl = sceneEditorUrlForCurrentState();
+  if (editorUrl) {
     sceneEditorLink.href = editorUrl;
   }
-  await loadWorldEntry();
+  if (!sceneEditorLink.dataset.sceneEditorBound) {
+    sceneEditorLink.dataset.sceneEditorBound = "1";
+    sceneEditorLink.addEventListener("click", function (event) {
+      const clickGatewayUrl = sceneEditorGatewayUrl();
+      if (!clickGatewayUrl) return;
+      const clickUrl = sceneEditorUrlForCurrentState();
+      if (!clickUrl) return;
+      event.preventDefault();
+      window.location.assign(clickUrl);
+    });
+  }
+  applyRailVisibility();
+}
+
+function renderInitialShell() {
   bootTransportStatus();
   refreshGatewayBadge();
   if (!userShellProjection()) {
@@ -9234,6 +9000,14 @@ async function main() {
   applyWorkspace();
   syncComposerDraft({ force: true });
   updateComposerState();
+}
+
+async function main() {
+  initializeLocalShellState();
+  await loadInitialRuntimeState();
+  bindSceneEditorLink();
+  await loadWorldEntry();
+  renderInitialShell();
   startGatewayRealtime();
   focusComposerInput({ force: true });
 }
@@ -9781,16 +9555,18 @@ function toggleMessageSearch() {
 
 function clearSearchResults() {
   const container = document.querySelector(".message-search-results");
-  if (container) container.innerHTML = "";
+  if (container) container.replaceChildren();
 }
 
 async function performMessageSearch(query) {
-  if (!gatewayUrl || !activeRoomId || !query.trim()) return;
-  const q = encodeURIComponent(query.trim());
-  const roomId = encodeURIComponent(activeRoomId);
-  const url = `${gatewayUrl}/v1/shell/messages/search?q=${q}&room_id=${roomId}&limit=20`;
+  const request = messageSearchRequestModel({
+    gatewayUrl,
+    roomId: activeRoomId,
+    query,
+  });
+  if (!request) return;
   try {
-    const resp = await fetch(url);
+    const resp = await fetch(request.url);
     if (!resp.ok) return;
     const messages = await resp.json();
     renderSearchResults(messages);
@@ -9802,15 +9578,13 @@ async function performMessageSearch(query) {
 function renderSearchResults(messages) {
   const container = document.querySelector(".message-search-results");
   if (!container) return;
-  container.innerHTML = "";
+  container.replaceChildren();
   if (!messages?.length) {
-    container.innerHTML = '<div class="search-empty">未找到匹配消息</div>';
+    container.appendChild(createSearchDomNode(searchEmptyStateDomSpec()));
     return;
   }
   for (const msg of messages) {
-    const item = document.createElement("div");
-    item.className = "search-result-item";
-    item.innerHTML = buildSearchResultItemHtml(msg);
+    const item = createSearchDomNode(searchResultItemDomSpec(msg));
     item.addEventListener("click", () => {
       scrollToMessage(msg.message_id);
       toggleMessageSearch();
@@ -9841,8 +9615,13 @@ function setupSearchInput() {
   }
 }
 
+function findMessageSearchTargetRow(messageId) {
+  const rows = Array.from(document.querySelectorAll("[data-message-id]"));
+  return rows.find((row) => messageSearchRowMatchesId(row, messageId)) || null;
+}
+
 function scrollToMessage(messageId) {
-  const row = document.querySelector('[data-message-id="' + messageId + '"]');
+  const row = findMessageSearchTargetRow(messageId);
   if (row) {
     row.scrollIntoView({ behavior: "smooth", block: "center" });
     row.classList.add("message-highlight");

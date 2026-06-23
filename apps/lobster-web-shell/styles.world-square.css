@@ -125,9 +125,9 @@ body[data-shell-page="world-square"] {
 }
 
 .world-square-rail .rail-item.is-active {
-  color: #fff8d8;
-  background: rgba(120, 191, 209, 0.16);
-  border-color: rgba(120, 191, 209, 0.58);
+  color: #1f1409;
+  background: linear-gradient(90deg, rgba(220, 185, 106, 0.62) 0%, rgba(220, 185, 106, 0.22) 75%);
+  border-color: rgba(220, 185, 106, 0.7);
 }
 
 .world-square-rail .rail-label {
@@ -249,11 +249,11 @@ body[data-shell-page="world-square"] {
   width: calc(100% + clamp(150px, 12vw, 230px));
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.08), rgba(0, 0, 0, 0) 42%, rgba(0, 0, 0, 0.12)),
-    url("./assets/pixel/concepts/world-square-concept-20260427-256.png") center / cover no-repeat;
+    url("./assets/pixel/concepts/world-square-concept-20260427-256.png") center / contain no-repeat;
 }
 
 body[data-time-of-day="day"] .world-square-scene::before {
-  background: url("./assets/pixel/concepts/world-square-concept-day-256.png") center / cover no-repeat;
+  background: url("./assets/pixel/concepts/world-square-concept-day-256.png") center / contain no-repeat;
 }
 
 .world-square-card {
@@ -601,6 +601,11 @@ body[data-time-of-day="day"] .world-square-scene::before {
     background-position: center;
   }
 
+  /* 移动竖屏：横幅素材 contain 会上下留巨量空白，改回 cover 填满（牺牲左右裁切） */
+  .world-square-scene::before {
+    background-size: cover;
+  }
+
   .world-square-card--compact,
   .world-square-card {
     left: 12px;
@@ -635,12 +640,14 @@ body[data-time-of-day="day"] .world-square-scene::before {
   }
 }
 
-/* 2026-05-18 navigation alignment:
-   keep world-square rail in the same visual scale as the IM rail, and crop the
-   concept art's painted-in side navigation so the page has only one live rail. */
+/* 2026-06-18 调整：用户反馈"素材没显示全"。原 2026-05-18 设计故意左偏移裁掉
+   concept art 画里画好的侧导航以避免与 live rail 重复，但导致素材只显示右 ~84%
+   且导航半截残留、主体偏右。现改为完整显示素材（桌面 contain 零裁切，仅上下
+   留窄深边融入 stage 背景；移动竖屏 cover 填满）。画里导航会重现——用户明确要
+   "显示全"，接受此代价。rail 视觉宽度仍对齐 IM rail。 */
 body[data-shell-page="world-square"] {
   --im-scene-rail-width: 220px;
-  --world-square-art-left-crop: clamp(220px, 14vw, 280px);
+  --world-square-art-left-crop: 0;
 }
 
 .world-square-shell {
@@ -653,8 +660,8 @@ body[data-shell-page="world-square"] {
 }
 
 .world-square-scene::before {
-  left: calc(-1 * var(--world-square-art-left-crop));
-  width: calc(100% + var(--world-square-art-left-crop));
+  left: 0;
+  width: 100%;
 }
 
 @media (max-width: 820px) {

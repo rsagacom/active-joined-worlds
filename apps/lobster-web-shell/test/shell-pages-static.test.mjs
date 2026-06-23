@@ -1151,6 +1151,70 @@ test("timeline message text is rendered through textContent sinks", async () => 
   assert.doesNotMatch(source, /message\.text[^;\n]*innerHTML/);
 });
 
+test("message search DOM is rendered from specs without innerHTML sinks", async () => {
+  const source = await readShellModule("app.js");
+  const searchSource = await readShellModule("shell-message-search.js");
+  const searchChrome = sliceBetween(
+    source,
+    "// === Message Search UI elements ===",
+    "// Insert search bar before timeline",
+  );
+  const resultRenderer = sliceBetween(
+    source,
+    "function renderSearchResults(messages) {",
+    "let searchDebounceTimer = null;",
+  );
+  const clearRenderer = sliceBetween(
+    source,
+    "function clearSearchResults() {",
+    "async function performMessageSearch(query) {",
+  );
+  const requestRenderer = sliceBetween(
+    source,
+    "async function performMessageSearch(query) {",
+    "function renderSearchResults(messages) {",
+  );
+  const targetFinder = sliceBetween(
+    source,
+    "function findMessageSearchTargetRow(messageId) {",
+    "function scrollToMessage(messageId) {",
+  );
+  const scrollRenderer = sliceBetween(
+    source,
+    "function scrollToMessage(messageId) {",
+    "// Close drawer when clicking outside",
+  );
+
+  assert.match(searchSource, /export function messageSearchBarDomSpec/);
+  assert.match(searchSource, /export function messageSearchRequestModel/);
+  assert.match(searchSource, /export function messageSearchRowMatchesId/);
+  assert.match(searchSource, /export function searchResultItemDomSpec/);
+  assert.match(searchSource, /export function searchEmptyStateDomSpec/);
+  assert.match(searchChrome, /searchToggleBtn\.textContent = "🔍"/);
+  assert.match(searchChrome, /const searchBar = createMessageSearchBarNode\(\)/);
+  assert.doesNotMatch(searchChrome, /innerHTML/);
+  assert.match(clearRenderer, /container\.replaceChildren\(\)/);
+  assert.doesNotMatch(clearRenderer, /innerHTML/);
+  assert.match(
+    requestRenderer,
+    /const request = messageSearchRequestModel\(\{\s*gatewayUrl,\s*roomId: activeRoomId,\s*query,\s*\}\)/,
+  );
+  assert.match(requestRenderer, /fetch\(request\.url\)/);
+  assert.doesNotMatch(requestRenderer, /encodeURIComponent\(query\.trim\(\)\)/);
+  assert.doesNotMatch(requestRenderer, /encodeURIComponent\(activeRoomId\)/);
+  assert.doesNotMatch(requestRenderer, /\/v1\/shell\/messages\/search\?q=\$\{q\}/);
+  assert.match(resultRenderer, /container\.replaceChildren\(\)/);
+  assert.match(resultRenderer, /searchEmptyStateDomSpec\(\)/);
+  assert.match(resultRenderer, /searchResultItemDomSpec\(msg\)/);
+  assert.match(resultRenderer, /createSearchDomNode/);
+  assert.doesNotMatch(resultRenderer, /innerHTML/);
+  assert.doesNotMatch(resultRenderer, /buildSearchResultItemHtml/);
+  assert.match(targetFinder, /document\.querySelectorAll\("\[data-message-id\]"\)/);
+  assert.match(targetFinder, /messageSearchRowMatchesId\(row, messageId\)/);
+  assert.match(scrollRenderer, /const row = findMessageSearchTargetRow\(messageId\)/);
+  assert.doesNotMatch(scrollRenderer, /querySelector\(\s*['"`]\[data-message-id/);
+});
+
 test("message body terminal plain and structured DOM are delegated out of createMessageBodyNode", async () => {
   const source = await readShellModule("app.js");
   const shellRenderer = sliceBetween(
@@ -1988,6 +2052,51 @@ test("user detail card projection branches are delegated out of userDetailCardPr
   assert.doesNotMatch(projectionSource, /currentIdentity\(\) \|\| "当前住户"/);
 });
 
+test("room stage projection copy is delegated out of app.js", async () => {
+  const source = await readShellModule("app.js");
+  const stageModule = await readShellModule("shell-room-stage.js");
+  const summarySource = sliceBetween(
+    source,
+    "function roomStageSummary(room) {",
+    "function roomStagePortraitSummary(room) {",
+  );
+  const portraitSummarySource = sliceBetween(
+    source,
+    "function roomStagePortraitSummary(room) {",
+    "function roomStagePortraitTitle(room) {",
+  );
+  const portraitTitleSource = sliceBetween(
+    source,
+    "function roomStagePortraitTitle(room) {",
+    "function roomStagePortraitChips(room) {",
+  );
+  const portraitChipsSource = sliceBetween(
+    source,
+    "function roomStagePortraitChips(room) {",
+    "function appendRoomQuickStateAdvanceButton(actions, room, options = {}) {",
+  );
+  const projectionSource = sliceBetween(
+    source,
+    "function userRoomProjection(room, visual) {",
+    "const USER_SCENE_IMAGE_LAYER_PRESETS = new Map([",
+  );
+
+  assert.match(source, /from "\.\/shell-room-stage\.js"/);
+  assert.match(stageModule, /export function roomStageSummaryForState/);
+  assert.match(stageModule, /export function roomStagePortraitSummaryForState/);
+  assert.match(stageModule, /export function roomStagePortraitChipsForState/);
+  assert.match(stageModule, /export function userRoomProjectionForState/);
+  assert.match(summarySource, /roomStageSummaryForState\(\{/);
+  assert.match(portraitSummarySource, /roomStagePortraitSummaryForState\(\{/);
+  assert.match(portraitTitleSource, /roomStagePortraitTitleForState\(\{/);
+  assert.match(portraitChipsSource, /roomStagePortraitChipsForState\(\{/);
+  assert.match(projectionSource, /userRoomProjectionForState\(\{/);
+  assert.doesNotMatch(summarySource, /先选一个会话|auto_reply/);
+  assert.doesNotMatch(portraitSummarySource, /先从左侧选会话|房间管家/);
+  assert.doesNotMatch(portraitChipsSource, /等待选中会话|条访客提醒/);
+  assert.doesNotMatch(projectionSource, /住宅私聊 \/ 房内聊天|公共频道 \/ 群聊现场/);
+});
+
 test("user detail card shell state and meta rows are delegated out of syncUserDetailCard", async () => {
   const source = await readShellModule("app.js");
   const shellRenderer = sliceBetween(
@@ -2091,6 +2200,41 @@ test("user detail card action buttons are delegated out of syncUserDetailCard", 
   assert.match(syncSource, /renderUserDetailCardActions\(room, card\)/);
   assert.doesNotMatch(syncSource, /button\.dataset\.cardAction = action/);
   assert.doesNotMatch(syncSource, /appendRoomQuickActionOverviewButton\(chatDetailCardActionsEl, room/);
+});
+
+test("user scene chrome DOM assembly is delegated out of ensureUserSceneChrome", async () => {
+  const source = await readShellModule("app.js");
+  const sceneEnsurer = sliceBetween(
+    source,
+    "function ensureUserSceneChrome() {",
+    "function ensureRoomStageSideChrome() {",
+  );
+  const sideEnsurer = sliceBetween(
+    source,
+    "function ensureRoomStageSideChrome() {",
+    "function createRoomStageSideElement() {",
+  );
+  const canvasFactory = sliceBetween(
+    source,
+    "function createRoomStageCanvasChrome(id, label) {",
+    "function ensureRoomStagePortraitCanvasChrome() {",
+  );
+  const chatDetailEnsurer = sliceBetween(
+    source,
+    "function ensureChatDetailPanelChrome() {",
+    "function createChatDetailPanelChrome() {",
+  );
+
+  assert.match(sceneEnsurer, /ensureRoomStageSideChrome\(\)/);
+  assert.match(sceneEnsurer, /ensureRoomStagePortraitCanvasChrome\(\)/);
+  assert.match(sceneEnsurer, /ensureRoomStageCanvasChrome\(\)/);
+  assert.match(sceneEnsurer, /ensureChatDetailPanelChrome\(\)/);
+  assert.match(sideEnsurer, /roomStageSideEl = createRoomStageSideElement\(\)/);
+  assert.match(canvasFactory, /canvas\.id = id/);
+  assert.match(canvasFactory, /canvas\.setAttribute\("aria-label", label\)/);
+  assert.match(chatDetailEnsurer, /chatDetailPanelEl = createChatDetailPanelChrome\(\)/);
+  assert.doesNotMatch(sceneEnsurer, /document\.createElement/);
+  assert.doesNotMatch(sceneEnsurer, /setInlineStyle/);
 });
 
 test("room inline action buttons are delegated out of createRoomInlineActions", async () => {
@@ -2370,6 +2514,23 @@ test("gateway send failure keeps composer cleared and stops pending typing", asy
   assert.match(renderSource, /pending\.some\(\(message\) => !message\?\.failed\)/);
 });
 
+test("message owner action specs are delegated out of createMessageOwnerActions", async () => {
+  const source = await readShellModule("app.js");
+  const renderSource = await readShellModule("shell-message-render.js");
+  const ownerActionRenderer = sliceBetween(
+    source,
+    "function createMessageOwnerActions(room, message, { isSelf, messageKind } = {}) {",
+    "async function retryPendingEcho(roomId, echoId) {",
+  );
+
+  assert.match(renderSource, /export function messageOwnerActionSpecs\(\{/);
+  assert.match(ownerActionRenderer, /messageOwnerActionSpecs\(\{/);
+  assert.match(ownerActionRenderer, /createMessageOwnerActionButton\(spec, room, message\)/);
+  assert.doesNotMatch(ownerActionRenderer, /message\?\.moderation_status === ['"]blocked['"]/);
+  assert.doesNotMatch(ownerActionRenderer, /editButton\.textContent = "编辑"/);
+  assert.doesNotMatch(ownerActionRenderer, /recallButton\.textContent = "撤回"/);
+});
+
 test("composer submit ignores duplicate send while a message is in flight", async () => {
   const source = await readShellModule("app.js");
   const blockedRenderer = sliceBetween(
@@ -2468,11 +2629,13 @@ test("composer input state and downstream renders are delegated out of updateCom
     "async function submitComposerMessage() {",
   );
 
-  assert.match(placeholderRenderer, /if \(isSendingMessage\) \{/);
-  assert.match(placeholderRenderer, /gatewayUnavailableForComposer\(\)/);
-  assert.match(placeholderRenderer, /residentGatewayLoginRequired\(\)/);
-  assert.match(placeholderRenderer, /placeholder \+= gatewayUrl \? "（会先保存在本地，等待同步）" : "（会先进入本地时间线）"/);
-  assert.match(placeholderRenderer, /if \(editingMessageTarget\) \{/);
+  assert.match(placeholderRenderer, /return resolveComposerPlaceholderForState\(\{/);
+  assert.match(placeholderRenderer, /gatewayUnavailable: gatewayUnavailableForComposer\(\)/);
+  assert.match(placeholderRenderer, /loginRequired: residentGatewayLoginRequired\(\)/);
+  assert.match(placeholderRenderer, /editingMessage: Boolean\(editingMessageTarget\)/);
+  assert.match(placeholderRenderer, /roomThreadHeadline: room \? roomThreadHeadline\(room\) : ""/);
+  assert.doesNotMatch(placeholderRenderer, /if \(isSendingMessage\) \{/);
+  assert.doesNotMatch(placeholderRenderer, /placeholder \+=/);
   assert.match(inputRenderer, /composerInputEl\.disabled = !composerAvailability\.canDraft \|\| isSendingMessage/);
   assert.match(inputRenderer, /composerSendEl\.disabled = !composerAvailability\.canSend/);
   assert.match(inputRenderer, /composerInputEl\.placeholder = placeholder/);
@@ -2486,28 +2649,30 @@ test("composer input state and downstream renders are delegated out of updateCom
   assert.doesNotMatch(stateRenderer, /renderComposerHero\(room\)/);
 });
 
-test("composer context model and DOM are delegated out of updateComposerContext", async () => {
+test("composer hero model is delegated out of renderComposerHero", async () => {
   const source = await readShellModule("app.js");
-  const inputStateRenderer = sliceBetween(
+  const roomRenderSource = await readShellModule("shell-room-render.js");
+  const heroRenderer = sliceBetween(
     source,
-    "function composerContextInputStatusItem(room) {",
-    "function composerContextUserRoomItems(room) {",
-  );
-  const userItemsRenderer = sliceBetween(
-    source,
-    "function composerContextUserRoomItems(room) {",
-    "function composerContextRoomItems(room, shellPage) {",
-  );
-  const roomItemsRenderer = sliceBetween(
-    source,
-    "function composerContextRoomItems(room, shellPage) {",
-    "function composerContextEmptyItems(shellPage) {",
-  );
-  const emptyItemsRenderer = sliceBetween(
-    source,
-    "function composerContextEmptyItems(shellPage) {",
+    "function renderComposerHero(room) {",
     "function composerContextItems(room, shellPage) {",
   );
+
+  assert.match(source, /composerHeroModelForState/);
+  assert.match(roomRenderSource, /export function composerHeroModelForState/);
+  assert.match(heroRenderer, /const model = composerHeroModelForState\(\{/);
+  assert.match(heroRenderer, /composerHeroEl\.dataset\.variant = model\.variant/);
+  assert.match(heroRenderer, /kicker\.textContent = model\.kicker/);
+  assert.match(heroRenderer, /title\.textContent = model\.title/);
+  assert.match(heroRenderer, /note\.textContent = model\.note/);
+  assert.match(heroRenderer, /for \(const chip of model\.chips\)/);
+  assert.doesNotMatch(heroRenderer, /composerHeroKicker|composerHeroTitle|composerHeroNote|composerHeroChipsData/);
+  assert.doesNotMatch(heroRenderer, /translateRoomKind\(roomKind\(room\)\)/);
+});
+
+test("composer context model and DOM are delegated out of updateComposerContext", async () => {
+  const source = await readShellModule("app.js");
+  const roomRenderSource = await readShellModule("shell-room-render.js");
   const itemsRenderer = sliceBetween(
     source,
     "function composerContextItems(room, shellPage) {",
@@ -2529,15 +2694,13 @@ test("composer context model and DOM are delegated out of updateComposerContext"
     "function updateComposerTip() {",
   );
 
-  assert.match(inputStateRenderer, /isSendingMessage \? "发送中" : roomSendErrors\[room\.id\] \? "待重发" : "可发送"/);
-  assert.match(userItemsRenderer, /label: "发送到"/);
-  assert.match(userItemsRenderer, /composerContextInputStatusItem\(room\)/);
-  assert.match(roomItemsRenderer, /if \(shellPage === "user"\) return composerContextUserRoomItems\(room\)/);
-  assert.match(roomItemsRenderer, /label: shellPage === "admin" \? "线程" : "会话标题"/);
-  assert.match(roomItemsRenderer, /roomQueueSummary\(room\)/);
-  assert.match(roomItemsRenderer, /composerContextInputStatusItem\(room\)/);
-  assert.match(emptyItemsRenderer, /gatewayUrl \? "先打开一个会话" : "等待网关"/);
-  assert.match(itemsRenderer, /return room \? composerContextRoomItems\(room, shellPage\) : composerContextEmptyItems\(shellPage\)/);
+  assert.match(source, /composerContextItemsForState/);
+  assert.match(roomRenderSource, /export function composerContextItemsForState/);
+  assert.match(itemsRenderer, /return composerContextItemsForState\(\{/);
+  assert.match(itemsRenderer, /threadHeadline: room \? roomThreadHeadline\(room\) : ""/);
+  assert.match(itemsRenderer, /visiblePendingEchoCount: room \? visiblePendingEchoCount\(room\) : 0/);
+  assert.match(itemsRenderer, /sendError: room \? roomSendErrors\[room\.id\] : ""/);
+  assert.doesNotMatch(itemsRenderer, /label:|待重发|队列|聊天状态/);
   assert.match(itemNodeRenderer, /block\.className = "composer-context-item"/);
   assert.match(itemNodeRenderer, /createLine\("composer-context-label", item\.label\)/);
   assert.match(itemNodeRenderer, /value\.textContent = item\.value/);
@@ -2856,10 +3019,16 @@ test("timeline committed message article body is delegated out of createTimeline
 
 test("timeline committed message row DOM is delegated out of renderTimeline", async () => {
   const source = await readShellModule("app.js");
+  const messageRenderSource = await readShellModule("shell-message-render.js");
   const messageRowRenderer = sliceBetween(
     source,
     "function createTimelineMessageRowNode({",
-    "function appendTimelineCommittedMessageRows(room, messages, flowSpec) {",
+    "function createTimelineDividerNode(dividerSpec) {",
+  );
+  const dividerRenderer = sliceBetween(
+    source,
+    "function createTimelineDividerNode(dividerSpec) {",
+    "function renderTimelineNoRoomState(shellPage) {",
   );
   const committedRowsRenderer = sliceBetween(
     source,
@@ -2878,14 +3047,22 @@ test("timeline committed message row DOM is delegated out of renderTimeline", as
   assert.match(messageRowRenderer, /createTimelineMessageArticleNode\(message, room, messages, rowSpec, quickContext\)/);
   assert.match(messageRowRenderer, /createTimelineMessageStackNode\(article\)/);
   assert.match(messageRowRenderer, /return row/);
-  assert.match(committedRowsRenderer, /for \(const \[index, message\] of messages\.entries\(\)\) \{/);
-  assert.match(committedRowsRenderer, /timelineDividerSpecsForMessage\(\{/);
-  assert.match(committedRowsRenderer, /const row = createTimelineMessageRowNode\(\{/);
+  assert.match(source, /timelineCommittedMessageRenderItems/);
+  assert.match(messageRenderSource, /export function timelineCommittedMessageRenderItems/);
+  assert.match(dividerRenderer, /divider\.className = dividerSpec\.className/);
+  assert.match(dividerRenderer, /divider\.textContent = dividerSpec\.text/);
+  assert.match(committedRowsRenderer, /timelineCommittedMessageRenderItems\(\{\s*messages,\s*flowSpec,/);
+  assert.match(committedRowsRenderer, /if \(item\.type === "divider"\)/);
+  assert.match(committedRowsRenderer, /timelineEl\.appendChild\(createTimelineDividerNode\(item\.divider\)\)/);
+  assert.match(committedRowsRenderer, /createTimelineMessageRowNode\(\{\s*room,\s*\.\.\.item\.rowInput,/);
   assert.match(committedRowsRenderer, /timelineEl\.appendChild\(row\)/);
   assert.match(renderSource, /const flowSpec = timelineFlowSpecForRoom\(room, localPreviewMessages, shellPage, unread\)/);
   assert.match(renderSource, /appendTimelineMessageFlowRows\(room, flowSpec\)/);
   assert.doesNotMatch(messageRowRenderer, /createMessageBodyNode\(message/);
   assert.doesNotMatch(messageRowRenderer, /createMessageOwnerActions\(room, message/);
+  assert.doesNotMatch(source, /timelineDividerSpecsForMessage/);
+  assert.doesNotMatch(committedRowsRenderer, /for \(const \[index, message\] of messages\.entries\(\)\)/);
+  assert.doesNotMatch(committedRowsRenderer, /unreadForDivider|allowMessageGrouping|staggerBase|staggerCap/);
   assert.doesNotMatch(renderSource, /for \(const \[index, message\] of messages\.entries\(\)\)/);
   assert.doesNotMatch(renderSource, /timelineMessageFlowSpec\(\{/);
   assert.doesNotMatch(renderSource, /message-avatar-/);
@@ -3010,15 +3187,16 @@ test("timeline pending message row DOM is delegated out of renderTimeline", asyn
 
 test("world safety empty and mirror cards are delegated out of renderWorldSafety", async () => {
   const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
   const emptyRenderer = sliceBetween(
     source,
     "function renderWorldSafetyEmptyState() {",
-    "function createWorldSafetyMirrorCard(safety) {",
+    "function createWorldSafetyMirrorCard(model) {",
   );
   const mirrorRenderer = sliceBetween(
     source,
-    "function createWorldSafetyMirrorCard(safety) {",
-    "function createWorldSafetyAdvisoryCard(advisory) {",
+    "function createWorldSafetyMirrorCard(model) {",
+    "function createWorldSafetyAdvisoryCard(model) {",
   );
   const renderSource = sliceBetween(
     source,
@@ -3026,38 +3204,46 @@ test("world safety empty and mirror cards are delegated out of renderWorldSafety
     "function renderResidents() {",
   );
 
-  assert.match(emptyRenderer, /empty\.textContent = gatewayUrl/);
+  assert.match(source, /worldSafetyEmptyStateText/);
+  assert.match(source, /worldSafetyMirrorCardModel/);
+  assert.match(governanceRenderSource, /export function worldSafetyEmptyStateText/);
+  assert.match(governanceRenderSource, /export function worldSafetyMirrorCardModel/);
+  assert.match(emptyRenderer, /empty\.textContent = worldSafetyEmptyStateText\(\{ gatewayUrl \}\)/);
   assert.match(emptyRenderer, /worldSafetyListEl\.appendChild\(empty\)/);
-  assert.match(mirrorRenderer, /createLine\(\s*"city-name",\s*`镜像城市 \$\{safety\.mirrors\?\.filter/);
-  assert.match(mirrorRenderer, /translateTrustState\(mirror\.trust_state\)/);
-  assert.match(mirrorRenderer, /治理员：\$\{\(safety\.stewards \|\| \[\]\)\.join\("、"\) \|\| "暂无"\}/);
+  assert.match(mirrorRenderer, /li\.className = model\.className/);
+  assert.match(mirrorRenderer, /createLine\("city-name", model\.title\)/);
+  assert.match(mirrorRenderer, /createLine\("city-sub", model\.mirrors\)/);
+  assert.match(mirrorRenderer, /createLine\("city-role", model\.stewards\)/);
   assert.match(renderSource, /if \(!safety\) \{\s*renderWorldSafetyEmptyState\(\);\s*return;\s*\}/);
-  assert.match(renderSource, /worldSafetyListEl\.appendChild\(createWorldSafetyMirrorCard\(safety\)\)/);
+  assert.match(renderSource, /worldSafetyListEl\.appendChild\(createWorldSafetyMirrorCard\(worldSafetyMirrorCardModel\(safety\)\)\)/);
+  assert.doesNotMatch(mirrorRenderer, /translateTrustState\(mirror\.trust_state\)/);
+  assert.doesNotMatch(mirrorRenderer, /safety\.mirrors/);
   assert.doesNotMatch(renderSource, /镜像城市/);
   assert.doesNotMatch(renderSource, /世界安全动态暂不可用/);
 });
 
 test("world safety advisory and summary cards are delegated out of renderWorldSafety", async () => {
   const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
   const advisoryRenderer = sliceBetween(
     source,
-    "function createWorldSafetyAdvisoryCard(advisory) {",
+    "function createWorldSafetyAdvisoryCard(model) {",
     "function appendWorldSafetyAdvisoryCards(safety) {",
   );
   const advisoryAppender = sliceBetween(
     source,
     "function appendWorldSafetyAdvisoryCards(safety) {",
-    "function createWorldSafetySanctionSummaryCard(residentSanctions, blacklistEntries) {",
+    "function createWorldSafetySanctionSummaryCard(model) {",
   );
   const sanctionSummaryRenderer = sliceBetween(
     source,
-    "function createWorldSafetySanctionSummaryCard(residentSanctions, blacklistEntries) {",
-    "function createWorldSafetyReportSummaryCard(reports) {",
+    "function createWorldSafetySanctionSummaryCard(model) {",
+    "function createWorldSafetyReportSummaryCard(model) {",
   );
   const reportSummaryRenderer = sliceBetween(
     source,
-    "function createWorldSafetyReportSummaryCard(reports) {",
-    "function createWorldSafetySanctionCard(sanction) {",
+    "function createWorldSafetyReportSummaryCard(model) {",
+    "function createWorldSafetySanctionCard(model) {",
   );
   const renderSource = sliceBetween(
     source,
@@ -3065,32 +3251,54 @@ test("world safety advisory and summary cards are delegated out of renderWorldSa
     "function renderResidents() {",
   );
 
-  assert.match(advisoryRenderer, /translateAdvisoryAction\(advisory\.action\)/);
-  assert.match(advisoryRenderer, /translateSubjectKind\(advisory\.subject_kind\)/);
+  assert.match(source, /worldSafetyAdvisoryCardModel/);
+  assert.match(source, /worldSafetyAdvisoryEmptyStateText/);
+  assert.match(source, /worldSafetySanctionSummaryCardModel/);
+  assert.match(source, /worldSafetyReportSummaryCardModel/);
+  assert.match(governanceRenderSource, /export function worldSafetyAdvisoryCardModel/);
+  assert.match(governanceRenderSource, /export function worldSafetyAdvisoryEmptyStateText/);
+  assert.match(governanceRenderSource, /export function worldSafetySanctionSummaryCardModel/);
+  assert.match(governanceRenderSource, /export function worldSafetyReportSummaryCardModel/);
+  assert.match(advisoryRenderer, /li\.className = model\.className/);
+  assert.match(advisoryRenderer, /titleRow\.className = model\.titleRowClassName/);
+  assert.match(advisoryRenderer, /createLine\("city-name", model\.title\)/);
+  assert.match(advisoryRenderer, /createLine\("city-slug", model\.action\)/);
+  assert.match(advisoryRenderer, /createLine\("city-sub", model\.reason\)/);
+  assert.match(advisoryRenderer, /createLine\("city-role", model\.meta\)/);
   assert.match(advisoryAppender, /const activeAdvisories = safety\.advisories \|\| \[\]/);
-  assert.match(advisoryAppender, /当前没有生效中的世界安全通告/);
-  assert.match(advisoryAppender, /createWorldSafetyAdvisoryCard\(advisory\)/);
-  assert.match(sanctionSummaryRenderer, /居民制裁 \$\{residentSanctions\.length\}/);
-  assert.match(sanctionSummaryRenderer, /黑名单哈希条目 \$\{blacklistEntries\.length\}/);
-  assert.match(reportSummaryRenderer, /举报记录 \$\{reports\.length\}/);
-  assert.match(reportSummaryRenderer, /最新时间 \$\{formatDateTime\(reports\[0\]\.reported_at_ms\)\}/);
+  assert.match(advisoryAppender, /empty\.textContent = worldSafetyAdvisoryEmptyStateText\(\)/);
+  assert.match(advisoryAppender, /createWorldSafetyAdvisoryCard\(worldSafetyAdvisoryCardModel\(advisory\)\)/);
+  assert.match(sanctionSummaryRenderer, /li\.className = model\.className/);
+  assert.match(sanctionSummaryRenderer, /createLine\("city-name", model\.title\)/);
+  assert.match(sanctionSummaryRenderer, /createLine\("city-sub", model\.summary\)/);
+  assert.match(sanctionSummaryRenderer, /createLine\("city-role", model\.meta\)/);
+  assert.match(reportSummaryRenderer, /li\.className = model\.className/);
+  assert.match(reportSummaryRenderer, /createLine\("city-name", model\.title\)/);
+  assert.match(reportSummaryRenderer, /createLine\("city-sub", model\.summary\)/);
+  assert.match(reportSummaryRenderer, /createLine\("city-role", model\.meta\)/);
   assert.match(renderSource, /appendWorldSafetyAdvisoryCards\(safety\)/);
-  assert.match(renderSource, /worldSafetyListEl\.appendChild\(createWorldSafetySanctionSummaryCard\(residentSanctions, blacklistEntries\)\)/);
-  assert.match(renderSource, /worldSafetyListEl\.appendChild\(createWorldSafetyReportSummaryCard\(reports\)\)/);
+  assert.match(renderSource, /worldSafetyListEl\.appendChild\(\s*createWorldSafetySanctionSummaryCard\(\s*worldSafetySanctionSummaryCardModel\(residentSanctions, blacklistEntries\),\s*\),\s*\)/);
+  assert.match(renderSource, /worldSafetyListEl\.appendChild\(\s*createWorldSafetyReportSummaryCard\(worldSafetyReportSummaryCardModel\(reports\)\),\s*\)/);
+  assert.doesNotMatch(advisoryRenderer, /translateAdvisoryAction\(advisory\.action\)/);
+  assert.doesNotMatch(advisoryRenderer, /translateSubjectKind\(advisory\.subject_kind\)/);
+  assert.doesNotMatch(advisoryRenderer, /formatDateTime\(advisory\.issued_at_ms\)/);
+  assert.doesNotMatch(sanctionSummaryRenderer, /translateReportStatus\(item\.status\)|residentSanctions\.length|blacklistEntries\.length/);
+  assert.doesNotMatch(reportSummaryRenderer, /translateTargetKind\(item\.target_kind\)|translateReportStatus\(item\.status\)|formatDateTime\(reports\[0\]\.reported_at_ms\)/);
   assert.doesNotMatch(renderSource, /当前没有生效中的世界安全通告/);
   assert.doesNotMatch(renderSource, /居民制裁 \$\{residentSanctions\.length\}/);
 });
 
 test("world safety sanction and report detail cards are delegated out of renderWorldSafety", async () => {
   const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
   const sanctionRenderer = sliceBetween(
     source,
-    "function createWorldSafetySanctionCard(sanction) {",
-    "function createWorldSafetyReportCard(report) {",
+    "function createWorldSafetySanctionCard(model) {",
+    "function createWorldSafetyReportCard(model) {",
   );
   const reportRenderer = sliceBetween(
     source,
-    "function createWorldSafetyReportCard(report) {",
+    "function createWorldSafetyReportCard(model) {",
     "function appendWorldSafetySanctionCards(residentSanctions) {",
   );
   const sanctionAppender = sliceBetween(
@@ -3109,42 +3317,50 @@ test("world safety sanction and report detail cards are delegated out of renderW
     "function renderResidents() {",
   );
 
-  assert.match(sanctionRenderer, /translateReportStatus\(sanction\.status\)/);
-  assert.match(sanctionRenderer, /translatePortability\(\s*sanction\.portability_revoked,\s*\)/);
-  assert.match(sanctionRenderer, /formatDateTime\(sanction\.issued_at_ms\)/);
-  assert.match(reportRenderer, /translateReportStatus\(report\.status \|\| "Pending"\)/);
-  assert.match(reportRenderer, /translateTargetKind\(report\.target_kind\)/);
-  assert.match(reportRenderer, /formatDateTime\(report\.reported_at_ms\)/);
+  assert.match(source, /worldSafetySanctionCardModel/);
+  assert.match(source, /worldSafetyReportCardModel/);
+  assert.match(governanceRenderSource, /export function worldSafetySanctionCardModel/);
+  assert.match(governanceRenderSource, /export function worldSafetyReportCardModel/);
+  assert.match(sanctionRenderer, /li\.className = model\.className/);
+  assert.match(sanctionRenderer, /titleRow\.className = model\.titleRowClassName/);
+  assert.match(sanctionRenderer, /createLine\("city-name", model\.title\)/);
+  assert.match(sanctionRenderer, /createLine\("city-slug", model\.status\)/);
+  assert.match(sanctionRenderer, /createLine\("city-sub", model\.reason\)/);
+  assert.match(sanctionRenderer, /createLine\("city-role", model\.meta\)/);
+  assert.match(reportRenderer, /li\.className = model\.className/);
+  assert.match(reportRenderer, /titleRow\.className = model\.titleRowClassName/);
+  assert.match(reportRenderer, /createLine\("city-name", model\.title\)/);
+  assert.match(reportRenderer, /createLine\("city-slug", model\.status\)/);
+  assert.match(reportRenderer, /createLine\("city-sub", model\.summary\)/);
+  assert.match(reportRenderer, /createLine\("city-role", model\.meta\)/);
   assert.match(sanctionAppender, /for \(const sanction of residentSanctions\.slice\(0, 6\)\) \{/);
-  assert.match(sanctionAppender, /createWorldSafetySanctionCard\(sanction\)/);
+  assert.match(sanctionAppender, /createWorldSafetySanctionCard\(worldSafetySanctionCardModel\(sanction\)\)/);
   assert.match(reportAppender, /for \(const report of reports\.slice\(0, 6\)\) \{/);
-  assert.match(reportAppender, /createWorldSafetyReportCard\(report\)/);
+  assert.match(reportAppender, /createWorldSafetyReportCard\(worldSafetyReportCardModel\(report\)\)/);
   assert.match(renderSource, /appendWorldSafetySanctionCards\(residentSanctions\)/);
   assert.match(renderSource, /appendWorldSafetyReportCards\(reports\)/);
+  assert.doesNotMatch(sanctionRenderer, /translateReportStatus\(sanction\.status\)|translatePortability\(\s*sanction\.portability_revoked|formatDateTime\(sanction\.issued_at_ms\)/);
+  assert.doesNotMatch(reportRenderer, /translateReportStatus\(report\.status|translateTargetKind\(report\.target_kind\)|formatDateTime\(report\.reported_at_ms\)/);
   assert.doesNotMatch(renderSource, /sanction\.resident_id/);
   assert.doesNotMatch(renderSource, /report\.target_ref/);
 });
 
 test("resident directory card DOM is delegated out of renderResidents", async () => {
   const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
   const emptyRenderer = sliceBetween(
     source,
     "function createResidentDirectoryEmptyNode() {",
-    "function residentDirectoryDisplayName(resident) {",
-  );
-  const displayNameResolver = sliceBetween(
-    source,
-    "function residentDirectoryDisplayName(resident) {",
-    "function appendResidentDirectoryTitleRow(li, resident) {",
+    "function appendResidentDirectoryTitleRow(li, model) {",
   );
   const titleRenderer = sliceBetween(
     source,
-    "function appendResidentDirectoryTitleRow(li, resident) {",
-    "function appendResidentDirectoryMetaRows(li, resident) {",
+    "function appendResidentDirectoryTitleRow(li, model) {",
+    "function appendResidentDirectoryMetaRows(li, model) {",
   );
   const metaRenderer = sliceBetween(
     source,
-    "function appendResidentDirectoryMetaRows(li, resident) {",
+    "function appendResidentDirectoryMetaRows(li, model) {",
     "function createResidentDirectActionButton(resident) {",
   );
   const directButtonRenderer = sliceBetween(
@@ -3168,22 +3384,30 @@ test("resident directory card DOM is delegated out of renderResidents", async ()
     "/** Render compact resident directory in creative.html sidebar */",
   );
 
-  assert.match(emptyRenderer, /empty\.textContent = gatewayUrl/);
-  assert.match(displayNameResolver, /resident\.nickname \|\| resident\.resident_id/);
-  assert.match(titleRenderer, /titleRow\.className = "city-card-title"/);
-  assert.match(titleRenderer, /translateResidentLabel\(resident\.resident_id\)/);
-  assert.match(metaRenderer, /joinOrFallback\(resident\.active_cities \|\| \[\], "暂无"\)/);
-  assert.match(metaRenderer, /resident\.pending_cities\.join\("、"\)/);
-  assert.match(metaRenderer, /\(resident\.roles \|\| \[\]\)\.map\(translateRole\)/);
+  assert.match(source, /residentDirectoryEmptyStateText,\s+residentDirectoryCardModel,/);
+  assert.match(governanceRenderSource, /export function residentDirectoryEmptyStateText/);
+  assert.match(governanceRenderSource, /export function residentDirectoryCardModel/);
+  assert.match(emptyRenderer, /empty\.textContent = residentDirectoryEmptyStateText\(\{ gatewayUrl \}\)/);
+  assert.match(titleRenderer, /titleRow\.className = model\.titleRowClassName/);
+  assert.match(titleRenderer, /createLine\("city-name", model\.title\)/);
+  assert.match(titleRenderer, /createLine\("city-slug", model\.slug\)/);
+  assert.match(metaRenderer, /for \(const row of model\.rows\) \{/);
+  assert.match(metaRenderer, /createLine\(row\.className, row\.text\)/);
   assert.match(directButtonRenderer, /directButton\.textContent = "发起私聊"/);
   assert.match(directButtonRenderer, /enterResidentRoom\(resident\)/);
   assert.match(actionsRenderer, /actions\.className = "city-actions"/);
   assert.match(actionsRenderer, /createResidentDirectActionButton\(resident\)/);
-  assert.match(cardRenderer, /appendResidentDirectoryTitleRow\(li, resident\)/);
-  assert.match(cardRenderer, /appendResidentDirectoryMetaRows\(li, resident\)/);
+  assert.match(cardRenderer, /const model = residentDirectoryCardModel\(resident, \{/);
+  assert.match(cardRenderer, /translateResidentLabelFn: translateResidentLabel/);
+  assert.match(cardRenderer, /li\.className = model\.className/);
+  assert.match(cardRenderer, /appendResidentDirectoryTitleRow\(li, model\)/);
+  assert.match(cardRenderer, /appendResidentDirectoryMetaRows\(li, model\)/);
   assert.match(cardRenderer, /appendResidentDirectoryActions\(li, resident\)/);
   assert.match(renderSource, /residentListEl\.appendChild\(createResidentDirectoryEmptyNode\(\)\)/);
   assert.match(renderSource, /residentListEl\.appendChild\(createResidentDirectoryCardNode\(resident\)\)/);
+  assert.doesNotMatch(source, /function residentDirectoryDisplayName/);
+  assert.doesNotMatch(titleRenderer, /resident\.nickname|translateResidentLabel\(resident\.resident_id\)/);
+  assert.doesNotMatch(metaRenderer, /joinOrFallback|resident\.active_cities|resident\.pending_cities|translateRole/);
   assert.doesNotMatch(renderSource, /directButton\.textContent = "发起私聊"/);
   assert.doesNotMatch(renderSource, /titleRow\.className = "city-card-title"/);
 });
@@ -3277,34 +3501,35 @@ test("compact resident list DOM is delegated out of renderResidentList", async (
 
 test("caretaker panel DOM is delegated out of renderCaretakerPanel", async () => {
   const source = await readShellModule("app.js");
+  const caretakerPanelSource = await readShellModule("shell-caretaker-panel.js");
   const titleRenderer = sliceBetween(
     source,
-    "function createCaretakerPanelTitleNode() {",
-    "function createCaretakerPanelHeaderNode() {",
+    "function createCaretakerPanelTitleNode(model) {",
+    "function createCaretakerPanelHeaderNode(model) {",
   );
   const headerRenderer = sliceBetween(
     source,
-    "function createCaretakerPanelHeaderNode() {",
-    "function createCaretakerPanelSummaryNode() {",
+    "function createCaretakerPanelHeaderNode(model) {",
+    "function createCaretakerPanelSummaryNode(model) {",
   );
   const summaryRenderer = sliceBetween(
     source,
-    "function createCaretakerPanelSummaryNode() {",
+    "function createCaretakerPanelSummaryNode(model) {",
     "function createCaretakerMessageNode(item) {",
   );
   const messageRenderer = sliceBetween(
     source,
     "function createCaretakerMessageNode(item) {",
-    "function createCaretakerMessagesNode() {",
+    "function createCaretakerMessagesNode(model) {",
   );
   const messagesRenderer = sliceBetween(
     source,
-    "function createCaretakerMessagesNode() {",
-    "function createCaretakerRulesNode() {",
+    "function createCaretakerMessagesNode(model) {",
+    "function createCaretakerRulesNode(model) {",
   );
   const rulesRenderer = sliceBetween(
     source,
-    "function createCaretakerRulesNode() {",
+    "function createCaretakerRulesNode(model) {",
     "function renderCaretakerPanel() {",
   );
   const renderSource = sliceBetween(
@@ -3312,27 +3537,42 @@ test("caretaker panel DOM is delegated out of renderCaretakerPanel", async () =>
     "function renderCaretakerPanel() {",
     "function ensureCaretakerBadge() {",
   );
+  const statusRenderer = sliceBetween(
+    source,
+    "function updateCaretakerStatus() {",
+    "function ensureChatPriorityBadge() {",
+  );
 
-  assert.match(titleRenderer, /panelTitle\.textContent = "OpenClaw 管家 · 小狗"/);
-  assert.match(headerRenderer, /CARETAKER_PROFILE\.displayName/);
-  assert.match(headerRenderer, /CARETAKER_PROFILE\.highlight/);
-  assert.match(summaryRenderer, /summary\.textContent = CARETAKER_PROFILE\.summary/);
+  assert.match(source, /caretakerPanelModel,\s+caretakerStatusItems,/);
+  assert.match(caretakerPanelSource, /export function caretakerPanelModel/);
+  assert.match(caretakerPanelSource, /export function caretakerStatusItems/);
+  assert.doesNotMatch(source, /const CARETAKER_PROFILE|const CARETAKER_MESSAGES|const CARETAKER_RULES/);
+  assert.match(titleRenderer, /panelTitle\.textContent = model\.title/);
+  assert.match(headerRenderer, /const profile = model\.profile/);
+  assert.match(headerRenderer, /profile\.displayName/);
+  assert.match(headerRenderer, /profile\.highlight/);
+  assert.match(summaryRenderer, /summary\.textContent = model\.profile\.summary/);
   assert.match(messageRenderer, /titleSpan\.textContent = item\.title/);
   assert.match(messageRenderer, /timeSpan\.textContent = item\.time/);
-  assert.match(messagesRenderer, /for \(const item of CARETAKER_MESSAGES\) \{/);
+  assert.match(messagesRenderer, /for \(const item of model\.messages\) \{/);
   assert.match(messagesRenderer, /createCaretakerMessageNode\(item\)/);
-  assert.match(rulesRenderer, /rulesTitle\.textContent = "自动回复 \/ 留言规则"/);
-  assert.match(rulesRenderer, /for \(const rule of CARETAKER_RULES\) \{/);
-  assert.match(renderSource, /caretakerPanelEl\.appendChild\(createCaretakerPanelTitleNode\(\)\)/);
-  assert.match(renderSource, /body\.appendChild\(createCaretakerPanelHeaderNode\(\)\)/);
-  assert.match(renderSource, /body\.appendChild\(createCaretakerMessagesNode\(\)\)/);
-  assert.match(renderSource, /body\.appendChild\(createCaretakerRulesNode\(\)\)/);
+  assert.match(rulesRenderer, /rulesTitle\.textContent = model\.rulesTitle/);
+  assert.match(rulesRenderer, /for \(const rule of model\.rules\) \{/);
+  assert.match(renderSource, /const model = caretakerPanelModel\(\)/);
+  assert.match(renderSource, /caretakerPanelEl\.appendChild\(createCaretakerPanelTitleNode\(model\)\)/);
+  assert.match(renderSource, /body\.appendChild\(createCaretakerPanelHeaderNode\(model\)\)/);
+  assert.match(renderSource, /body\.appendChild\(createCaretakerMessagesNode\(model\)\)/);
+  assert.match(renderSource, /body\.appendChild\(createCaretakerRulesNode\(model\)\)/);
+  assert.match(statusRenderer, /const items = caretakerStatusItems\(\{ roomLabel \}\)/);
+  assert.match(statusRenderer, /document\.createElement\(item\.element\)/);
+  assert.match(statusRenderer, /if \(item\.className\) node\.className = item\.className/);
   assert.doesNotMatch(renderSource, /CARETAKER_MESSAGES/);
   assert.doesNotMatch(renderSource, /CARETAKER_RULES/);
 });
 
 test("governance offline empty state is delegated out of renderGovernance", async () => {
   const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
   const offlineRenderer = sliceBetween(
     source,
     "function renderGovernanceOfflineState() {",
@@ -3344,17 +3584,61 @@ test("governance offline empty state is delegated out of renderGovernance", asyn
     "function renderWorldDirectory() {",
   );
 
-  assert.match(offlineRenderer, /setNodeText\(worldStateEl, "世界：离线"\)/);
+  assert.match(source, /governanceOfflineStateModel,/);
+  assert.match(governanceRenderSource, /export function governanceOfflineStateModel/);
+  assert.match(offlineRenderer, /const model = governanceOfflineStateModel\(\{ gatewayUrl, shellMode \}\)/);
+  assert.match(offlineRenderer, /setNodeText\(worldStateEl, model\.worldState\)/);
+  assert.match(offlineRenderer, /setNodeText\(worldSummaryEl, model\.summary\)/);
   assert.match(offlineRenderer, /worldDirectoryListEl,\s*worldMirrorSourceListEl,\s*worldSquareListEl,\s*worldSafetyListEl,/);
-  assert.match(offlineRenderer, /empty\.textContent = "世界层暂不可用"/);
-  assert.match(offlineRenderer, /cityEmpty\.textContent = "世界状态暂不可用"/);
+  assert.match(offlineRenderer, /empty\.className = model\.listEmptyClassName/);
+  assert.match(offlineRenderer, /empty\.textContent = model\.listEmptyText/);
+  assert.match(offlineRenderer, /cityEmpty\.className = model\.cityEmptyClassName/);
+  assert.match(offlineRenderer, /cityEmpty\.textContent = model\.cityEmptyText/);
   assert.match(renderSource, /if \(!governance\.world\) \{\s*renderGovernanceOfflineState\(\);\s*return;\s*\}/);
+  assert.doesNotMatch(offlineRenderer, /"世界：离线"|"世界层暂不可用"|"世界状态暂不可用"/);
   assert.doesNotMatch(renderSource, /世界层暂不可用/);
   assert.doesNotMatch(renderSource, /世界状态暂不可用/);
 });
 
+test("world state payload normalization is delegated out of loadWorldState", async () => {
+  const source = await readShellModule("app.js");
+  const loadSource = sliceBetween(
+    source,
+    "async function loadWorldState() {",
+    "async function loadProviderState() {",
+  );
+
+  assert.match(source, /governanceFromWorldSnapshotBundle/);
+  assert.match(source, /governanceFromWorldApiPayload/);
+  assert.match(loadSource, /const snapshotGovernance = governanceFromWorldSnapshotBundle\(bundle\)/);
+  assert.match(loadSource, /const apiGovernance = governanceFromWorldApiPayload\(payload, residentsPayload\)/);
+  assert.doesNotMatch(loadSource, /governance = \{/);
+  assert.doesNotMatch(loadSource, /world_mirror_sources:/);
+  assert.doesNotMatch(loadSource, /world_square:/);
+});
+
+test("main startup orchestration is split into named phases", async () => {
+  const source = await readShellModule("app.js");
+  const mainSource = sliceBetween(
+    source,
+    "async function main() {",
+    "composerFormEl?.addEventListener",
+  );
+
+  assert.match(source, /function initializeLocalShellState\(\) \{/);
+  assert.match(source, /async function loadInitialRuntimeState\(\) \{/);
+  assert.match(source, /function renderInitialShell\(\) \{/);
+  assert.match(mainSource, /initializeLocalShellState\(\)/);
+  assert.match(mainSource, /await loadInitialRuntimeState\(\)/);
+  assert.match(mainSource, /renderInitialShell\(\)/);
+  assert.doesNotMatch(mainSource, /roomReadMarkers = loadRoomReadMarkers\(\)/);
+  assert.doesNotMatch(mainSource, /await loadGatewayBootstrap\(\)/);
+  assert.doesNotMatch(mainSource, /renderResidents\(\)/);
+});
+
 test("governance render flow delegates chrome and member filtering", async () => {
   const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
   const targetResolver = sliceBetween(
     source,
     "function hasGovernanceRenderTargets() {",
@@ -3388,10 +3672,19 @@ test("governance render flow delegates chrome and member filtering", async () =>
 
   assert.match(targetResolver, /!cityListEl/);
   assert.match(targetResolver, /!worldSafetyListEl/);
-  assert.match(headerRenderer, /setNodeText\(worldStateEl, `世界：\$\{displayWorldTitle\(governance\.world\.title\)\}`\)/);
-  assert.match(headerRenderer, /shellMode === "user"/);
-  assert.match(headerRenderer, /跨城私聊 \$\{governance\.world\.allows_cross_city_private_messages \? "开启" : "关闭"\}/);
-  assert.match(emptyRenderer, /empty\.textContent = "暂时还没有公开城市"/);
+  assert.match(source, /governanceWorldHeaderModel,\s+governanceEmptyCityStateModel,/);
+  assert.match(governanceRenderSource, /export function governanceWorldHeaderModel/);
+  assert.match(governanceRenderSource, /export function governanceEmptyCityStateModel/);
+  assert.match(headerRenderer, /const model = governanceWorldHeaderModel\(\{/);
+  assert.match(headerRenderer, /world: governance\.world/);
+  assert.match(headerRenderer, /directory: governance\.world_directory/);
+  assert.match(headerRenderer, /cityCount: governance\.cities\.length/);
+  assert.match(headerRenderer, /worldSquareCount: \(governance\.world_square \|\| \[\]\)\.length/);
+  assert.match(headerRenderer, /setNodeText\(worldStateEl, model\.worldState\)/);
+  assert.match(headerRenderer, /setNodeText\(worldSummaryEl, model\.summary\)/);
+  assert.match(emptyRenderer, /const model = governanceEmptyCityStateModel\(\)/);
+  assert.match(emptyRenderer, /empty\.className = model\.className/);
+  assert.match(emptyRenderer, /empty\.textContent = model\.text/);
   assert.match(pendingResolver, /item\.city_id === city\.city_id && item\.state === "PendingApproval"/);
   assert.match(activeResolver, /item\.state === "Active"/);
   assert.match(activeResolver, /item\.resident_id !== currentIdentity\(\)/);
@@ -3400,12 +3693,117 @@ test("governance render flow delegates chrome and member filtering", async () =>
   assert.match(renderSource, /appendGovernanceEmptyCityState\(\)/);
   assert.match(renderSource, /const pendingMembers = governancePendingMembersForCity\(city\)/);
   assert.match(renderSource, /const activeMembers = governanceActiveMembersForCity\(city\)/);
+  assert.doesNotMatch(headerRenderer, /displayWorldTitle|跨城私聊|shellMode === "user"/);
+  assert.doesNotMatch(emptyRenderer, /"暂时还没有公开城市"/);
   assert.doesNotMatch(renderSource, /worldSummaryEl, shellMode === "user"/);
   assert.doesNotMatch(renderSource, /governance\.memberships\.filter/);
 });
 
+test("world directory DOM copy is delegated out of renderWorldDirectory", async () => {
+  const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
+  const cardRenderer = sliceBetween(
+    source,
+    "function createWorldDirectoryCityCardNode(model) {",
+    "function renderWorldDirectory() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderWorldDirectory() {",
+    "function renderMirrorSources() {",
+  );
+
+  assert.match(source, /worldDirectoryCityCardModel/);
+  assert.match(source, /worldDirectoryEmptyStateText/);
+  assert.match(governanceRenderSource, /export function worldDirectoryCityCardModel/);
+  assert.match(governanceRenderSource, /export function worldDirectoryEmptyStateText/);
+  assert.match(cardRenderer, /li\.className = model\.className/);
+  assert.match(cardRenderer, /titleRow\.className = model\.titleRowClassName/);
+  assert.match(cardRenderer, /createLine\("city-name", model\.title\)/);
+  assert.match(cardRenderer, /createLine\("city-slug", model\.slug\)/);
+  assert.match(cardRenderer, /createLine\("city-sub", model\.description\)/);
+  assert.match(cardRenderer, /createLine\("city-sub", model\.metrics\)/);
+  assert.match(cardRenderer, /createLine\("city-role", model\.mirror\)/);
+  assert.match(renderSource, /empty\.textContent = worldDirectoryEmptyStateText\(\{ gatewayUrl \}\)/);
+  assert.match(renderSource, /createWorldDirectoryCityCardNode\(worldDirectoryCityCardModel\(city\)\)/);
+  assert.doesNotMatch(renderSource, /displayCityTitle\(city\)/);
+  assert.doesNotMatch(renderSource, /displayCityDescription\(city\)/);
+  assert.doesNotMatch(renderSource, /translateSourceKind\(city\.source_kind\)/);
+  assert.doesNotMatch(renderSource, /translateTrustState\(city\.trust_state\)/);
+  assert.doesNotMatch(renderSource, /世界目录暂时还没有公开条目/);
+  assert.doesNotMatch(renderSource, /信任状态/);
+});
+
+test("mirror source DOM copy is delegated out of renderMirrorSources", async () => {
+  const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
+  const cardRenderer = sliceBetween(
+    source,
+    "function createMirrorSourceCardNode(model) {",
+    "function renderMirrorSources() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderMirrorSources() {",
+    "function renderWorldSquare() {",
+  );
+
+  assert.match(source, /mirrorSourceCardModel/);
+  assert.match(source, /mirrorSourcesEmptyStateText/);
+  assert.match(governanceRenderSource, /export function mirrorSourceCardModel/);
+  assert.match(governanceRenderSource, /export function mirrorSourcesEmptyStateText/);
+  assert.match(cardRenderer, /li\.className = model\.className/);
+  assert.match(cardRenderer, /createLine\("city-name", model\.title\)/);
+  assert.match(cardRenderer, /createLine\("city-sub", model\.status\)/);
+  assert.match(cardRenderer, /createLine\("city-role", model\.metrics\)/);
+  assert.match(cardRenderer, /if \(model\.lastSnapshot\)/);
+  assert.match(cardRenderer, /createLine\("city-role", model\.lastSnapshot\)/);
+  assert.match(renderSource, /empty\.textContent = mirrorSourcesEmptyStateText\(\{ gatewayUrl \}\)/);
+  assert.match(renderSource, /createMirrorSourceCardNode\(mirrorSourceCardModel\(source\)\)/);
+  assert.doesNotMatch(renderSource, /translateSourceKind\(source\.source_kind\)/);
+  assert.doesNotMatch(renderSource, /source\.enabled \? "已启用" : "未启用"/);
+  assert.doesNotMatch(renderSource, /source\.reachable \? "可达" : "不可达"/);
+  assert.doesNotMatch(renderSource, /formatDateTime\(source\.last_snapshot_at_ms\)/);
+  assert.doesNotMatch(renderSource, /暂时还没有配置世界镜像源/);
+  assert.doesNotMatch(renderSource, /城市 \$\{source\.city_count\}/);
+});
+
+test("world square notice DOM copy is delegated out of renderWorldSquare", async () => {
+  const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
+  const cardRenderer = sliceBetween(
+    source,
+    "function createWorldSquareNoticeCardNode(model) {",
+    "function renderWorldSquare() {",
+  );
+  const renderSource = sliceBetween(
+    source,
+    "function renderWorldSquare() {",
+    "function renderWorldSafetyEmptyState() {",
+  );
+
+  assert.match(source, /worldSquareNoticeCardModel/);
+  assert.match(source, /worldSquareEmptyStateText/);
+  assert.match(governanceRenderSource, /export function worldSquareNoticeCardModel/);
+  assert.match(governanceRenderSource, /export function worldSquareEmptyStateText/);
+  assert.match(cardRenderer, /li\.className = model\.className/);
+  assert.match(cardRenderer, /titleRow\.className = model\.titleRowClassName/);
+  assert.match(cardRenderer, /createLine\("city-name", model\.title\)/);
+  assert.match(cardRenderer, /createLine\("city-slug", model\.meta\)/);
+  assert.match(cardRenderer, /createLine\("city-sub", model\.body\)/);
+  assert.match(cardRenderer, /createLine\("city-role", model\.tags\)/);
+  assert.match(renderSource, /empty\.textContent = worldSquareEmptyStateText\(\{ gatewayUrl \}\)/);
+  assert.match(renderSource, /createWorldSquareNoticeCardNode\(worldSquareNoticeCardModel\(notice\)\)/);
+  assert.doesNotMatch(renderSource, /translateSeverity\(notice\.severity/);
+  assert.doesNotMatch(renderSource, /\(notice\.tags \|\| \[\]\)\.join/);
+  assert.doesNotMatch(renderSource, /formatDateTime\(notice\.posted_at_ms\)/);
+  assert.doesNotMatch(renderSource, /世界广场当前还没有新动态/);
+  assert.doesNotMatch(renderSource, /标签：/);
+});
+
 test("governance city card summary DOM is delegated out of renderGovernance", async () => {
   const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
   const cardBaseRenderer = sliceBetween(
     source,
     "function createGovernanceCityCardBaseNode(city, membership) {",
@@ -3417,21 +3815,30 @@ test("governance city card summary DOM is delegated out of renderGovernance", as
     "    if (rooms.length) {",
   );
 
+  assert.match(source, /governanceCityCardBaseModel/);
+  assert.match(governanceRenderSource, /export function governanceCityCardBaseModel/);
   assert.match(cardBaseRenderer, /document\.createElement\("li"\)/);
-  assert.match(cardBaseRenderer, /li\.className = "city-card"/);
-  assert.match(cardBaseRenderer, /titleRow\.className = "city-card-title"/);
-  assert.match(cardBaseRenderer, /createLine\("city-name", displayCityTitle\(city\)\)/);
-  assert.match(cardBaseRenderer, /createLine\("city-slug", city\.slug\)/);
-  assert.match(cardBaseRenderer, /createLine\("city-sub", displayCityDescription\(city\)\)/);
-  assert.match(cardBaseRenderer, /createLine\("city-role", `你的状态：\$\{humanMembership\(membership\)\}`\)/);
-  assert.match(cardBaseRenderer, /city\.public_room_discovery_enabled \? "开启" : "关闭"/);
+  assert.match(cardBaseRenderer, /const model = governanceCityCardBaseModel\(city, membership, \{ membershipLabelFn: humanMembership \}\)/);
+  assert.match(cardBaseRenderer, /li\.className = model\.className/);
+  assert.match(cardBaseRenderer, /titleRow\.className = model\.titleRowClassName/);
+  assert.match(cardBaseRenderer, /createLine\("city-name", model\.title\)/);
+  assert.match(cardBaseRenderer, /createLine\("city-slug", model\.slug\)/);
+  assert.match(cardBaseRenderer, /createLine\("city-sub", model\.description\)/);
+  assert.match(cardBaseRenderer, /createLine\("city-role", model\.role\)/);
+  assert.match(cardBaseRenderer, /createLine\("city-sub", model\.access\)/);
   assert.match(renderSource, /const li = createGovernanceCityCardBaseNode\(city, membership\)/);
+  assert.doesNotMatch(cardBaseRenderer, /displayCityTitle\(city\)/);
+  assert.doesNotMatch(cardBaseRenderer, /displayCityDescription\(city\)/);
+  assert.doesNotMatch(cardBaseRenderer, /humanMembership\(membership\)/);
+  assert.doesNotMatch(cardBaseRenderer, /city\.public_room_discovery_enabled/);
+  assert.doesNotMatch(cardBaseRenderer, /city\.approval_required/);
   assert.doesNotMatch(renderSource, /titleRow\.className = "city-card-title"/);
   assert.doesNotMatch(renderSource, /displayCityDescription\(city\)/);
 });
 
 test("governance city room list DOM is delegated out of renderGovernance", async () => {
   const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
   const openButtonRenderer = sliceBetween(
     source,
     "function createGovernanceRoomOpenButton(room) {",
@@ -3458,16 +3865,33 @@ test("governance city room list DOM is delegated out of renderGovernance", async
     "    if (pendingMembers.length) {",
   );
 
-  assert.match(roomListRenderer, /roomList\.textContent = "公共房间"/);
-  assert.match(roomListRenderer, /roomWrap\.className = "city-room-wrap"/);
-  assert.match(roomListRenderer, /for \(const room of rooms\) \{/);
-  assert.match(openButtonRenderer, /openButton\.textContent = "打开"/);
-  assert.match(openButtonRenderer, /focusRoom\(room\.room_id\)/);
+  assert.match(source, /governanceCityRoomListModel/);
+  assert.match(governanceRenderSource, /export function governanceCityRoomListModel/);
+  assert.match(roomListRenderer, /const model = governanceCityRoomListModel\(rooms, membership, \{ canFreezeRoomFn: roleAllowsFreezeRoom \}\)/);
+  assert.match(roomListRenderer, /roomList\.className = model\.titleClassName/);
+  assert.match(roomListRenderer, /roomList\.textContent = model\.title/);
+  assert.match(roomListRenderer, /roomWrap\.className = model\.wrapClassName/);
+  assert.match(roomListRenderer, /for \(const room of model\.entries\) \{/);
+  assert.match(openButtonRenderer, /const model = room\.openButton/);
+  assert.match(openButtonRenderer, /openButton\.type = model\.type/);
+  assert.match(openButtonRenderer, /openButton\.className = model\.className/);
+  assert.match(openButtonRenderer, /openButton\.textContent = model\.text/);
+  assert.match(openButtonRenderer, /focusRoom\(room\.roomId\)/);
+  assert.match(freezeButtonRenderer, /const model = room\.freezeButton/);
+  assert.match(freezeButtonRenderer, /toggleButton\.textContent = model\.text/);
   assert.match(freezeButtonRenderer, /submitFreezeRoom\(city\.slug, room\.slug, !room\.frozen\)/);
+  assert.match(roomEntryRenderer, /row\.className = room\.rowClassName/);
+  assert.match(roomEntryRenderer, /label\.textContent = room\.label/);
+  assert.match(roomEntryRenderer, /controls\.className = room\.controlsClassName/);
   assert.match(roomEntryRenderer, /createGovernanceRoomOpenButton\(room\)/);
-  assert.match(roomEntryRenderer, /createGovernanceRoomFreezeButton\(city, room\)/);
+  assert.match(roomEntryRenderer, /if \(room\.freezeButton\) \{/);
   assert.match(roomListRenderer, /createGovernanceCityRoomEntryNode\(city, membership, room\)/);
   assert.match(renderSource, /if \(rooms\.length\) \{\s*appendGovernanceCityRoomList\(li, city, membership, rooms\);\s*\}/);
+  assert.doesNotMatch(roomListRenderer, /"公共房间"/);
+  assert.doesNotMatch(roomListRenderer, /for \(const room of rooms\) \{/);
+  assert.doesNotMatch(roomEntryRenderer, /room\.frozen \? " · 已冻结" : ""/);
+  assert.doesNotMatch(openButtonRenderer, /openButton\.textContent = "打开"/);
+  assert.doesNotMatch(freezeButtonRenderer, /room\.frozen \? "解冻" : "冻结"/);
   assert.doesNotMatch(renderSource, /roomList\.textContent = "公共房间"/);
   assert.doesNotMatch(renderSource, /submitFreezeRoom\(city\.slug, room\.slug, !room\.frozen\)/);
   assert.doesNotMatch(roomListRenderer, /focusRoom\(room\.room_id\)/);
@@ -3476,10 +3900,11 @@ test("governance city room list DOM is delegated out of renderGovernance", async
 
 test("governance pending member list DOM is delegated out of renderGovernance", async () => {
   const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
   const pendingListRenderer = sliceBetween(
     source,
     "function appendGovernancePendingMemberList(li, city, membership, pendingMembers) {",
-    "function renderGovernance() {",
+    "function appendGovernanceActiveMemberList(li, city, membership, activeMembers) {",
   );
   const renderSource = sliceBetween(
     source,
@@ -3487,22 +3912,37 @@ test("governance pending member list DOM is delegated out of renderGovernance", 
     "    if (activeMembers.length) {",
   );
 
-  assert.match(pendingListRenderer, /pendingTitle\.textContent = "待审批居民"/);
-  assert.match(pendingListRenderer, /pendingWrap\.className = "city-room-wrap"/);
-  assert.match(pendingListRenderer, /for \(const pending of pendingMembers\) \{/);
-  assert.match(pendingListRenderer, /approveButton\.textContent = "批准"/);
-  assert.match(pendingListRenderer, /submitApproveResident\(city\.slug, pending\.resident_id\)/);
+  assert.match(source, /governancePendingMemberListModel/);
+  assert.match(governanceRenderSource, /export function governancePendingMemberListModel/);
+  assert.match(pendingListRenderer, /const model = governancePendingMemberListModel\(pendingMembers, membership, \{ canApproveJoinFn: roleAllowsApproveJoin \}\)/);
+  assert.match(pendingListRenderer, /pendingTitle\.className = model\.titleClassName/);
+  assert.match(pendingListRenderer, /pendingTitle\.textContent = model\.title/);
+  assert.match(pendingListRenderer, /pendingWrap\.className = model\.wrapClassName/);
+  assert.match(pendingListRenderer, /for \(const pending of model\.entries\) \{/);
+  assert.match(pendingListRenderer, /row\.className = pending\.rowClassName/);
+  assert.match(pendingListRenderer, /label\.textContent = pending\.label/);
+  assert.match(pendingListRenderer, /if \(pending\.approveButton\) \{/);
+  assert.match(pendingListRenderer, /approveButton\.type = pending\.approveButton\.type/);
+  assert.match(pendingListRenderer, /approveButton\.className = pending\.approveButton\.className/);
+  assert.match(pendingListRenderer, /approveButton\.textContent = pending\.approveButton\.text/);
+  assert.match(pendingListRenderer, /submitApproveResident\(city\.slug, pending\.residentId\)/);
   assert.match(renderSource, /if \(pendingMembers\.length\) \{\s*appendGovernancePendingMemberList\(li, city, membership, pendingMembers\);\s*\}/);
+  assert.doesNotMatch(pendingListRenderer, /"待审批居民"/);
+  assert.doesNotMatch(pendingListRenderer, /"批准"/);
+  assert.doesNotMatch(pendingListRenderer, /pending\.resident_id/);
+  assert.doesNotMatch(pendingListRenderer, /membership\?\.state === "Active"/);
+  assert.doesNotMatch(pendingListRenderer, /roleAllowsApproveJoin\(membership\.role\)/);
   assert.doesNotMatch(renderSource, /pendingTitle\.textContent = "待审批居民"/);
   assert.doesNotMatch(renderSource, /submitApproveResident\(city\.slug, pending\.resident_id\)/);
 });
 
 test("governance active member list DOM is delegated out of renderGovernance", async () => {
   const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
   const activeListRenderer = sliceBetween(
     source,
     "function appendGovernanceActiveMemberList(li, city, membership, activeMembers) {",
-    "function renderGovernance() {",
+    "function createGovernanceJoinButton(action) {",
   );
   const renderSource = sliceBetween(
     source,
@@ -3510,48 +3950,59 @@ test("governance active member list DOM is delegated out of renderGovernance", a
     "    appendGovernanceCityActions(li, city, membership, rooms);",
   );
 
-  assert.match(activeListRenderer, /activeTitle\.textContent = "活跃居民"/);
-  assert.match(activeListRenderer, /activeWrap\.className = "city-room-wrap"/);
-  assert.match(activeListRenderer, /for \(const resident of activeMembers\) \{/);
-  assert.match(activeListRenderer, /label\.textContent = `\$\{resident\.resident_id\} · \$\{translateRole\(resident\.role\)\}`/);
-  assert.match(activeListRenderer, /stewardButton\.textContent = grant \? "设为执事" : "撤销执事"/);
-  assert.match(activeListRenderer, /submitStewardUpdate\(city\.slug, resident\.resident_id, grant\)/);
+  assert.match(source, /governanceActiveMemberListModel/);
+  assert.match(governanceRenderSource, /export function governanceActiveMemberListModel/);
+  assert.match(activeListRenderer, /const model = governanceActiveMemberListModel\(activeMembers, membership, \{\s*canManageStewardsFn: roleAllowsManageStewards,\s*translateRoleFn: translateRole,\s*\}\)/);
+  assert.match(activeListRenderer, /activeTitle\.className = model\.titleClassName/);
+  assert.match(activeListRenderer, /activeTitle\.textContent = model\.title/);
+  assert.match(activeListRenderer, /activeWrap\.className = model\.wrapClassName/);
+  assert.match(activeListRenderer, /for \(const resident of model\.entries\) \{/);
+  assert.match(activeListRenderer, /row\.className = resident\.rowClassName/);
+  assert.match(activeListRenderer, /label\.textContent = resident\.label/);
+  assert.match(activeListRenderer, /if \(resident\.stewardButton\) \{/);
+  assert.match(activeListRenderer, /stewardButton\.type = resident\.stewardButton\.type/);
+  assert.match(activeListRenderer, /stewardButton\.className = resident\.stewardButton\.className/);
+  assert.match(activeListRenderer, /stewardButton\.textContent = resident\.stewardButton\.text/);
+  assert.match(activeListRenderer, /submitStewardUpdate\(city\.slug, resident\.residentId, resident\.stewardGrant\)/);
   assert.match(renderSource, /if \(activeMembers\.length\) \{\s*appendGovernanceActiveMemberList\(li, city, membership, activeMembers\);\s*\}/);
+  assert.doesNotMatch(activeListRenderer, /"活跃居民"/);
+  assert.doesNotMatch(activeListRenderer, /translateRole\(resident\.role\)/);
+  assert.doesNotMatch(activeListRenderer, /resident\.role !== "Steward"/);
+  assert.doesNotMatch(activeListRenderer, /"设为执事"|"撤销执事"/);
+  assert.doesNotMatch(activeListRenderer, /membership\?\.state === "Active"/);
+  assert.doesNotMatch(activeListRenderer, /roleAllowsManageStewards\(membership\.role\)/);
   assert.doesNotMatch(renderSource, /activeTitle\.textContent = "活跃居民"/);
   assert.doesNotMatch(renderSource, /submitStewardUpdate\(city\.slug, resident\.resident_id, grant\)/);
 });
 
 test("governance city action controls DOM is delegated out of renderGovernance", async () => {
   const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
   const joinButtonRenderer = sliceBetween(
     source,
-    "function createGovernanceJoinButton(city) {",
-    "function createGovernancePendingApprovalNotice() {",
+    "function createGovernanceJoinButton(action) {",
+    "function createGovernancePendingApprovalNotice(notice) {",
   );
   const pendingNoticeRenderer = sliceBetween(
     source,
-    "function createGovernancePendingApprovalNotice() {",
-    "function governanceLobbyRoom(rooms) {",
-  );
-  const lobbyResolver = sliceBetween(
-    source,
-    "function governanceLobbyRoom(rooms) {",
+    "function createGovernancePendingApprovalNotice(notice) {",
     "function createGovernanceLobbyOpenButton(lobby) {",
+    "function createGovernanceCreateRoomButton(action) {",
   );
   const lobbyOpenButtonRenderer = sliceBetween(
     source,
     "function createGovernanceLobbyOpenButton(lobby) {",
-    "function createGovernanceCreateRoomButton(city) {",
+    "function createGovernanceCreateRoomButton(action) {",
   );
   const createRoomButtonRenderer = sliceBetween(
     source,
-    "function createGovernanceCreateRoomButton(city) {",
+    "function createGovernanceCreateRoomButton(action) {",
     "function appendGovernanceCityActions(li, city, membership, rooms) {",
   );
   const actionRenderer = sliceBetween(
     source,
     "function appendGovernanceCityActions(li, city, membership, rooms) {",
-    "function renderGovernance() {",
+    "function appendGovernanceFederationPolicyControls(li, city, membership) {",
   );
   const renderSource = sliceBetween(
     source,
@@ -3559,24 +4010,38 @@ test("governance city action controls DOM is delegated out of renderGovernance",
     "    appendGovernanceFederationPolicyControls(li, city, membership);",
   );
 
+  assert.match(source, /governanceCityActionsModel/);
+  assert.match(governanceRenderSource, /export function governanceCityActionsModel/);
+  assert.match(actionRenderer, /const model = governanceCityActionsModel\(city, membership, rooms, \{ canCreatePublicRoomFn: roleAllowsCreatePublicRoom \}\)/);
+  assert.match(actionRenderer, /if \(!model\.hasActions\) return/);
   assert.match(actionRenderer, /const actions = document\.createElement\("div"\)/);
-  assert.match(actionRenderer, /actions\.className = "city-actions"/);
-  assert.match(joinButtonRenderer, /joinButton\.textContent = "加入"/);
-  assert.match(joinButtonRenderer, /cityJoinInputEl\.value = city\.slug/);
-  assert.match(joinButtonRenderer, /await submitJoinCity\(city\.slug\)/);
-  assert.match(pendingNoticeRenderer, /pending\.textContent = "等待审批"/);
-  assert.match(lobbyResolver, /rooms\.find\(\(room\) => room\.slug === "lobby"\) \|\| rooms\[0\]/);
-  assert.match(lobbyOpenButtonRenderer, /openButton\.textContent = `打开 \$\{lobby\.slug\}`/);
-  assert.match(lobbyOpenButtonRenderer, /focusRoom\(lobby\.room_id\)/);
-  assert.match(createRoomButtonRenderer, /setGovernanceStatus\(`已准备在 \$\{city\.slug\} 中创建房间`\)/);
-  assert.match(actionRenderer, /actions\.appendChild\(createGovernanceJoinButton\(city\)\)/);
-  assert.match(actionRenderer, /actions\.appendChild\(createGovernancePendingApprovalNotice\(\)\)/);
-  assert.match(actionRenderer, /const lobby = governanceLobbyRoom\(rooms\)/);
-  assert.match(actionRenderer, /actions\.appendChild\(createGovernanceLobbyOpenButton\(lobby\)\)/);
-  assert.match(actionRenderer, /roleAllowsCreatePublicRoom\(membership\.role\)/);
-  assert.match(actionRenderer, /actions\.appendChild\(createGovernanceCreateRoomButton\(city\)\)/);
+  assert.match(actionRenderer, /actions\.className = model\.className/);
+  assert.match(joinButtonRenderer, /joinButton\.type = action\.type/);
+  assert.match(joinButtonRenderer, /joinButton\.className = action\.className/);
+  assert.match(joinButtonRenderer, /joinButton\.textContent = action\.text/);
+  assert.match(joinButtonRenderer, /cityJoinInputEl\.value = action\.citySlug/);
+  assert.match(joinButtonRenderer, /await submitJoinCity\(action\.citySlug\)/);
+  assert.match(pendingNoticeRenderer, /pending\.className = notice\.className/);
+  assert.match(pendingNoticeRenderer, /pending\.textContent = notice\.text/);
+  assert.match(lobbyOpenButtonRenderer, /openButton\.textContent = lobby\.text/);
+  assert.match(lobbyOpenButtonRenderer, /focusRoom\(lobby\.roomId\)/);
+  assert.match(createRoomButtonRenderer, /roomButton\.textContent = action\.text/);
+  assert.match(createRoomButtonRenderer, /roomCityInputEl\.value = action\.citySlug/);
+  assert.match(createRoomButtonRenderer, /setGovernanceStatus\(action\.statusText\)/);
+  assert.match(actionRenderer, /if \(model\.joinButton\) \{/);
+  assert.match(actionRenderer, /actions\.appendChild\(createGovernanceJoinButton\(model\.joinButton\)\)/);
+  assert.match(actionRenderer, /if \(model\.pendingNotice\) \{/);
+  assert.match(actionRenderer, /actions\.appendChild\(createGovernancePendingApprovalNotice\(model\.pendingNotice\)\)/);
+  assert.match(actionRenderer, /if \(model\.lobbyButton\) \{/);
+  assert.match(actionRenderer, /actions\.appendChild\(createGovernanceLobbyOpenButton\(model\.lobbyButton\)\)/);
+  assert.match(actionRenderer, /if \(model\.createRoomButton\) \{/);
+  assert.match(actionRenderer, /actions\.appendChild\(createGovernanceCreateRoomButton\(model\.createRoomButton\)\)/);
   assert.match(actionRenderer, /li\.appendChild\(actions\)/);
   assert.match(renderSource, /appendGovernanceCityActions\(li, city, membership, rooms\)/);
+  assert.doesNotMatch(actionRenderer, /"city-actions"|"加入"|"等待审批"|"新建房间"|已准备在/);
+  assert.doesNotMatch(actionRenderer, /membership\?\.state === "Active"/);
+  assert.doesNotMatch(actionRenderer, /roleAllowsCreatePublicRoom\(membership\.role\)/);
+  assert.doesNotMatch(actionRenderer, /rooms\.find\(\(room\) => room\.slug === "lobby"\)/);
   assert.doesNotMatch(renderSource, /const actions = document\.createElement\("div"\)/);
   assert.doesNotMatch(renderSource, /submitJoinCity\(city\.slug\)/);
   assert.doesNotMatch(renderSource, /roomTitleInputEl\.focus\(\)/);
@@ -3587,6 +4052,7 @@ test("governance city action controls DOM is delegated out of renderGovernance",
 
 test("governance federation policy controls are delegated out of renderGovernance", async () => {
   const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
   const federationRenderer = sliceBetween(
     source,
     "function appendGovernanceFederationPolicyControls(li, city, membership) {",
@@ -3598,17 +4064,32 @@ test("governance federation policy controls are delegated out of renderGovernanc
     "    cityListEl.appendChild(li);",
   );
 
-  assert.match(federationRenderer, /roleAllowsUpdateFederation\(membership\.role\)/);
-  assert.match(federationRenderer, /federationLabel\.textContent = `联邦策略 · \$\{translateFederationPolicy\(city\.federation_policy\)\}`/);
-  assert.match(federationRenderer, /const policies = \[/);
-  assert.match(federationRenderer, /\["Open", "开放互联"\]/);
-  assert.match(federationRenderer, /\["Selective", "选择互联"\]/);
-  assert.match(federationRenderer, /\["Isolated", "孤城断联"\]/);
-  assert.match(federationRenderer, /applyButton\.textContent =\s*city\.federation_policy === policyValue \? "当前" : "应用"/);
-  assert.match(federationRenderer, /await submitFederationPolicy\(city\.slug, policyValue\)/);
+  assert.match(source, /governanceFederationPolicyControlsModel/);
+  assert.match(governanceRenderSource, /export function governanceFederationPolicyControlsModel/);
+  assert.match(federationRenderer, /const model = governanceFederationPolicyControlsModel\(city, membership, \{\s*canUpdateFederationFn: roleAllowsUpdateFederation,\s*translateFederationPolicyFn: translateFederationPolicy,\s*\}\)/);
+  assert.match(federationRenderer, /if \(!model\) return/);
+  assert.match(federationRenderer, /federationLabel\.className = model\.titleClassName/);
+  assert.match(federationRenderer, /federationLabel\.textContent = model\.title/);
+  assert.match(federationRenderer, /federationWrap\.className = model\.wrapClassName/);
+  assert.match(federationRenderer, /for \(const policy of model\.entries\) \{/);
+  assert.match(federationRenderer, /row\.className = policy\.rowClassName/);
+  assert.match(federationRenderer, /text\.textContent = policy\.label/);
+  assert.match(federationRenderer, /applyButton\.type = policy\.applyButton\.type/);
+  assert.match(federationRenderer, /applyButton\.className = policy\.applyButton\.className/);
+  assert.match(federationRenderer, /applyButton\.textContent = policy\.applyButton\.text/);
+  assert.match(federationRenderer, /applyButton\.disabled = policy\.applyButton\.disabled/);
+  assert.match(federationRenderer, /await submitFederationPolicy\(city\.slug, policy\.policyValue\)/);
   assert.match(federationRenderer, /setGovernanceStatus\(localizedRuntimeError\(error, "联邦策略更新失败"\), true\)/);
   assert.match(federationRenderer, /li\.appendChild\(federationWrap\)/);
   assert.match(renderSource, /appendGovernanceFederationPolicyControls\(li, city, membership\)/);
+  assert.doesNotMatch(federationRenderer, /membership\?\.state === "Active"/);
+  assert.doesNotMatch(federationRenderer, /roleAllowsUpdateFederation\(membership\.role\)/);
+  assert.doesNotMatch(federationRenderer, /translateFederationPolicy\(city\.federation_policy\)/);
+  assert.doesNotMatch(federationRenderer, /const policies = \[/);
+  assert.doesNotMatch(federationRenderer, /\["Open", "开放互联"\]/);
+  assert.doesNotMatch(federationRenderer, /\["Selective", "选择互联"\]/);
+  assert.doesNotMatch(federationRenderer, /\["Isolated", "孤城断联"\]/);
+  assert.doesNotMatch(federationRenderer, /"当前"|"应用"|当前生效|可切换/);
   assert.doesNotMatch(renderSource, /const federationLabel = document\.createElement\("div"\)/);
   assert.doesNotMatch(renderSource, /submitFederationPolicy\(city\.slug, policyValue\)/);
   assert.doesNotMatch(renderSource, /const policies = \[/);
@@ -3762,29 +4243,10 @@ test("room digest chip groups are delegated out of renderRoomDigest", async () =
 
 test("thread status rail visibility and items are delegated out of renderThreadStatusRail", async () => {
   const source = await readShellModule("app.js");
-  const hiddenHelper = sliceBetween(
+  const roomRenderSource = await readShellModule("shell-room-render.js");
+  const modelAdapter = sliceBetween(
     source,
-    "function shouldHideThreadStatusRail(room, shellPage) {",
-    "function threadStatusBaseItems(room, shellPage) {",
-  );
-  const baseItemsHelper = sliceBetween(
-    source,
-    "function threadStatusBaseItems(room, shellPage) {",
-    "function appendThreadStatusDraftItem(items, room) {",
-  );
-  const draftAppender = sliceBetween(
-    source,
-    "function appendThreadStatusDraftItem(items, room) {",
-    "function appendThreadStatusCaretakerItems(items, room) {",
-  );
-  const caretakerAppender = sliceBetween(
-    source,
-    "function appendThreadStatusCaretakerItems(items, room) {",
-    "function threadStatusRailItems(room, shellPage) {",
-  );
-  const itemsHelper = sliceBetween(
-    source,
-    "function threadStatusRailItems(room, shellPage) {",
+    "function threadStatusRailModel(room, shellPage) {",
     "function composerMetaStatusForRoom(room) {",
   );
   const railRenderer = sliceBetween(
@@ -3793,22 +4255,22 @@ test("thread status rail visibility and items are delegated out of renderThreadS
     "function renderComposerMeta(room) {",
   );
 
-  assert.match(hiddenHelper, /return !room \|\| shellPage === "user"/);
-  assert.match(baseItemsHelper, /label: shellPage === "admin" \? "线程" : "会话标题"/);
-  assert.match(baseItemsHelper, /value: roomThreadHeadline\(room\)/);
-  assert.match(baseItemsHelper, /roomChatStatusSummary\(room\)/);
-  assert.match(baseItemsHelper, /roomQueueSummary\(room\)/);
-  assert.match(draftAppender, /if \(!roomHasDraft\(room\.id\)\) return/);
-  assert.match(draftAppender, /`\$\{draftForRoom\(room\.id\)\.trim\(\)\.length\} 字`/);
-  assert.match(caretakerAppender, /const caretaker = caretakerProfile\(room\)/);
-  assert.match(caretakerAppender, /caretakerNotificationCount\(room\) > 0/);
-  assert.match(itemsHelper, /const items = threadStatusBaseItems\(room, shellPage\)/);
-  assert.match(itemsHelper, /appendThreadStatusDraftItem\(items, room\)/);
-  assert.match(itemsHelper, /appendThreadStatusCaretakerItems\(items, room\)/);
-  assert.doesNotMatch(itemsHelper, /roomChatStatusSummary\(room\)/);
-  assert.doesNotMatch(itemsHelper, /caretakerNotificationCount\(room\) > 0/);
-  assert.match(railRenderer, /if \(shouldHideThreadStatusRail\(room, shellPage\)\) \{/);
-  assert.match(railRenderer, /for \(const item of threadStatusRailItems\(room, shellPage\)\) \{/);
+  assert.match(roomRenderSource, /export function threadStatusRailModelForState/);
+  assert.match(source, /threadStatusRailModelForState,/);
+  assert.match(modelAdapter, /const sendError = room \? roomSendErrors\[room\.id\] : ""/);
+  assert.match(modelAdapter, /const caretaker = caretakerProfile\(room\)/);
+  assert.match(modelAdapter, /threadStatusRailModelForState\(\{/);
+  assert.match(modelAdapter, /threadHeadline: room \? roomThreadHeadline\(room\) : ""/);
+  assert.match(modelAdapter, /draftLength: room && roomHasDraft\(room\.id\) \? draftForRoom\(room\.id\)\.trim\(\)\.length : 0/);
+  assert.match(modelAdapter, /caretakerNotificationCount: caretakerNotificationCount\(room\)/);
+  assert.match(railRenderer, /const model = threadStatusRailModel\(room, shellPage\)/);
+  assert.match(railRenderer, /if \(!model\.visible\) \{/);
+  assert.match(railRenderer, /for \(const item of model\.items\) \{/);
+  assert.doesNotMatch(source, /function shouldHideThreadStatusRail/);
+  assert.doesNotMatch(source, /function threadStatusBaseItems/);
+  assert.doesNotMatch(source, /function appendThreadStatusDraftItem/);
+  assert.doesNotMatch(source, /function appendThreadStatusCaretakerItems/);
+  assert.doesNotMatch(source, /function threadStatusRailItems/);
   assert.doesNotMatch(railRenderer, /const items = \[/);
   assert.doesNotMatch(railRenderer, /roomChatStatusSummary\(room\)/);
 });
@@ -3932,30 +4394,16 @@ test("chat detail hero DOM is delegated out of renderChatDetailPanel", async () 
 
 test("chat detail runtime status DOM is delegated out of renderChatDetailPanel", async () => {
   const source = await readShellModule("app.js");
+  const roomRenderSource = await readShellModule("shell-room-render.js");
   const runtimeRenderer = sliceBetween(
     source,
     "function createChatRuntimeDetailSection(room, shellPage) {",
     "function chatDetailRoomContextModel(room) {",
   );
-  const shellRowsRenderer = sliceBetween(
-    source,
-    "function appendChatRuntimeShellRows(runtime, room, shellPage) {",
-    "function appendChatRuntimeSyncRows(runtime, room) {",
-  );
-  const quickRowsRenderer = sliceBetween(
-    source,
-    "function appendChatRuntimeQuickActionRows(runtime, room) {",
-    "function appendChatRuntimeProviderRows(runtime, room) {",
-  );
   const previewCardRenderer = sliceBetween(
     source,
     "function createChatRuntimePreviewCardNode(room, preview, previewFieldView) {",
     "function appendChatRuntimePreviewRows(runtime, room, preview) {",
-  );
-  const providerRowsRenderer = sliceBetween(
-    source,
-    "function appendChatRuntimeProviderRows(runtime, room) {",
-    "function createChatRuntimeDetailSection(room, shellPage) {",
   );
   const renderSource = sliceBetween(
     source,
@@ -3963,22 +4411,20 @@ test("chat detail runtime status DOM is delegated out of renderChatDetailPanel",
     "  const caretakerSection = createCaretakerDetailSection(room);",
   );
 
+  assert.match(source, /chatRuntimeDetailModelForState/);
+  assert.match(roomRenderSource, /export function chatRuntimeDetailModelForState/);
   assert.match(runtimeRenderer, /const runtime = createDetailSection\("聊天状态"\)/);
-  assert.match(runtimeRenderer, /appendChatRuntimeShellRows\(runtime, room, shellPage\)/);
-  assert.match(runtimeRenderer, /appendChatRuntimeSyncRows\(runtime, room\)/);
-  assert.match(runtimeRenderer, /appendChatRuntimeQuickActionRows\(runtime, room\)/);
-  assert.match(runtimeRenderer, /appendChatRuntimeProviderRows\(runtime, room\)/);
-  assert.match(shellRowsRenderer, /if \(shellPage === "user"\) return/);
-  assert.match(shellRowsRenderer, /createDetailRow\(shellPage === "admin" \? "线程" : "会话标题", roomThreadHeadline\(room\)\)/);
-  assert.match(quickRowsRenderer, /const quickContext = chatRuntimeQuickActionContext\(room\)/);
-  assert.match(quickRowsRenderer, /appendChatRuntimePreviewRows\(runtime, room, preview\)/);
-  assert.match(providerRowsRenderer, /createDetailRow\(\s*"消息来源"/);
-  assert.match(providerRowsRenderer, /createDetailRow\(\s*"输入状态"/);
+  assert.match(runtimeRenderer, /const model = chatRuntimeDetailModel\(room, shellPage\)/);
+  assert.match(runtimeRenderer, /appendChatRuntimeRows\(runtime, model\.rowsBeforePreview\)/);
+  assert.match(runtimeRenderer, /appendChatRuntimePreviewRows\(runtime, room, model\.preview\)/);
+  assert.match(runtimeRenderer, /appendChatRuntimeRows\(runtime, model\.rowsAfterPreview\)/);
   assert.match(previewCardRenderer, /createQuickActionPreviewCard\(preview\.action, preview\.state, preview\.structured/);
   assert.match(previewCardRenderer, /previewRoomQuickStage\(room\.id, preview\.action, preview\.state, index\)/);
   assert.match(previewCardRenderer, /setRoomQuickPreviewFieldView\(room\.id, preview\.action, preview\.state, preview\.snapshotIndex, viewId\)/);
   assert.match(renderSource, /const runtime = createChatRuntimeDetailSection\(room, shellPage\)/);
   assert.match(renderSource, /chatDetailContentEl\.appendChild\(runtime\)/);
+  assert.doesNotMatch(runtimeRenderer, /roomThreadHeadline\(room\)|roomQueueSummary\(room\)|translateProviderMode\(provider\.mode/);
+  assert.doesNotMatch(source, /function appendChatRuntimeShellRows|function appendChatRuntimeProviderRows/);
   assert.doesNotMatch(runtimeRenderer, /createQuickActionPreviewCard\(preview\.action, preview\.state, preview\.structured/);
   assert.doesNotMatch(runtimeRenderer, /translateProviderMode\(provider\.mode/);
   assert.doesNotMatch(renderSource, /createDetailSection\("聊天状态"\)/);
@@ -4144,6 +4590,36 @@ test("conversation callout model and DOM are delegated out of updateConversation
   assert.doesNotMatch(updateRenderer, /document\.createElement\("p"\)/);
   assert.doesNotMatch(updateRenderer, /clearChildren\(conversationCalloutEl\)/);
   assert.doesNotMatch(updateRenderer, /conversationCalloutEl\.dataset\.variant =/);
+});
+
+test("room stage canvas user branch is delegated out of syncRoomStageCanvas", async () => {
+  const source = await readShellModule("app.js");
+  const stageSyncer = sliceBetween(
+    source,
+    "function syncRoomStageCanvas(room) {",
+    "function renderDefaultUserRoomStageCanvas() {",
+  );
+  const defaultRenderer = sliceBetween(
+    source,
+    "function renderDefaultUserRoomStageCanvas() {",
+    "function defaultUserRoomStageVisual() {",
+  );
+  const activeRenderer = sliceBetween(
+    source,
+    "function renderUserRoomStageCanvas(room) {",
+    "function updateRoomStageNote(rendered, summary) {",
+  );
+
+  assert.match(stageSyncer, /if \(shellPage === "hub"\)/);
+  assert.match(stageSyncer, /renderDefaultUserRoomStageCanvas\(\)/);
+  assert.match(stageSyncer, /renderUserRoomStageCanvas\(room\)/);
+  assert.doesNotMatch(stageSyncer, /buildRoomVisualModel\(/);
+  assert.doesNotMatch(stageSyncer, /renderStageCanvas\(/);
+  assert.match(defaultRenderer, /defaultUserRoomStageVisual\(\)/);
+  assert.match(defaultRenderer, /roomStageCanvasEl\.dataset\.variant = "home"/);
+  assert.match(activeRenderer, /buildUserRoomVisual\(room\)/);
+  assert.match(activeRenderer, /syncUserRoomProjection\(room, visual\)/);
+  assert.match(activeRenderer, /updateRoomStageNote\(rendered, visual\.stage\.summary\)/);
 });
 
 test("conversation overview header DOM is delegated out of renderConversationOverview", async () => {
@@ -4463,8 +4939,11 @@ test("scene pages keep one desktop rail width and stretch the stage frame", asyn
     /body\[data-shell-page="hub"\]\[data-shell-variant="public-square"\]\s+\.public-square-layout\s*\{[\s\S]*?grid-template-columns:\s*var\(--im-scene-rail-width,\s*220px\)\s+minmax\(0,\s*1fr\);/,
   );
   assert.match(worldCss, /\.world-square-shell\s*\{[\s\S]*?grid-template-columns:\s*var\(--im-scene-rail-width,\s*220px\)\s+minmax\(0,\s*1fr\);/);
-  assert.match(worldCss, /--world-square-art-left-crop:\s*clamp\(220px,\s*14vw,\s*280px\);/);
-  assert.match(worldCss, /\.world-square-scene::before\s*\{[\s\S]*?left:\s*calc\(-1 \* var\(--world-square-art-left-crop\)\);/);
+  // 2026-06-18 用户反馈"素材没显示全"：改为完整显示 concept art（contain 零裁切），
+  // 不再左偏移裁掉画里画好的侧导航。固化新设计：crop 归零、::before 不偏移、contain。
+  assert.match(worldCss, /--world-square-art-left-crop:\s*0;/);
+  assert.match(worldCss, /\.world-square-scene::before\s*\{[\s\S]*?left:\s*0;\s*width:\s*100%;/);
+  assert.match(worldCss, /world-square-concept-20260427-256\.png"\) center \/ contain no-repeat/);
 });
 
 test("scene clear mode can be exited with Escape", async () => {
@@ -4525,4 +5004,54 @@ test("shell pages declare a favicon to avoid browser 404 noise", async () => {
     const html = await readShellPage(page);
     assert.match(html, /<link rel="icon" href="data:," ?\/>/);
   }
+});
+
+test("scene-editor link resolves active room and token at click time (no stale dm prefix)", async () => {
+  const source = await readShellModule("app.js");
+  const mainSource = sliceBetween(
+    source,
+    "async function main() {",
+    "composerFormEl?.addEventListener",
+  );
+
+  // 旧残缺 "dm:" + id + ":"（缺对方 id）构造已移除：它让 scene-editor 查 /v1/shell/state
+  // 永远匹配不到房间，owner 加载必空（P1 房间编辑器加载阻断）。
+  assert.doesNotMatch(source, /encodeURIComponent\("dm:" \+ id \+":/);
+  // 左键点击实时取当前 activeRoomId，覆盖 owner 切换房间后链接跟随当前房间。
+  assert.match(source, /sceneEditorLink\.addEventListener\("click"/);
+  assert.match(source, /&room=" \+ encodeURIComponent\(activeRoomId\)/);
+  // session token 透传给 scene-editor（旧逻辑只传 gateway，保存会 401）。
+  assert.match(source, /safeLocalStorageGet\("lobster-session-token"\)/);
+  // hub 页消息网关仍是 query-only，但 scene-editor 入口可用 remembered gateway 进入编辑器。
+  assert.match(source, /function sceneEditorGatewayUrl\(\) \{\s*return gatewayUrl \|\| safeLocalStorageGet\("lobster-gateway-url"\) \|\| "";/);
+  assert.match(source, /const editorGatewayUrl = sceneEditorGatewayUrl\(\)/);
+  assert.match(source, /const clickGatewayUrl = sceneEditorGatewayUrl\(\)/);
+  assert.match(source, /function sceneEditorUrlForCurrentState\(\) \{/);
+  assert.match(source, /function bindSceneEditorLink\(\) \{/);
+  assert.match(mainSource, /bindSceneEditorLink\(\)/);
+  assert.doesNotMatch(mainSource, /sceneEditorLink\.addEventListener/);
+  assert.doesNotMatch(mainSource, /scene-editor\.html\?gateway=/);
+});
+
+test("owner-only rail visibility is enforced for logged-in residents", async () => {
+  const source = await readShellModule("app.js");
+
+  // 实现 [data-rail-visibility="owner-only"] 消费（此前为声明无消费者的 dead attribute，
+  // 访客可见 scene-editor 入口）。
+  assert.match(source, /function applyRailVisibility\(\)/);
+  assert.match(source, /\[data-rail-visibility="owner-only"\]/);
+  assert.match(source, /currentIdentity\(\) !== "访客"/);
+  // 登录入口 persistSenderIdentity 与 init 加载 loadSenderIdentity 后都应用可见性。
+  const persistBlock = sliceBetween(
+    source,
+    "function persistSenderIdentity(value) {",
+    "async function refreshIdentityProjection() {",
+  );
+  assert.match(persistBlock, /applyRailVisibility\(\)/);
+  const loadBlock = sliceBetween(
+    source,
+    "function loadSenderIdentity() {",
+    "function persistSenderIdentity(value) {",
+  );
+  assert.match(loadBlock, /applyRailVisibility\(\)/);
 });

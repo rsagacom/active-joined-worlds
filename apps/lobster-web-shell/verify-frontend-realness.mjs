@@ -298,6 +298,103 @@ async function verifyNoJavascriptErrors(page, baseUrl) {
   }
 }
 
+async function verifySceneEditorAccess(page, baseUrl) {
+  // 守护 P1 房间编辑器入口的访问控制（app.js applyRailVisibility）：访客
+  // （identity=访客）看不到编辑器入口；已登录居民可见。
+  // 注：scene-editor 的 URL 构造（activeRoomId 实时取 + token 透传，废弃残缺
+  // "dm:<id>:" 前缀）依赖真实 gateway 的 init 完整流程；realness 静态服务器
+  // 无 gateway，refreshFromGateway 失败会中断 init 的 href 填充，故 URL 部分由
+  // shell-pages-static 源码断言守护，这里只固化访问控制的运行时行为。
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  await page.goto(`${baseUrl}/index.html?verify=frontend-realness&identity=${encodeURIComponent("访客")}`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(300);
+  const guestDisplay = await page.locator("#scene-editor-link").evaluate((node) => getComputedStyle(node).display);
+  assert(guestDisplay === "none", `guest must not see scene-editor link (owner-only), got display=${guestDisplay}`);
+
+  await page.goto(`${baseUrl}/index.html?verify=frontend-realness&identity=alice`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(300);
+  const ownerDisplay = await page.locator("#scene-editor-link").evaluate((node) => getComputedStyle(node).display);
+  assert(ownerDisplay !== "none", `logged-in resident must see scene-editor link, got display=${ownerDisplay}`);
+}
+
+async function verifySceneEditorMobile(page, baseUrl) {
+  // 守护 scene-editor 移动端可用：pointer 事件替换 mouse 后加载无 JS 错误，且窄屏
+  // 切单栏布局（不再被 280px 桌面侧栏挤爆）。P1 房间编辑器移动端交互闭环。
+  await page.setViewportSize({ width: 390, height: 844 });
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(String(e)));
+  await page.goto(`${baseUrl}/scene-editor.html?verify=frontend-realness`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(300);
+  assert(errors.length === 0, `scene-editor mobile must load without JS errors: ${errors.join(" | ").slice(0, 240)}`);
+  const cols = await page.locator(".editor-shell").evaluate((node) => getComputedStyle(node).gridTemplateColumns);
+  // grid-template-columns: 1fr 计算值为单 track 像素（如 "390px"）；桌面双栏计算值首列是 "280px ..."。
+  assert(!cols.startsWith("280px"), `scene-editor mobile must drop the 280px sidebar column (single-column), got ${cols}`);
+}
+
+async function verifySceneEditorDayNight(page, baseUrl) {
+  // 守护 scene-editor 昼夜预览切换：填入 day/night URL，点击 previewBtn 应在两时段间
+  // 切换 timeOfDay 并更新 img.src，让编辑者验证两个背景的热点对齐。
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${baseUrl}/scene-editor.html?verify=frontend-realness`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(200);
+  // 空状态引导：img 无 src 时可见（CSS :has），加载背景后自动隐藏
+  assert(await page.locator("#emptyHint").evaluate((n) => getComputedStyle(n).display !== "none"), "empty hint must show when no background loaded");
+  await page.locator("#dayUrl").fill("https://example.test/scene-day.png");
+  await page.locator("#nightUrl").fill("https://example.test/scene-night.png");
+  const initial = await page.evaluate(() => document.body.dataset.timeOfDay);
+  await page.locator("#previewBtn").click();
+  await page.waitForTimeout(150);
+  const afterClick = await page.evaluate(() => document.body.dataset.timeOfDay);
+  assert(afterClick !== initial, `preview click must toggle time-of-day, ${initial} -> ${afterClick}`);
+  const imgSrc = await page.locator("#sceneImage").evaluate((node) => node.getAttribute("src") || "");
+  const expected = afterClick === "day" ? "scene-day" : "scene-night";
+  assert(imgSrc.includes(expected), `preview must load the toggled ${afterClick} background, got ${imgSrc}`);
+  assert(await page.locator("#emptyHint").evaluate((n) => getComputedStyle(n).display === "none"), "empty hint must hide once a background is loaded");
+}
+
+async function verifySceneEditorHotspotList(page, baseUrl) {
+  // 守护侧栏热点列表（多热点管理 UX）：添加后列表显示 + 计数更新，点击列表项选中，× 删除后同步。
+  // 页面加载不触发 renderHotspots，必须靠 addHotspotBtn 驱动才能执行列表渲染逻辑。
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${baseUrl}/scene-editor.html?verify=frontend-realness`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(200);
+  assert(await page.locator("#hotspot-list .hl-empty").count() === 1, "hotspot list should show empty hint initially");
+  assert((await page.locator("#hotspot-count").textContent()) === "0", "hotspot count should be 0 initially");
+  await page.locator("#addHotspotBtn").click();
+  await page.locator("#addHotspotBtn").click();
+  await page.waitForTimeout(120);
+  const lis = page.locator("#hotspot-list li");
+  assert(await lis.count() === 2, "hotspot list should list 2 hotspots after adding twice");
+  assert((await page.locator("#hotspot-count").textContent()) === "2", "hotspot count should be 2 after adding");
+  await lis.nth(1).click();
+  await page.waitForTimeout(100);
+  assert(await lis.nth(1).evaluate((n) => n.classList.contains("selected")), "clicking a list item should mark it selected");
+  await page.locator("#hotspot-list li .hl-del").first().click();
+  await page.waitForTimeout(100);
+  assert(await lis.count() === 1, "hotspot list should drop to 1 after deleting one");
+}
+
+async function verifySceneEditorUndoRedo(page, baseUrl) {
+  // 守护 undo/redo 历史栈：添加→undo 清空→redo 恢复→undo 再清空，验证结构变更可撤销/重做。
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto(`${baseUrl}/scene-editor.html?verify=frontend-realness`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(200);
+  await page.locator("#addHotspotBtn").click();
+  await page.waitForTimeout(100);
+  assert((await page.locator("#hotspot-count").textContent()) === "1", "count should be 1 after adding");
+  await page.locator("#undoBtn").click();
+  await page.waitForTimeout(100);
+  assert((await page.locator("#hotspot-count").textContent()) === "0", "undo should drop count to 0");
+  assert(await page.locator("#hotspot-list .hl-empty").count() === 1, "undo should show empty hint");
+  await page.locator("#redoBtn").click();
+  await page.waitForTimeout(100);
+  assert((await page.locator("#hotspot-count").textContent()) === "1", "redo should restore count to 1");
+  await page.locator("#undoBtn").click();
+  await page.waitForTimeout(100);
+  assert((await page.locator("#hotspot-count").textContent()) === "0", "second undo should clear again");
+}
+
 const server = createStaticServer();
 const address = await listen(server);
 const baseUrl = `http://${address.address}:${address.port}`;
@@ -312,7 +409,12 @@ try {
   await verifyAdminDs(page, baseUrl);
   await verifySceneHotspotSizes(page, baseUrl);
   await verifyNoJavascriptErrors(page, baseUrl);
-  console.log("frontend realness: composer, hotspot labels, shared scene rails, day/night backgrounds, formal admin, fixed hotspot sizes (64x34) and zero uncaught JS errors passed");
+  await verifySceneEditorAccess(page, baseUrl);
+  await verifySceneEditorMobile(page, baseUrl);
+  await verifySceneEditorDayNight(page, baseUrl);
+  await verifySceneEditorHotspotList(page, baseUrl);
+  await verifySceneEditorUndoRedo(page, baseUrl);
+  console.log("frontend realness: composer, hotspot labels, shared scene rails, day/night backgrounds, formal admin, fixed hotspot sizes (64x34), zero uncaught JS errors, scene-editor owner-only access, mobile touch, day/night preview, hotspot list and undo/redo passed");
 } finally {
   await browser.close();
   await close(server);

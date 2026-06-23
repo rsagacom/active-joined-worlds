@@ -1263,6 +1263,91 @@ node --check scripts/smoke-web-dual-browser.mjs
 git diff --check
 ```
 
+## 2026-06-17 Codex 技术债推进: web-shell app.js 长函数与纯规格抽取
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| app.js 长函数清零 | 完成 | 拆分 `ensureWorkspaceChrome()`、`ensureUserSceneChrome()`、`syncRoomStageCanvas()`，并继续拆 `loadWorldState()` / `main()`；当前全部 `function`（含 async）扫描无超过 50 行的函数 |
+| workspace chrome 拆分 | 完成 | 工作区 nav、用户搜索、room toolbar、composer 辅助层、caretaker chrome 分离，并新增静态护栏 |
+| user scene chrome 拆分 | 完成 | 房间侧栏、舞台 canvas、人物 canvas、chat-detail 面板拆成独立 helper，不改场景热点/图层交互合同 |
+| room stage canvas 拆分 | 完成 | 默认住宅画布、用户房间画布、note 更新与 visual 构建分离 |
+| world state payload 纯模型 | 完成 | `governanceFromWorldSnapshotBundle()` / `governanceFromWorldApiPayload()` 移入 `shell-state-normalize.js`；`loadWorldState()` 只保留请求与赋值，新增 3 条单测和静态防回流护栏 |
+| main 启动编排拆分 | 完成 | `initializeLocalShellState()`、`loadInitialRuntimeState()`、`bindSceneEditorLink()`、`renderInitialShell()` 接管启动阶段；`main()` 不再直接拼 scene-editor URL 或堆本地状态加载细节 |
+| composer placeholder 纯函数 | 完成 | `composerPlaceholderForState()` 移入 `shell-room-render.js`，新增 6 条单测；`app.js` 只收集运行态并委托 |
+| message owner action spec | 完成 | `messageOwnerActionSpecs()` 移入 `shell-message-render.js`，新增 edit/recall 可见性单测；DOM 事件绑定仍留在 `app.js` |
+| chat detail runtime rows 纯模型 | 完成 | `chatRuntimeDetailModelForState()` 移入 `shell-room-render.js`，把聊天详情运行状态行、quick action 行、provider/输入/管家/错误行顺序下沉；`app.js` 只负责 detail row DOM 与预览卡交互 |
+| timeline committed render items | 完成 | `timelineCommittedMessageRenderItems()` 移入 `shell-message-render.js`，把已提交消息的未读/日期 divider 与 message row 顺序下沉；`app.js` 只按 item 类型创建透明 DOM 节点 |
+| world directory 纯规格 | 完成 | 新增 `shell-governance-render.js`，把世界目录空状态和城市卡文案/class 规格下沉；`renderWorldDirectory()` 只负责 DOM 创建和列表挂载 |
+| mirror sources 纯规格 | 完成 | `mirrorSourcesEmptyStateText()` / `mirrorSourceCardModel()` 下沉世界镜像源空状态、状态行、计数行和最近快照文案；`renderMirrorSources()` 只负责 DOM 创建和列表挂载 |
+| world square notice 纯规格 | 完成 | `worldSquareEmptyStateText()` / `worldSquareNoticeCardModel()` 下沉世界广场空状态、标题/meta、正文、标签/时间文案；`renderWorldSquare()` 只负责 DOM 创建和列表挂载 |
+| world safety mirror 纯规格 | 完成 | `worldSafetyEmptyStateText()` / `worldSafetyMirrorCardModel()` 下沉世界安全空状态、镜像城市数量、信任状态列表和治理员文案；`renderWorldSafety()` 继续只做列表组合 |
+| world safety advisory 纯规格 | 完成 | `worldSafetyAdvisoryEmptyStateText()` / `worldSafetyAdvisoryCardModel()` 下沉世界安全通告空态、动作、对象类型和发布时间文案；`appendWorldSafetyAdvisoryCards()` 只负责分支和挂载 |
+| world safety summary/detail 纯规格 | 完成 | `worldSafetySanctionSummaryCardModel()` / `worldSafetyReportSummaryCardModel()` / `worldSafetySanctionCardModel()` / `worldSafetyReportCardModel()` 下沉制裁/举报摘要与明细文案；`renderWorldSafety()` 和 append helpers 只做列表组合 |
+| resident directory 纯规格 | 完成 | `residentDirectoryEmptyStateText()` / `residentDirectoryCardModel()` 下沉居民目录空态、标题/slug、已加入/待审批城市与身份行文案；`app.js` 只保留 DOM 创建、私聊按钮和当前身份判断 |
+| caretaker panel 纯规格 | 完成 | 新增 `shell-caretaker-panel.js`，下沉非居民页管家面板标题、资料、消息、规则和状态条 items；`app.js` 只负责 DOM 创建和当前房间标题注入 |
+| governance offline/header 纯规格 | 完成 | `governanceOfflineStateModel()` / `governanceWorldHeaderModel()` / `governanceEmptyCityStateModel()` 下沉治理离线态、世界 header 摘要和空城市列表文案；`app.js` 只负责清 DOM 与挂载 |
+| governance city card base 纯规格 | 完成 | `governanceCityCardBaseModel()` 下沉城市卡基础 class、标题/slug、简介、成员状态与公开发现/入城审批文案；`app.js` 只负责创建 DOM 和注入 `humanMembership()` |
+| governance city room list 纯规格 | 完成 | `governanceCityRoomListModel()` 下沉公共房间标题、容器/行 class、冻结标签、打开/冻结按钮文案和冻结权限判定；`app.js` 只保留按钮事件绑定与 Gateway 调用 |
+| governance member lists 纯规格 | 完成 | `governancePendingMemberListModel()` / `governanceActiveMemberListModel()` 下沉待审批/活跃居民列表标题、容器/行 class、批准/执事按钮文案和权限判定；`app.js` 只保留 approve/steward 事件绑定与 Gateway 调用 |
+| governance city actions 纯规格 | 完成 | `governanceCityActionsModel()` 下沉加入、等待审批、打开大厅、新建房间动作的 class/文案/可见性与 lobby fallback；`app.js` 只保留输入聚焦、状态提示和 Gateway 调用 |
+| governance federation policy 纯规格 | 完成 | `governanceFederationPolicyControlsModel()` 下沉联邦策略标题、选项行、当前/应用按钮状态和权限判定；`app.js` 只保留 `submitFederationPolicy()` 事件绑定 |
+| room stage 投影纯函数 | 完成 | 新增 `shell-room-stage.js`，下沉舞台摘要、画像摘要/标题、画像 chips、私宅/公共频道投影文案；新增 5 条单测和静态防回流护栏 |
+| composer context 纯模型 | 完成 | 新增 `composerContextItemsForState()`，把 composer context 文案、状态和 tone 规则移入 `shell-room-render.js`；`app.js` 与既有 `shell-composer.js` 均改为复用同一 helper，新增 4 条单测和静态防回流护栏 |
+| composer hero 纯模型 | 完成 | 新增 `composerHeroModelForState()`，统一 hero variant/kicker/title/note/chips；`app.js` 和既有 `shell-composer.js` 均只负责 DOM 创建，新增 3 条单测和静态防回流护栏 |
+| fake-dom import 映射 | 完成 | 全量测试红灯暴露 `app.js` 新增 `shell-room-stage.js` import 后 fake-dom 临时模块重写漏映射；已补 `APP_LOCAL_IMPORT_PATHS`，相关 import rewrite / shell init 测试转绿 |
+| scene-editor token 回归 | 完成 | realness 暴露 hub 页 query-only gateway 策略导致 editor href 不带 token；新增 `sceneEditorGatewayUrl()`，只让编辑器入口 fallback 到 remembered gateway，不改变 hub 消息网关策略 |
+| message search DOM 纯规格 | 完成 | `messageSearchBarDomSpec()` / `searchResultItemDomSpec()` / `searchEmptyStateDomSpec()` 下沉搜索栏与搜索结果节点规格；`app.js` 搜索 UI 改为 `createElement` / `textContent` / `replaceChildren()`，移除搜索路径 `innerHTML` sink |
+| message search request 纯模型 | 完成 | `messageSearchRequestModel()` 下沉空查询/缺网关/缺房间 guard、query trim、room/query/limit 编码与 `/v1/shell/messages/search` URL 组合；`app.js` 只保留 `fetch(request.url)` 和结果渲染 |
+| message search target 匹配纯函数 | 完成 | `messageSearchRowMatchesId()` 下沉搜索结果跳转的 `message_id` 精确匹配；`searchResultItemDomSpec()` 保留可字符串化 message_id（如 `0`）；`app.js` 改为扫描 `[data-message-id]` 候选后比较 `dataset.messageId`，不再把 gateway/search 返回的 messageId 拼进 CSS selector |
+
+### 当前指标
+
+| 指标 | 当前值 |
+| --- | ---: |
+| `apps/lobster-web-shell/app.js` 行数 | 9733 |
+| `app.js` >50 行函数（函数体括号范围扫描，含 async） | 0 |
+| `shell-pages-static.test.mjs` | 151 passed |
+| `shell-caretaker-panel.test.mjs` | 2 passed |
+| `shell-message-search.test.mjs` | 14 passed |
+| `shell-message-render.test.mjs` | 46 passed |
+| `shell-room-render.test.mjs` | 51 passed |
+| `shell-governance-render.test.mjs` | 39 passed |
+| `shell-state-normalize.test.mjs` | 12 passed |
+| web-shell 全量测试 | 1007 unit passed / 0 failed，layout passed，realness passed |
+
+### 验证
+
+```bash
+cd /Volumes/AJW-Data/Projects/lobster-chat/apps/lobster-web-shell
+node --test test/shell-room-render.test.mjs
+node --test test/shell-message-render.test.mjs
+node --test test/shell-caretaker-panel.test.mjs
+node --test test/shell-message-search.test.mjs
+node --test test/shell-governance-render.test.mjs
+node --test test/shell-pages-static.test.mjs
+node --test test/shell-state-normalize.test.mjs test/shell-pages-static.test.mjs test/fake-dom-import-rewrite.test.mjs
+node --test test/shell-composer.test.mjs
+node --test test/shell-room-stage.test.mjs
+node --check app.js
+node --check shell-message-render.js
+node --check shell-room-render.js
+node --check shell-caretaker-panel.js
+node --check shell-governance-render.js
+node --check shell-state-normalize.js
+for f in app.js shell-*.js composer-state.js pretext-stage.js; do node --check "$f" || exit 1; done
+node verify-frontend-realness.mjs
+npm test
+git diff --check
+```
+
+### 下一步建议
+
+1. 继续按 TDD 小步拆 `app.js`，优先选不碰 CC 交互改动的纯规格/文案层：governance list DOM specs、conversation overview 非用户状态/动作 specs、thread status rail 后续组合 specs。
+2. 暂缓直接外提 `roomAudienceLabel()` / `roomSummaryLine()` 这组函数；它们在 `app.js` 里仍依赖 governance/publicRoom 实时状态，需先设计参数化边界再动。
+3. CC/DS 若推进场景交互，必须保留 realness 的 scene-editor owner-only/token 护栏和三层/四层热点结构测试。
+
 ## 2026-06-16 Codex 复盘: CC 近期推进核验与技术债护栏恢复
 
 ### 读取来源

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   contractConversationMap,
+  governanceFromWorldApiPayload,
+  governanceFromWorldSnapshotBundle,
   mergeRoomWithContract,
   synthesizeRoomsFromContracts,
 } from "../shell-state-normalize.js";
@@ -109,4 +111,92 @@ test("synthesizeRoomsFromContracts converts contract map to room array", () => {
   assert.equal(rooms.length, 2);
   assert.equal(rooms[0].id, "room:a");
   assert.equal(rooms[1].id, "room:b");
+});
+
+test("governanceFromWorldSnapshotBundle maps snapshot payload and world extensions", () => {
+  const bundle = {
+    payload: {
+      governance: {
+        world: { id: "world", title: "龙虾镇" },
+        portability: { enabled: true },
+        cities: [{ city_id: "main" }],
+        memberships: [{ resident_id: "alice" }],
+        public_rooms: [{ id: "room:lobby" }],
+      },
+      residents: [{ id: "alice" }],
+      directory: { city_count: 1 },
+      mirror_sources: [{ city_id: "mirror" }],
+      square: [{ id: "notice-1" }],
+      safety: { steward_count: 2 },
+    },
+  };
+
+  assert.deepEqual(governanceFromWorldSnapshotBundle(bundle), {
+    world: { id: "world", title: "龙虾镇" },
+    portability: { enabled: true },
+    cities: [{ city_id: "main" }],
+    memberships: [{ resident_id: "alice" }],
+    public_rooms: [{ id: "room:lobby" }],
+    residents: [{ id: "alice" }],
+    world_directory: { city_count: 1 },
+    world_mirror_sources: [{ city_id: "mirror" }],
+    world_square: [{ id: "notice-1" }],
+    world_safety: { steward_count: 2 },
+  });
+});
+
+test("governanceFromWorldSnapshotBundle returns null without a world and defaults arrays", () => {
+  assert.equal(governanceFromWorldSnapshotBundle({ payload: { governance: {} } }), null);
+
+  assert.deepEqual(
+    governanceFromWorldSnapshotBundle({
+      payload: {
+        governance: { world: { id: "world" } },
+        residents: null,
+        mirror_sources: null,
+        square: null,
+      },
+    }),
+    {
+      world: { id: "world" },
+      portability: undefined,
+      cities: [],
+      memberships: [],
+      public_rooms: [],
+      residents: [],
+      world_directory: null,
+      world_mirror_sources: [],
+      world_square: [],
+      world_safety: null,
+    },
+  );
+});
+
+test("governanceFromWorldApiPayload maps legacy world and resident responses", () => {
+  assert.equal(governanceFromWorldApiPayload({}, []), null);
+
+  assert.deepEqual(
+    governanceFromWorldApiPayload(
+      {
+        world: { id: "world", title: "龙虾镇" },
+        portability: { enabled: false },
+        cities: [{ city_id: "main" }],
+        memberships: [{ resident_id: "bob" }],
+        public_rooms: [{ id: "room:lobby" }],
+      },
+      [{ id: "bob" }],
+    ),
+    {
+      world: { id: "world", title: "龙虾镇" },
+      portability: { enabled: false },
+      cities: [{ city_id: "main" }],
+      memberships: [{ resident_id: "bob" }],
+      public_rooms: [{ id: "room:lobby" }],
+      residents: [{ id: "bob" }],
+      world_directory: null,
+      world_mirror_sources: [],
+      world_square: [],
+      world_safety: null,
+    },
+  );
 });
