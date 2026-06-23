@@ -588,3 +588,52 @@ test("admin-ds.js 批量通过消息必须逐条检查结果（禁止假成功�
   const snippet = js.slice(idx, idx + 1000);
   assert.match(snippet, /summarizeBatchResults/, "批量通过回调必须用 summarizeBatchResults 汇总，不能无条件报成功");
 });
+
+// ====== HTTP 失败假成功态防护 ======
+// fetchGatewayJsonPost 在 HTTP 4xx/5xx 时返回 {ok:false, status, data}，**无 error 字段**。
+// 若写操作用 `if (r.error) ... else { 成功 }` 判定，HTTP 失败会落入 else 成功分支，
+// 读 r.data.xxx 得到 undefined 却报"已生成/已清空"——假成功态。
+// 成功判定必须用 r.ok === true（对齐 await 模式 banResident 的 else if (result.ok)）。
+
+test("admin-ds.js 生成邀请码成功判定用 r.ok 而非仅 !r.error（防 HTTP 失败假成功）", async () => {
+  const js = await readShellModule("admin-ds.js");
+  const idx = js.indexOf("/v1/admin/invites', {actor_id: currentGatewayIdentity(), max_uses: 10}");
+  assert.ok(idx !== -1, "应存在生成邀请码写操作");
+  const snippet = js.slice(idx, idx + 400);
+  // 成功分支必须显式检查 r.ok，不能是裸 else（裸 else 会把 HTTP 失败当成功）
+  assert.match(snippet, /else if \(r\.ok\)|else if \(r && r\.ok\)/, "生成邀请码成功判定必须用 r.ok，禁止裸 else 导致 HTTP 失败假成功");
+});
+
+test("admin-ds.js 清空日志成功判定用 r.ok 而非仅 !r.error（防 HTTP 失败假成功）", async () => {
+  const js = await readShellModule("admin-ds.js");
+  const idx = js.indexOf("/v1/admin/logs/clear', {}");
+  assert.ok(idx !== -1, "应存在清空日志写操作");
+  const snippet = js.slice(idx, idx + 400);
+  assert.match(snippet, /else if \(r\.ok\)|else if \(r && r\.ok\)/, "清空日志成功判定必须用 r.ok，禁止裸 else 导致 HTTP 失败假成功");
+});
+
+test("admin-ds.js 所有 .then 写操作成功判定用 r.ok（系统性防 HTTP 失败假成功）", async () => {
+  // fetchGatewayJsonPost HTTP 失败返回 {ok:false,status,data} 无 error。
+  // 任何 `if (r.error) ... else { 成功 }` 裸 else 都会在 HTTP 失败时假成功。
+  // 逐一覆盖所有 .then 模式写操作端点。
+  const js = await readShellModule("admin-ds.js");
+  const endpoints = [
+    "/v1/admin/rooms/members', {room_id:",
+    "/v1/admin/invites/revoke', {code:",
+    "/v1/admin/logs/handle', {log_id:",
+    "/v1/admin/residents', {resident_id: residentId, email: email}",
+    "/v1/admin/devices/unblock', { address:",
+    "/v1/admin/devices/block', { address:",
+    "/v1/admin/devices/remove', { address:",
+  ];
+  for (const ep of endpoints) {
+    const idx = js.indexOf(ep);
+    assert.ok(idx !== -1, `应存在写操作端点 ${ep}`);
+    const snippet = js.slice(idx, idx + 500);
+    assert.match(
+      snippet,
+      /else if \(r\.ok\)|else if \(r && r\.ok\)/,
+      `${ep} 成功判定必须用 r.ok，禁止裸 else 导致 HTTP 失败假成功`
+    );
+  }
+});

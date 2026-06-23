@@ -487,6 +487,24 @@ test("admin-ds runtime: fetchGatewayJsonPost 发送 JSON POST 请求", serial, a
   assert.equal(result.ok, true);
 });
 
+test("admin-ds runtime: fetchGatewayJsonPost HTTP 失败时返回 ok:false 且无 error 字段", serial, async () => {
+  // 这是「HTTP 失败假成功态」bug 的根因：HTTP 4xx/5xx 时返回 {ok:false,status,data}，
+  // 没有 error 字段。若调用方用 `if (r.error) ... else { 成功 }` 判定，HTTP 失败会落入 else。
+  // 因此写操作的成功判定必须用 r.ok === true，不能靠 !r.error。
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  globalThis.fetch = async (_url, _init) => ({
+    ok: false, status: 500,
+    json: async () => ({ error: "internal server error" }),
+    text: async () => '{"error":"internal server error"}',
+  });
+  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
+  const result = await api.fetchGatewayJsonPost("/v1/admin/invites", { actor_id: "rsaga" });
+
+  assert.equal(result.ok, false, "HTTP 500 时 ok 必须为 false");
+  assert.equal(result.status, 500);
+  assert.equal("error" in result, false, "HTTP 失败返回结构无顶层 error 字段——!r.error 判定会漏，必须用 r.ok");
+});
+
 test("admin-ds runtime: 外部数据写入使用安全 DOM API", serial, async () => {
   const js = await readText("../admin-ds.js");
 

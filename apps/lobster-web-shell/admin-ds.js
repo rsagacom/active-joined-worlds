@@ -1305,7 +1305,8 @@
                 fetchGatewayJsonPost('/v1/admin/rooms/members', {room_id: room.id, resident_id: residentId, actor_id: currentGatewayIdentity(), action: action}).then(function(r) {
                   memberBtn.disabled = false; memberBtn.textContent = '管理成员';
                   if (r.error) { showAdminNotice('成员操作失败: ' + r.error, 'error'); }
-                  else { showAdminNotice('成员 ' + residentId + ' 已' + (action==='add'?'添加至':'移出') + '房间 ' + room.id, 'success'); }
+                  else if (r.ok) { showAdminNotice('成员 ' + residentId + ' 已' + (action==='add'?'添加至':'移出') + '房间 ' + room.id, 'success'); }
+                  else { showAdminNotice('成员操作失败 (HTTP ' + r.status + ')', 'error'); }
                 });
               });
               actions.appendChild(memberBtn);
@@ -1693,7 +1694,8 @@
                 fetchGatewayJsonPost('/v1/admin/invites/revoke', {code: ic.code, actor_id: currentGatewayIdentity()}).then(function(r) {
                   revokeBtn.disabled = false; revokeBtn.textContent = '已作废';
                   if (r.error) { showAdminNotice('作废失败: ' + r.error, 'error'); revokeBtn.textContent = '作废'; }
-                  else { showAdminNotice('邀请码 ' + ic.code + ' 已作废', 'success'); revokeBtn.textContent = '已作废'; revokeBtn.style.color = 'var(--ds-text-muted)'; }
+                  else if (r.ok) { showAdminNotice('邀请码 ' + ic.code + ' 已作废', 'success'); revokeBtn.textContent = '已作废'; revokeBtn.style.color = 'var(--ds-text-muted)'; }
+                  else { showAdminNotice('作废失败 (HTTP ' + r.status + ')', 'error'); revokeBtn.textContent = '作废'; }
                 });
               });
           btnGroup.appendChild(revokeBtn);
@@ -1837,7 +1839,8 @@
                 fetchGatewayJsonPost('/v1/admin/logs/handle', {log_id: log.id, actor_id: currentGatewayIdentity()}).then(function(r) {
                   handleLogBtn.disabled = false;
                   if (r.error) { showAdminNotice('标记失败: ' + r.error, 'error'); handleLogBtn.textContent = '标记已处理'; }
-                  else { showAdminNotice('日志 ' + log.id + ' 已标记为已处理', 'success'); handleLogBtn.textContent = '已处理'; handleLogBtn.style.color = 'var(--ds-success)'; }
+                  else if (r.ok) { showAdminNotice('日志 ' + log.id + ' 已标记为已处理', 'success'); handleLogBtn.textContent = '已处理'; handleLogBtn.style.color = 'var(--ds-success)'; }
+                  else { showAdminNotice('标记失败 (HTTP ' + r.status + ')', 'error'); handleLogBtn.textContent = '标记已处理'; }
                 });
               });
               actions.appendChild(handleLogBtn);
@@ -2143,7 +2146,8 @@
             unblockBtn.addEventListener('click', function () {
               fetchGatewayJsonPost('/v1/admin/devices/unblock', { address: d.address }).then(function (r) {
                 if (r && r.error) { showAdminNotice('解封失败: ' + r.error, 'error'); }
-                else { showAdminNotice('设备 ' + d.address + ' 已解封', 'success'); }
+                else if (r && r.ok) { showAdminNotice('设备 ' + d.address + ' 已解封', 'success'); }
+                else { showAdminNotice('解封失败 (HTTP ' + (r && r.status || '?') + ')', 'error'); }
                 loadDevices();
               });
             });
@@ -2154,7 +2158,8 @@
             blockBtn.addEventListener('click', function () {
               fetchGatewayJsonPost('/v1/admin/devices/block', { address: d.address }).then(function (r) {
                 if (r && r.error) { showAdminNotice('封禁失败: ' + r.error, 'error'); }
-                else { showAdminNotice('设备 ' + d.address + ' 已封禁', 'success'); }
+                else if (r && r.ok) { showAdminNotice('设备 ' + d.address + ' 已封禁', 'success'); }
+                else { showAdminNotice('封禁失败 (HTTP ' + (r && r.status || '?') + ')', 'error'); }
                 loadDevices();
               });
             });
@@ -2165,7 +2170,8 @@
             if (confirm('确定移除设备 ' + d.address + ' ？')) {
               fetchGatewayJsonPost('/v1/admin/devices/remove', { address: d.address }).then(function (r) {
                 if (r && r.error) { showAdminNotice('移除失败: ' + r.error, 'error'); }
-                else { showAdminNotice('设备 ' + d.address + ' 已移除', 'success'); }
+                else if (r && r.ok) { showAdminNotice('设备 ' + d.address + ' 已移除', 'success'); }
+                else { showAdminNotice('移除失败 (HTTP ' + (r && r.status || '?') + ')', 'error'); }
                 loadDevices();
               });
             }
@@ -2291,7 +2297,8 @@
         fetchGatewayJsonPost('/v1/admin/invites', {actor_id: currentGatewayIdentity(), max_uses: 10}).then(function(r) {
           genInviteBtn.disabled = false; genInviteBtn.textContent = '+ 生成邀请码';
           if (r.error) { showAdminNotice('生成失败: ' + r.error, 'error'); }
-          else { showAdminNotice('邀请码已生成: ' + r.data.code, 'success'); loadInviteCodes(); }
+          else if (r.ok) { showAdminNotice('邀请码已生成: ' + (r.data && r.data.code || ''), 'success'); loadInviteCodes(); }
+          else { showAdminNotice('生成失败 (HTTP ' + r.status + ')', 'error'); }
         }).catch(function() {
           genInviteBtn.disabled = false; genInviteBtn.textContent = '+ 生成邀请码';
         });
@@ -2339,7 +2346,8 @@
         fetchGatewayJsonPost('/v1/admin/residents', {resident_id: residentId, email: email}).then(function(r) {
           createResidentBtn.disabled = false; createResidentBtn.textContent = '+ 新建居民';
           if (r.error) { showAdminNotice('创建失败: ' + r.error, 'error'); }
-          else { showAdminNotice('居民 ' + residentId + ' 已创建', 'success'); loadGatewayAdminData(); }
+          else if (r.ok) { showAdminNotice('居民 ' + residentId + ' 已创建', 'success'); loadGatewayAdminData(); }
+          else { showAdminNotice('创建失败 (HTTP ' + r.status + ')', 'error'); }
         }).catch(function() {
           createResidentBtn.disabled = false; createResidentBtn.textContent = '+ 新建居民';
         });
@@ -2354,7 +2362,8 @@
         fetchGatewayJsonPost('/v1/admin/logs/clear', {}).then(function (r) {
           clearLogsBtn.disabled = false; clearLogsBtn.textContent = '清空已处理';
           if (r.error) { showAdminNotice('清空失败: ' + r.error, 'error'); }
-          else { showAdminNotice('已清空 ' + (r.data && r.data.cleared || '') + ' 条已处理日志', 'success'); loadAuditLog(); }
+          else if (r.ok) { showAdminNotice('已清空 ' + (r.data && r.data.cleared || '') + ' 条已处理日志', 'success'); loadAuditLog(); }
+          else { showAdminNotice('清空失败 (HTTP ' + r.status + ')', 'error'); }
         }).catch(function () {
           clearLogsBtn.disabled = false; clearLogsBtn.textContent = '清空已处理';
         });
