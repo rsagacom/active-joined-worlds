@@ -101,6 +101,11 @@ import {
   searchResultItemDomSpec,
 } from "./shell-message-search.js";
 import {
+  messageBodyDomSpec,
+  messageQuickActionChipSpec,
+  messageQuickStateChipSpec,
+} from "./shell-message-body.js";
+import {
   quickActionContextCopy,
   quickActionDefaultSendLabel,
   quickActionDraftStatusCopy,
@@ -4314,123 +4319,36 @@ function clearChildren(element) {
 }
 
 
+function buildNodeFromSpec(spec) {
+  if (!spec) return null;
+  const node = document.createElement(spec.tag || "div");
+  if (spec.className) node.className = spec.className;
+  if (spec.extraClass) node.classList.add(spec.extraClass);
+  if (spec.text !== undefined && spec.text !== null) node.textContent = spec.text;
+  if (spec.dataset) {
+    for (const [key, value] of Object.entries(spec.dataset)) {
+      setDatasetFlag(node, key, value);
+    }
+  }
+  if (Array.isArray(spec.children)) {
+    for (const child of spec.children) {
+      const childNode = buildNodeFromSpec(child);
+      if (childNode) node.appendChild(childNode);
+    }
+  }
+  return node;
+}
+
 function createMessageQuickActionChip(action) {
-  if (!action) return null;
-  const chip = document.createElement("span");
-  chip.className = "message-quick-action";
-  chip.textContent = action;
-  chip.dataset.actionIntensity = quickActionIntensity(action);
-  chip.dataset.quickAction = action;
-  chip.classList.add(`message-quick-action-${quickActionTone(action)}`);
-  return chip;
+  return buildNodeFromSpec(messageQuickActionChipSpec(action));
 }
 
 function createMessageQuickStateChip(action, state = "") {
-  const label = quickActionFollowUpLabel(action, state);
-  if (!label) return null;
-  const chip = document.createElement("span");
-  chip.className = "message-quick-state";
-  chip.textContent = label;
-  chip.dataset.actionIntensity = quickActionIntensity(action);
-  chip.dataset.quickAction = action;
-  chip.classList.add(`message-quick-state-${quickActionTone(action)}`);
-  return chip;
-}
-
-function createMessageBodyShell(structured, action) {
-  const body = document.createElement("div");
-  body.className = structured ? "message-body message-body-structured" : "message-body";
-  if (action) {
-    body.dataset.quickAction = action;
-    body.dataset.actionIntensity = quickActionIntensity(action);
-  }
-  return body;
-}
-
-function applyMessageBodyTerminalState(body, message) {
-  if (message?.is_recalled) {
-    body.classList.add("message-body-recalled");
-    body.textContent = "消息已撤回";
-    return true;
-  }
-  if (message?.moderation_status === 'blocked') {
-    body.classList.add("message-body-recalled");
-    body.textContent = "消息已屏蔽";
-    return true;
-  }
-  return false;
-}
-
-function appendPlainMessageBodyText(body, message) {
-  body.textContent = message.text;
-  return body;
-}
-
-function appendMessageQuickSheetFields(sheet, structured) {
-  for (const field of structured.fields) {
-    const row = document.createElement("div");
-    row.className = "message-quick-sheet-row";
-
-    const label = document.createElement("span");
-    label.className = "message-quick-sheet-label";
-    label.textContent = field.label;
-
-    const value = document.createElement("span");
-    value.className = "message-quick-sheet-value";
-    value.textContent = field.value;
-
-    row.appendChild(label);
-    row.appendChild(value);
-    sheet.appendChild(row);
-  }
-}
-
-function appendMessageQuickSheetNotes(sheet, structured) {
-  if (structured.notes.length) {
-    const notes = document.createElement("div");
-    notes.className = "message-quick-sheet-notes";
-    notes.textContent = structured.notes.join("\n");
-    sheet.appendChild(notes);
-  }
-}
-
-function appendMessageQuickSheetFollowUp(sheet, action, quickState) {
-  const followUpLabel = quickActionFollowUpLabel(action, quickState);
-  const followUpCopy = quickActionFollowUpCopy(action, quickState);
-  if (followUpLabel && followUpCopy) {
-    const followUp = document.createElement("div");
-    followUp.className = "message-quick-sheet-follow-up";
-    const label = document.createElement("span");
-    label.className = "message-quick-sheet-follow-up-label";
-    label.textContent = followUpLabel;
-    const copy = document.createElement("span");
-    copy.className = "message-quick-sheet-follow-up-copy";
-    copy.textContent = followUpCopy;
-    followUp.appendChild(label);
-    followUp.appendChild(copy);
-    sheet.appendChild(followUp);
-  }
-}
-
-function appendStructuredMessageBodySheet(body, structured, action, quickState) {
-  const sheet = document.createElement("div");
-  sheet.className = "message-quick-sheet";
-  appendMessageQuickSheetFields(sheet, structured);
-  appendMessageQuickSheetNotes(sheet, structured);
-  appendMessageQuickSheetFollowUp(sheet, action, quickState);
-
-  body.appendChild(sheet);
-  return body;
+  return buildNodeFromSpec(messageQuickStateChipSpec(action, state));
 }
 
 function createMessageBodyNode(message, options = {}) {
-  const structured = parseStructuredQuickActionMessage(message);
-  const action = typeof message?.quick_action === "string" ? message.quick_action.trim() : "";
-  const quickState = typeof options.quickState === "string" ? options.quickState : "";
-  const body = createMessageBodyShell(structured, action);
-  if (applyMessageBodyTerminalState(body, message)) return body;
-  if (!structured) return appendPlainMessageBodyText(body, message);
-  return appendStructuredMessageBodySheet(body, structured, action, quickState);
+  return buildNodeFromSpec(messageBodyDomSpec(message, options));
 }
 
 function roomDisplayPeer(room) { return _roomDisplayPeer(room); }

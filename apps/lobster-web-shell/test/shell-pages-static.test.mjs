@@ -373,9 +373,9 @@ test("admin summary has no innerHTML sink", async () => {
   assert.match(html, /if \(text\) el\.textContent = text;/);
   assert.doesNotMatch(html, /renderSummary[\s\S]{0,800}\.innerHTML\s*=/);
 
-  // app.js 中 admin 相关消息渲染也走 textContent
+  // app.js 中 admin 相关消息渲染也走 textContent（buildNodeFromSpec 用 textContent 落地 spec）
   assert.match(source, /function createMessageBodyNode\(message, options = \{\}\)/);
-  assert.match(source, /body\.textContent = message\.text/);
+  assert.match(source, /node\.textContent = spec\.text/);
 });
 
 test("admin summary shows one primary action and opens drawer for full tools", async () => {
@@ -1139,16 +1139,20 @@ test("pixel scene pages suppress scroll-to-bottom floating button", async () => 
 
 test("timeline message text is rendered through textContent sinks", async () => {
   const source = await readShellModule("app.js");
+  const bodyModule = await readShellModule("shell-message-body.js");
 
-  assert.match(
-    source,
-    /function appendPlainMessageBodyText\(body, message\) \{[\s\S]*body\.textContent = message\.text/
-  );
-  assert.match(source, /label\.textContent = field\.label/);
-  assert.match(source, /value\.textContent = field\.value/);
-  assert.match(source, /notes\.textContent = structured\.notes\.join\("\\n"\)/);
-  assert.doesNotMatch(source, /innerHTML\s*=\s*[^;\n]*message\.text/);
-  assert.doesNotMatch(source, /message\.text[^;\n]*innerHTML/);
+  // app.js 的 buildNodeFromSpec 用 textContent 落地 spec.text（不 innerHTML）
+  assert.match(source, /function buildNodeFromSpec\(spec\)/);
+  const buildNode = sliceBetween(source, "function buildNodeFromSpec(spec) {", "function createMessageQuickActionChip");
+  assert.match(buildNode, /node\.textContent = spec\.text/);
+  assert.doesNotMatch(buildNode, /innerHTML/);
+
+  // 消息文本/字段/notes 均以 spec.text 形式构造（shell-message-body.js），无 innerHTML
+  assert.match(bodyModule, /message\?\.text/);
+  assert.match(bodyModule, /text: field\.label/);
+  assert.match(bodyModule, /text: field\.value/);
+  assert.match(bodyModule, /structured\.notes\.join\("\\n"\)/);
+  assert.doesNotMatch(bodyModule, /innerHTML/);
 });
 
 test("message search DOM is rendered from specs without innerHTML sinks", async () => {
@@ -1217,67 +1221,32 @@ test("message search DOM is rendered from specs without innerHTML sinks", async 
 
 test("message body terminal plain and structured DOM are delegated out of createMessageBodyNode", async () => {
   const source = await readShellModule("app.js");
-  const shellRenderer = sliceBetween(
-    source,
-    "function createMessageBodyShell(structured, action) {",
-    "function applyMessageBodyTerminalState(body, message) {",
-  );
-  const terminalRenderer = sliceBetween(
-    source,
-    "function applyMessageBodyTerminalState(body, message) {",
-    "function appendPlainMessageBodyText(body, message) {",
-  );
-  const plainRenderer = sliceBetween(
-    source,
-    "function appendPlainMessageBodyText(body, message) {",
-    "function appendMessageQuickSheetFields(sheet, structured) {",
-  );
-  const fieldRenderer = sliceBetween(
-    source,
-    "function appendMessageQuickSheetFields(sheet, structured) {",
-    "function appendMessageQuickSheetNotes(sheet, structured) {",
-  );
-  const notesRenderer = sliceBetween(
-    source,
-    "function appendMessageQuickSheetNotes(sheet, structured) {",
-    "function appendMessageQuickSheetFollowUp(sheet, action, quickState) {",
-  );
-  const followUpRenderer = sliceBetween(
-    source,
-    "function appendMessageQuickSheetFollowUp(sheet, action, quickState) {",
-    "function appendStructuredMessageBodySheet(body, structured, action, quickState) {",
-  );
-  const sheetRenderer = sliceBetween(
-    source,
-    "function appendStructuredMessageBodySheet(body, structured, action, quickState) {",
-    "function createMessageBodyNode(message, options = {}) {",
-  );
+  const bodyModule = await readShellModule("shell-message-body.js");
+
+  // app.js 只剩薄委托：buildNodeFromSpec 落地 + createMessageBodyNode 委托 messageBodyDomSpec
   const bodyRenderer = sliceBetween(
     source,
     "function createMessageBodyNode(message, options = {}) {",
     "function roomDisplayPeer(room) {",
   );
+  assert.match(source, /function buildNodeFromSpec\(spec\)/);
+  assert.match(bodyRenderer, /messageBodyDomSpec\(message, options\)/);
+  assert.match(bodyRenderer, /buildNodeFromSpec/);
+  // app.js 不再内联终态/结构化/field/notes/followUp 装配逻辑
+  assert.doesNotMatch(source, /function createMessageBodyShell\b/);
+  assert.doesNotMatch(source, /function applyMessageBodyTerminalState\b/);
+  assert.doesNotMatch(source, /function appendPlainMessageBodyText\b/);
+  assert.doesNotMatch(source, /function appendMessageQuickSheetFields\b/);
+  assert.doesNotMatch(source, /function appendStructuredMessageBodySheet\b/);
 
-  assert.match(shellRenderer, /body\.className = structured \? "message-body message-body-structured" : "message-body"/);
-  assert.match(shellRenderer, /body\.dataset\.quickAction = action/);
-  assert.match(terminalRenderer, /message\?\.is_recalled/);
-  assert.match(terminalRenderer, /body\.textContent = "消息已撤回"/);
-  assert.match(terminalRenderer, /message\?\.moderation_status === 'blocked'/);
-  assert.match(plainRenderer, /body\.textContent = message\.text/);
-  assert.match(fieldRenderer, /label\.textContent = field\.label/);
-  assert.match(fieldRenderer, /value\.textContent = field\.value/);
-  assert.match(notesRenderer, /notes\.textContent = structured\.notes\.join\("\\n"\)/);
-  assert.match(followUpRenderer, /quickActionFollowUpLabel\(action, quickState\)/);
-  assert.match(followUpRenderer, /copy\.textContent = followUpCopy/);
-  assert.match(sheetRenderer, /appendMessageQuickSheetFields\(sheet, structured\)/);
-  assert.match(sheetRenderer, /appendMessageQuickSheetNotes\(sheet, structured\)/);
-  assert.match(sheetRenderer, /appendMessageQuickSheetFollowUp\(sheet, action, quickState\)/);
-  assert.match(bodyRenderer, /const body = createMessageBodyShell\(structured, action\)/);
-  assert.match(bodyRenderer, /if \(applyMessageBodyTerminalState\(body, message\)\) return body/);
-  assert.match(bodyRenderer, /return appendPlainMessageBodyText\(body, message\)/);
-  assert.match(bodyRenderer, /return appendStructuredMessageBodySheet\(body, structured, action, quickState\)/);
-  assert.doesNotMatch(bodyRenderer, /message-quick-sheet-row/);
-  assert.doesNotMatch(bodyRenderer, /quickActionFollowUpLabel\(action, quickState\)/);
+  // 逻辑迁入 shell-message-body.js（spec 形式）
+  assert.match(bodyModule, /export function messageBodyDomSpec/);
+  assert.match(bodyModule, /message-body-recalled/);
+  assert.match(bodyModule, /消息已撤回/);
+  assert.match(bodyModule, /moderation_status === "blocked"/);
+  assert.match(bodyModule, /message-quick-sheet-row/);
+  assert.match(bodyModule, /message-quick-sheet-notes/);
+  assert.match(bodyModule, /quickActionFollowUpLabel\(action, quickState\)/);
 });
 
 test("room inline preview controls and actions consume clickable render specs", async () => {
