@@ -9,10 +9,33 @@ use transport_waku::WakuGatewayResponse;
 use crate::{
     ApproveCityJoinRequest, CreateCityRequest, CreatePublicRoomRequest, FreezePublicRoomRequest,
     GatewayRuntime, GatewayStateNotifier, JoinCityRequest, UpdateFederationPolicyRequest,
-    UpdateStewardRequest, http_support::json_header, http_write_routes::require_admin_auth,
+    UpdateStewardRequest,
+    http_support::{ResponseHeaderExt, json_header},
+    http_write_routes::require_admin_auth,
 };
 
 pub(crate) type HttpResponse = Response<Cursor<Vec<u8>>>;
+
+fn runtime_unavailable() -> HttpResponse {
+    Response::from_string(
+        serde_json::to_string(&WakuGatewayResponse::Error {
+            message: "gateway runtime unavailable".into(),
+        })
+        .unwrap_or_else(|_| "{\"error\":true}".into()),
+    )
+    .with_status_code(StatusCode(500))
+    .with_optional_header(json_header())
+}
+
+fn with_runtime<T>(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    action: impl FnOnce(&mut GatewayRuntime) -> T,
+) -> Result<T, HttpResponse> {
+    match runtime.lock() {
+        Ok(mut runtime) => Ok(action(&mut runtime)),
+        Err(_) => Err(runtime_unavailable()),
+    }
+}
 
 pub(crate) fn handle_post_create_city(
     runtime: &Arc<Mutex<GatewayRuntime>>,
@@ -26,15 +49,15 @@ pub(crate) fn handle_post_create_city(
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
         return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
             .with_status_code(StatusCode(400))
-            .with_header(json_header());
+            .with_optional_header(json_header());
     }
 
     match serde_json::from_slice::<CreateCityRequest>(&body) {
         Ok(payload) => {
-            let result = runtime
-                .lock()
-                .expect("gateway runtime mutex poisoned")
-                .create_city(payload);
+            let result = match with_runtime(runtime, |runtime| runtime.create_city(payload)) {
+                Ok(result) => result,
+                Err(response) => return response,
+            };
             match result {
                 Ok(city) => {
                     notifier.notify_changed();
@@ -42,14 +65,14 @@ pub(crate) fn handle_post_create_city(
                         serde_json::to_string(&city).unwrap_or_else(|_| "{}".into()),
                     )
                     .with_status_code(StatusCode(200))
-                    .with_header(json_header())
+                    .with_optional_header(json_header())
                 }
                 Err(message) => Response::from_string(
                     serde_json::to_string(&WakuGatewayResponse::Error { message })
                         .unwrap_or_else(|_| "{\"error\":true}".into()),
                 )
                 .with_status_code(StatusCode(400))
-                .with_header(json_header()),
+                .with_optional_header(json_header()),
             }
         }
         Err(error) => Response::from_string(
@@ -59,7 +82,7 @@ pub(crate) fn handle_post_create_city(
             .unwrap_or_else(|_| "{\"error\":true}".into()),
         )
         .with_status_code(StatusCode(400))
-        .with_header(json_header()),
+        .with_optional_header(json_header()),
     }
 }
 
@@ -75,15 +98,15 @@ pub(crate) fn handle_post_join_city(
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
         return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
             .with_status_code(StatusCode(400))
-            .with_header(json_header());
+            .with_optional_header(json_header());
     }
 
     match serde_json::from_slice::<JoinCityRequest>(&body) {
         Ok(payload) => {
-            let result = runtime
-                .lock()
-                .expect("gateway runtime mutex poisoned")
-                .join_city(payload);
+            let result = match with_runtime(runtime, |runtime| runtime.join_city(payload)) {
+                Ok(result) => result,
+                Err(response) => return response,
+            };
             match result {
                 Ok(membership) => {
                     notifier.notify_changed();
@@ -91,14 +114,14 @@ pub(crate) fn handle_post_join_city(
                         serde_json::to_string(&membership).unwrap_or_else(|_| "{}".into()),
                     )
                     .with_status_code(StatusCode(200))
-                    .with_header(json_header())
+                    .with_optional_header(json_header())
                 }
                 Err(message) => Response::from_string(
                     serde_json::to_string(&WakuGatewayResponse::Error { message })
                         .unwrap_or_else(|_| "{\"error\":true}".into()),
                 )
                 .with_status_code(StatusCode(400))
-                .with_header(json_header()),
+                .with_optional_header(json_header()),
             }
         }
         Err(error) => Response::from_string(
@@ -108,7 +131,7 @@ pub(crate) fn handle_post_join_city(
             .unwrap_or_else(|_| "{\"error\":true}".into()),
         )
         .with_status_code(StatusCode(400))
-        .with_header(json_header()),
+        .with_optional_header(json_header()),
     }
 }
 
@@ -124,15 +147,15 @@ pub(crate) fn handle_post_approve_city_join(
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
         return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
             .with_status_code(StatusCode(400))
-            .with_header(json_header());
+            .with_optional_header(json_header());
     }
 
     match serde_json::from_slice::<ApproveCityJoinRequest>(&body) {
         Ok(payload) => {
-            let result = runtime
-                .lock()
-                .expect("gateway runtime mutex poisoned")
-                .approve_city_join(payload);
+            let result = match with_runtime(runtime, |runtime| runtime.approve_city_join(payload)) {
+                Ok(result) => result,
+                Err(response) => return response,
+            };
             match result {
                 Ok(membership) => {
                     notifier.notify_changed();
@@ -140,14 +163,14 @@ pub(crate) fn handle_post_approve_city_join(
                         serde_json::to_string(&membership).unwrap_or_else(|_| "{}".into()),
                     )
                     .with_status_code(StatusCode(200))
-                    .with_header(json_header())
+                    .with_optional_header(json_header())
                 }
                 Err(message) => Response::from_string(
                     serde_json::to_string(&WakuGatewayResponse::Error { message })
                         .unwrap_or_else(|_| "{\"error\":true}".into()),
                 )
                 .with_status_code(StatusCode(400))
-                .with_header(json_header()),
+                .with_optional_header(json_header()),
             }
         }
         Err(error) => Response::from_string(
@@ -157,7 +180,7 @@ pub(crate) fn handle_post_approve_city_join(
             .unwrap_or_else(|_| "{\"error\":true}".into()),
         )
         .with_status_code(StatusCode(400))
-        .with_header(json_header()),
+        .with_optional_header(json_header()),
     }
 }
 
@@ -173,15 +196,15 @@ pub(crate) fn handle_post_update_steward(
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
         return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
             .with_status_code(StatusCode(400))
-            .with_header(json_header());
+            .with_optional_header(json_header());
     }
 
     match serde_json::from_slice::<UpdateStewardRequest>(&body) {
         Ok(payload) => {
-            let result = runtime
-                .lock()
-                .expect("gateway runtime mutex poisoned")
-                .update_steward(payload);
+            let result = match with_runtime(runtime, |runtime| runtime.update_steward(payload)) {
+                Ok(result) => result,
+                Err(response) => return response,
+            };
             match result {
                 Ok(membership) => {
                     notifier.notify_changed();
@@ -189,14 +212,14 @@ pub(crate) fn handle_post_update_steward(
                         serde_json::to_string(&membership).unwrap_or_else(|_| "{}".into()),
                     )
                     .with_status_code(StatusCode(200))
-                    .with_header(json_header())
+                    .with_optional_header(json_header())
                 }
                 Err(message) => Response::from_string(
                     serde_json::to_string(&WakuGatewayResponse::Error { message })
                         .unwrap_or_else(|_| "{\"error\":true}".into()),
                 )
                 .with_status_code(StatusCode(400))
-                .with_header(json_header()),
+                .with_optional_header(json_header()),
             }
         }
         Err(error) => Response::from_string(
@@ -206,7 +229,7 @@ pub(crate) fn handle_post_update_steward(
             .unwrap_or_else(|_| "{\"error\":true}".into()),
         )
         .with_status_code(StatusCode(400))
-        .with_header(json_header()),
+        .with_optional_header(json_header()),
     }
 }
 
@@ -222,15 +245,16 @@ pub(crate) fn handle_post_update_federation_policy(
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
         return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
             .with_status_code(StatusCode(400))
-            .with_header(json_header());
+            .with_optional_header(json_header());
     }
 
     match serde_json::from_slice::<UpdateFederationPolicyRequest>(&body) {
         Ok(payload) => {
-            let result = runtime
-                .lock()
-                .expect("gateway runtime mutex poisoned")
-                .update_federation_policy(payload);
+            let result =
+                match with_runtime(runtime, |runtime| runtime.update_federation_policy(payload)) {
+                    Ok(result) => result,
+                    Err(response) => return response,
+                };
             match result {
                 Ok(city) => {
                     notifier.notify_changed();
@@ -238,14 +262,14 @@ pub(crate) fn handle_post_update_federation_policy(
                         serde_json::to_string(&city).unwrap_or_else(|_| "{}".into()),
                     )
                     .with_status_code(StatusCode(200))
-                    .with_header(json_header())
+                    .with_optional_header(json_header())
                 }
                 Err(message) => Response::from_string(
                     serde_json::to_string(&WakuGatewayResponse::Error { message })
                         .unwrap_or_else(|_| "{\"error\":true}".into()),
                 )
                 .with_status_code(StatusCode(400))
-                .with_header(json_header()),
+                .with_optional_header(json_header()),
             }
         }
         Err(error) => Response::from_string(
@@ -255,7 +279,7 @@ pub(crate) fn handle_post_update_federation_policy(
             .unwrap_or_else(|_| "{\"error\":true}".into()),
         )
         .with_status_code(StatusCode(400))
-        .with_header(json_header()),
+        .with_optional_header(json_header()),
     }
 }
 
@@ -271,15 +295,16 @@ pub(crate) fn handle_post_create_public_room(
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
         return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
             .with_status_code(StatusCode(400))
-            .with_header(json_header());
+            .with_optional_header(json_header());
     }
 
     match serde_json::from_slice::<CreatePublicRoomRequest>(&body) {
         Ok(payload) => {
-            let result = runtime
-                .lock()
-                .expect("gateway runtime mutex poisoned")
-                .create_public_room(payload);
+            let result = match with_runtime(runtime, |runtime| runtime.create_public_room(payload))
+            {
+                Ok(result) => result,
+                Err(response) => return response,
+            };
             match result {
                 Ok(room) => {
                     notifier.notify_changed();
@@ -287,14 +312,14 @@ pub(crate) fn handle_post_create_public_room(
                         serde_json::to_string(&room).unwrap_or_else(|_| "{}".into()),
                     )
                     .with_status_code(StatusCode(200))
-                    .with_header(json_header())
+                    .with_optional_header(json_header())
                 }
                 Err(message) => Response::from_string(
                     serde_json::to_string(&WakuGatewayResponse::Error { message })
                         .unwrap_or_else(|_| "{\"error\":true}".into()),
                 )
                 .with_status_code(StatusCode(400))
-                .with_header(json_header()),
+                .with_optional_header(json_header()),
             }
         }
         Err(error) => Response::from_string(
@@ -304,7 +329,7 @@ pub(crate) fn handle_post_create_public_room(
             .unwrap_or_else(|_| "{\"error\":true}".into()),
         )
         .with_status_code(StatusCode(400))
-        .with_header(json_header()),
+        .with_optional_header(json_header()),
     }
 }
 
@@ -320,15 +345,16 @@ pub(crate) fn handle_post_freeze_public_room(
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
         return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
             .with_status_code(StatusCode(400))
-            .with_header(json_header());
+            .with_optional_header(json_header());
     }
 
     match serde_json::from_slice::<FreezePublicRoomRequest>(&body) {
         Ok(payload) => {
-            let result = runtime
-                .lock()
-                .expect("gateway runtime mutex poisoned")
-                .freeze_public_room(payload);
+            let result = match with_runtime(runtime, |runtime| runtime.freeze_public_room(payload))
+            {
+                Ok(result) => result,
+                Err(response) => return response,
+            };
             match result {
                 Ok(room) => {
                     notifier.notify_changed();
@@ -336,14 +362,14 @@ pub(crate) fn handle_post_freeze_public_room(
                         serde_json::to_string(&room).unwrap_or_else(|_| "{}".into()),
                     )
                     .with_status_code(StatusCode(200))
-                    .with_header(json_header())
+                    .with_optional_header(json_header())
                 }
                 Err(message) => Response::from_string(
                     serde_json::to_string(&WakuGatewayResponse::Error { message })
                         .unwrap_or_else(|_| "{\"error\":true}".into()),
                 )
                 .with_status_code(StatusCode(400))
-                .with_header(json_header()),
+                .with_optional_header(json_header()),
             }
         }
         Err(error) => Response::from_string(
@@ -353,6 +379,6 @@ pub(crate) fn handle_post_freeze_public_room(
             .unwrap_or_else(|_| "{\"error\":true}".into()),
         )
         .with_status_code(StatusCode(400))
-        .with_header(json_header()),
+        .with_optional_header(json_header()),
     }
 }

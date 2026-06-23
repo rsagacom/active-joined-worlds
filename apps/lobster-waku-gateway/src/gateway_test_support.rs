@@ -20,7 +20,9 @@ use tiny_http::Server;
 
 use crate::{
     http_router::dispatch_http_request,
-    http_support::{cors_headers_header, cors_methods_header, cors_origin_header},
+    http_support::{
+        ResponseHeaderExt, cors_headers_header, cors_methods_header, cors_origin_header,
+    },
 };
 
 pub(super) fn sample_frame_with(
@@ -132,9 +134,9 @@ pub(super) fn start_local_gateway_http_server(runtime: GatewayRuntime) -> LocalG
                 let mut response =
                     dispatch_http_request(&runtime, &notifier, &listen_addr, &mut request);
                 response = response
-                    .with_header(cors_origin_header())
-                    .with_header(cors_methods_header())
-                    .with_header(cors_headers_header());
+                    .with_optional_header(cors_origin_header())
+                    .with_optional_header(cors_methods_header())
+                    .with_optional_header(cors_headers_header());
                 let _ = request.respond(response);
             });
         }

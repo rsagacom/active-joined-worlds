@@ -43,6 +43,12 @@ fi
 if [[ "$SKIP_BUILD" != "1" ]]; then
   need_cmd cargo
   run_step \
+    "rust fmt" \
+    cargo fmt --manifest-path "$ROOT_DIR/Cargo.toml" --check
+  run_step \
+    "rust lint" \
+    cargo clippy --manifest-path "$ROOT_DIR/Cargo.toml" --workspace -- -D warnings
+  run_step \
     "building shared debug binaries" \
     cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p lobster-waku-gateway -p lobster-cli -p lobster-tui
 fi
@@ -84,10 +90,13 @@ run_step "install layout smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_insta
 run_step "public ingress smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_public_ingress_unit.py"
 run_step "package release unit" python3 "$ROOT_DIR/scripts/test_package_release_unit.py"
 run_step "restart gateway unit" python3 "$ROOT_DIR/scripts/test_restart_gateway_unit.py"
+run_step "rust production panic scan unit" python3 "$ROOT_DIR/scripts/test_rust_production_panic_scan_unit.py"
+run_step "rust production panic scan" python3 "$ROOT_DIR/scripts/rust-production-panic-scan.py"
 run_step "web preview unit" python3 "$ROOT_DIR/scripts/test_start_web_preview_unit.py"
 run_step "preview server unit" python3 "$ROOT_DIR/scripts/test_preview_server_unit.py"
 run_step "device id unit" python3 "$ROOT_DIR/scripts/test_lobster_device_id_unit.py"
 run_step "web assets audit unit" python3 "$ROOT_DIR/scripts/test_audit_web_assets_unit.py"
+run_step "complete verification unit" python3 "$ROOT_DIR/scripts/test_verify_complete_unit.py"
 
 echo "== release gate passed =="
 echo "root: $ROOT_DIR"

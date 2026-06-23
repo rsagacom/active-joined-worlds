@@ -1606,10 +1606,11 @@ impl GatewayRuntime {
     }
 
     pub(crate) fn now_ms() -> i64 {
-        SystemTime::now()
+        let millis = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("system time should be after unix epoch")
-            .as_millis() as i64
+            .map(|duration| duration.as_millis())
+            .unwrap_or(0);
+        millis.min(i64::MAX as u128) as i64
     }
 
     pub(crate) fn next_message_id(&mut self) -> String {

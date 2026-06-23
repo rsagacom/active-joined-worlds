@@ -16,10 +16,11 @@ type Key = [u8; KEY_LEN];
 
 static RNG: LazyLock<SystemRandom> = LazyLock::new(SystemRandom::new);
 
-fn generate_key() -> Key {
+fn generate_key() -> Result<Key, String> {
     let mut k = [0u8; KEY_LEN];
-    RNG.fill(&mut k).expect("RNG");
-    k
+    RNG.fill(&mut k)
+        .map_err(|e| format!("rng key generation failed: {e}"))?;
+    Ok(k)
 }
 
 fn derive_nonce(gid: &str, epoch: u64, ctr: u64) -> [u8; NONCE_LEN] {
@@ -33,15 +34,15 @@ fn derive_nonce(gid: &str, epoch: u64, ctr: u64) -> [u8; NONCE_LEN] {
     n
 }
 
-fn derive_epoch_key(prev: &[u8], epoch: u64) -> Key {
+fn derive_epoch_key(prev: &[u8], epoch: u64) -> Result<Key, String> {
     let s = hkdf::Salt::new(hkdf::HKDF_SHA256, &[]);
     let o = s.extract(&[prev, &epoch.to_le_bytes()].concat());
     let mut k = [0u8; KEY_LEN];
     o.expand(&[b"lobster-epoch"], hkdf::HKDF_SHA256)
-        .expect("HKDF")
+        .map_err(|e| format!("hkdf epoch expand failed: {e}"))?
         .fill(&mut k)
-        .expect("fill");
-    k
+        .map_err(|e| format!("hkdf epoch fill failed: {e}"))?;
+    Ok(k)
 }
 
 pub fn derive_group_key(members: &[MlsMember]) -> Result<Key, String> {
@@ -53,7 +54,7 @@ pub fn derive_group_key(members: &[MlsMember]) -> Result<Key, String> {
         .filter_map(|m| m.public_key.as_deref())
         .collect();
     if keys.is_empty() {
-        return Ok(generate_key());
+        return generate_key();
     }
     keys.sort();
     let s = hkdf::Salt::new(hkdf::HKDF_SHA256, b"lobster-mls-group-key-v1");
@@ -209,9 +210,7 @@ impl SkeletonSecureSessionManager {
         if k == MlsGroupKind::Direct && ms.len() != 2 {
             return Err("direct needs 2".into());
         }
-        let key = derive_group_key(&ms)
-            .unwrap_or_else(|_| generate_key())
-            .to_vec();
+        let key = derive_group_key(&ms)?.to_vec();
         Ok(MlsGroupState {
             group_id: format!("mls:{}", c.0),
             conversation_id: c.clone(),
@@ -268,7 +267,7 @@ impl SecureSessionManager for SkeletonSecureSessionManager {
     fn rotate_epoch(&mut self, c: &ConversationId) -> Result<u64, String> {
         let g = self.gm(c)?;
         let ne = g.epoch + 1;
-        let dk = derive_epoch_key(&g.group_key, ne);
+        let dk = derive_epoch_key(&g.group_key, ne)?;
         g.epoch = ne;
         g.pending_rekey = false;
         g.group_key = dk.to_vec();
@@ -395,6 +394,20 @@ mod tests {
             ciphertext: vec![],
             timestamp_ms: 1_763_560_000_000,
             ephemeral: false,
+        }
+    }
+    #[test]
+    fn crypto_key_helpers_do_not_panic_on_rng_or_hkdf_failure() {
+        let source = include_str!("lib.rs");
+        for pattern in [
+            format!(".expect({:?})", "RNG"),
+            format!(".expect({:?})", "HKDF"),
+            format!(".expect({:?})", "fill"),
+        ] {
+            assert!(
+                !source.contains(&pattern),
+                "production crypto helper should return errors instead of panicking on {pattern}"
+            );
         }
     }
     #[test]

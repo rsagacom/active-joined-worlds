@@ -35,10 +35,12 @@ def main() -> int:
     assert "test_smoke_public_ingress_unit.py" in text
     assert "test_package_release_unit.py" in text
     assert "test_restart_gateway_unit.py" in text
+    assert "test_rust_production_panic_scan_unit.py" in text
     assert "test_start_web_preview_unit.py" in text
     assert "test_preview_server_unit.py" in text
     assert "test_lobster_device_id_unit.py" in text
     assert "test_audit_web_assets_unit.py" in text
+    assert "test_verify_complete_unit.py" in text
     assert "smoke-provider-federation.sh" in text
     assert "run_shell_step()" in text
     assert 'run_step "preflight unit" python3 "$ROOT_DIR/scripts/test_preflight_unit.py"' in text
@@ -48,7 +50,11 @@ def main() -> int:
     assert 'run_shell_step "preflight" "$ROOT_DIR/scripts/preflight.sh"' in text
     assert "need_cmd bash\nneed_cmd python3" in text
     assert text.index('if [[ "$SKIP_BUILD" != "1" ]]; then') < text.index("need_cmd cargo")
-    assert text.index("need_cmd cargo") < text.index('cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p lobster-waku-gateway -p lobster-cli -p lobster-tui')
+    assert 'run_step \\\n    "rust fmt" \\\n    cargo fmt --manifest-path "$ROOT_DIR/Cargo.toml" --check' in text
+    assert text.index("need_cmd cargo") < text.index('"rust fmt"')
+    assert 'run_step \\\n    "rust lint" \\\n    cargo clippy --manifest-path "$ROOT_DIR/Cargo.toml" --workspace -- -D warnings' in text
+    assert text.index('"rust fmt"') < text.index('"rust lint"')
+    assert text.index('"rust lint"') < text.index('cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p lobster-waku-gateway -p lobster-cli -p lobster-tui')
     assert 'run_step "makefile smoke unit" python3 "$ROOT_DIR/scripts/test_makefile_unit.py"' in text
     assert 'run_shell_step "cli channel smoke" "$ROOT_DIR/scripts/smoke-cli-channel.sh"' in text
     assert 'run_step "cli channel smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_cli_channel_unit.py"' in text
@@ -86,6 +92,10 @@ def main() -> int:
     assert text.index('run_step "package release unit"') < text.index('echo "== release gate passed =="')
     assert 'run_step "restart gateway unit" python3 "$ROOT_DIR/scripts/test_restart_gateway_unit.py"' in text
     assert text.index('run_step "restart gateway unit"') < text.index('echo "== release gate passed =="')
+    assert 'run_step "rust production panic scan unit" python3 "$ROOT_DIR/scripts/test_rust_production_panic_scan_unit.py"' in text
+    assert 'run_step "rust production panic scan" python3 "$ROOT_DIR/scripts/rust-production-panic-scan.py"' in text
+    assert text.index('run_step "rust production panic scan unit"') < text.index('run_step "rust production panic scan"')
+    assert text.index('run_step "rust production panic scan"') < text.index('echo "== release gate passed =="')
     assert 'run_step "web preview unit" python3 "$ROOT_DIR/scripts/test_start_web_preview_unit.py"' in text
     assert text.index('run_step "web preview unit"') < text.index('echo "== release gate passed =="')
     assert 'run_step "preview server unit" python3 "$ROOT_DIR/scripts/test_preview_server_unit.py"' in text
@@ -94,6 +104,8 @@ def main() -> int:
     assert text.index('run_step "device id unit"') < text.index('echo "== release gate passed =="')
     assert 'run_step "web assets audit unit" python3 "$ROOT_DIR/scripts/test_audit_web_assets_unit.py"' in text
     assert text.index('run_step "web assets audit unit"') < text.index('echo "== release gate passed =="')
+    assert 'run_step "complete verification unit" python3 "$ROOT_DIR/scripts/test_verify_complete_unit.py"' in text
+    assert text.index('run_step "complete verification unit"') < text.index('echo "== release gate passed =="')
     assert 'export GATEWAY_BIN="' in text
     assert 'export CLI_BIN="' in text
     assert 'export TUI_BIN="' in text

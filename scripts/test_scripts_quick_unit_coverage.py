@@ -15,6 +15,7 @@ SCRIPT_UNIT_MAP = {
     "preflight.sh": "test_preflight_unit.py",
     "preview-server.mjs": "test_preview_server_unit.py",
     "restart-gateway.sh": "test_restart_gateway_unit.py",
+    "rust-production-panic-scan.py": "test_rust_production_panic_scan_unit.py",
     "smoke-auth-registration.sh": "test_smoke_auth_registration_unit.py",
     "smoke-cli-channel.sh": "test_smoke_cli_channel_unit.py",
     "smoke-install-layout.sh": "test_smoke_install_layout_unit.py",
@@ -28,6 +29,7 @@ SCRIPT_UNIT_MAP = {
     "smoke-web-shell.sh": "test_smoke_web_shell_unit.py",
     "start-terminal.sh": "test_start_terminal_shell_unit.py",
     "start-web-preview.sh": "test_start_web_preview_unit.py",
+    "verify-complete.sh": "test_verify_complete_unit.py",
 }
 
 
@@ -62,10 +64,12 @@ def main() -> int:
         "test_smoke_public_ingress_unit.py",
         "test_package_release_unit.py",
         "test_restart_gateway_unit.py",
+        "test_rust_production_panic_scan_unit.py",
         "test_start_web_preview_unit.py",
         "test_preview_server_unit.py",
         "test_lobster_device_id_unit.py",
         "test_audit_web_assets_unit.py",
+        "test_verify_complete_unit.py",
     }
     missing_from_gate = [
         unit for unit in sorted(release_gate_units) if unit not in release_gate_text

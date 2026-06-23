@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     path::PathBuf,
-    sync::{Arc, Condvar, Mutex},
+    sync::{Arc, Condvar, Mutex, MutexGuard},
     time::Instant,
 };
 
@@ -52,8 +52,8 @@ use federation_read::GatewayFederationReadPlan;
 use gateway_models::*;
 use http_router::dispatch_http_request;
 use http_support::{
-    cors_headers_header, cors_methods_header, cors_origin_header, parse_cli_address,
-    parse_cli_args, security_headers,
+    ResponseHeaderExt, cors_headers_header, cors_methods_header, cors_origin_header,
+    parse_cli_address, parse_cli_args, security_headers,
 };
 
 #[derive(Debug, Default)]
@@ -67,37 +67,35 @@ impl GatewayStateNotifier {
         Self::default()
     }
 
-    pub(crate) fn generation(&self) -> u64 {
-        *self
-            .generation
+    fn generation_guard(&self) -> MutexGuard<'_, u64> {
+        self.generation
             .lock()
-            .expect("gateway notifier mutex poisoned")
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    pub(crate) fn generation(&self) -> u64 {
+        *self.generation_guard()
     }
 
     pub(crate) fn notify_changed(&self) {
-        let mut generation = self
-            .generation
-            .lock()
-            .expect("gateway notifier mutex poisoned");
+        let mut generation = self.generation_guard();
         *generation = generation.saturating_add(1);
         self.changed.notify_all();
     }
 
     pub(crate) fn wait_until_changed_since(&self, observed_generation: u64, deadline: Instant) {
-        let mut generation = self
-            .generation
-            .lock()
-            .expect("gateway notifier mutex poisoned");
+        let mut generation = self.generation_guard();
         while *generation == observed_generation {
             let now = Instant::now();
             if now >= deadline {
                 break;
             }
             let wait_for = deadline.saturating_duration_since(now);
-            let (next_generation, wait_result) = self
-                .changed
-                .wait_timeout(generation, wait_for)
-                .expect("gateway notifier condvar poisoned");
+            let (next_generation, wait_result) =
+                match self.changed.wait_timeout(generation, wait_for) {
+                    Ok(wait_result) => wait_result,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
             generation = next_generation;
             if wait_result.timed_out() {
                 break;
@@ -137,12 +135,15 @@ fn main() -> Result<(), String> {
     println!(
         "directory api: GET /v1/world-directory, GET /v1/world-mirrors, GET /v1/world-mirror-sources, POST /v1/world-mirror-sources"
     );
-    if let Some(upstream) = runtime
-        .lock()
-        .expect("gateway runtime mutex poisoned")
-        .upstream_status()
-    {
-        println!("upstream provider: {upstream}");
+    match runtime.lock() {
+        Ok(runtime) => {
+            if let Some(upstream) = runtime.upstream_status() {
+                println!("upstream provider: {upstream}");
+            }
+        }
+        Err(_) => {
+            eprintln!("warning: gateway runtime unavailable while printing upstream status");
+        }
     }
 
     for mut request in server.incoming_requests() {
@@ -154,9 +155,9 @@ fn main() -> Result<(), String> {
                 dispatch_http_request(&runtime, &notifier, &listen_addr, &mut request);
 
             response = response
-                .with_header(cors_origin_header())
-                .with_header(cors_methods_header())
-                .with_header(cors_headers_header());
+                .with_optional_header(cors_origin_header())
+                .with_optional_header(cors_methods_header())
+                .with_optional_header(cors_headers_header());
             for header in security_headers() {
                 response = response.with_header(header);
             }

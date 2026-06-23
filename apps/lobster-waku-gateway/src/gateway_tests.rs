@@ -14,9 +14,25 @@ use crate::gateway_test_support::{
     http_json, http_json_with_headers, http_raw, register_resident, sample_frame,
     sample_frame_with, start_local_gateway_http_server, start_mock_upstream_gateway,
 };
-use crate::http_read_routes::{handle_get_world_entry, handle_get_world_square};
+use crate::http_auth_routes::handle_get_auth_session;
+use crate::http_city_write_routes::handle_post_create_city;
+use crate::http_device_routes::handle_get_admin_devices;
+use crate::http_governance_write_routes::handle_post_publish_world_notice;
+use crate::http_read_routes::{
+    handle_get_provider, handle_get_world_entry, handle_get_world_square,
+};
+use crate::http_write_routes::handle_post_provider_disconnect;
 use tempfile::tempdir;
-use tiny_http::StatusCode;
+use tiny_http::{Header, StatusCode, TestRequest};
+
+fn poison_runtime_mutex(runtime: &Arc<Mutex<GatewayRuntime>>) {
+    let poisoned_runtime = Arc::clone(runtime);
+    let _ = thread::spawn(move || {
+        let _guard = poisoned_runtime.lock().expect("lock runtime");
+        panic!("poison gateway runtime mutex");
+    })
+    .join();
+}
 
 #[test]
 fn runtime_publishes_and_polls_frames() {
@@ -55,6 +71,226 @@ fn runtime_publishes_and_polls_frames() {
         WakuGatewayResponse::Frames { frames } => assert_eq!(frames.len(), 1),
         other => panic!("expected frames response, got {other:?}"),
     }
+}
+
+#[test]
+fn admin_devices_returns_500_when_runtime_lock_poisoned() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = Arc::new(Mutex::new(
+        GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime"),
+    ));
+    poison_runtime_mutex(&runtime);
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        handle_get_admin_devices(&runtime)
+    }));
+
+    assert!(result.is_ok(), "device list route should not panic");
+    assert_eq!(result.unwrap().status_code(), StatusCode(500));
+}
+
+#[test]
+fn auth_session_returns_500_when_runtime_lock_poisoned() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = Arc::new(Mutex::new(
+        GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime"),
+    ));
+    poison_runtime_mutex(&runtime);
+    let request: tiny_http::Request = TestRequest::new()
+        .with_header(Header::from_bytes("Authorization", "Bearer test-token").expect("header"))
+        .into();
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        handle_get_auth_session(&runtime, &request)
+    }));
+
+    assert!(result.is_ok(), "auth session route should not panic");
+    assert_eq!(result.unwrap().status_code(), StatusCode(500));
+}
+
+#[test]
+fn create_city_returns_500_when_runtime_lock_poisoned() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = Arc::new(Mutex::new(
+        GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime"),
+    ));
+    poison_runtime_mutex(&runtime);
+    let notifier = Arc::new(GatewayStateNotifier::new());
+    let mut request: tiny_http::Request = TestRequest::new().with_body("{}").into();
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        handle_post_create_city(&runtime, &notifier, &mut request)
+    }));
+
+    assert!(result.is_ok(), "create city route should not panic");
+    assert_eq!(result.unwrap().status_code(), StatusCode(500));
+}
+
+#[test]
+fn city_write_routes_do_not_depend_on_runtime_lock_expect() {
+    let source = include_str!("http_city_write_routes.rs");
+
+    assert!(
+        !source.contains("gateway runtime mutex poisoned"),
+        "city write routes should return JSON 500 when runtime lock is poisoned"
+    );
+}
+
+#[test]
+fn publish_world_notice_returns_500_when_runtime_lock_poisoned() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = Arc::new(Mutex::new(
+        GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime"),
+    ));
+    poison_runtime_mutex(&runtime);
+    let notifier = Arc::new(GatewayStateNotifier::new());
+    let mut request: tiny_http::Request = TestRequest::new()
+        .with_body(
+            r#"{"actor_id":"rsaga","title":"Mirror sync","body":"Maintenance window","severity":"info","tags":["world"]}"#,
+        )
+        .into();
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        handle_post_publish_world_notice(&runtime, &notifier, &mut request)
+    }));
+
+    assert!(
+        result.is_ok(),
+        "publish world notice route should not panic"
+    );
+    assert_eq!(result.unwrap().status_code(), StatusCode(500));
+}
+
+#[test]
+fn governance_write_routes_do_not_depend_on_runtime_lock_expect() {
+    let source = include_str!("http_governance_write_routes.rs");
+
+    assert!(
+        !source.contains("gateway runtime mutex poisoned"),
+        "governance write routes should return JSON 500 when runtime lock is poisoned"
+    );
+}
+
+#[test]
+fn provider_status_returns_500_when_runtime_lock_poisoned() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = Arc::new(Mutex::new(
+        GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime"),
+    ));
+    poison_runtime_mutex(&runtime);
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        handle_get_provider(&runtime)
+    }));
+
+    assert!(result.is_ok(), "provider status route should not panic");
+    assert_eq!(result.unwrap().status_code(), StatusCode(500));
+}
+
+#[test]
+fn read_routes_do_not_depend_on_runtime_lock_expect() {
+    let source = include_str!("http_read_routes.rs");
+
+    assert!(
+        !source.contains("gateway runtime mutex poisoned"),
+        "read routes should return JSON 500 when runtime lock is poisoned"
+    );
+}
+
+#[test]
+fn provider_disconnect_returns_500_when_runtime_lock_poisoned() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = Arc::new(Mutex::new(
+        GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime"),
+    ));
+    poison_runtime_mutex(&runtime);
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        handle_post_provider_disconnect(&runtime)
+    }));
+
+    assert!(result.is_ok(), "provider disconnect route should not panic");
+    assert_eq!(result.unwrap().status_code(), StatusCode(500));
+}
+
+#[test]
+fn write_routes_do_not_depend_on_runtime_lock_expect() {
+    let source = include_str!("http_write_routes.rs");
+
+    assert!(
+        !source.contains("expect(\"gateway runtime mutex"),
+        "write routes should return JSON 500 when runtime lock is poisoned"
+    );
+}
+
+#[test]
+fn write_routes_do_not_depend_on_actor_unwrap() {
+    let source = include_str!("http_write_routes.rs");
+
+    assert!(
+        !source.contains("actor.unwrap()"),
+        "write routes should handle missing admin actors without production unwrap"
+    );
+}
+
+#[test]
+fn core_runtime_now_ms_does_not_depend_on_system_time_expect() {
+    let source = include_str!("core_runtime.rs");
+
+    assert!(
+        !source.contains("system time should be after unix epoch"),
+        "gateway runtime time helper should not panic on system clock errors"
+    );
+}
+
+#[test]
+fn gateway_main_does_not_depend_on_runtime_lock_expect() {
+    let source = include_str!("main.rs");
+
+    assert!(
+        !source.contains("expect(\"gateway runtime mutex"),
+        "gateway main should not panic when runtime lock is poisoned"
+    );
+}
+
+#[test]
+fn gateway_notifier_recovers_from_poisoned_mutex() {
+    let notifier = Arc::new(GatewayStateNotifier::new());
+    let poisoned_notifier = Arc::clone(&notifier);
+    let _ = thread::spawn(move || {
+        let _guard = poisoned_notifier
+            .generation
+            .lock()
+            .expect("lock notifier generation");
+        panic!("poison gateway notifier mutex");
+    })
+    .join();
+
+    let generation =
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| notifier.generation()));
+    assert!(generation.is_ok(), "notifier generation should not panic");
+    assert_eq!(generation.unwrap(), 0);
+
+    let notify = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        notifier.notify_changed();
+    }));
+    assert!(notify.is_ok(), "notifier notify should not panic");
+    assert_eq!(notifier.generation(), 1);
+
+    let wait = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        notifier.wait_until_changed_since(1, Instant::now());
+    }));
+    assert!(wait.is_ok(), "notifier wait should not panic");
+}
+
+#[test]
+fn gateway_notifier_does_not_depend_on_poison_expect() {
+    let source = include_str!("main.rs");
+
+    assert!(
+        !source.contains("expect(\"gateway notifier"),
+        "gateway notifier should recover from poisoned synchronization primitives"
+    );
 }
 
 #[test]
@@ -5997,6 +6233,21 @@ fn split_path_and_query_decodes_percent_escaped_components() {
 }
 
 #[test]
+fn split_path_and_query_keeps_unescaped_query_components_intact() {
+    let (path, params) = crate::http_support::split_path_and_query(
+        "/v1/export?for=user:rsaga&format=jsonl&include_public=true",
+    );
+
+    assert_eq!(path, "/v1/export");
+    assert_eq!(params.get("for").map(String::as_str), Some("user:rsaga"));
+    assert_eq!(params.get("format").map(String::as_str), Some("jsonl"));
+    assert_eq!(
+        params.get("include_public").map(String::as_str),
+        Some("true")
+    );
+}
+
+#[test]
 fn cli_missing_for_body_uses_message_shape() {
     assert_eq!(
         crate::http_support::cli_missing_for_body(),
@@ -8348,7 +8599,7 @@ fn otp_verify_rate_limited_per_challenge() {
 #[test]
 fn cors_origin_reads_from_env() {
     // Default is wildcard
-    let default = crate::http_support::cors_origin_header();
+    let default = crate::http_support::cors_origin_header().expect("default cors header");
     assert_eq!(
         default.value.as_str(),
         "*",
@@ -8359,7 +8610,7 @@ fn cors_origin_reads_from_env() {
     unsafe {
         std::env::set_var("LOBSTER_CORS_ORIGIN", "https://example.com");
     }
-    let custom = crate::http_support::cors_origin_header();
+    let custom = crate::http_support::cors_origin_header().expect("custom cors header");
     assert_eq!(
         custom.value.as_str(),
         "https://example.com",
@@ -8370,11 +8621,24 @@ fn cors_origin_reads_from_env() {
     unsafe {
         std::env::set_var("LOBSTER_CORS_ORIGIN", "");
     }
-    let empty = crate::http_support::cors_origin_header();
+    let empty = crate::http_support::cors_origin_header().expect("empty cors header");
     assert_eq!(
         empty.value.as_str(),
         "*",
         "empty CORS origin should be wildcard"
+    );
+
+    unsafe {
+        std::env::set_var(
+            "LOBSTER_CORS_ORIGIN",
+            "https://bad.example\nX-Bad: injected",
+        );
+    }
+    let invalid = crate::http_support::cors_origin_header().expect("invalid cors header fallback");
+    assert_eq!(
+        invalid.value.as_str(),
+        "*",
+        "invalid CORS origin should fall back to wildcard"
     );
 
     unsafe {

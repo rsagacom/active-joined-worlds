@@ -1,6 +1,105 @@
 # lobster-chat Active Work Queue
 
-Last updated: 2026-06-16
+Last updated: 2026-06-20
+
+## 2026-06-20 Codex 技术债推进: Rust 生产 panic 扫描门禁固化
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯契约 | 完成 | `test_scripts_quick_unit_coverage.py` 与 `test_smoke_release_gate_unit.py` 先要求新增 Rust 生产 panic 扫描，并确认缺脚本/缺挂载会失败 |
+| 扫描脚本 | 完成 | 新增 `scripts/rust-production-panic-scan.py`，覆盖 Gateway / CLI / TUI / crates 生产 Rust 源，排除测试文件与 `#[cfg(test)]` item |
+| 崩溃宏防回归 | 完成 | 扫描器除 `.unwrap()` / `.expect()` / `panic!()` 外，也拦截生产 `todo!()` / `unimplemented!()` / `unreachable!()`，防止占位实现进入运行路径 |
+| 假阳性处理 | 完成 | 扫描器在计算作用域前剥离字符串字面量，避免 `"\n}\n"`、`format!("{x}")` 等测试字符串打乱花括号计数 |
+| 扫描器自验证 | 完成 | `test_rust_production_panic_scan_unit.py` 通过临时 Rust fixture 验证生产 `.unwrap()` 与 `unimplemented!()` 会失败、`#[cfg(test)]` 中 `.unwrap()` 会被忽略，带内部引号/跨行内容的 raw string 与块注释不会误报 |
+| 字符串/注释过滤 | 完成 | 扫描匹配前剥离普通字符串、可跨行 Rust raw string、`//` 行注释与 `/* ... */` 块注释，避免帮助文案或注释里的 `.unwrap(`/`panic!` 造成假红灯 |
+| 缺失路径假绿防护 | 完成 | 显式 `--scan-root` 或默认扫描根缺失时直接失败并输出 `scan root missing`，避免目录移动/拼写错误让门禁静默通过 |
+| Rust fmt 门禁 | 完成 | `smoke-release-gate.sh` 的非 `SKIP_BUILD` 路径先跑 `cargo fmt --check` 再跑 clippy/build；`verify-complete.sh` 也在 workspace test 后、lint 前挂载 `rust fmt` |
+| Release gate | 完成 | `smoke-release-gate.sh` 先跑扫描器 quick unit，再跑真实 `rust-production-panic-scan.py`，避免只测脚本、不扫真实仓库 |
+| 完整验证 | 完成 | `verify-complete.sh` 也拆成扫描器 quick unit + 真实生产扫描，并用 stub 单测锁定 PASS/FAIL 记账，避免完整验证漏掉真实扫描 |
+
+### 验证
+
+```bash
+python3 scripts/test_rust_production_panic_scan_unit.py
+python3 scripts/rust-production-panic-scan.py
+python3 scripts/test_scripts_quick_unit_coverage.py
+python3 scripts/test_smoke_release_gate_unit.py
+python3 scripts/test_verify_complete_unit.py
+bash -n scripts/verify-complete.sh
+bash -n scripts/smoke-release-gate.sh
+```
+
+## 2026-06-19 Codex 技术债推进: verify-complete 假绿风险收口
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯契约 | 完成 | 新增 `scripts/test_verify_complete_unit.py`，锁定 `verify-complete.sh` 必须开启 `set -euo pipefail`，并用 `${PIPESTATUS[0]}` 读取 `cmd | tee` 中真实命令退出码 |
+| 验收脚本 | 完成 | `verify-complete.sh` 改为 `run_logged()` 统一记录 PASS/FAIL，任一阶段失败都会让最终脚本退出非零，同时继续写完整日志 |
+| 门禁覆盖 | 完成 | `test_scripts_quick_unit_coverage.py` 将 `verify-complete.sh` 纳入脚本 quick unit 映射；`smoke-release-gate.sh` 挂载 `complete verification unit`，只跑快速合同检查，不执行完整长耗时验收 |
+| 真实失败路径 | 完成 | 用临时 stub 让 `npm test` 返回 7，验证脚本最终退出 `1`，日志包含 `FAIL: frontend`，后续成功项仍能继续记录 |
+| 行为测试补强 | 完成 | `test_verify_complete_unit.py` 现在会实际执行 `verify-complete.sh` 的 stub 环境，覆盖 `npm` 失败与 `git status` 失败两条路径；工作区状态也改为 `run_logged "workspace status"`，不再绕过统一退出码 |
+| crypto-mls panic 收口 | 完成 | `generate_key()` / `derive_epoch_key()` 从 `expect("RNG")` / `expect("HKDF")` / `expect("fill")` 改为 `Result` 错误传播；新增测试护栏防止生产 crypto helper 重新引入这些 panic |
+| Gateway 安全头 panic 收口 | 完成 | `security_headers()` 不再对静态安全响应头 `unwrap()`；新增 `http_support` 单测锁定无 panic 构造并确认 `X-Content-Type-Options` / `X-Frame-Options` / `Referrer-Policy` 仍输出 |
+| CORS 配置注入防护 | 完成 | `LOBSTER_CORS_ORIGIN` 若为空或包含控制字符（如换行注入）会回退 `*`；`cors_origin_reads_from_env` 覆盖合法、空值和非法换行配置，避免服务输出危险 header value |
+| CORS 非 ASCII 配置防护 | 完成 | `LOBSTER_CORS_ORIGIN` 若包含非 ASCII 字符会回退 `*`；新增 `cors_origin_non_ascii_env_falls_back_to_wildcard`，避免环境变量误填导致 gateway 在 header 构造处 panic |
+| Admin device 路由锁中毒防护 | 完成 | `http_device_routes.rs` 新增统一 `with_runtime()` 锁助手；设备列表/add/remove/block/unblock 遇到 poisoned runtime mutex 时返回 JSON 500，不再 `expect("poisoned")` 打崩请求线程 |
+| Auth 路由锁中毒防护 | 完成 | `http_auth_routes.rs` 新增统一 `with_runtime()` 锁助手；session/preflight/email OTP/mobile OTP/logout 遇到 poisoned runtime mutex 时返回 JSON 500，不再 `expect("gateway runtime mutex poisoned")` 打崩请求线程 |
+| City 写路由锁中毒防护 | 完成 | `require_admin_auth()` / `require_capability_or_bypass()` 遇到 poisoned runtime mutex 时返回 JSON 500；`http_city_write_routes.rs` 新增统一 `with_runtime()`，create/join/approve/steward/federation/public-room/freeze 不再依赖 `expect("gateway runtime mutex poisoned")` |
+| Governance 写路由锁中毒防护 | 完成 | `http_governance_write_routes.rs` 新增统一 `with_runtime()`；world notice / city trust / safety report / review / advisory / sanction / unsanction 遇到 poisoned runtime mutex 时返回 JSON 500，并保留 bearer actor 校验和 unsanction 审计写入 |
+| Read 路由锁中毒防护 | 完成 | `http_read_routes.rs` 统一走 `with_runtime()`；provider/shell/world/admin/read-only CLI 入口遇到 poisoned runtime mutex 时返回 JSON 500，不再依赖 `expect("gateway runtime mutex poisoned")`；`export` 也移除 `resident_id validated above` 的生产 `expect` |
+| Write 路由锁中毒防护 | 完成 | `http_write_routes.rs` 新增统一 `with_runtime()`；provider/direct/waku/shell message/scene/edit/recall/presence/mark-read/CLI/admin 写入口遇到 poisoned runtime mutex 时返回 JSON 500，不再依赖 `expect("gateway runtime mutex...")`；业务变更与审计写入仍保留在同一 runtime 作用域 |
+| Gateway main/notifier 锁中毒防护 | 完成 | `main.rs` 启动期 upstream 状态打印不再因 runtime mutex poisoned panic；`GatewayStateNotifier` 的 mutex/condvar poisoned 后恢复 inner guard，SSE generation/notify/wait 路径不再依赖 `expect("gateway notifier...")` |
+| Admin actor unwrap 收口 | 完成 | `http_write_routes.rs` 的 ban/unban/freeze/unfreeze/config/moderate admin actor 校验改为 `required_admin_actor()` 显式返回 401，不再保留 `actor.unwrap()` 生产路径 |
+| Runtime 时间 helper panic 收口 | 完成 | `GatewayRuntime::now_ms()` 不再 `expect("system time should be after unix epoch")`；系统时间异常时回退 `0`，极端未来时间 clamp 到 `i64::MAX` |
+| Gateway query parser 覆盖补强 | 完成 | 新增 `split_path_and_query_keeps_unescaped_query_components_intact`，补上普通未转义 query key/value 不被截断的回归覆盖，和既有 percent escape 测试形成完整边界 |
+| Gateway 静态 header helper panic 收口 | 完成 | `json_header()` / `text_header()` / `sse_header()` / `no_cache_header()` / `cors_*_header()` 改为返回 `Option<Header>`；响应构造统一用 `ResponseHeaderExt::with_optional_header()`，header 构造失败时跳过该 header 而不是 panic |
+| Gateway 生产 panic 扫描 | 完成 | 排除 `gateway_tests.rs` / `gateway_test_support.rs` 后，Gateway 生产文件在 `#[cfg(test)]` 前的 `.expect()` / `.unwrap()` / `panic!()` 扫描为空 |
+| Rust workspace 基线复验 | 完成 | `cargo test --workspace` 通过；覆盖 CLI 100 unit + 18 gateway integration + 5 integration、TUI 225 unit、Gateway 264 unit、核心 crates 与 doc-tests |
+| Complete verification 覆盖补强 | 完成 | `verify-complete.sh` 新增 `cargo test --workspace` 与 `cargo clippy --workspace -- -D warnings`，避免“完整验证”只覆盖 gateway/cli/tui 三个包而漏掉核心 crates/doc-tests/lint |
+| Release gate lint 挂载 | 完成 | `smoke-release-gate.sh` 在非 `SKIP_BUILD=1` 的发布路径中先跑 `cargo clippy --manifest-path "$ROOT_DIR/Cargo.toml" --workspace -- -D warnings`，再 build 三个共享 debug binary |
+
+### 验证
+
+```bash
+python3 scripts/test_verify_complete_unit.py
+python3 scripts/test_scripts_quick_unit_coverage.py
+python3 scripts/test_smoke_release_gate_unit.py
+bash -n scripts/verify-complete.sh scripts/smoke-release-gate.sh
+make lint
+python3 scripts/test_package_release_unit.py && python3 scripts/test_scripts_quick_unit_coverage.py && python3 scripts/test_smoke_release_gate_unit.py && python3 scripts/test_smoke_provider_federation_unit.py && python3 scripts/test_smoke_web_dual_browser_unit.py && python3 scripts/test_smoke_resident_mainline_unit.py && python3 scripts/test_smoke_cli_channel_unit.py && python3 scripts/test_smoke_auth_registration_unit.py && python3 scripts/test_smoke_shell_dual_http_unit.py && python3 scripts/test_smoke_shell_direct_http_unit.py && python3 scripts/test_smoke_web_shell_unit.py && python3 scripts/test_install_server_unit.py && python3 scripts/test_preview_server_unit.py && python3 scripts/test_start_terminal_shell_unit.py && python3 scripts/test_audit_web_assets_unit.py && python3 scripts/test_lobster_device_id_unit.py && python3 scripts/test_start_web_preview_unit.py && python3 scripts/test_restart_gateway_unit.py && python3 scripts/test_preflight_unit.py && python3 scripts/test_smoke_public_ingress_unit.py && python3 scripts/test_smoke_install_layout_unit.py && python3 scripts/test_start_terminal_unit.py && python3 scripts/test_makefile_unit.py && python3 scripts/test_verify_complete_unit.py
+bash -n scripts/package-release.sh scripts/smoke-provider-federation.sh scripts/smoke-release-gate.sh scripts/smoke-resident-mainline.sh scripts/smoke-cli-channel.sh scripts/smoke-auth-registration.sh scripts/smoke-shell-dual-http.sh scripts/smoke-shell-direct-http.sh scripts/install-server.sh scripts/smoke-web-shell.sh scripts/start-terminal.sh scripts/audit-web-assets.sh scripts/lobster-device-id.sh scripts/restart-gateway.sh scripts/preflight.sh scripts/smoke-public-ingress.sh scripts/smoke-install-layout.sh scripts/verify-complete.sh
+zsh -n scripts/start-web-preview.sh
+node --check scripts/preview-server.mjs
+node --check scripts/smoke-web-dual-browser.mjs
+cargo test -p lobster-waku-gateway cors_origin_non_ascii_env_falls_back_to_wildcard
+cargo test -p lobster-waku-gateway admin_devices_returns_500_when_runtime_lock_poisoned
+cargo test -p lobster-waku-gateway auth_session_returns_500_when_runtime_lock_poisoned
+cargo test -p lobster-waku-gateway create_city_returns_500_when_runtime_lock_poisoned
+cargo test -p lobster-waku-gateway city_write_routes_do_not_depend_on_runtime_lock_expect
+cargo test -p lobster-waku-gateway publish_world_notice_returns_500_when_runtime_lock_poisoned
+cargo test -p lobster-waku-gateway governance_write_routes_do_not_depend_on_runtime_lock_expect
+cargo test -p lobster-waku-gateway provider_status_returns_500_when_runtime_lock_poisoned
+cargo test -p lobster-waku-gateway read_routes_do_not_depend_on_runtime_lock_expect
+cargo test -p lobster-waku-gateway provider_disconnect_returns_500_when_runtime_lock_poisoned
+cargo test -p lobster-waku-gateway write_routes_do_not_depend_on_runtime_lock_expect
+cargo test -p lobster-waku-gateway gateway_main_does_not_depend_on_runtime_lock_expect
+cargo test -p lobster-waku-gateway gateway_notifier_recovers_from_poisoned_mutex
+cargo test -p lobster-waku-gateway gateway_notifier_does_not_depend_on_poison_expect
+cargo test -p lobster-waku-gateway write_routes_do_not_depend_on_actor_unwrap
+cargo test -p lobster-waku-gateway core_runtime_now_ms_does_not_depend_on_system_time_expect
+cargo test -p lobster-waku-gateway split_path_and_query_keeps_unescaped_query_components_intact
+cargo test -p lobster-waku-gateway static_header_helpers_do_not_depend_on_panic_paths
+cargo test -p crypto-mls
+cargo test -p lobster-waku-gateway
+cargo test --workspace
+cargo fmt --check
+for f in apps/lobster-waku-gateway/src/*.rs; do case "$f" in */gateway_tests.rs|*/gateway_test_support.rs) continue ;; esac; hits=$(sed '/^#\[cfg(test)\]/,$d' "$f" | rg -n "\.expect\(|\.unwrap\(\)|panic!\(" || true); if [[ -n "$hits" ]]; then printf '%s\n%s\n' "-- $f" "$hits"; fi; done
+git diff --check -- apps/lobster-waku-gateway/src/http_auth_routes.rs apps/lobster-waku-gateway/src/http_city_write_routes.rs apps/lobster-waku-gateway/src/http_device_routes.rs apps/lobster-waku-gateway/src/http_governance_write_routes.rs apps/lobster-waku-gateway/src/http_support.rs apps/lobster-waku-gateway/src/http_write_routes.rs apps/lobster-waku-gateway/src/gateway_tests.rs crates/crypto-mls/src/lib.rs scripts/verify-complete.sh scripts/test_verify_complete_unit.py scripts/test_scripts_quick_unit_coverage.py scripts/test_smoke_release_gate_unit.py scripts/smoke-release-gate.sh docs/ACTIVE_WORK_QUEUE.md
+```
 
 ## 2026-06-09 Codex 技术债校准与修复
 

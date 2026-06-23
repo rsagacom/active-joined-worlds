@@ -40,7 +40,7 @@ use crate::{
         handle_get_world_safety, handle_get_world_safety_reports,
         handle_get_world_safety_residents, handle_get_world_snapshot, handle_get_world_square,
     },
-    http_support::{split_path_and_query, text_header},
+    http_support::{ResponseHeaderExt, split_path_and_query, text_header},
     http_write_routes::{
         handle_post_admin_ban_resident, handle_post_admin_clear_processed_logs,
         handle_post_admin_config, handle_post_admin_create_invite,
@@ -72,10 +72,10 @@ pub(crate) fn dispatch_http_request(
     match (method, path) {
         (Method::Options, _) => Response::from_string("")
             .with_status_code(StatusCode(204))
-            .with_header(text_header()),
+            .with_optional_header(text_header()),
         (Method::Get, "/health") | (Method::Head, "/health") => Response::from_string("ok")
             .with_status_code(StatusCode(200))
-            .with_header(text_header()),
+            .with_optional_header(text_header()),
         (Method::Get, "/v1/admin/summary") => handle_get_admin_summary(runtime),
         (Method::Get, "/v1/admin/conversations") => handle_get_admin_conversations(runtime),
         (Method::Get, "/v1/admin/messages") => handle_get_admin_messages(runtime, &query_params),
@@ -255,6 +255,6 @@ pub(crate) fn dispatch_http_request(
         (Method::Post, "/v1/waku") => handle_post_waku(runtime, request),
         _ => Response::from_string("not found")
             .with_status_code(StatusCode(404))
-            .with_header(text_header()),
+            .with_optional_header(text_header()),
     }
 }

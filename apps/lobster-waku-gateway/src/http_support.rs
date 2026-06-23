@@ -1,18 +1,29 @@
 use std::{collections::HashMap, io::Read, path::PathBuf};
 
 use chat_core::{ConversationId, IdentityId};
-use tiny_http::{Header, Request};
+use tiny_http::{Header, Request, Response};
 
 use crate::{CliAddress, ExportFormat};
 
-pub(crate) fn json_header() -> Header {
-    Header::from_bytes("Content-Type", "application/json; charset=utf-8")
-        .expect("static json header should be valid")
+pub(crate) trait ResponseHeaderExt: Sized {
+    fn with_optional_header(self, header: Option<Header>) -> Self;
 }
 
-pub(crate) fn text_header() -> Header {
-    Header::from_bytes("Content-Type", "text/plain; charset=utf-8")
-        .expect("static text header should be valid")
+impl<R: Read> ResponseHeaderExt for Response<R> {
+    fn with_optional_header(self, header: Option<Header>) -> Self {
+        match header {
+            Some(header) => self.with_header(header),
+            None => self,
+        }
+    }
+}
+
+pub(crate) fn json_header() -> Option<Header> {
+    Header::from_bytes("Content-Type", "application/json; charset=utf-8").ok()
+}
+
+pub(crate) fn text_header() -> Option<Header> {
+    Header::from_bytes("Content-Type", "text/plain; charset=utf-8").ok()
 }
 
 pub(crate) const MAX_BODY_SIZE: u64 = 1_048_576; // 1 MiB
@@ -31,48 +42,56 @@ pub(crate) fn read_request_body(request: &mut Request) -> Result<Vec<u8>, String
     Ok(body)
 }
 
-pub(crate) fn sse_header() -> Header {
-    Header::from_bytes("Content-Type", "text/event-stream; charset=utf-8")
-        .expect("static sse header should be valid")
+pub(crate) fn sse_header() -> Option<Header> {
+    Header::from_bytes("Content-Type", "text/event-stream; charset=utf-8").ok()
 }
 
-pub(crate) fn no_cache_header() -> Header {
-    Header::from_bytes("Cache-Control", "no-cache").expect("static cache header should be valid")
+pub(crate) fn no_cache_header() -> Option<Header> {
+    Header::from_bytes("Cache-Control", "no-cache").ok()
 }
 
 pub(crate) fn security_headers() -> Vec<Header> {
-    vec![
-        Header::from_bytes("X-Content-Type-Options", "nosniff").unwrap(),
-        Header::from_bytes("X-Frame-Options", "DENY").unwrap(),
-        Header::from_bytes("Referrer-Policy", "strict-origin-when-cross-origin").unwrap(),
+    [
+        ("X-Content-Type-Options", "nosniff"),
+        ("X-Frame-Options", "DENY"),
+        ("Referrer-Policy", "strict-origin-when-cross-origin"),
     ]
+    .into_iter()
+    .filter_map(|(name, value)| Header::from_bytes(name, value).ok())
+    .collect()
 }
 
 pub(crate) fn cli_missing_for_body() -> String {
     serde_json::json!({ "message": "missing for" }).to_string()
 }
 
-pub(crate) fn cors_origin_header() -> Header {
+pub(crate) fn cors_origin_header() -> Option<Header> {
     // Defaults to "*" for local dev compatibility.
     // Production MUST set LOBSTER_CORS_ORIGIN to the actual frontend origin.
     let origin = std::env::var("LOBSTER_CORS_ORIGIN").unwrap_or_else(|_| "*".into());
     let origin = origin.trim();
-    let value = if origin.is_empty() { "*" } else { origin };
-    Header::from_bytes("Access-Control-Allow-Origin", value)
-        .expect("static cors header should be valid")
+    let value = if is_safe_header_value(origin) {
+        origin
+    } else {
+        "*"
+    };
+    Header::from_bytes("Access-Control-Allow-Origin", value).ok()
 }
 
-pub(crate) fn cors_methods_header() -> Header {
-    Header::from_bytes("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        .expect("static cors methods header should be valid")
+fn is_safe_header_value(value: &str) -> bool {
+    !value.is_empty() && value.is_ascii() && !value.chars().any(char::is_control)
 }
 
-pub(crate) fn cors_headers_header() -> Header {
+pub(crate) fn cors_methods_header() -> Option<Header> {
+    Header::from_bytes("Access-Control-Allow-Methods", "GET, POST, OPTIONS").ok()
+}
+
+pub(crate) fn cors_headers_header() -> Option<Header> {
     Header::from_bytes(
         "Access-Control-Allow-Headers",
         "Content-Type, Authorization",
     )
-    .expect("static cors headers header should be valid")
+    .ok()
 }
 
 pub(crate) fn authorization_bearer_token(request: &Request) -> Option<String> {
@@ -221,4 +240,84 @@ pub(crate) fn parse_cli_args() -> (String, PathBuf, Option<String>) {
     }
 
     (format!("{host}:{port}"), state_dir, upstream_gateway_url)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn function_body<'a>(source: &'a str, signature: &str) -> &'a str {
+        let start = source.find(signature).expect("function signature");
+        let rest = &source[start..];
+        let end = rest.find("\n}\n").expect("function end");
+        &rest[..end]
+    }
+
+    #[test]
+    fn security_headers_do_not_depend_on_unwrap() {
+        let source = include_str!("http_support.rs");
+        let body = function_body(source, "pub(crate) fn security_headers()");
+
+        assert!(
+            !body.contains(".unwrap()"),
+            "security_headers should skip invalid static headers instead of panicking"
+        );
+    }
+
+    #[test]
+    fn static_header_helpers_do_not_depend_on_panic_paths() {
+        let source = include_str!("http_support.rs");
+        let helper_signatures = [
+            "pub(crate) fn json_header()",
+            "pub(crate) fn text_header()",
+            "pub(crate) fn sse_header()",
+            "pub(crate) fn no_cache_header()",
+            "pub(crate) fn cors_origin_header()",
+            "pub(crate) fn cors_methods_header()",
+            "pub(crate) fn cors_headers_header()",
+        ];
+
+        for signature in helper_signatures {
+            let body = function_body(source, signature);
+            assert!(
+                !body.contains(".expect(")
+                    && !body.contains(".unwrap()")
+                    && !body.contains("panic!("),
+                "{signature} should skip invalid headers instead of panicking"
+            );
+        }
+    }
+
+    #[test]
+    fn cors_origin_non_ascii_env_falls_back_to_wildcard() {
+        unsafe {
+            std::env::set_var("LOBSTER_CORS_ORIGIN", "https://例子.invalid");
+        }
+
+        let header = cors_origin_header().expect("cors header should be available");
+
+        unsafe {
+            std::env::remove_var("LOBSTER_CORS_ORIGIN");
+        }
+
+        assert_eq!(header.field.to_string(), "Access-Control-Allow-Origin");
+        assert_eq!(header.value.as_str(), "*");
+    }
+
+    #[test]
+    fn security_headers_keep_expected_header_names() {
+        let names: Vec<_> = security_headers()
+            .into_iter()
+            .map(|header| header.field.to_string())
+            .collect();
+
+        assert_eq!(
+            names,
+            vec![
+                "X-Content-Type-Options",
+                "X-Frame-Options",
+                "Referrer-Policy",
+            ]
+        );
+    }
 }
