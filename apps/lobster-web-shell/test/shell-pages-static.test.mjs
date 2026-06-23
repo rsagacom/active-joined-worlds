@@ -2078,7 +2078,7 @@ test("room stage projection copy is delegated out of app.js", async () => {
   const projectionSource = sliceBetween(
     source,
     "function userRoomProjection(room, visual) {",
-    "const USER_SCENE_IMAGE_LAYER_PRESETS = new Map([",
+    "function sceneImageLayerEnv() {",
   );
 
   assert.match(source, /from "\.\/shell-room-stage\.js"/);
@@ -2095,6 +2095,25 @@ test("room stage projection copy is delegated out of app.js", async () => {
   assert.doesNotMatch(portraitSummarySource, /先从左侧选会话|房间管家/);
   assert.doesNotMatch(portraitChipsSource, /等待选中会话|条访客提醒/);
   assert.doesNotMatch(projectionSource, /住宅私聊 \/ 房内聊天|公共频道 \/ 群聊现场/);
+});
+
+test("scene image-layer URL resolution is delegated out of app.js", async () => {
+  const source = await readShellModule("app.js");
+  const imageLayerModule = await readShellModule("shell-scene-image-layer.js");
+  // 模块导出纯函数 + env 依赖注入
+  assert.match(imageLayerModule, /export function imageLayerUrlForState/);
+  assert.match(imageLayerModule, /export function presetImageLayerUrlForState/);
+  assert.match(imageLayerModule, /export function timeAdjustedRuntimeSceneUrlForState/);
+  assert.match(source, /from "\.\/shell-scene-image-layer\.js"/);
+  // app.js 不再持有 preset/runtime URL Map（已移入模块）
+  assert.doesNotMatch(source, /const USER_SCENE_IMAGE_LAYER_PRESETS = new Map/);
+  assert.doesNotMatch(source, /const DAY_SCENE_RUNTIME_URLS = new Map/);
+  assert.doesNotMatch(source, /const MOBILE_SCENE_RUNTIME_URLS = new Map/);
+  // app.js 的 imageLayerUrl/presetImageLayerUrl 是薄委托
+  const delegator = sliceBetween(source, "function sceneImageLayerEnv() {", "function syncUserRoomProjection(room, visual) {");
+  assert.match(delegator, /imageLayerUrlForState/);
+  assert.match(delegator, /presetImageLayerUrlForState/);
+  assert.match(delegator, /timeAdjustedRuntimeSceneUrlForState/);
 });
 
 test("user detail card shell state and meta rows are delegated out of syncUserDetailCard", async () => {
