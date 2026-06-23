@@ -561,3 +561,30 @@ test("admin-ds.js 包含场景编辑相关函数", async () => {
   assert.match(js, /function renderSceneEditor/, "应定义 renderSceneEditor 函数");
   assert.match(js, /\/v1\/admin\/scene/, "应调用 admin/scene 端点");
 });
+
+// ====== 写操作失败反馈（禁止假成功态）======
+// ACTIVE-im：fetchGatewayJsonPost 永不 reject，.then 必须检查 r.error/r.ok，
+// 否则失败时静默刷新或误报成功。设备 block/unblock/remove 历史上无参 .then 静默 loadDevices。
+
+test("admin-ds.js 设备 block/unblock/remove 操作必须检查失败（禁止静默）", async () => {
+  const js = await readShellModule("admin-ds.js");
+  for (const path of ["/v1/admin/devices/unblock", "/v1/admin/devices/block", "/v1/admin/devices/remove"]) {
+    const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const idx = js.indexOf(path);
+    assert.ok(idx !== -1, `应调用 ${path} 端点`);
+    // 截取该端点调用后 180 字符内的 .then 回调体，必须出现 error 检查
+    const snippet = js.slice(idx, idx + 180);
+    assert.match(snippet, /error/, `${path} 的 .then 回调必须检查 r.error 并反馈失败，不能静默 loadDevices`);
+  }
+});
+
+test("admin-ds.js 批量通过消息必须逐条检查结果（禁止假成功态）", async () => {
+  const js = await readShellModule("admin-ds.js");
+  // 批量通过用 summarizeBatchResults 汇总，回调按 ok/fail 如实反馈
+  assert.match(js, /function summarizeBatchResults/, "应定义 summarizeBatchResults 纯函数汇总批量结果");
+  const idx = js.indexOf("batch-approve-messages");
+  assert.ok(idx !== -1, "应存在批量通过按钮");
+  // 批量通过回调体（按钮 wiring 后 1000 字符）必须引用 summarizeBatchResults，不能无条件 success
+  const snippet = js.slice(idx, idx + 1000);
+  assert.match(snippet, /summarizeBatchResults/, "批量通过回调必须用 summarizeBatchResults 汇总，不能无条件报成功");
+});

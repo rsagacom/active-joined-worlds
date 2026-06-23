@@ -150,6 +150,7 @@ async function loadAdminDsWithExports(opts = {}) {
     "window.__adminTest.unbanResident = unbanResident;\n" +
     "window.__adminTest.freezeRoom = freezeRoom;\n" +
     "window.__adminTest.unfreezeRoom = unfreezeRoom;\n" +
+    "window.__adminTest.summarizeBatchResults = summarizeBatchResults;\n" +
     "function bindStaticAdminActions"
   );
 
@@ -496,4 +497,53 @@ test("admin-ds runtime: 外部数据写入使用安全 DOM API", serial, async (
   assert.match(js, /\.textContent\s*=/, "应使用 .textContent =");
   assert.match(js, /document\.createTextNode\(/, "应使用 createTextNode");
   assert.match(js, /document\.createElement\(/, "应使用 createElement");
+});
+
+// ====== 批量操作结果汇总（禁止假成功态）======
+// ACTIVE-im 规则：写操作失败要有反馈，不能假成功态。
+// fetchGatewayJsonPost 永不 reject（内部 try/catch 返回 {error} 或 {ok,data}），
+// 因此 Promise.all(...).then 永远触发——批量通过若不逐条检查结果，全部失败也会报"已批量通过"。
+// summarizeBatchResults 是纯函数，把 results 数组汇总成 {total, ok, fail}，供回调如实反馈。
+
+test("admin-ds runtime: summarizeBatchResults 暴露为函数", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  const api = await loadAdminDsWithExports();
+  assert.equal(typeof api.summarizeBatchResults, "function", "summarizeBatchResults 应暴露为函数");
+});
+
+test("admin-ds runtime: summarizeBatchResults 全部成功时 fail=0", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  const api = await loadAdminDsWithExports();
+  const s = api.summarizeBatchResults([{ ok: true, data: {} }, { ok: true, data: {} }]);
+  assert.equal(s.total, 2);
+  assert.equal(s.ok, 2);
+  assert.equal(s.fail, 0, "全部成功时 fail 必须为 0");
+});
+
+test("admin-ds runtime: summarizeBatchResults 全部失败时 ok=0（禁止假成功态）", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  const api = await loadAdminDsWithExports();
+  // 模拟 gateway 全部 401/500：fetchGatewayJsonPost 返回 {error} 或 {ok:false}
+  const s = api.summarizeBatchResults([{ error: "401" }, { ok: false, status: 500 }, { error: "network" }]);
+  assert.equal(s.total, 3);
+  assert.equal(s.ok, 0, "全部失败时 ok 必须为 0，禁止报成功");
+  assert.equal(s.fail, 3, "全部失败时 fail 必须等于总数");
+});
+
+test("admin-ds runtime: summarizeBatchResults 部分成功如实统计", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  const api = await loadAdminDsWithExports();
+  const s = api.summarizeBatchResults([{ ok: true, data: {} }, { error: "401" }, { ok: false, status: 500 }, { ok: true, data: {} }]);
+  assert.equal(s.total, 4);
+  assert.equal(s.ok, 2);
+  assert.equal(s.fail, 2);
+});
+
+test("admin-ds runtime: summarizeBatchResults 空数组返回零计数", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  const api = await loadAdminDsWithExports();
+  const s = api.summarizeBatchResults([]);
+  assert.equal(s.total, 0);
+  assert.equal(s.ok, 0);
+  assert.equal(s.fail, 0);
 });

@@ -160,6 +160,19 @@
     });
   }
 
+  // 汇总批量写操作结果。fetchGatewayJsonPost 永不 reject（内部 try/catch 返回
+  // {error} 或 {ok,data}），因此 Promise.all(...).then 永远触发——调用方必须用本函数
+  // 逐条判定成功/失败并如实反馈，禁止无条件报成功（ACTIVE-im：不能假成功态）。
+  function summarizeBatchResults(results) {
+    var list = Array.isArray(results) ? results : [];
+    var ok = 0;
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i];
+      if (r && !r.error && r.ok !== false) ok++;
+    }
+    return { total: list.length, ok: ok, fail: list.length - ok };
+  }
+
   function setGatewayStatus(text, className) {
     if (!gatewayStatus) return;
     gatewayStatus.textContent = text;
@@ -2128,21 +2141,33 @@
           if (d.blocked) {
             var unblockBtn = makeBtn('解封', 'ds-btn-outline ds-btn-xs');
             unblockBtn.addEventListener('click', function () {
-              fetchGatewayJsonPost('/v1/admin/devices/unblock', { address: d.address }).then(function () { loadDevices(); });
+              fetchGatewayJsonPost('/v1/admin/devices/unblock', { address: d.address }).then(function (r) {
+                if (r && r.error) { showAdminNotice('解封失败: ' + r.error, 'error'); }
+                else { showAdminNotice('设备 ' + d.address + ' 已解封', 'success'); }
+                loadDevices();
+              });
             });
             btnGroup.appendChild(unblockBtn);
           } else {
             var blockBtn = makeBtn('封禁', 'ds-btn-outline ds-btn-xs');
             blockBtn.style.color = 'var(--ds-danger)';
             blockBtn.addEventListener('click', function () {
-              fetchGatewayJsonPost('/v1/admin/devices/block', { address: d.address }).then(function () { loadDevices(); });
+              fetchGatewayJsonPost('/v1/admin/devices/block', { address: d.address }).then(function (r) {
+                if (r && r.error) { showAdminNotice('封禁失败: ' + r.error, 'error'); }
+                else { showAdminNotice('设备 ' + d.address + ' 已封禁', 'success'); }
+                loadDevices();
+              });
             });
             btnGroup.appendChild(blockBtn);
           }
           var removeBtn = makeBtn('移除', 'ds-btn-danger-text ds-btn-xs');
           removeBtn.addEventListener('click', function () {
             if (confirm('确定移除设备 ' + d.address + ' ？')) {
-              fetchGatewayJsonPost('/v1/admin/devices/remove', { address: d.address }).then(function () { loadDevices(); });
+              fetchGatewayJsonPost('/v1/admin/devices/remove', { address: d.address }).then(function (r) {
+                if (r && r.error) { showAdminNotice('移除失败: ' + r.error, 'error'); }
+                else { showAdminNotice('设备 ' + d.address + ' 已移除', 'success'); }
+                loadDevices();
+              });
             }
           });
           btnGroup.appendChild(removeBtn);
@@ -2287,13 +2312,16 @@
           var convId = row.dataset.conversationId || '';
           if (msgId) promises.push(fetchGatewayJsonPost('/v1/admin/messages/moderate', {message_id: msgId, conversation_id: convId, action: 'approved'}));
         });
-        Promise.all(promises).then(function () {
+        Promise.all(promises).then(function (results) {
           batchApproveBtn.disabled = false; batchApproveBtn.textContent = '批量通过';
-          showAdminNotice('已批量通过 ' + rows.length + ' 条消息', 'success');
+          var s = summarizeBatchResults(results);
+          if (s.fail === 0) { showAdminNotice('已批量通过 ' + s.ok + ' 条消息', 'success'); }
+          else if (s.ok === 0) { showAdminNotice('批量通过全部失败（' + s.fail + ' 条）', 'error'); }
+          else { showAdminNotice('批量通过 ' + s.ok + ' 条成功，' + s.fail + ' 条失败', 'info'); }
           refreshCurrentMessageView();
         }).catch(function () {
           batchApproveBtn.disabled = false; batchApproveBtn.textContent = '批量通过';
-          showAdminNotice('批量通过部分失败', 'error');
+          showAdminNotice('批量通过请求异常', 'error');
         });
       });
     }
