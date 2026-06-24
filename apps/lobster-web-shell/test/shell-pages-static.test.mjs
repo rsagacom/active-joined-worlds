@@ -2085,6 +2085,21 @@ test("scene image-layer URL resolution is delegated out of app.js", async () => 
   assert.match(delegator, /timeAdjustedRuntimeSceneUrlForState/);
 });
 
+test("room state summaries are delegated out of app.js", async () => {
+  const source = await readShellModule("app.js");
+  const summaryModule = await readShellModule("shell-room-summary.js");
+  // 模块导出 *ForState 纯函数 + deps 注入
+  assert.match(summaryModule, /export function roomFollowUpCountForState/);
+  assert.match(summaryModule, /export function roomChatStatusSummaryForState/);
+  assert.match(summaryModule, /export function roomQueueSummaryForState/);
+  assert.match(source, /from "\.\/shell-room-summary\.js"/);
+  // app.js 不再内联摘要分支逻辑，改为薄委托
+  assert.match(source, /function roomSummaryDeps\(\)/);
+  const queueDelegator = sliceBetween(source, "function roomQueueSummary(room) {", "function roomThreadHeadline(room) {");
+  assert.match(queueDelegator, /roomQueueSummaryForState\(room, roomSummaryDeps\(\)\)/);
+  assert.doesNotMatch(queueDelegator, /条访客提醒|条新动态/);
+});
+
 test("user detail card shell state and meta rows are delegated out of syncUserDetailCard", async () => {
   const source = await readShellModule("app.js");
   const shellRenderer = sliceBetween(

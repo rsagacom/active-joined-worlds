@@ -322,6 +322,11 @@ import {
   roomThreadHeadline as _roomThreadHeadline,
 } from "./shell-room-rail.js";
 import {
+  roomFollowUpCountForState,
+  roomChatStatusSummaryForState,
+  roomQueueSummaryForState,
+} from "./shell-room-summary.js";
+import {
   isVisitorIdentity,
   residentScopedShellStatePage,
   translateClientDisplayName,
@@ -4289,60 +4294,30 @@ function roomContextSummary(room) {
   return actionCopy ? `${actionCopy} · ${base}` : base;
 }
 
+function roomSummaryDeps() {
+  return {
+    unreadCount,
+    caretakerPendingCount,
+    roomHasDraft,
+    visiblePendingEchoCount,
+    roomSendError: (roomId) => roomSendErrors[roomId],
+    latestRoomQuickAction,
+    latestRoomQuickState,
+    get shellPage() { return currentShellPage(); },
+    roomKind,
+  };
+}
+
 function roomFollowUpCount(room) {
-  if (!room) return 0;
-  return (
-    Number(unreadCount(room) > 0) +
-    Number(roomHasDraft(room.id)) +
-    Number(visiblePendingEchoCount(room) > 0) +
-    Number(Boolean(roomSendErrors[room.id])) +
-    Number(caretakerPendingCount(room) > 0)
-  );
+  return roomFollowUpCountForState(room, roomSummaryDeps());
 }
 
 function roomChatStatusSummary(room) {
-  if (!room) return "等待新消息";
-  if (roomSendErrors[room.id]) return "这条聊天有消息待重发";
-  if (visiblePendingEchoCount(room)) return "这条聊天有消息待同步";
-  if (roomHasDraft(room.id)) return "草稿已存在当前会话";
-  if (unreadCount(room) > 0) return `有 ${unreadCount(room)} 条新消息待看`;
-  if (latestRoomQuickAction(room)) {
-    return quickActionFollowUpCopy(latestRoomQuickAction(room), latestRoomQuickState(room)) || "这条聊天正在按动作继续推进";
-  }
-  if (typeof room?.chat_status_summary === "string" && room.chat_status_summary.trim()) {
-    return room.chat_status_summary.trim();
-  }
-  if (currentShellPage() === "user") {
-    return roomKind(room) === "direct" ? "可以直接继续说" : "城镇里还算安静";
-  }
-  return roomKind(room) === "direct" ? "可直接继续回复" : "群聊当前比较安静";
+  return roomChatStatusSummaryForState(room, roomSummaryDeps());
 }
 
 function roomQueueSummary(room) {
-  if (!room) return "等待新的后台窗口";
-  const items = [];
-  if (caretakerPendingCount(room) > 0) {
-    items.push(`${caretakerPendingCount(room)} 条访客提醒`);
-  }
-  if (unreadCount(room) > 0) {
-    items.push(`${unreadCount(room)} 条新动态`);
-  }
-  if (roomHasDraft(room.id)) {
-    items.push("有待发记录");
-  }
-  if (visiblePendingEchoCount(room)) {
-    items.push("消息待同步");
-  }
-  if (roomSendErrors[room.id]) {
-    items.push("发送失败待复核");
-  }
-  if (items.length) {
-    return items.join(" · ");
-  }
-  if (typeof room?.queue_summary === "string" && room.queue_summary.trim()) {
-    return room.queue_summary.trim();
-  }
-  return "窗口清爽，可继续巡视或记录";
+  return roomQueueSummaryForState(room, roomSummaryDeps());
 }
 
 function roomThreadHeadline(room) { return _roomThreadHeadline(room); }
