@@ -643,7 +643,7 @@ test("workspace chrome DOM assembly is delegated out of ensureWorkspaceChrome", 
   const composer = sliceBetween(
     source,
     "function ensureComposerStatusChrome() {",
-    "function ensureComposerTip() {",
+    "function ensureNonUserCaretakerChrome(userProjection) {",
   );
   const chromeEnsurer = sliceBetween(
     source,
@@ -2001,7 +2001,7 @@ test("user detail card projection branches are delegated out of userDetailCardPr
   const projectionSource = sliceBetween(
     source,
     "function userDetailCardProjection(room, visual, projection) {",
-    "function seedComposerFromQuickAction(action, template = quickActionTemplate(action), options = {}) {",
+    "function applyUserDetailCardShellState(card) {",
   );
 
   assert.match(idleProjection, /variant: "idle"/);
@@ -2640,64 +2640,45 @@ test("composer input state and downstream renders are delegated out of updateCom
 test("composer hero model is delegated out of renderComposerHero", async () => {
   const source = await readShellModule("app.js");
   const roomRenderSource = await readShellModule("shell-room-render.js");
-  const heroRenderer = sliceBetween(
-    source,
-    "function renderComposerHero(room) {",
-    "function composerContextItems(room, shellPage) {",
-  );
+  const composerMod = await readShellModule("shell-composer.js");
 
-  assert.match(source, /composerHeroModelForState/);
+  // app.js 不再内联 renderComposerHero，委托 shell-composer.js
+  assert.doesNotMatch(source, /function renderComposerHero\b/);
+  assert.match(source, /renderComposerHero,/);
+  assert.match(source, /initShellComposer\(/);
+
+  // 模型在 shell-room-render.js，渲染在 shell-composer.js
   assert.match(roomRenderSource, /export function composerHeroModelForState/);
-  assert.match(heroRenderer, /const model = composerHeroModelForState\(\{/);
-  assert.match(heroRenderer, /composerHeroEl\.dataset\.variant = model\.variant/);
-  assert.match(heroRenderer, /kicker\.textContent = model\.kicker/);
-  assert.match(heroRenderer, /title\.textContent = model\.title/);
-  assert.match(heroRenderer, /note\.textContent = model\.note/);
-  assert.match(heroRenderer, /for \(const chip of model\.chips\)/);
-  assert.doesNotMatch(heroRenderer, /composerHeroKicker|composerHeroTitle|composerHeroNote|composerHeroChipsData/);
-  assert.doesNotMatch(heroRenderer, /translateRoomKind\(roomKind\(room\)\)/);
+  assert.match(composerMod, /export function renderComposerHero\(room\)/);
+  assert.match(composerMod, /composerHeroModelForState\(\{/);
+  assert.match(composerMod, /composerHeroEl\.dataset\.variant = model\.variant/);
+  assert.match(composerMod, /kicker\.textContent = model\.kicker/);
+  assert.match(composerMod, /title\.textContent = model\.title/);
+  assert.match(composerMod, /note\.textContent = model\.note/);
+  assert.match(composerMod, /for \(const chip of model\.chips\)/);
 });
 
 test("composer context model and DOM are delegated out of updateComposerContext", async () => {
   const source = await readShellModule("app.js");
   const roomRenderSource = await readShellModule("shell-room-render.js");
-  const itemsRenderer = sliceBetween(
-    source,
-    "function composerContextItems(room, shellPage) {",
-    "function createComposerContextItemNode(item) {",
-  );
-  const itemNodeRenderer = sliceBetween(
-    source,
-    "function createComposerContextItemNode(item) {",
-    "function renderComposerContextItems(items) {",
-  );
-  const listRenderer = sliceBetween(
-    source,
-    "function renderComposerContextItems(items) {",
-    "function updateComposerContext(room) {",
-  );
-  const contextRenderer = sliceBetween(
-    source,
-    "function updateComposerContext(room) {",
-    "function updateComposerTip() {",
-  );
+  const composerMod = await readShellModule("shell-composer.js");
 
-  assert.match(source, /composerContextItemsForState/);
+  // app.js 不再内联 updateComposerContext，委托 shell-composer.js
+  assert.doesNotMatch(source, /function updateComposerContext\b/);
+  assert.doesNotMatch(source, /function composerContextItems\b/);
+  assert.match(source, /updateComposerContext,/);
+  assert.match(source, /initShellComposer\(/);
+
+  // 模型在 shell-room-render.js，渲染在 shell-composer.js
   assert.match(roomRenderSource, /export function composerContextItemsForState/);
-  assert.match(itemsRenderer, /return composerContextItemsForState\(\{/);
-  assert.match(itemsRenderer, /threadHeadline: room \? roomThreadHeadline\(room\) : ""/);
-  assert.match(itemsRenderer, /visiblePendingEchoCount: room \? visiblePendingEchoCount\(room\) : 0/);
-  assert.match(itemsRenderer, /sendError: room \? roomSendErrors\[room\.id\] : ""/);
-  assert.doesNotMatch(itemsRenderer, /label:|待重发|队列|聊天状态/);
-  assert.match(itemNodeRenderer, /block\.className = "composer-context-item"/);
-  assert.match(itemNodeRenderer, /createLine\("composer-context-label", item\.label\)/);
-  assert.match(itemNodeRenderer, /value\.textContent = item\.value/);
-  assert.match(listRenderer, /clearChildren\(composerContextEl\)/);
-  assert.match(listRenderer, /composerContextEl\.appendChild\(createComposerContextItemNode\(item\)\)/);
-  assert.match(contextRenderer, /const shellPage = currentShellPage\(\)/);
-  assert.match(contextRenderer, /renderComposerContextItems\(composerContextItems\(room, shellPage\)\)/);
-  assert.doesNotMatch(contextRenderer, /const block = document\.createElement\("div"\)/);
-  assert.doesNotMatch(contextRenderer, /roomQueueSummary\(room\)/);
+  assert.match(composerMod, /export function updateComposerContext\(room\)/);
+  assert.match(composerMod, /composerContextItemsForState\(\{/);
+  assert.match(composerMod, /threadHeadline: room \? _ctx\.roomThreadHeadline\(room\) : ""/);
+  assert.match(composerMod, /visiblePendingEchoCount: room \? _ctx\.visiblePendingEchoCount\(room\) : 0/);
+  assert.match(composerMod, /sendError: room \? _ctx\.roomSendErrors\[room\.id\] : ""/);
+  assert.match(composerMod, /composer-context-item/);
+  assert.match(composerMod, /createLine\("composer-context-label", item\.label\)/);
+  assert.match(composerMod, /value\.textContent = item\.value/);
 });
 
 test("gateway errors read transport Error message and localize common send failures", async () => {
@@ -4235,12 +4216,12 @@ test("thread status rail visibility and items are delegated out of renderThreadS
   const modelAdapter = sliceBetween(
     source,
     "function threadStatusRailModel(room, shellPage) {",
-    "function composerMetaStatusForRoom(room) {",
+    "function createThreadStatusItemNode(item) {",
   );
   const railRenderer = sliceBetween(
     source,
     "function renderThreadStatusRail(room) {",
-    "function renderComposerMeta(room) {",
+    "function gatewayConnectionStatus() {",
   );
 
   assert.match(roomRenderSource, /export function threadStatusRailModelForState/);
@@ -4273,7 +4254,7 @@ test("thread status item DOM is delegated out of renderThreadStatusRail", async 
   const railRenderer = sliceBetween(
     source,
     "function renderThreadStatusRail(room) {",
-    "function renderComposerMeta(room) {",
+    "function gatewayConnectionStatus() {",
   );
 
   assert.match(itemRenderer, /document\.createElement\("div"\)/);
@@ -4287,71 +4268,27 @@ test("thread status item DOM is delegated out of renderThreadStatusRail", async 
 
 test("composer meta model and DOM are delegated out of renderComposerMeta", async () => {
   const source = await readShellModule("app.js");
-  const statusResolver = sliceBetween(
-    source,
-    "function composerMetaStatusForRoom(room) {",
-    "function composerMetaUserItems(room, baseStatus) {",
-  );
-  const userItemsRenderer = sliceBetween(
-    source,
-    "function composerMetaUserItems(room, baseStatus) {",
-    "function composerMetaNonUserItems(room, shellPage, baseStatus) {",
-  );
-  const nonUserItemsRenderer = sliceBetween(
-    source,
-    "function composerMetaNonUserItems(room, shellPage, baseStatus) {",
-    "function appendComposerMetaCaretakerItem(items, room, shellPage) {",
-  );
-  const caretakerAppender = sliceBetween(
-    source,
-    "function appendComposerMetaCaretakerItem(items, room, shellPage) {",
-    "function composerMetaItems(room, shellPage) {",
-  );
-  const itemsRenderer = sliceBetween(
-    source,
-    "function composerMetaItems(room, shellPage) {",
-    "function createComposerMetaItemNode(item) {",
-  );
-  const itemNodeRenderer = sliceBetween(
-    source,
-    "function createComposerMetaItemNode(item) {",
-    "function renderComposerMetaItems(items) {",
-  );
-  const listRenderer = sliceBetween(
-    source,
-    "function renderComposerMetaItems(items) {",
-    "function renderComposerMeta(room) {",
-  );
-  const metaRenderer = sliceBetween(
-    source,
-    "function renderComposerMeta(room) {",
-    "function createChatDetailHeroNode(room, shellPage) {",
-  );
+  const composerMod = await readShellModule("shell-composer.js");
 
-  assert.match(statusResolver, /composerMetaBaseStatus\(/);
-  assert.match(statusResolver, /room \? roomSendErrors\[room\.id\] : null/);
-  assert.match(userItemsRenderer, /label: "当前会话"/);
-  assert.match(userItemsRenderer, /roomSyncLabel\(\)/);
-  assert.match(nonUserItemsRenderer, /label: shellPage === "admin" \? "线程" : "会话标题"/);
-  assert.match(nonUserItemsRenderer, /roomRouteLabel\(room\)/);
-  assert.match(nonUserItemsRenderer, /roomQueueSummary\(room\)/);
-  assert.match(nonUserItemsRenderer, /currentIdentity\(\) \|\| "访客"/);
-  assert.match(caretakerAppender, /const caretaker = room \? caretakerProfile\(room\) : null/);
-  assert.match(caretakerAppender, /label: shellPage === "admin" \? "巡检\/管家" : "管家"/);
-  assert.match(
-    itemsRenderer,
-    /const items =\s+shellPage === "user"\s+\?\s+composerMetaUserItems\(room, baseStatus\)\s+:\s+composerMetaNonUserItems\(room, shellPage, baseStatus\)/,
-  );
-  assert.match(itemsRenderer, /appendComposerMetaCaretakerItem\(items, room, shellPage\)/);
-  assert.match(itemsRenderer, /composerMetaQuickHint\(shellMode\)/);
-  assert.match(itemNodeRenderer, /block\.className = "composer-meta-item"/);
-  assert.match(itemNodeRenderer, /createLine\("composer-meta-label", item\.label\)/);
-  assert.match(itemNodeRenderer, /createLine\("composer-meta-value", item\.value\)/);
-  assert.match(listRenderer, /clearChildren\(composerMetaEl\)/);
-  assert.match(listRenderer, /composerMetaEl\.appendChild\(createComposerMetaItemNode\(item\)\)/);
-  assert.match(metaRenderer, /renderComposerMetaItems\(composerMetaItems\(room, shellPage\)\)/);
-  assert.doesNotMatch(metaRenderer, /const items =/);
-  assert.doesNotMatch(metaRenderer, /composerMetaBaseStatus\(/);
+  // app.js 不再内联 composer meta 逻辑，全部委托 shell-composer.js
+  assert.doesNotMatch(source, /function composerMetaItems\b/);
+  assert.doesNotMatch(source, /function composerMetaStatusForRoom\b/);
+  assert.doesNotMatch(source, /function renderComposerMeta\b/);
+  assert.match(source, /renderComposerMeta,/);
+  assert.match(source, /initShellComposer\(/);
+
+  // 逻辑在 shell-composer.js（renderComposerMeta 导出 + 内联 items 构造）
+  assert.match(composerMod, /export function renderComposerMeta\(room\)/);
+  assert.match(composerMod, /label: "当前会话"/);
+  assert.match(composerMod, /label: shellPage === "admin" \? "线程" : "会话标题"/);
+  assert.match(composerMod, /roomRouteLabel\(room\)/);
+  assert.match(composerMod, /currentIdentity\(\) \|\| "访客"/);
+  assert.match(composerMod, /caretakerProfile\(room\)/);
+  assert.match(composerMod, /_ctx\.shellMode === "admin"/);
+  assert.match(composerMod, /更多 · 刷新/);
+  assert.match(composerMod, /广场 · 刷新/);
+  assert.match(composerMod, /composer-meta-item/);
+  assert.match(composerMod, /createLine\("composer-meta-label"/);
 });
 
 test("chat detail hero DOM is delegated out of renderChatDetailPanel", async () => {

@@ -3,7 +3,24 @@ import {
   caretakerPanelModel,
   caretakerStatusItems,
 } from "./shell-caretaker-panel.js";
-import { composerStatusState } from "./shell-composer.js";
+import {
+  composerStatusState,
+  initShellComposer,
+  seedComposerFromQuickAction,
+  syncComposerDraft,
+  focusComposerInput,
+  autoSizeComposerInput,
+  ensureComposerTip,
+  renderComposerHero,
+  updateComposerContext,
+  updateComposerTip,
+  ensureComposerKeyBindings,
+  triggerComposerKeyboardSubmit,
+  handleComposerInputKeydown,
+  handleComposerFormPointerdown,
+  renderComposerMeta,
+  gatewayUnavailableForComposer,
+} from "./shell-composer.js";
 import { applyAvatarStyle } from "./shell-avatar.js";
 import {
   createChatDetailCardMetaRow,
@@ -765,24 +782,6 @@ function userDetailCardProjection(room, visual, projection) {
   return userDetailCardHomeProjection(room, projection, caretaker, monogram, status);
 }
 
-
-function seedComposerFromQuickAction(action, template = quickActionTemplate(action), options = {}) {
-  if (!composerInputEl || composerInputEl.disabled || !activeRoomId) return;
-  const previousAction = roomQuickAction(activeRoomId);
-  const previousTemplate = quickActionTemplate(previousAction);
-  const nextTemplate = template;
-  const currentValue = composerInputEl.value.trim();
-  const shouldSeed = options.force === true || !currentValue || currentValue === previousTemplate.trim();
-  setRoomQuickAction(activeRoomId, action);
-  if (shouldSeed) {
-    composerInputEl.value = nextTemplate;
-    composerInputEl.dispatchEvent(new Event("input", { bubbles: true }));
-  } else {
-    updateComposerState();
-    renderConversationOverview();
-  }
-  focusComposerInput({ force: true });
-}
 
 function applyUserDetailCardShellState(card) {
   setDatasetFlag(chatDetailCardShellEl, "roomVariant", card.variant);
@@ -3086,42 +3085,6 @@ function appendRoomQuickActionOverviewButton(actions, room, options = {}) {
   actions.appendChild(button);
 }
 
-function syncComposerDraft({ force = false } = {}) {
-  if (!composerInputEl) return;
-  const nextDraft = draftForRoom(activeRoomId);
-  if (force || document.activeElement !== composerInputEl) {
-    composerInputEl.value = nextDraft;
-  }
-  autoSizeComposerInput();
-}
-
-function focusComposerInput({ force = false, select = false } = {}) {
-  if (!composerInputEl || composerInputEl.disabled) return;
-  requestAnimationFrame(() => {
-    if (!composerInputEl || composerInputEl.disabled) return;
-    if (!force && document.activeElement === composerInputEl) return;
-    composerInputEl.focus({ preventScroll: true });
-    if (select) {
-      composerInputEl.select();
-    }
-  });
-}
-
-function autoSizeComposerInput() {
-  if (!composerInputEl) return;
-  composerInputEl.style.height = "auto";
-  const isWechat = !!composerInputEl.closest(".wechat-composer");
-  const isMobile = window.innerWidth <= 720;
-  const isCityHub = document.body.dataset.sfcTheme === "city";
-  const isSceneComposer = !!composerInputEl.closest(".public-square-composer, .creative-composer");
-  const isResidentShell = currentShellPage() === "user";
-  const minH = isWechat || isResidentShell ? (isMobile ? 40 : 36) : (isMobile ? 48 : (isCityHub ? 36 : 74));
-  const maxH = isWechat || isResidentShell || isSceneComposer ? 120 : (isMobile ? 120 : (isCityHub ? 80 : 220));
-  const nextHeight = Math.min(Math.max(composerInputEl.scrollHeight, minH), maxH);
-  composerInputEl.style.height = `${nextHeight}px`;
-  composerInputEl.style.overflowY = composerInputEl.scrollHeight > maxH ? "auto" : "hidden";
-}
-
 function unreadCount(room) {
   const seen = Number(roomReadMarkers?.[room.id] || 0);
   return Math.max((room?.messages?.length || 0) - seen, 0);
@@ -3956,178 +3919,6 @@ function syncHubStageCanvas(room) {
   }
 }
 
-function ensureComposerTip() {
-  if (!composerFormEl) return;
-  if (!composerTipEl) {
-    composerTipEl = document.createElement("div");
-    composerTipEl.className = "composer-tip";
-  }
-  const reference = composerStatusEl || composerFormEl.querySelector(".composer-row");
-  if (reference && !composerTipEl.isConnected) {
-    reference.insertAdjacentElement("afterend", composerTipEl);
-  }
-  updateComposerTip();
-}
-
-function renderComposerHero(room) {
-  if (currentShellPage() === "user" || !composerHeroEl) return;
-  const shellPage = currentShellPage();
-  const model = composerHeroModelForState({
-    room,
-    shellPage,
-    roomKind: room ? roomKind(room) : "",
-    roomThreadHeadline: room ? roomThreadHeadline(room) : "",
-    roomDisplayPeer: roomDisplayPeer(room),
-    roomSyncLabel: roomSyncLabel(),
-    caretakerPendingCount: room ? caretakerPendingCount(room) : 0,
-    unreadCount: room ? unreadCount(room) : 0,
-    refreshInProgress,
-    gatewayUrl,
-  });
-  clearChildren(composerHeroEl);
-  composerHeroEl.dataset.variant = model.variant;
-
-  const kicker = document.createElement("div");
-  kicker.className = "composer-hero-kicker";
-  kicker.textContent = model.kicker;
-  composerHeroEl.appendChild(kicker);
-
-  const title = document.createElement("div");
-  title.className = "composer-hero-title";
-  title.textContent = model.title;
-  composerHeroEl.appendChild(title);
-
-  const note = document.createElement("div");
-  note.className = "composer-hero-note";
-  note.textContent = model.note;
-  composerHeroEl.appendChild(note);
-
-  const chips = document.createElement("div");
-  chips.className = "composer-hero-chips";
-  for (const chip of model.chips) {
-    chips.appendChild(createPill(chip.text, chip.tone));
-  }
-  composerHeroEl.appendChild(chips);
-}
-
-function composerContextItems(room, shellPage) {
-  return composerContextItemsForState({
-    room,
-    shellPage,
-    gatewayUrl,
-    threadHeadline: room ? roomThreadHeadline(room) : "",
-    audienceLabel: room ? roomAudienceLabel(room) : "",
-    routeLabel: room ? roomRouteLabel(room) : "",
-    chatStatusSummary: room ? roomChatStatusSummary(room) : "",
-    queueSummary: room ? roomQueueSummary(room) : "",
-    caretakerPendingCount: room ? caretakerPendingCount(room) : 0,
-    unreadCount: room ? unreadCount(room) : 0,
-    visiblePendingEchoCount: room ? visiblePendingEchoCount(room) : 0,
-    sendError: room ? roomSendErrors[room.id] : "",
-    isSendingMessage,
-  });
-}
-
-function createComposerContextItemNode(item) {
-  const block = document.createElement("div");
-  block.className = "composer-context-item";
-  block.appendChild(createLine("composer-context-label", item.label));
-  const value = document.createElement("div");
-  value.className = `composer-context-value composer-context-value-${item.tone}`;
-  value.textContent = item.value;
-  block.appendChild(value);
-  return block;
-}
-
-function renderComposerContextItems(items) {
-  clearChildren(composerContextEl);
-  for (const item of items) {
-    composerContextEl.appendChild(createComposerContextItemNode(item));
-  }
-}
-
-function updateComposerContext(room) {
-  if (currentShellPage() === "user" || !composerContextEl) return;
-  const shellPage = currentShellPage();
-  renderComposerContextItems(composerContextItems(room, shellPage));
-}
-
-function updateComposerTip() {
-  if (!composerTipEl) return;
-  const room = state.rooms.find((item) => item.id === activeRoomId);
-  const roomLabel = room
-    ? roomThreadHeadline(room)
-    : "未选会话";
-  const activeAction = room ? roomQuickAction(room.id) : "";
-  const instruction = "Enter 发送 · Shift+Enter 换行 · ↑ 取回上一条";
-  const fallback = gatewayUrl
-    ? room
-      ? "网关回执慢时，会先保留本地草稿和待同步消息。"
-      : "先选会话后输入区才会解锁。"
-    : room
-      ? "离线预览态，消息先留在本地时间线。"
-      : "先选会话后输入区才会解锁，草稿会保留在当前窗口。";
-  composerTipEl.textContent = activeAction
-    ? `${roomLabel} · 当前动作 ${activeAction} · ${instruction} · ${fallback}`
-    : `${roomLabel} · ${instruction} · ${fallback}`;
-}
-
-function ensureComposerKeyBindings() {
-  if (!composerInputEl) return;
-  if (composerInputEl.dataset.chatBindings === "true") return;
-  composerInputEl.addEventListener("keydown", handleComposerInputKeydown);
-  composerFormEl?.addEventListener("pointerdown", handleComposerFormPointerdown);
-  composerInputEl.dataset.chatBindings = "true";
-}
-
-function triggerComposerKeyboardSubmit() {
-  const now = Date.now();
-  if (now - lastComposerKeyboardSubmitAt < 120) return;
-  if (!composerFormEl || !composerInputEl || composerInputEl.disabled) return;
-  lastComposerKeyboardSubmitAt = now;
-  void submitComposerMessage();
-}
-
-function handleComposerInputKeydown(event) {
-  if (
-    event.key === "Enter" &&
-    !event.shiftKey &&
-    !event.altKey &&
-    !event.metaKey &&
-    !event.ctrlKey &&
-    !event.isComposing &&
-    !event.repeat
-  ) {
-    event.preventDefault();
-    event.stopPropagation();
-    triggerComposerKeyboardSubmit();
-    return;
-  }
-  if (
-    event.key === "ArrowUp" &&
-    !event.shiftKey &&
-    !event.altKey &&
-    !event.metaKey &&
-    !event.ctrlKey &&
-    composerInputEl.value.trim() === "" &&
-    lastSentMessage
-  ) {
-    event.preventDefault();
-    composerInputEl.value = lastSentMessage;
-    composerInputEl.dispatchEvent(new Event("input", { bubbles: true }));
-  }
-}
-
-function handleComposerFormPointerdown(event) {
-  if (!composerInputEl) return;
-  const target = event.target;
-  if (!(target instanceof HTMLElement)) return;
-  if (target.closest("textarea, button, input, select, a, summary")) return;
-  requestAnimationFrame(() => {
-    focusComposerInput({ force: true });
-  });
-}
-
 function toggleElements(elements, hidden) {
   for (const element of elements) {
     element.classList.toggle("surface-hidden", hidden);
@@ -4709,90 +4500,6 @@ function threadStatusRailModel(room, shellPage) {
   });
 }
 
-function composerMetaStatusForRoom(room) {
-  return composerMetaBaseStatus(
-    room,
-    room ? roomSendErrors[room.id] : null,
-    isSendingMessage,
-    room ? roomHasDraft(room.id) : false,
-  );
-}
-
-function composerMetaUserItems(room, baseStatus) {
-  return [
-    { label: "当前会话", value: room ? roomThreadHeadline(room) : "未选择会话" },
-    { label: "聊天对象", value: room ? roomAudienceLabel(room) : "等待会话" },
-    { label: "同步", value: room ? roomSyncLabel() : gatewayUrl ? "等待会话" : "等待网关" },
-    { label: "状态", value: baseStatus },
-  ];
-}
-
-function composerMetaNonUserItems(room, shellPage, baseStatus) {
-  return [
-    {
-      label: shellPage === "admin" ? "线程" : "会话标题",
-      value: room ? roomThreadHeadline(room) : "未选择会话",
-    },
-    {
-      label: shellPage === "admin" ? "当前对象" : "聊天对象",
-      value: room ? roomAudienceLabel(room) : gatewayUrl ? "等待会话" : "等待网关",
-    },
-    {
-      label: shellPage === "admin" ? "消息去向" : "路由",
-      value: room ? roomRouteLabel(room) : gatewayUrl ? "等待会话" : "等待网关",
-    },
-    {
-      label: "聊天状态",
-      value: room ? roomChatStatusSummary(room) : baseStatus,
-    },
-    {
-      label: "队列",
-      value: room ? roomQueueSummary(room) : "等待会话",
-    },
-    {
-      label: shellPage === "admin" ? "当前身份" : "身份",
-      value: currentIdentity() || "访客",
-    },
-    { label: "输入", value: baseStatus },
-  ];
-}
-
-function appendComposerMetaCaretakerItem(items, room, shellPage) {
-  const caretaker = room ? caretakerProfile(room) : null;
-  if (!caretaker) return;
-  items.push({
-    label: shellPage === "admin" ? "巡检/管家" : "管家",
-    value: `${caretaker.name} · ${caretaker.auto_reply}`,
-  });
-}
-
-function composerMetaItems(room, shellPage) {
-  const baseStatus = composerMetaStatusForRoom(room);
-  const items =
-    shellPage === "user"
-      ? composerMetaUserItems(room, baseStatus)
-      : composerMetaNonUserItems(room, shellPage, baseStatus);
-  appendComposerMetaCaretakerItem(items, room, shellPage);
-  const quickHint = composerMetaQuickHint(shellMode);
-  items.push({ label: "快捷", value: quickHint, tone: "muted" });
-  return items;
-}
-
-function createComposerMetaItemNode(item) {
-  const block = document.createElement("div");
-  block.className = "composer-meta-item";
-  block.appendChild(createLine("composer-meta-label", item.label));
-  block.appendChild(createLine("composer-meta-value", item.value));
-  return block;
-}
-
-function renderComposerMetaItems(items) {
-  clearChildren(composerMetaEl);
-  for (const item of items) {
-    composerMetaEl.appendChild(createComposerMetaItemNode(item));
-  }
-}
-
 function createThreadStatusItemNode(item) {
   const chip = document.createElement("div");
   chip.className = `thread-status-item thread-status-item-${item.tone}`;
@@ -4817,12 +4524,6 @@ function renderThreadStatusRail(room) {
   }
 }
 
-function renderComposerMeta(room) {
-  if (!composerMetaEl) return;
-  const shellPage = currentShellPage();
-  renderComposerMetaItems(composerMetaItems(room, shellPage));
-}
-
 function gatewayConnectionStatus() {
   if (!gatewayUrl) return "offline";
   const explicitGatewayUrl = Boolean(queryGatewayUrl());
@@ -4832,14 +4533,6 @@ function gatewayConnectionStatus() {
   if (providerState === "Connecting" || (refreshInProgress && !lastRefreshAtMs)) return "connecting";
   if (providerState === "Connected" || lastRefreshAtMs) return "online";
   return refreshInProgress ? "connecting" : "offline";
-}
-
-function gatewayUnavailableForComposer() {
-  if (!gatewayUrl) return false;
-  const explicitGatewayUrl = Boolean(queryGatewayUrl());
-  if (lastRefreshErrorMessage && (explicitGatewayUrl || providerLoaded)) return true;
-  const providerState = normalizeProviderConnectionState(provider.connection_state);
-  return providerIndicatesGatewayOffline({ providerLoaded, provider, providerState });
 }
 
 function translateResidentLabel(residentId) {
@@ -9390,6 +9083,53 @@ const sceneRuntime = initSceneRuntime({
   closeRail: () => setSfcRailOpen(false),
 });
 sceneRuntime.bindTimeline(timelineEl);
+
+// shell-composer 模块依赖注入：DOM 元素/对象引用直接传，会变的原始值用 getter
+// 保证模块内 _ctx 读取的是当前值而非初始化快照。
+function buildComposerDeps() {
+  return {
+    get composerFormEl() { return composerFormEl; },
+    get composerInputEl() { return composerInputEl; },
+    get composerHeroEl() { return composerHeroEl; },
+    get composerMetaEl() { return composerMetaEl; },
+    get composerContextEl() { return composerContextEl; },
+    get composerStatusEl() { return composerStatusEl; },
+    get composerTipEl() { return composerTipEl; },
+    set composerTipEl(v) { composerTipEl = v; },
+    get activeRoomId() { return activeRoomId; },
+    get shellMode() { return shellMode; },
+    get gatewayUrl() { return gatewayUrl; },
+    get isSendingMessage() { return isSendingMessage; },
+    get refreshInProgress() { return refreshInProgress; },
+    get lastRefreshErrorMessage() { return lastRefreshErrorMessage; },
+    get providerLoaded() { return providerLoaded; },
+    get provider() { return provider; },
+    get lastSentMessage() { return lastSentMessage; },
+    get lastComposerKeyboardSubmitAt() { return lastComposerKeyboardSubmitAt; },
+    set lastComposerKeyboardSubmitAt(v) { lastComposerKeyboardSubmitAt = v; },
+    get state() { return state; },
+    get roomSendErrors() { return roomSendErrors; },
+    get roomReadMarkers() { return roomReadMarkers; },
+    currentIdentity,
+    quickActionTemplate,
+    roomQuickAction,
+    setRoomQuickAction,
+    draftForRoom,
+    roomHasDraft,
+    visiblePendingEchoCount,
+    roomThreadHeadline,
+    roomDisplayPeer,
+    roomAudienceLabel,
+    roomRouteLabel,
+    roomChatStatusSummary,
+    roomQueueSummary,
+    roomSyncLabel,
+    updateComposerState,
+    renderConversationOverview,
+    submitComposerMessage,
+  };
+}
+initShellComposer(buildComposerDeps());
 
 function renderSceneHotspotsForRoom(room) {
   sceneRuntime.renderSceneHotspotsForRoom(room);
