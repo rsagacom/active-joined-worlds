@@ -1,10 +1,13 @@
 /* shell-room-context.js — 房间 governance-aware 上下文纯函数
  * 从 app.js 提取。返回纯数据/文案，governance 查询 + 全局通过 deps 注入
  * (publicRoomRecordForConversation/cityStateForConversation/worldDirectoryCity/
- *  membershipForCity/publicRoomsForCity/residents/world/currentIdentity/
- *  shellPage/roomKind/roomQuickActionContextCopy/roomDisplayPeer/roomPreview/
- *  translateFederationPolicy)，脱离全局即可单测。
+ *  membershipForCity/publicRoomsForCity/residents/world/memberships/
+ *  currentIdentity/shellPage/roomKind/roomQuickActionContextCopy/
+ *  roomDisplayPeer/roomPreview/translateFederationPolicy/displayCityTitle)，
+ * 脱离全局即可单测。
  */
+
+import { displayCityTitle } from "./shell-labels.js";
 
 export function chatDetailRoomContextModelForState(room, deps) {
   const publicRoom = deps.publicRoomRecordForConversation(room.id);
@@ -92,4 +95,46 @@ export function roomRouteLabelForState(room, deps) {
     return deps.world?.allows_cross_city_private_messages ? "跨城私信已开启" : "私信待网关确认";
   }
   return shellPage === "user" ? "城门消息同步" : "系统状态同步";
+}
+
+export function roomMemberCountForState(room, deps) {
+  const explicit = Number(room?.member_count);
+  if (Number.isFinite(explicit) && explicit > 0) {
+    return explicit;
+  }
+  const publicRoom = deps.publicRoomRecordForConversation(room?.id);
+  if (publicRoom) {
+    const activeResidents = (deps.memberships || []).filter(
+      (item) => item.city_id === publicRoom.city_id && item.state === "Active",
+    ).length;
+    if (activeResidents > 0) {
+      return activeResidents;
+    }
+  }
+  const participants = new Set((room?.messages || []).map((message) => message.sender).filter(Boolean));
+  const identity = deps.currentIdentity();
+  if (identity) {
+    participants.add(identity);
+  }
+  if (participants.size > 0) {
+    return participants.size;
+  }
+  return deps.roomKind(room) === "direct" ? 2 : 1;
+}
+
+export function roomAudienceLabelForState(room, deps) {
+  if (!room) return "未选会话";
+  const kind = deps.roomKind(room);
+  if (kind === "direct") {
+    return room.participant_label || `你与 ${deps.roomDisplayPeer(room)}`;
+  }
+  if (kind === "public") {
+    const publicRoom = deps.publicRoomRecordForConversation(room.id);
+    const cityProfile = deps.cityStateForConversation(room.id)?.profile || deps.worldDirectoryCity(publicRoom?.city_id);
+    if (publicRoom) {
+      return `${displayCityTitle(cityProfile)} · ${publicRoom.slug || publicRoom.room_id}`;
+    }
+    return room.participant_label || "公开频道";
+  }
+  return room.participant_label || "系统会话";
 }

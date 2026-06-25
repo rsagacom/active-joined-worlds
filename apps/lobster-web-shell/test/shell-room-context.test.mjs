@@ -16,6 +16,8 @@ const {
   directRoomPeerOnlineStatusForState,
   roomContextSummaryForState,
   roomRouteLabelForState,
+  roomMemberCountForState,
+  roomAudienceLabelForState,
 } = mod;
 
 // 默认 deps：governance 查询返回 null，全局空
@@ -28,6 +30,7 @@ function deps(over = {}) {
     publicRoomsForCity: () => [],
     residents: [],
     world: null,
+    memberships: [],
     currentIdentity: () => "me",
     shellPage: "admin",
     roomKind: () => "public",
@@ -35,6 +38,7 @@ function deps(over = {}) {
     roomDisplayPeer: () => "对方",
     roomPreview: () => "预览",
     translateFederationPolicy: () => "联邦策略文案",
+    displayCityTitle: (city) => (city?.title || "城市"),
     ...over,
   };
 }
@@ -253,4 +257,100 @@ test("routeLabel: system user 页返回城门消息同步", () => {
 test("routeLabel: system admin 页返回系统状态同步", () => {
   const d = deps({ roomKind: () => "system", shellPage: "admin" });
   assert.equal(roomRouteLabelForState({ id: "sys" }, d), "系统状态同步");
+});
+
+// ====== roomMemberCount ======
+
+test("memberCount: 显式 member_count 优先", () => {
+  assert.equal(roomMemberCountForState({ id: "r1", member_count: 5 }, deps()), 5);
+});
+
+test("memberCount: member_count=0 不用显式值", () => {
+  assert.equal(roomMemberCountForState({ id: "r1", member_count: 0 }, deps()), 1);
+});
+
+test("memberCount: public 房间用 governance memberships 活跃数", () => {
+  const d = deps({
+    roomKind: () => "public",
+    publicRoomRecordForConversation: () => ({ city_id: "c1" }),
+    memberships: [
+      { city_id: "c1", state: "Active" },
+      { city_id: "c1", state: "Active" },
+      { city_id: "c1", state: "Pending" },
+      { city_id: "c2", state: "Active" },
+    ],
+  });
+  assert.equal(roomMemberCountForState({ id: "r1" }, d), 2);
+});
+
+test("memberCount: public 无活跃成员时回退 participants", () => {
+  const d = deps({
+    roomKind: () => "public",
+    publicRoomRecordForConversation: () => ({ city_id: "c1" }),
+    memberships: [],
+    currentIdentity: () => "me",
+  });
+  const room = { id: "r1", messages: [{ sender: "a" }, { sender: "b" }] };
+  assert.equal(roomMemberCountForState(room, d), 3); // a + b + me
+});
+
+test("memberCount: 无 publicRoom 时用 messages participants + identity", () => {
+  const d = deps({ currentIdentity: () => "me" });
+  const room = { id: "dm:me:x", messages: [{ sender: "x" }] };
+  assert.equal(roomMemberCountForState(room, d), 2); // x + me
+});
+
+test("memberCount: 无 participants 且无 identity 时 direct 返回 2 public 返回 1", () => {
+  const noId = deps({ currentIdentity: () => "" });
+  assert.equal(roomMemberCountForState({ id: "dm:a:b" }, { ...noId, roomKind: () => "direct" }), 2);
+  assert.equal(roomMemberCountForState({ id: "r1" }, { ...noId, roomKind: () => "public" }), 1);
+});
+
+// ====== roomAudienceLabel ======
+
+test("audienceLabel: null room 返回未选会话", () => {
+  assert.equal(roomAudienceLabelForState(null, deps()), "未选会话");
+});
+
+test("audienceLabel: direct 用 participant_label 优先", () => {
+  const d = deps({ roomKind: () => "direct" });
+  assert.equal(roomAudienceLabelForState({ id: "dm:a:b", participant_label: "你与 爱丽丝" }, d), "你与 爱丽丝");
+});
+
+test("audienceLabel: direct 无 label 时用 roomDisplayPeer 拼接", () => {
+  const d = deps({ roomKind: () => "direct", roomDisplayPeer: () => "鲍勃" });
+  assert.equal(roomAudienceLabelForState({ id: "dm:a:b" }, d), "你与 鲍勃");
+});
+
+test("audienceLabel: public 有 publicRoom 时用城市标题·slug", () => {
+  const d = deps({
+    roomKind: () => "public",
+    publicRoomRecordForConversation: () => ({ city_id: "c1", slug: "lobby" }),
+    cityStateForConversation: () => ({ profile: { title: "城A" } }),
+    displayCityTitle: (city) => city?.title || "城市",
+  });
+  assert.equal(roomAudienceLabelForState({ id: "r1" }, d), "城A · lobby");
+});
+
+test("audienceLabel: public 无 cityState 时用 worldDirectoryCity 回退", () => {
+  const d = deps({
+    roomKind: () => "public",
+    publicRoomRecordForConversation: () => ({ city_id: "c1", room_id: "r1" }),
+    cityStateForConversation: () => null,
+    worldDirectoryCity: () => ({ title: "目录城A" }),
+    displayCityTitle: (city) => city?.title || "城市",
+  });
+  assert.equal(roomAudienceLabelForState({ id: "r1" }, d), "目录城A · r1");
+});
+
+test("audienceLabel: public 无 publicRoom 时用 participant_label 或公开频道", () => {
+  const d = deps({ roomKind: () => "public" });
+  assert.equal(roomAudienceLabelForState({ id: "r1", participant_label: "自定义" }, d), "自定义");
+  assert.equal(roomAudienceLabelForState({ id: "r1" }, d), "公开频道");
+});
+
+test("audienceLabel: system 用 participant_label 或系统会话", () => {
+  const d = deps({ roomKind: () => "system" });
+  assert.equal(roomAudienceLabelForState({ id: "sys", participant_label: "系统" }, d), "系统");
+  assert.equal(roomAudienceLabelForState({ id: "sys" }, d), "系统会话");
 });

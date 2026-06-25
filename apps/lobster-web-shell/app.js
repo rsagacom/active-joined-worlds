@@ -331,6 +331,8 @@ import {
   directRoomPeerOnlineStatusForState,
   roomContextSummaryForState,
   roomRouteLabelForState,
+  roomMemberCountForState,
+  roomAudienceLabelForState,
 } from "./shell-room-context.js";
 import {
   isVisitorIdentity,
@@ -4156,44 +4158,11 @@ function createMessageBodyNode(message, options = {}) {
 function roomDisplayPeer(room) { return _roomDisplayPeer(room); }
 
 function roomMemberCount(room) {
-  const explicit = Number(room?.member_count);
-  if (Number.isFinite(explicit) && explicit > 0) {
-    return explicit;
-  }
-  const publicRoom = publicRoomRecordForConversation(room?.id);
-  if (publicRoom) {
-    const activeResidents = governance.memberships.filter(
-      (item) => item.city_id === publicRoom.city_id && item.state === "Active",
-    ).length;
-    if (activeResidents > 0) {
-      return activeResidents;
-    }
-  }
-  const participants = new Set((room?.messages || []).map((message) => message.sender).filter(Boolean));
-  if (currentIdentity()) {
-    participants.add(currentIdentity());
-  }
-  if (participants.size > 0) {
-    return participants.size;
-  }
-  return roomKind(room) === "direct" ? 2 : 1;
+  return roomMemberCountForState(room, governanceContextDeps());
 }
 
 function roomAudienceLabel(room) {
-  if (!room) return "未选会话";
-  const kind = roomKind(room);
-  if (kind === "direct") {
-    return room.participant_label || `你与 ${roomDisplayPeer(room)}`;
-  }
-  if (kind === "public") {
-    const publicRoom = publicRoomRecordForConversation(room.id);
-    const cityProfile = cityStateForConversation(room.id)?.profile || worldDirectoryCity(publicRoom?.city_id);
-    if (publicRoom) {
-      return `${displayCityTitle(cityProfile)} · ${publicRoom.slug || publicRoom.room_id}`;
-    }
-    return room.participant_label || "公开频道";
-  }
-  return room.participant_label || "系统会话";
+  return roomAudienceLabelForState(room, governanceContextDeps());
 }
 
 function governanceContextDeps() {
@@ -4205,6 +4174,7 @@ function governanceContextDeps() {
     publicRoomsForCity,
     get residents() { return governance?.residents; },
     get world() { return governance?.world; },
+    get memberships() { return governance?.memberships; },
     currentIdentity,
     get shellPage() { return currentShellPage(); },
     roomKind,
@@ -4212,6 +4182,7 @@ function governanceContextDeps() {
     roomDisplayPeer,
     roomPreview,
     translateFederationPolicy,
+    displayCityTitle,
   };
 }
 
