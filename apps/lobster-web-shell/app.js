@@ -327,6 +327,12 @@ import {
   roomQueueSummaryForState,
 } from "./shell-room-summary.js";
 import {
+  chatDetailRoomContextModelForState,
+  directRoomPeerOnlineStatusForState,
+  roomContextSummaryForState,
+  roomRouteLabelForState,
+} from "./shell-room-context.js";
+import {
   isVisitorIdentity,
   residentScopedShellStatePage,
   translateClientDisplayName,
@@ -4190,33 +4196,27 @@ function roomAudienceLabel(room) {
   return room.participant_label || "系统会话";
 }
 
+function governanceContextDeps() {
+  return {
+    publicRoomRecordForConversation,
+    cityStateForConversation,
+    worldDirectoryCity,
+    membershipForCity,
+    publicRoomsForCity,
+    get residents() { return governance?.residents; },
+    get world() { return governance?.world; },
+    currentIdentity,
+    get shellPage() { return currentShellPage(); },
+    roomKind,
+    roomQuickActionContextCopy,
+    roomDisplayPeer,
+    roomPreview,
+    translateFederationPolicy,
+  };
+}
+
 function roomRouteLabel(room) {
-  if (!room) return "等待连接";
-  if (typeof room.route_label === "string" && room.route_label.trim()) {
-    return room.route_label.trim();
-  }
-  const kind = roomKind(room);
-  const shellPage = currentShellPage();
-  if (kind === "public") {
-    const publicRoom = publicRoomRecordForConversation(room.id);
-    if (publicRoom?.frozen) {
-      return "房间已冻结";
-    }
-    const federation = cityStateForConversation(room.id)?.profile?.federation_policy;
-    if (federation) {
-      return translateFederationPolicy(federation);
-    }
-    return shellPage === "user" ? "城镇频道可发言" : "房间可发言";
-  }
-  if (kind === "direct") {
-    if (shellPage === "user") {
-      return governance.world?.allows_cross_city_private_messages
-        ? "居民私信已连通"
-        : "居民私信待网关确认";
-    }
-    return governance.world?.allows_cross_city_private_messages ? "跨城私信已开启" : "私信待网关确认";
-  }
-  return shellPage === "user" ? "城门消息同步" : "系统状态同步";
+  return roomRouteLabelForState(room, governanceContextDeps());
 }
 
 function roomSummaryLine(room) {
@@ -4273,25 +4273,7 @@ function roomStatusLine(room) {
 }
 
 function roomContextSummary(room) {
-  if (!room) return "打开一个会话后，这里会显示上下文摘要。";
-  const actionCopy = roomQuickActionContextCopy(room);
-  if (!actionCopy && typeof room.context_summary === "string" && room.context_summary.trim()) {
-    return room.context_summary.trim();
-  }
-  let base = "";
-  if (typeof room.scene_summary === "string" && room.scene_summary.trim()) {
-    base = room.scene_summary.trim();
-  } else {
-    const publicRoom = publicRoomRecordForConversation(room.id);
-    if (publicRoom?.description?.trim()) {
-      base = publicRoom.description.trim();
-    } else if (roomKind(room) === "direct") {
-      base = room.overview_summary || room.subtitle || `直接和 ${roomDisplayPeer(room)} 继续一对一沟通。`;
-    } else {
-      base = room.overview_summary || room.subtitle || roomPreview(room);
-    }
-  }
-  return actionCopy ? `${actionCopy} · ${base}` : base;
+  return roomContextSummaryForState(room, governanceContextDeps());
 }
 
 function roomSummaryDeps() {
@@ -4608,21 +4590,7 @@ function focusRoom(roomId) {
  * @returns {"online" | "offline" | null}
  */
 function directRoomPeerOnlineStatus(room) {
-  if (!room || roomKind(room) !== "direct") return null;
-  if (!governance?.residents?.length) return null;
-  const identity = currentIdentity();
-  const participants = room.participants;
-  if (!participants?.length) return null;
-  const peerId = participants.find(
-    (p) => (typeof p === "string" ? p : p?.id || p?.resident_id || "") !== identity,
-  );
-  if (!peerId) return null;
-  const peerKey = typeof peerId === "string" ? peerId : peerId.id || peerId.resident_id || "";
-  const resident = governance.residents.find(
-    (r) => r.resident_id === peerKey,
-  );
-  if (!resident) return null;
-  return resident.online ? "online" : "offline";
+  return directRoomPeerOnlineStatusForState(room, governanceContextDeps());
 }
 
 function confirmResidentRoomJump(room) {
@@ -5749,24 +5717,7 @@ function createChatRuntimeDetailSection(room, shellPage) {
 }
 
 function chatDetailRoomContextModel(room) {
-  const publicRoom = publicRoomRecordForConversation(room.id);
-  const cityState = cityStateForConversation(room.id);
-  const directoryCity = publicRoom ? worldDirectoryCity(publicRoom.city_id) : null;
-  const membership = publicRoom ? membershipForCity(publicRoom.city_id) : null;
-  const cityProfile = publicRoom
-    ? cityState?.profile || directoryCity || {
-        title: publicRoom.city_id,
-        slug: publicRoom.city_id,
-      }
-    : null;
-  return {
-    publicRoom,
-    cityState,
-    directoryCity,
-    membership,
-    cityProfile,
-    siblingRooms: publicRoom ? publicRoomsForCity(publicRoom.city_id).filter((item) => item.room_id !== room.id) : [],
-  };
+  return chatDetailRoomContextModelForState(room, governanceContextDeps());
 }
 
 function createChatDetailCityContextSection(context) {

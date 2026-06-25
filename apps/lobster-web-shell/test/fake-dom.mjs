@@ -33,6 +33,7 @@ export const APP_LOCAL_IMPORT_PATHS = Object.freeze([
   "./shell-scene-image-layer.js",
   "./shell-message-body.js",
   "./shell-room-summary.js",
+  "./shell-room-context.js",
   "./shell-auth.js",
   "./shell-room-profiles.js",
   "./shell-role-permissions.js",

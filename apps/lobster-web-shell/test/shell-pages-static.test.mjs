@@ -4432,6 +4432,7 @@ test("chat detail caretaker section DOM is delegated out of renderChatDetailPane
 
 test("chat detail room context sections are delegated out of renderChatDetailPanel", async () => {
   const source = await readShellModule("app.js");
+  const contextMod = await readShellModule("shell-room-context.js");
   const contextResolver = sliceBetween(
     source,
     "function chatDetailRoomContextModel(room) {",
@@ -4463,11 +4464,14 @@ test("chat detail room context sections are delegated out of renderChatDetailPan
     "function createTimelineEmptyStateNode(cardSpec) {",
   );
 
-  assert.match(contextResolver, /const publicRoom = publicRoomRecordForConversation\(room\.id\)/);
-  assert.match(contextResolver, /const cityState = cityStateForConversation\(room\.id\)/);
-  assert.match(contextResolver, /const directoryCity = publicRoom \? worldDirectoryCity\(publicRoom\.city_id\) : null/);
-  assert.match(contextResolver, /const membership = publicRoom \? membershipForCity\(publicRoom\.city_id\) : null/);
-  assert.match(contextResolver, /siblingRooms: publicRoom \? publicRoomsForCity\(publicRoom\.city_id\)\.filter/);
+  // app.js chatDetailRoomContextModel 改为薄委托，governance 聚合逻辑移入 shell-room-context.js
+  assert.match(contextResolver, /chatDetailRoomContextModelForState\(room, governanceContextDeps\(\)\)/);
+  assert.match(contextMod, /export function chatDetailRoomContextModelForState/);
+  assert.match(contextMod, /deps\.publicRoomRecordForConversation\(room\.id\)/);
+  assert.match(contextMod, /deps\.cityStateForConversation\(room\.id\)/);
+  assert.match(contextMod, /deps\.worldDirectoryCity\(publicRoom\.city_id\)/);
+  assert.match(contextMod, /deps\.membershipForCity\(publicRoom\.city_id\)/);
+  assert.match(contextMod, /deps\.publicRoomsForCity\(publicRoom\.city_id\)\.filter/);
   assert.match(cityRenderer, /const citySection = createDetailSection\(\s*"城市 \/ 频道资料"/);
   assert.match(cityRenderer, /createDetailRow\("城市", displayCityTitle\(cityProfile\)\)/);
   assert.match(cityRenderer, /translateTrustState\(directoryCity\.trust_state\)/);
