@@ -1986,52 +1986,42 @@ test("quick action preview card controls and sheet are delegated out of createQu
   assert.doesNotMatch(cardRenderer, /for \(const childSpec of sheetRenderDomSpec\.children\)/);
 });
 
-test("user detail card projection branches are delegated out of userDetailCardProjection", async () => {
+test("user detail card projection branches are delegated out of app.js", async () => {
   const source = await readShellModule("app.js");
-  const idleProjection = sliceBetween(
-    source,
-    "function userDetailCardIdleProjection() {",
-    "function userDetailCardMonogram(visual, projection) {",
-  );
-  const monogramResolver = sliceBetween(
-    source,
-    "function userDetailCardMonogram(visual, projection) {",
-    "function userDetailCardCustomProjection(room, visual, projection, detailCard, monogram, status) {",
-  );
-  const customProjection = sliceBetween(
-    source,
-    "function userDetailCardCustomProjection(room, visual, projection, detailCard, monogram, status) {",
-    "function userDetailCardCityProjection(room, projection, caretaker, monogram, status) {",
-  );
-  const cityProjection = sliceBetween(
-    source,
-    "function userDetailCardCityProjection(room, projection, caretaker, monogram, status) {",
-    "function userDetailCardHomeProjection(room, projection, caretaker, monogram, status) {",
-  );
-  const homeProjection = sliceBetween(
-    source,
-    "function userDetailCardHomeProjection(room, projection, caretaker, monogram, status) {",
-    "function userDetailCardProjection(room, visual, projection) {",
-  );
+  const detailCardModule = await readShellModule("shell-user-detail-card.js");
+  // 模块导出纯函数（deps 注入）
+  assert.match(detailCardModule, /export function userDetailCardProjectionForState/);
+  assert.match(detailCardModule, /export function userDetailCardIdleProjectionForState/);
+  assert.match(detailCardModule, /export function userDetailCardMonogramForState/);
+  assert.match(detailCardModule, /export function userDetailCardCustomProjectionForState/);
+  assert.match(detailCardModule, /export function userDetailCardCityProjectionForState/);
+  assert.match(detailCardModule, /export function userDetailCardHomeProjectionForState/);
+  // 分支文案/逻辑落在模块里
+  assert.match(detailCardModule, /variant: "idle"/);
+  assert.match(detailCardModule, /公共频道向导/);
+  assert.match(detailCardModule, /currentIdentity\(\) \|\| "当前住户"/);
+  assert.match(detailCardModule, /deps\.roomAudienceLabel\(room\)/);
+  assert.match(detailCardModule, /deps\.roomChatStatusSummary\(room\)/);
+  // app.js 引用模块
+  assert.match(source, /from "\.\/shell-user-detail-card\.js"/);
+  // app.js 的 userDetailCardProjection 是薄壳委托
   const projectionSource = sliceBetween(
     source,
     "function userDetailCardProjection(room, visual, projection) {",
     "function applyUserDetailCardShellState(card) {",
   );
-
-  assert.match(idleProjection, /variant: "idle"/);
-  assert.match(monogramResolver, /visual\.portrait\?\.visual\?\.monogram/);
-  assert.match(customProjection, /detailCard\.kicker/);
-  assert.match(customProjection, /Array\.isArray\(detailCard\.meta\)/);
-  assert.match(cityProjection, /variant: "city"/);
-  assert.match(cityProjection, /公共频道向导/);
-  assert.match(homeProjection, /variant: "home"/);
-  assert.match(homeProjection, /currentIdentity\(\) \|\| "当前住户"/);
-  assert.match(projectionSource, /return userDetailCardIdleProjection\(\)/);
-  assert.match(projectionSource, /const monogram = userDetailCardMonogram\(visual, projection\)/);
-  assert.match(projectionSource, /return userDetailCardCustomProjection\(room, visual, projection, detailCard, monogram, status\)/);
-  assert.match(projectionSource, /return userDetailCardCityProjection\(room, projection, caretaker, monogram, status\)/);
-  assert.match(projectionSource, /return userDetailCardHomeProjection\(room, projection, caretaker, monogram, status\)/);
+  assert.match(projectionSource, /return userDetailCardProjectionForState\(room, visual, projection, \{/);
+  assert.match(projectionSource, /roomChatStatusSummary,/);
+  assert.match(projectionSource, /currentIdentity,/);
+  assert.match(projectionSource, /roomDisplayPeer,/);
+  assert.match(projectionSource, /roomAudienceLabel,/);
+  // app.js 不再内联这些分支函数（已下沉到模块）
+  assert.doesNotMatch(source, /function userDetailCardIdleProjection\(/);
+  assert.doesNotMatch(source, /function userDetailCardMonogram\(/);
+  assert.doesNotMatch(source, /function userDetailCardCustomProjection\(/);
+  assert.doesNotMatch(source, /function userDetailCardCityProjection\(/);
+  assert.doesNotMatch(source, /function userDetailCardHomeProjection\(/);
+  // 分支文案不再留在 app.js 的 projection 薄壳里
   assert.doesNotMatch(projectionSource, /公共频道向导/);
   assert.doesNotMatch(projectionSource, /currentIdentity\(\) \|\| "当前住户"/);
 });

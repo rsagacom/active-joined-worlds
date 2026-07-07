@@ -43,6 +43,7 @@ export const APP_LOCAL_IMPORT_PATHS = Object.freeze([
   "./shell-storage-keys.js",
   "./pretext-stage.js",
   "./shell-room-rail.js",
+  "./shell-user-detail-card.js",
 ]);
 
 function appLocalImportUrlMap() {

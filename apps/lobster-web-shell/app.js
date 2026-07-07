@@ -274,6 +274,7 @@ import {
   stageProjection,
   workflowProfile,
 } from "./shell-room-profiles.js";
+import { userDetailCardProjectionForState } from "./shell-user-detail-card.js";
 import {
   roleAllowsApproveJoin,
   roleAllowsCreatePublicRoom,
@@ -742,79 +743,13 @@ function syncUserRoomProjection(room, visual) {
   syncUserDetailCard(room, visual, projection);
 }
 
-function userDetailCardIdleProjection() {
-  return {
-    variant: "idle",
-    motif: "idle",
-    kicker: "角色卡",
-    title: "当前房间角色卡",
-    monogram: "房",
-    meta: [{ label: "状态", value: "等待打开一个会话" }],
-    actions: [],
-  };
-}
-
-function userDetailCardMonogram(visual, projection) {
-  return visual.portrait?.visual?.monogram || (projection?.variant === "city" ? "巡" : "房");
-}
-
-function userDetailCardCustomProjection(room, visual, projection, detailCard, monogram, status) {
-  return {
-    variant: projection?.variant || (visual.stage.variant === "home" ? "home" : "city"),
-    motif: projection?.motif || (visual.stage.visual?.motif || "watchtower"),
-    kicker: detailCard.kicker || (projection?.variant === "city" ? "公共频道 / 角色卡" : "住宅私聊 / 角色卡"),
-    title: detailCard.title || "当前房间角色卡",
-    monogram: detailCard.monogram || monogram,
-    meta: Array.isArray(detailCard.meta) && detailCard.meta.length
-      ? detailCard.meta
-      : [{ label: "状态", value: status }],
-    actions: Array.isArray(detailCard.actions) ? detailCard.actions : [],
-  };
-}
-
-function userDetailCardCityProjection(room, projection, caretaker, monogram, status) {
-  return {
-    variant: "city",
-    motif: projection.motif,
-    kicker: "公共频道 / 角色卡",
-    title: caretaker ? `${caretaker.name} / 频道状态` : "公共频道 / 当前状态",
-    monogram,
-    meta: [
-      { label: "角色", value: caretaker?.role_label || "公共频道向导" },
-      { label: "称号", value: caretaker?.name || room.thread_headline || room.title || "未知会话" },
-      { label: "当前", value: roomAudienceLabel(room) },
-      { label: "状态", value: status },
-    ],
-    actions: ["私聊", "委托", "交易"],
-  };
-}
-
-function userDetailCardHomeProjection(room, projection, caretaker, monogram, status) {
-  return {
-    variant: "home",
-    motif: projection?.motif || "courtyard",
-    kicker: "住宅私聊 / 角色卡",
-    title: caretaker ? `${caretaker.name} / 房内状态` : "住宅私聊 / 房内状态",
-    monogram,
-    meta: [
-      { label: "住户", value: currentIdentity() || "当前住户" },
-      { label: "同住AI", value: caretaker?.name || roomDisplayPeer(room) },
-      { label: "当前", value: roomAudienceLabel(room) },
-      { label: "状态", value: status },
-    ],
-    actions: ["续聊", "整理", "留条"],
-  };
-}
-
 function userDetailCardProjection(room, visual, projection) {
-  if (!room || !visual?.stage) return userDetailCardIdleProjection();
-  const detailCard = detailCardProfile(room);
-  const caretaker = caretakerProfile(room);
-  const monogram = userDetailCardMonogram(visual, projection);
-  const status = caretaker?.status || roomChatStatusSummary(room);
-  if (detailCard) return userDetailCardCustomProjection(room, visual, projection, detailCard, monogram, status);
-  if (projection?.variant === "city") return userDetailCardCityProjection(room, projection, caretaker, monogram, status);
-  return userDetailCardHomeProjection(room, projection, caretaker, monogram, status);
+  return userDetailCardProjectionForState(room, visual, projection, {
+    roomChatStatusSummary,
+    currentIdentity,
+    roomDisplayPeer,
+    roomAudienceLabel,
+  });
 }
 
 
