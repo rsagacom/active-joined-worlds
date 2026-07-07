@@ -277,6 +277,11 @@ import {
 import { userDetailCardProjectionForState } from "./shell-user-detail-card.js";
 import { conversationCalloutModelForState } from "./shell-conversation-callout.js";
 import {
+  gatewayMessagePayloadForState,
+  editMessagePayloadForState,
+  recallMessagePayloadForState,
+} from "./shell-message-action-payload.js";
+import {
   roleAllowsApproveJoin,
   roleAllowsCreatePublicRoom,
   roleAllowsFreezeRoom,
@@ -7881,14 +7886,10 @@ function commitLocalSend(roomId, text, quickAction) {
 }
 
 function gatewayMessagePayload(roomId, text, quickAction) {
-  return {
-    room_id: roomId,
-    sender: currentIdentity(),
-    text,
-    quick_action: quickAction || undefined,
-    device_id: "browser-shell",
-    language_tag: navigator.language || "zh-CN",
-  };
+  return gatewayMessagePayloadForState(roomId, text, quickAction, {
+    currentIdentity,
+    languageTag: navigator.language,
+  });
 }
 
 function prepareGatewaySend(roomId, text, quickAction) {
@@ -7954,12 +7955,10 @@ async function editMessage(roomId, messageId, text) {
   if (!roomId || !messageId || !text.trim()) {
     throw new Error("编辑消息需要提供房间、消息 ID 和新内容");
   }
-  await postGatewayJson("/v1/shell/message/edit", {
-    room_id: roomId,
-    message_id: messageId,
-    actor: currentIdentity(),
-    text: text.trim(),
-  });
+  await postGatewayJson(
+    "/v1/shell/message/edit",
+    editMessagePayloadForState(roomId, messageId, text, { currentIdentity }),
+  );
   await refreshFromGateway({ requireShell: true });
 }
 
@@ -7970,11 +7969,10 @@ async function recallMessage(roomId, messageId) {
   if (!roomId || !messageId) {
     throw new Error("撤回消息需要提供房间和消息 ID");
   }
-  await postGatewayJson("/v1/shell/message/recall", {
-    room_id: roomId,
-    message_id: messageId,
-    actor: currentIdentity(),
-  });
+  await postGatewayJson(
+    "/v1/shell/message/recall",
+    recallMessagePayloadForState(roomId, messageId, { currentIdentity }),
+  );
   await refreshFromGateway({ requireShell: true });
 }
 

@@ -33,7 +33,8 @@ Last updated: 2026-07-07
 | --- | --- | --- |
 | userDetailCard 投影下沉 | 已完成 | commit 22d60b9：6 内联函数 → shell-user-detail-card.js *ForState 注入式纯函数，+15 单测，app.js -65 行 |
 | conversationCallout 文案下沉 | 已完成 | commit ef93132：3 内联模型 → shell-conversation-callout.js *ForState，+10 单测，app.js -53 行 |
-| app.js 累计 | 9342→9224 | 两轮减债 -118 行；npm test 全绿（1185 unit + layout + realness） |
+| 消息动作 payload 下沉 | 已完成 | gatewayMessagePayload/editMessage/recallMessage payload → shell-message-action-payload.js *ForState，+5 单测，app.js -2 行 |
+| app.js 累计 | 9342→9222 | 三轮减债 -120 行；npm test 1215 全绿（unit + layout + realness） |
 | 交付完整性 | 已完成 | README 进度章节更新到 7-07（Gateway 274/Web 1185）；CHANGELOG.md 创建；CI 覆盖三端确认 |
 | 端到端真实 smoke | 已通过 | `SKIP_BUILD=1 node scripts/smoke-web-dual-browser.mjs`：真实 gateway+双浏览器验证消息发送/编辑/撤回/失败重发闭环（503 注入重发测试通过） |
 
