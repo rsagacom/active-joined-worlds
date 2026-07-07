@@ -1,6 +1,44 @@
 # lobster-chat Active Work Queue
 
-Last updated: 2026-06-28
+Last updated: 2026-07-07
+
+## 2026-07-07 进度收口: 6-26~28 WIP 提交 + 继续减债
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 6-26~28 WIP 提交 | 已完成 | commit 298758e：私宅访问确权+好友关系流+前端纯状态下沉（35 文件 +3628/-284），此前停留工作树未提交 |
+| 测试基线复验 | 已通过 | Gateway 274 passed/0 fail/0 warn；web-shell 1185 tests/0 fail（unit+layout+realness） |
+| 主题实验隔离 | 已保留 | neon-pixel 主题/mockup/private-room-alt01 素材未接入页面，留作 untracked，不入主线提交 |
+
+### 当前真实进度
+
+| 模块 | 估算 | 说明 |
+| --- | ---: | --- |
+| P0 单城 IM 闭环 | 99% | 私宅主客访问确权+好友关系流已提交，剩余仅上线环境复验 |
+| P1 空间交互 | 82% | 场景编辑器/移动端仍有 polish 空间 |
+| P2 后台运维 | 93% | admin-ds 设备/场景/写操作护栏已接入 |
+| P3 技术债 | 74% | app.js 9342 行（目标<8700），最大剩余债 |
+| P4 TUI/CLI parity | 95% | 后续以 release smoke 复验为主 |
+| P5 跨城/加密 | 15% | 后置 |
+
+### 下一步
+
+继续 app.js TDD 减债（9342→<8700）：优先抽 userDetailCard 投影纯模型、renderRoomStagePortrait 内联计算、shellMode 视图状态等低风险纯函数，每次配套 node --test。
+
+## 2026-07-07 续: app.js TDD 减债推进
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| userDetailCard 投影下沉 | 已完成 | commit 22d60b9：6 内联函数 → shell-user-detail-card.js *ForState 注入式纯函数，+15 单测，app.js -65 行 |
+| conversationCallout 文案下沉 | 已完成 | commit ef93132：3 内联模型 → shell-conversation-callout.js *ForState，+10 单测，app.js -53 行 |
+| app.js 累计 | 9342→9224 | 两轮减债 -118 行；npm test 全绿（1185 unit + layout + realness） |
+| 交付完整性 | 已完成 | README 进度章节更新到 7-07（Gateway 274/Web 1185）；CHANGELOG.md 创建；CI 覆盖三端确认 |
+
+### 下一步
+
+剩余 app.js 候选：消息动作 payload/guard（小）、shellMode 视图状态文案（小）、Quick-action 读取器（大但循环依赖复杂，需谨慎评估）。app.js 大量剩余是 DOM 编排+全局状态管理，纯函数拆分边际递减；P3 目标 <8700 行在 6-26~28 新增私宅/好友功能后需重新评估合理性。建议转向端到端 smoke 复验与上线环境真实可用性验证（P0 最后一公里）。
 
 ## 2026-06-28 P3 技术债推进: 直聊打开请求状态纯模型下沉
 

@@ -112,30 +112,31 @@ BASE_URL=https://<node>.<tailnet>.ts.net ./scripts/smoke-public-ingress.sh
 - 保持会话上下文可见：输入区下方会提示同步状态、共建记忆和访客提醒；网关慢时会先显示本地待同步消息。
 
 
-## 📊 当前开发进度 (2026-06-06)
+## 📊 当前开发进度 (2026-07-07)
 
 | 模块 | 测试数 | Clippy | 状态 |
 |------|--------|--------|------|
-| Gateway (Rust) | 232 | ✅ | 97 路由, 设备管理, 场景权限, 审核持久化 |
-| TUI (Rust/ratatui) | 218 | ✅ | 用户端/城主端/世界广场/私聊终端 |
-| CLI (Rust) | 42 | ✅ | 14 子命令, 集成测试 |
-| H5 Web Shell (JS) | 731 | — | 6 页面注册, 场景交互, admin-ds 10 模块 |
+| Gateway (Rust) | 274 | ✅ | 私宅访问确权+好友关系流, 设备管理, 场景权限, 审核持久化, 38+ HTTP 端点 |
+| TUI (Rust/ratatui) | 225 | ✅ | 用户端/城主端/世界广场/私聊终端 |
+| CLI (Rust) | 50 | ✅ | login/nickname/directory/snapshot/moderate/admin 命令 |
+| H5 Web Shell (JS) | 1185 | — | 7 页面, 场景交互, admin-ds 写操作护栏, 角色卡/导引纯模型下沉 |
 | crypto-mls | 20 | ✅ | AES-256-GCM + HKDF 前向安全 |
 | ai-sidecar | 7 | ✅ | HTTP AI 助手 + 流式 |
 | chat-core | 20 | ✅ | 合同定义, SceneImageLayer day/night |
 | chat-storage | 17 | ✅ | 文件存储, 原子写 |
-| **总计** | **~1,290** | **零警告** | 全模块通过 |
+| **总计** | **~1,828** | **零警告** | 全模块通过 |
 
-最近更新：
-- 🔐 crypto-mls: 骨架→AES-256-GCM 真加密 + 公钥交换
-- 🤖 ai-sidecar: trait→HTTP AI 助手实现
-- 🖥️ admin-ds: 审计日志 loading/error 状态, 设备管理 UI
-- 🎨 CSS: tokens 提取, admin 专属规则分离
-- 🧪 CLI: 31→42 测试, Gateway 集成覆盖
-- 🔧 工作区 clippy 零警告
+最近更新（6-26 ~ 7-07）：
+- 🏠 私宅主客访问确权：registered_all/friends_only 策略 + 房主确权端点 + 防消息泄漏
+- 🤝 好友关系流：request/accept 两步流 + 居民目录按 viewer 投影 relationship_state
+- 🔐 注册登录共享接线：shell-auth-standalone.js 统一 world-square/admin-ds OTP 流程
+- 🛡️ admin-ds 写操作护栏：9 处 .then 假成功态修复 + 设备/场景/邀请码真实端点闭环
+- 📉 app.js 减债：9694→9224，新增 shell-user-detail-card/shell-conversation-callout 等 6 个纯模型模块
+- 🎨 美术护栏：day 资产去蜡黄 + 热点层透明化 + CSS 拆分防回归
 
 完整审计: [docs/TECH_AUDIT_REPORT_20260604.md](docs/TECH_AUDIT_REPORT_20260604.md)
 开发蓝图: [docs/DEVELOPMENT_BLUEPRINT.md](docs/DEVELOPMENT_BLUEPRINT.md)
+工作队列: [docs/ACTIVE_WORK_QUEUE.md](docs/ACTIVE_WORK_QUEUE.md)
 
 ## Product direction
 
