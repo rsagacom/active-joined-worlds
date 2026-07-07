@@ -174,3 +174,53 @@
 4. 昼夜切换：`body[data-time-of-day]` + 三个 html 内联脚本 + pixel-map.css/world-entry.css/world-square.css 切 PNG + app.js 切运行时 URL，**不要**用 `mix-blend-mode: screen` 或半透明暖叠加伪造日光。
 5. 热点 `.scene-hotspot`：缩到原区域 1/4，所有状态边框 / 底色 / 阴影 / outline 全透明。详见 pixel-map.css / world-entry.css / world-square.css 末尾的"2026-06-14 热点层透明化"段。
 6. 测试锁定：`apps/lobster-web-shell/test/shell-pages-static.test.mjs` 钉住了 day 资产路径与"禁 mix-blend-mode screen"。改资产或 CSS 后先跑这个用例。
+
+## 十一、开发进度日志（2026-07-07）
+
+### 本轮提交（6 commit，分支 `refactor/web-shell-module-extraction`）
+
+| commit | 类型 | 内容 |
+|--------|------|------|
+| `298758e` | feat(im) | 提交 6-26~28 未提交 WIP：私宅主客访问确权+好友关系流+注册登录+admin-ds 护栏+P3 下沉（35 文件 +3628/-284） |
+| `22d60b9` | refactor | userDetailCard 投影 6 函数 → `shell-user-detail-card.js`（*ForState 注入式，+15 单测，app.js -65 行） |
+| `ef93132` | refactor | conversationCallout 文案 4 函数 → `shell-conversation-callout.js`（+10 单测，app.js -53 行） |
+| `8ae9642` | docs | README 进度更新到 7-07 + CHANGELOG 创建 + CI 覆盖三端确认 |
+| — | docs | 端到端双浏览器 smoke 验证记录 |
+| `3db3793` | refactor | 消息动作 payload → `shell-message-action-payload.js`（+5 单测） |
+
+### 验证基线（全绿零警告）
+
+- Gateway: **274 tests / 0 fail / 0 warning**
+- Web Shell: **1215 tests / 0 fail**（unit + layout + realness）
+- 端到端 smoke: `SKIP_BUILD=1 node scripts/smoke-web-dual-browser.mjs` 通过（真实 gateway + 双浏览器消息发送/编辑/撤回/失败重发闭环，503 注入重发测试）
+- app.js: **9342 → 9222 行**（-120，新增 3 个纯模型模块 + 30 单测）
+
+### 真实进度（2026-07-07）
+
+| 模块 | 估算 | 说明 |
+|------|------:|------|
+| P0 单城 IM 闭环 | 99% | 私宅确权+好友流已提交+smoke 验证；剩余仅上线环境复验 |
+| P1 空间交互 | 82% | 场景编辑器 UX、移动端 polish 仍有空间 |
+| P2 后台运维 | 93% | admin-ds 写操作护栏完成，Gateway 端点齐全（invites/members/logs/devices） |
+| P3 技术债 | ~75% | app.js 三轮减债 9342→9222；`<8700` 目标在 6-26~28 新增私宅/好友功能后需重新评估合理性 |
+| P4 TUI/CLI parity | 95% | 后续以 release smoke 复验为主 |
+| P5 跨城/加密 | 15% | 后置（PRODUCT_CHARTER 延后） |
+
+### 关键发现：6-26~28 WIP 曾未提交
+
+进入时工作树遗留 6-26~28 三天密集开发的 3628 行 WIP（私宅访问确权+好友关系流+前端纯状态下沉），测试全绿却从未 commit。本轮首要动作是锁定这批 WIP（commit `298758e`），消除最大风险。codex 日记与 CC 转录显示 7 月精力在 WVI 等其他项目，IM 处于停摆状态。
+
+### 下一步候选（按优先级）
+
+1. **app.js 候选 2**：Quick-action 读取器（~130 行，最大减债杠杆）—— 循环依赖复杂（`resolveRoomQuickPreview` ↔ `latestStructuredQuickActionPreview`）、是 IM 交互核心，风险中-高，需谨慎逐步推进并一并迁移 `pendingEchoes` 系列避免循环引用
+2. **P1 空间交互 polish**：场景编辑器 UX、移动端触控、空态视觉
+3. **P5 跨城/MLS 加密**：后置
+
+剩余 app.js 候选 3/4/5（消息 payload 已做；房间状态/连接/同步文案、shellMode 视图状态文案）收益小（各 15-28 行）且多耦合运行时状态或 DOM，边际递减。
+
+### 未入主线的实验产物（保留 untracked）
+
+按 scope 收紧原则（ACTIVE-im [ACT-013]）未接入页面、不入主线提交：
+- neon-pixel 主题：`styles.theme-neon-pixel.css` / `docs/UI_DESIGN_THEME_NEON_PIXEL.md` / `docs/mockups/neon-pixel-*.png`
+- 私宅素材：`apps/lobster-web-shell/assets/pixel/private-room-alt01-*.png`
+- 临时：`.tmp/`、`apps/lobster-web-shell/output/`、`styles.world-square.css.tmp`
