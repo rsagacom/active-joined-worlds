@@ -275,6 +275,7 @@ import {
   workflowProfile,
 } from "./shell-room-profiles.js";
 import { userDetailCardProjectionForState } from "./shell-user-detail-card.js";
+import { conversationCalloutModelForState } from "./shell-conversation-callout.js";
 import {
   roleAllowsApproveJoin,
   roleAllowsCreatePublicRoom,
@@ -3671,70 +3672,16 @@ function updateConversationCalloutStageTitle(room) {
     : "房间内聊天主界面";
 }
 
-function conversationCalloutUserModel(room, caretaker) {
-  const roomCopy = room
-    ? `${roomThreadHeadline(room)} · ${roomAudienceLabel(room)}`
-    : "先从左侧点一个会话，房间里的消息流和输入区就会跟上。";
-  const caretakerCopy = caretaker
-    ? `${caretaker.name} 在线 · ${caretaker.auto_reply}`
-    : "OpenClaw 小狗管家会在房间里接住访客留言。";
-  const autoReply = caretaker?.auto_reply || "小狗会在房间里自动回复访客。";
-  const pendingVisitors = caretaker ? caretakerPendingCount(room) : 0;
-  const visitorNote = pendingVisitors > 0
-    ? `有 ${pendingVisitors} 条访客提醒在排队，先把当前房间聊顺。`
-    : "目前没有排队访客，继续像在房间里聊天即可。";
-  return {
-    variant: "user",
-    title: "房间内聊天主界面",
-    paragraphs: [
-      { text: roomCopy },
-      { text: caretakerCopy },
-      { text: `${autoReply} · ${visitorNote}`, className: "conversation-callout-note" },
-    ],
-  };
-}
-
-function conversationCalloutAdminModel(room) {
-  const roomCopy = room
-    ? `${roomThreadHeadline(room)} · ${roomAudienceLabel(room)} · ${roomRouteLabel(room)}`
-    : "先在左边选一个会话，右边的补充信息会跟着切换。";
-  const governanceNote = room
-    ? `${roomChatStatusSummary(room)} · ${roomQueueSummary(room)}`
-    : "左侧选功能分类，中间处理消息，右侧显示当前对象和工具。";
-  return {
-    variant: "admin",
-    title: "管理后台",
-    paragraphs: [
-      { text: roomCopy },
-      {
-        text: `左侧选功能分类，中间处理消息，右侧显示当前对象和工具 · ${governanceNote}`,
-        className: "conversation-callout-note",
-      },
-    ],
-  };
-}
-
-function conversationCalloutUnifiedModel(room) {
-  const roomCopy = room
-    ? roomThreadHeadline(room)
-    : "中间保留聊天，边上按顺序摆世界、城市、公告、安全和身份。";
-  const roomContext = room
-    ? roomContextSummary(room)
-    : "左侧入口按需展开即可，消息流始终是主位。";
-  return {
-    variant: "unified",
-    title: "城市外世界页",
-    paragraphs: [
-      { text: roomCopy },
-      { text: roomContext, className: "conversation-callout-note" },
-    ],
-  };
-}
-
 function conversationCalloutModel(room, caretaker) {
-  if (shellMode === "user") return conversationCalloutUserModel(room, caretaker);
-  if (shellMode === "admin") return conversationCalloutAdminModel(room);
-  return conversationCalloutUnifiedModel(room);
+  return conversationCalloutModelForState(room, caretaker, shellMode, {
+    roomThreadHeadline,
+    roomAudienceLabel,
+    roomRouteLabel,
+    roomChatStatusSummary,
+    roomQueueSummary,
+    roomContextSummary,
+    caretakerPendingCount,
+  });
 }
 
 function createConversationCalloutParagraphNode(paragraph) {

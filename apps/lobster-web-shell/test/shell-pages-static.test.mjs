@@ -4609,16 +4609,25 @@ test("chat detail room context sections are delegated out of renderChatDetailPan
 
 test("conversation callout model and DOM are delegated out of updateConversationCallout", async () => {
   const source = await readShellModule("app.js");
-  const userModel = sliceBetween(
+  const calloutModule = await readShellModule("shell-conversation-callout.js");
+  // 模型已下沉到 shell-conversation-callout.js
+  assert.match(calloutModule, /export function conversationCalloutModelForState/);
+  assert.match(calloutModule, /variant: "user"/);
+  assert.match(calloutModule, /caretakerPendingCount\(room\)/);
+  assert.match(calloutModule, /variant: "admin"/);
+  assert.match(calloutModule, /roomChatStatusSummary\(room\)/);
+  assert.match(source, /from "\.\/shell-conversation-callout\.js"/);
+  // app.js 的 conversationCalloutModel 是薄壳委托
+  const projectionShell = sliceBetween(
     source,
-    "function conversationCalloutUserModel(room, caretaker) {",
-    "function conversationCalloutAdminModel(room) {",
+    "function conversationCalloutModel(room, caretaker) {",
+    "function createConversationCalloutParagraphNode(paragraph) {",
   );
-  const adminModel = sliceBetween(
-    source,
-    "function conversationCalloutAdminModel(room) {",
-    "function conversationCalloutUnifiedModel(room) {",
-  );
+  assert.match(projectionShell, /return conversationCalloutModelForState\(room, caretaker, shellMode, \{/);
+  // app.js 不再内联 user/admin/unified 模型函数（已下沉到模块）
+  assert.doesNotMatch(source, /function conversationCalloutUserModel\(/);
+  assert.doesNotMatch(source, /function conversationCalloutAdminModel\(/);
+  assert.doesNotMatch(source, /function conversationCalloutUnifiedModel\(/);
   const renderer = sliceBetween(
     source,
     "function renderConversationCalloutContent(model) {",
@@ -4629,11 +4638,6 @@ test("conversation callout model and DOM are delegated out of updateConversation
     "function updateConversationCallout() {",
     "function syncRoomStageCanvas(room) {",
   );
-
-  assert.match(userModel, /variant: "user"/);
-  assert.match(userModel, /caretakerPendingCount\(room\)/);
-  assert.match(adminModel, /variant: "admin"/);
-  assert.match(adminModel, /roomChatStatusSummary\(room\)/);
   assert.match(renderer, /conversationCalloutEl\.dataset\.variant = model\.variant/);
   assert.match(renderer, /clearChildren\(conversationCalloutEl\)/);
   assert.match(renderer, /document\.createElement\("strong"\)/);

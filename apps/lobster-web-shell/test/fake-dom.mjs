@@ -44,6 +44,7 @@ export const APP_LOCAL_IMPORT_PATHS = Object.freeze([
   "./pretext-stage.js",
   "./shell-room-rail.js",
   "./shell-user-detail-card.js",
+  "./shell-conversation-callout.js",
 ]);
 
 function appLocalImportUrlMap() {
