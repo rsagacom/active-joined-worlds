@@ -49,9 +49,11 @@ use crate::{
         handle_post_admin_moderate_message, handle_post_admin_revoke_invite,
         handle_post_admin_scene, handle_post_admin_set_nickname, handle_post_admin_unban_resident,
         handle_post_admin_unfreeze_room, handle_post_assign_permission_group, handle_post_cli_send,
-        handle_post_create_permission_group, handle_post_direct_open, handle_post_provider_connect,
-        handle_post_provider_disconnect, handle_post_scene_validate, handle_post_shell_mark_read,
-        handle_post_shell_message, handle_post_shell_message_edit,
+        handle_post_create_permission_group, handle_post_direct_open, handle_post_personal_room,
+        handle_post_personal_room_access_policy, handle_post_provider_connect,
+        handle_post_provider_disconnect, handle_post_resident_relationship_accept,
+        handle_post_resident_relationship_request, handle_post_scene_validate,
+        handle_post_shell_mark_read, handle_post_shell_message, handle_post_shell_message_edit,
         handle_post_shell_message_recall, handle_post_shell_presence, handle_post_shell_scene,
         handle_post_shell_set_nickname, handle_post_waku, handle_post_world_mirror_sources,
     },
@@ -207,6 +209,18 @@ pub(crate) fn dispatch_http_request(
         (Method::Get, "/v1/cli/rooms") => handle_get_cli_rooms(runtime, &query_params),
         (Method::Get, "/v1/cli/tail") => handle_get_cli_tail(runtime, &query_params),
         (Method::Post, "/v1/direct/open") => handle_post_direct_open(runtime, notifier, request),
+        (Method::Post, "/v1/personal-room") => {
+            handle_post_personal_room(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/personal-room/access-policy") => {
+            handle_post_personal_room_access_policy(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/resident-relationships/request") => {
+            handle_post_resident_relationship_request(runtime, notifier, request)
+        }
+        (Method::Post, "/v1/resident-relationships/accept") => {
+            handle_post_resident_relationship_accept(runtime, notifier, request)
+        }
         (Method::Post, "/v1/cities") => handle_post_create_city(runtime, notifier, request),
         (Method::Post, "/v1/cities/join") => handle_post_join_city(runtime, notifier, request),
         (Method::Post, "/v1/cities/approve") => {

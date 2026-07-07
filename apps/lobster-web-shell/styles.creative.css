@@ -738,6 +738,66 @@ body::before {
   align-items: center;
 }
 
+body[data-shell-variant="creative-terminal"] .creative-resident-list .resident-relationship-action {
+  width: calc(100% - 10px);
+  min-height: 34px;
+  margin: -2px 5px 6px;
+  padding: 5px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(120, 191, 209, 0.44);
+  background: rgba(8, 16, 19, 0.72);
+  color: #a8edff;
+  box-shadow: none;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+body[data-shell-variant="creative-terminal"] .resident-access-status {
+  display: block;
+  margin: 7px 5px 8px;
+  padding: 7px 9px;
+  border: 1px solid rgba(120, 191, 209, 0.34);
+  background: rgba(6, 13, 17, 0.62);
+  color: rgba(202, 239, 246, 0.82);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+body[data-shell-variant="creative-terminal"] .resident-access-status:empty {
+  display: none;
+}
+
+body[data-shell-variant="creative-terminal"] .governance-status.resident-room-access-note {
+  border-color: rgba(120, 191, 209, 0.52);
+}
+
+body[data-shell-variant="creative-terminal"] .governance-status.resident-room-access-note.is-locked {
+  border-color: rgba(238, 96, 96, 0.56);
+  color: rgba(255, 204, 204, 0.9);
+}
+
+body[data-shell-variant="creative-terminal"] .governance-status.resident-room-access-note.is-pending {
+  border-color: rgba(241, 201, 120, 0.52);
+  color: rgba(255, 244, 201, 0.86);
+}
+
+body[data-shell-variant="creative-terminal"] .governance-status.resident-room-access-note.is-actionable {
+  border-color: rgba(126, 253, 199, 0.54);
+  color: rgba(199, 255, 232, 0.9);
+}
+
+body[data-shell-variant="creative-terminal"] .creative-resident-list .resident-relationship-action.is-pending {
+  border-color: rgba(241, 201, 120, 0.42);
+  color: rgba(255, 244, 201, 0.74);
+}
+
+body[data-shell-variant="creative-terminal"] .creative-resident-list .resident-relationship-action.is-friends {
+  border-color: rgba(126, 253, 199, 0.44);
+  color: rgba(126, 253, 199, 0.78);
+}
+
 .resident-status-dot {
   display: inline-block;
   width: 7px;
@@ -1901,4 +1961,61 @@ body[data-room-ownership="visitor"] .creative-hud-ownership-badge--visitor {
   color: #fff4c9;
   background: rgba(241, 201, 120, 0.18);
   border: 1px solid rgba(241, 201, 120, 0.3);
+}
+
+.personal-room-policy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 3px;
+  border: 1px solid rgba(241, 201, 120, 0.28);
+  background: rgba(17, 12, 9, 0.72);
+  box-shadow: inset 0 0 0 1px rgba(255, 242, 194, 0.06);
+}
+
+.personal-room-policy[hidden] {
+  display: none !important;
+}
+
+.personal-room-policy-label,
+.personal-room-policy-status {
+  padding: 0 5px;
+  color: rgba(255, 244, 201, 0.76);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.personal-room-policy-status {
+  min-width: 28px;
+  color: rgba(126, 253, 199, 0.86);
+}
+
+.personal-room-policy-status.is-error {
+  color: #ffb18f;
+}
+
+.personal-room-policy-option {
+  min-width: 42px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(241, 201, 120, 0.22);
+  background: rgba(255, 242, 194, 0.07);
+  color: rgba(255, 244, 201, 0.86);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.personal-room-policy-option[aria-pressed="true"] {
+  color: #1a1208;
+  background: #f1c978;
+  border-color: rgba(255, 242, 194, 0.72);
+}
+
+.personal-room-policy-option:disabled {
+  cursor: default;
+  opacity: 0.52;
 }

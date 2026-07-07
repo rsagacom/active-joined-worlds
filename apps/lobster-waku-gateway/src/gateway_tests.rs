@@ -1229,6 +1229,582 @@ fn shell_state_for_viewer_filters_private_threads_and_labels_counterpart() {
 }
 
 #[test]
+fn personal_room_defaults_to_owner_only_shell_visibility() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+
+    register_resident(&mut runtime, "alice");
+    register_resident(&mut runtime, "bob");
+    runtime
+        .open_personal_room(PersonalRoomRequest {
+            resident_id: "alice".into(),
+        })
+        .expect("open alice personal room");
+
+    let owner = IdentityId("alice".into());
+    let owner_state = runtime.shell_state_for_viewer(Some(&owner));
+    let owner_room = owner_state
+        .rooms
+        .iter()
+        .find(|room| room.id == "home:alice")
+        .expect("owner should see own personal room");
+    assert_eq!(owner_room.owner_resident_id.as_deref(), Some("alice"));
+    assert_eq!(
+        owner_room.personal_room_access_policy,
+        Some(PersonalRoomAccessPolicy::FriendsOnly),
+        "owner shell state should expose the current personal room access policy"
+    );
+
+    let visitor = IdentityId("bob".into());
+    let visitor_state = runtime.shell_state_for_viewer(Some(&visitor));
+    assert!(
+        visitor_state
+            .rooms
+            .iter()
+            .all(|room| room.id != "home:alice"),
+        "registered visitors must not see another resident's personal room without owner policy"
+    );
+
+    let anonymous_state = runtime.shell_state_for_viewer(None);
+    assert!(
+        anonymous_state
+            .rooms
+            .iter()
+            .all(|room| room.id != "home:alice"),
+        "anonymous shell state must not expose personal rooms"
+    );
+}
+
+#[test]
+fn personal_room_requires_registered_owner() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+
+    let err = runtime
+        .open_personal_room(PersonalRoomRequest {
+            resident_id: "unregistered-owner".into(),
+        })
+        .expect_err("unregistered owner must not create a personal room");
+    assert!(
+        err.contains("registered"),
+        "error should mention registration, got {err}"
+    );
+
+    register_resident(&mut runtime, "registered-owner");
+    let response = runtime
+        .open_personal_room(PersonalRoomRequest {
+            resident_id: "registered-owner".into(),
+        })
+        .expect("registered owner can create a personal room");
+    assert_eq!(response.room_id, "home:registered-owner");
+}
+
+#[test]
+fn personal_room_http_route_requires_matching_bearer_owner() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+
+    register_resident(&mut runtime, "alice");
+    register_resident(&mut runtime, "bob");
+    runtime
+        .join_city(JoinCityRequest {
+            city: "core-harbor".into(),
+            resident_id: "alice".into(),
+        })
+        .expect("alice joins default city");
+    runtime
+        .join_city(JoinCityRequest {
+            city: "core-harbor".into(),
+            resident_id: "bob".into(),
+        })
+        .expect("bob joins default city");
+    let alice = IdentityId("alice".into());
+    let bob = IdentityId("bob".into());
+    let (alice_token, _) =
+        runtime.issue_auth_session(&alice, "test-personal-room-alice", GatewayRuntime::now_ms());
+    let (bob_token, _) =
+        runtime.issue_auth_session(&bob, "test-personal-room-bob", GatewayRuntime::now_ms());
+    let server = start_local_gateway_http_server(runtime);
+    let body = serde_json::json!({ "resident_id": "alice" });
+
+    let (missing_status, _missing) =
+        http_json("POST", &server.base_url, "/v1/personal-room", Some(&body));
+    assert_eq!(missing_status, 401);
+
+    let bob_auth = format!("Bearer {bob_token}");
+    let (mismatch_status, mismatch) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/personal-room",
+        &[("Authorization", bob_auth.as_str())],
+        Some(&body),
+    );
+    assert_eq!(mismatch_status, 401);
+    assert!(
+        mismatch["Error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("does not match authenticated session")
+    );
+
+    let alice_auth = format!("Bearer {alice_token}");
+    let (owner_status, owner_response) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/personal-room",
+        &[("Authorization", alice_auth.as_str())],
+        Some(&body),
+    );
+    assert_eq!(owner_status, 200);
+    assert_eq!(owner_response["room_id"], "home:alice");
+}
+
+#[test]
+fn personal_room_access_policy_http_route_requires_matching_bearer_owner() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+
+    register_resident(&mut runtime, "alice");
+    register_resident(&mut runtime, "bob");
+    runtime
+        .open_personal_room(PersonalRoomRequest {
+            resident_id: "alice".into(),
+        })
+        .expect("open alice personal room");
+    let alice = IdentityId("alice".into());
+    let bob = IdentityId("bob".into());
+    let (alice_token, _) =
+        runtime.issue_auth_session(&alice, "test-access-policy-alice", GatewayRuntime::now_ms());
+    let (bob_token, _) =
+        runtime.issue_auth_session(&bob, "test-access-policy-bob", GatewayRuntime::now_ms());
+    let server = start_local_gateway_http_server(runtime);
+    let body = serde_json::json!({
+        "resident_id": "alice",
+        "policy": "registered_all"
+    });
+
+    let (missing_status, _missing) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/personal-room/access-policy",
+        Some(&body),
+    );
+    assert_eq!(missing_status, 401);
+
+    let bob_auth = format!("Bearer {bob_token}");
+    let (mismatch_status, mismatch) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/personal-room/access-policy",
+        &[("Authorization", bob_auth.as_str())],
+        Some(&body),
+    );
+    assert_eq!(mismatch_status, 401);
+    assert!(
+        mismatch["Error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("does not match authenticated session")
+    );
+
+    let alice_auth = format!("Bearer {alice_token}");
+    let (owner_status, owner_response) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/personal-room/access-policy",
+        &[("Authorization", alice_auth.as_str())],
+        Some(&body),
+    );
+    assert_eq!(owner_status, 200);
+    assert_eq!(owner_response["resident_id"], "alice");
+    assert_eq!(owner_response["policy"], "registered_all");
+
+    let (bob_state_status, bob_state) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/shell/state?resident_id=bob",
+        None,
+    );
+    assert_eq!(bob_state_status, 200);
+    assert!(
+        bob_state["rooms"]
+            .as_array()
+            .expect("rooms")
+            .iter()
+            .any(|room| room["id"] == "home:alice"),
+        "registered_all policy set through HTTP should expose the personal room scene"
+    );
+}
+
+#[test]
+fn personal_room_registered_all_allows_registered_scene_without_message_history() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+
+    register_resident(&mut runtime, "alice");
+    register_resident(&mut runtime, "bob");
+    runtime
+        .open_personal_room(PersonalRoomRequest {
+            resident_id: "alice".into(),
+        })
+        .expect("open alice personal room");
+    runtime
+        .append_shell_message(ShellMessageRequest {
+            room_id: "home:alice".into(),
+            sender: "alice".into(),
+            text: "owner private note".into(),
+            device_id: Some("browser-a".into()),
+            language_tag: Some("zh-CN".into()),
+            reply_to_message_id: None,
+        })
+        .expect("owner writes private room note");
+
+    let bob = IdentityId("bob".into());
+    let hidden_state = runtime.shell_state_for_viewer(Some(&bob));
+    assert!(
+        hidden_state
+            .rooms
+            .iter()
+            .all(|room| room.id != "home:alice"),
+        "default friends_only policy should not expose the room before the owner opts in"
+    );
+
+    runtime
+        .set_personal_room_access_policy(PersonalRoomAccessPolicyRequest {
+            resident_id: "alice".into(),
+            policy: PersonalRoomAccessPolicy::RegisteredAll,
+        })
+        .expect("owner enables registered_all access");
+
+    let visible_state = runtime.shell_state_for_viewer(Some(&bob));
+    let room = visible_state
+        .rooms
+        .iter()
+        .find(|room| room.id == "home:alice")
+        .expect("registered_all should expose the personal room scene to registered visitors");
+    assert_eq!(room.owner_resident_id.as_deref(), Some("alice"));
+    assert_eq!(
+        room.personal_room_access_policy,
+        Some(PersonalRoomAccessPolicy::RegisteredAll)
+    );
+    assert!(
+        room.messages.is_empty(),
+        "registered_all scene access must not expose the owner's private room message history"
+    );
+}
+
+#[test]
+fn personal_room_friends_only_allows_accepted_friend_scene_without_message_history() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+
+    register_resident(&mut runtime, "alice");
+    register_resident(&mut runtime, "bob");
+    runtime
+        .open_personal_room(PersonalRoomRequest {
+            resident_id: "alice".into(),
+        })
+        .expect("open alice personal room");
+    runtime
+        .append_shell_message(ShellMessageRequest {
+            room_id: "home:alice".into(),
+            sender: "alice".into(),
+            text: "owner private note".into(),
+            device_id: Some("browser-a".into()),
+            language_tag: Some("zh-CN".into()),
+            reply_to_message_id: None,
+        })
+        .expect("owner writes private room note");
+
+    let bob = IdentityId("bob".into());
+    runtime
+        .request_resident_friendship(ResidentRelationshipRequest {
+            actor_id: "bob".into(),
+            peer_id: "alice".into(),
+        })
+        .expect("bob requests alice friendship");
+    assert!(
+        runtime
+            .shell_state_for_viewer(Some(&bob))
+            .rooms
+            .iter()
+            .all(|room| room.id != "home:alice"),
+        "pending friendship request must not unlock a friends_only personal room"
+    );
+
+    runtime
+        .accept_resident_friendship(ResidentRelationshipRequest {
+            actor_id: "alice".into(),
+            peer_id: "bob".into(),
+        })
+        .expect("alice accepts bob friendship");
+    let room = runtime
+        .shell_state_for_viewer(Some(&bob))
+        .rooms
+        .into_iter()
+        .find(|room| room.id == "home:alice")
+        .expect("accepted friends should see the friends_only personal room scene");
+    assert_eq!(room.owner_resident_id.as_deref(), Some("alice"));
+    assert_eq!(
+        room.personal_room_access_policy,
+        Some(PersonalRoomAccessPolicy::FriendsOnly)
+    );
+    assert!(
+        room.messages.is_empty(),
+        "friends_only scene access must not expose the owner's private room message history"
+    );
+}
+
+#[test]
+fn resident_relationship_http_routes_require_matching_bearer_actor_and_unlock_friends_only() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+
+    register_resident(&mut runtime, "alice");
+    register_resident(&mut runtime, "bob");
+    runtime
+        .open_personal_room(PersonalRoomRequest {
+            resident_id: "alice".into(),
+        })
+        .expect("open alice personal room");
+    let alice = IdentityId("alice".into());
+    let bob = IdentityId("bob".into());
+    let (alice_token, _) =
+        runtime.issue_auth_session(&alice, "test-relationship-alice", GatewayRuntime::now_ms());
+    let (bob_token, _) =
+        runtime.issue_auth_session(&bob, "test-relationship-bob", GatewayRuntime::now_ms());
+    let server = start_local_gateway_http_server(runtime);
+    let request_body = serde_json::json!({
+        "actor_id": "bob",
+        "peer_id": "alice"
+    });
+
+    let (missing_status, _missing) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/resident-relationships/request",
+        Some(&request_body),
+    );
+    assert_eq!(missing_status, 401);
+
+    let alice_auth = format!("Bearer {alice_token}");
+    let (mismatch_status, mismatch) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/resident-relationships/request",
+        &[("Authorization", alice_auth.as_str())],
+        Some(&request_body),
+    );
+    assert_eq!(mismatch_status, 401);
+    assert!(
+        mismatch["Error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("does not match authenticated session")
+    );
+
+    let bob_auth = format!("Bearer {bob_token}");
+    let (request_status, request_response) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/resident-relationships/request",
+        &[("Authorization", bob_auth.as_str())],
+        Some(&request_body),
+    );
+    assert_eq!(request_status, 200);
+    assert_eq!(request_response["state"], "pending");
+
+    let (pending_status, pending_state) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/shell/state?resident_id=bob",
+        None,
+    );
+    assert_eq!(pending_status, 200);
+    assert!(
+        pending_state["rooms"]
+            .as_array()
+            .expect("rooms")
+            .iter()
+            .all(|room| room["id"] != "home:alice"),
+        "pending relationship must not unlock friends_only personal room"
+    );
+
+    let accept_body = serde_json::json!({
+        "actor_id": "alice",
+        "peer_id": "bob"
+    });
+    let (accept_status, accept_response) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/resident-relationships/accept",
+        &[("Authorization", alice_auth.as_str())],
+        Some(&accept_body),
+    );
+    assert_eq!(accept_status, 200);
+    assert_eq!(accept_response["state"], "friends");
+
+    let (visible_status, visible_state) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/shell/state?resident_id=bob",
+        None,
+    );
+    assert_eq!(visible_status, 200);
+    assert!(
+        visible_state["rooms"]
+            .as_array()
+            .expect("rooms")
+            .iter()
+            .any(|room| room["id"] == "home:alice"),
+        "accepted friends should see friends_only personal room scene through HTTP"
+    );
+}
+
+#[test]
+fn residents_endpoint_projects_relationship_state_for_viewer() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+
+    register_resident(&mut runtime, "alice");
+    register_resident(&mut runtime, "bob");
+    runtime
+        .join_city(JoinCityRequest {
+            city: "core-harbor".into(),
+            resident_id: "alice".into(),
+        })
+        .expect("alice joins default city");
+    runtime
+        .join_city(JoinCityRequest {
+            city: "core-harbor".into(),
+            resident_id: "bob".into(),
+        })
+        .expect("bob joins default city");
+    let alice = IdentityId("alice".into());
+    let bob = IdentityId("bob".into());
+    let (alice_token, _) = runtime.issue_auth_session(
+        &alice,
+        "test-resident-projection-alice",
+        GatewayRuntime::now_ms(),
+    );
+    let (bob_token, _) = runtime.issue_auth_session(
+        &bob,
+        "test-resident-projection-bob",
+        GatewayRuntime::now_ms(),
+    );
+    let server = start_local_gateway_http_server(runtime);
+
+    let bob_auth = format!("Bearer {bob_token}");
+    let request_body = serde_json::json!({
+        "actor_id": "bob",
+        "peer_id": "alice"
+    });
+    let (request_status, _request_response) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/resident-relationships/request",
+        &[("Authorization", bob_auth.as_str())],
+        Some(&request_body),
+    );
+    assert_eq!(request_status, 200);
+
+    let (alice_view_status, alice_view) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/residents?resident_id=alice",
+        None,
+    );
+    assert_eq!(alice_view_status, 200);
+    let bob_row = alice_view
+        .as_array()
+        .expect("residents")
+        .iter()
+        .find(|row| row["resident_id"] == "bob")
+        .expect("bob row");
+    assert_eq!(bob_row["relationship_state"], "pending");
+    assert_eq!(bob_row["relationship_requested_by"], "bob");
+
+    let alice_auth = format!("Bearer {alice_token}");
+    let accept_body = serde_json::json!({
+        "actor_id": "alice",
+        "peer_id": "bob"
+    });
+    let (accept_status, _accept_response) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/resident-relationships/accept",
+        &[("Authorization", alice_auth.as_str())],
+        Some(&accept_body),
+    );
+    assert_eq!(accept_status, 200);
+
+    let (bob_view_status, bob_view) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/residents?resident_id=bob",
+        None,
+    );
+    assert_eq!(bob_view_status, 200);
+    let alice_row = bob_view
+        .as_array()
+        .expect("residents")
+        .iter()
+        .find(|row| row["resident_id"] == "alice")
+        .expect("alice row");
+    assert_eq!(alice_row["relationship_state"], "friends");
+    assert_eq!(alice_row["relationship_requested_by"], "bob");
+}
+
+#[test]
+fn resident_relationships_persist_across_restart() {
+    let temp = tempdir().expect("temp dir");
+    {
+        let mut runtime =
+            GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+        register_resident(&mut runtime, "alice");
+        register_resident(&mut runtime, "bob");
+        runtime
+            .request_resident_friendship(ResidentRelationshipRequest {
+                actor_id: "bob".into(),
+                peer_id: "alice".into(),
+            })
+            .expect("request relationship");
+        runtime
+            .accept_resident_friendship(ResidentRelationshipRequest {
+                actor_id: "alice".into(),
+                peer_id: "bob".into(),
+            })
+            .expect("accept relationship");
+    }
+
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    assert!(runtime.residents_are_friends(&IdentityId("alice".into()), &IdentityId("bob".into())));
+}
+
+#[test]
+fn personal_room_access_policy_persists_across_restart() {
+    let temp = tempdir().expect("temp dir");
+    {
+        let mut runtime =
+            GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+        register_resident(&mut runtime, "alice");
+        runtime
+            .set_personal_room_access_policy(PersonalRoomAccessPolicyRequest {
+                resident_id: "alice".into(),
+                policy: PersonalRoomAccessPolicy::RegisteredAll,
+            })
+            .expect("set access policy");
+    }
+
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let alice = IdentityId("alice".into());
+    assert_eq!(
+        runtime.personal_room_access_policy(&alice),
+        PersonalRoomAccessPolicy::RegisteredAll
+    );
+}
+
+#[test]
 fn shell_state_formats_unanchored_direct_threads_without_raw_dm_fallback() {
     let temp = tempdir().expect("temp dir");
     let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");

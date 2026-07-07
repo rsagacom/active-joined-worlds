@@ -231,6 +231,35 @@ impl GatewayRuntime {
         Ok(group)
     }
 
+    /// Ensure a personal room (1-participant Direct conversation) exists for `resident`.
+    /// Reuses ensure_direct_conversation with a single participant; open_direct_session
+    /// forbids 1-participant DMs, so personal rooms need this dedicated path.
+    pub(crate) fn ensure_personal_room(
+        &mut self,
+        resident: &IdentityId,
+    ) -> Result<ConversationId, String> {
+        let conversation_id = ConversationId(format!("home:{}", resident.0));
+        self.ensure_direct_conversation(&conversation_id, &[resident.clone()])?;
+        Ok(conversation_id)
+    }
+
+    pub(crate) fn open_personal_room(
+        &mut self,
+        request: PersonalRoomRequest,
+    ) -> Result<PersonalRoomResponse, String> {
+        let resident = IdentityId(Self::normalize_direct_resident_id(request.resident_id)?);
+        if !self.resident_has_authenticated_profile(&resident) {
+            return Err(format!(
+                "personal room owner {} must be a registered resident",
+                resident.0
+            ));
+        }
+        let conversation_id = self.ensure_personal_room(&resident)?;
+        Ok(PersonalRoomResponse {
+            room_id: conversation_id.0,
+        })
+    }
+
     fn normalize_direct_resident_id(raw: String) -> Result<String, String> {
         let resident_id = raw.trim().to_string();
         if resident_id.is_empty() || resident_id == "访客" {

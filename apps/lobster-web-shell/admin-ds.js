@@ -1951,6 +1951,25 @@
       el('label', { style: 'display:block;margin-bottom:4px;font-size:12px;color:var(--ds-text-secondary);' }, '场景预设'),
       presetSelect
     ));
+    var dayUrlInput = el('input', {
+      type: 'text',
+      class: 'ds-input',
+      placeholder: '白天背景图 URL（可选）',
+      value: (il && il.day_image_url) ? il.day_image_url : '',
+      style: 'width:100%;max-width:520px;margin-top:8px;'
+    });
+    var nightUrlInput = el('input', {
+      type: 'text',
+      class: 'ds-input',
+      placeholder: '夜晚背景图 URL（可选）',
+      value: (il && il.night_image_url) ? il.night_image_url : '',
+      style: 'width:100%;max-width:520px;margin-top:6px;'
+    });
+    imgSection.appendChild(el('div', { style: 'padding:0 1rem 0.75rem;' },
+      el('label', { style: 'display:block;margin-bottom:4px;font-size:12px;color:var(--ds-text-secondary);' }, '自定义背景（白天+夜晚必须成对填写）'),
+      dayUrlInput,
+      nightUrlInput
+    ));
     if (il && il.layer_id) {
       imgSection.appendChild(el('div', { style: 'padding:0 1rem 0.75rem;font-size:11px;color:var(--ds-text-muted);' }, '图层ID: ' + il.layer_id));
     }
@@ -2080,9 +2099,23 @@
       }
 
       try {
+        var dayUrl = dayUrlInput.value.trim();
+        var nightUrl = nightUrlInput.value.trim();
+        var ilPayload = null;
+        if (selectedPreset || dayUrl || nightUrl) {
+          ilPayload = {
+            layer_id: 'admin-scene-' + Date.now(),
+            preset: selectedPreset || 'custom',
+            asset_hint: selectedPreset || 'custom',
+            aspect_ratio_permyriad: 5625,
+            owner_editable: true,
+            day_image_url: dayUrl || null,
+            night_image_url: nightUrl || null
+          };
+        }
         var res = await fetchGatewayJsonPost('/v1/admin/scene', {
           room_id: room.id,
-          image_layer: selectedPreset ? { layer_id: 'admin-scene-' + Date.now(), preset: selectedPreset, asset_hint: selectedPreset, aspect_ratio_permyriad: 5625, owner_editable: true } : null,
+          image_layer: ilPayload,
           hotspot_layer: hlPayload
         });
         if (res.error) { statusMsg.textContent = '失败: ' + res.error; statusMsg.style.color = 'var(--ds-danger)'; }

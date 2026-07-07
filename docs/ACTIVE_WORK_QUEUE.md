@@ -1,6 +1,226 @@
 # lobster-chat Active Work Queue
 
-Last updated: 2026-06-20
+Last updated: 2026-06-28
+
+## 2026-06-28 P3 技术债推进: 直聊打开请求状态纯模型下沉
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| app.js 降债 | 已完成 | `openDirectSession()` 不再内联 trim / 空居民 / 自聊校验和 `/v1/direct/open` payload 拼装，改为消费 `directSessionOpenRequestState()` |
+| Gateway 合同 | 保持不变 | 实际 `POST /v1/direct/open`、表单 reset、focus room、刷新 Gateway 投影仍由 `app.js` 编排，H5 不新增私聊会话真值 |
+| 请求状态 | 已覆盖 | `directSessionOpenRequestState()` 统一产出 offline / empty-peer / self / allowed 请求状态，并保留既有私聊打开与就绪文案 |
+| 防回归测试 | 已完成 | `shell-governance-render.test.mjs` 覆盖 direct open 状态；`shell-pages-static.test.mjs` 锁定 app.js 通过 helper 消费直聊请求模型 |
+
+### 验证
+
+```bash
+node --test apps/lobster-web-shell/test/shell-governance-render.test.mjs --test-name-pattern "directSessionOpenRequestState"
+node --test apps/lobster-web-shell/test/shell-pages-static.test.mjs --test-name-pattern "direct session open"
+node --test apps/lobster-web-shell/test/fake-dom-import-rewrite.test.mjs
+```
+
+## 2026-06-28 P3 技术债推进: 好友关系提交状态纯模型下沉
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| app.js 降债 | 已完成 | `submitResidentRelationshipAction()` 不再直接判断 `model.endpoint` / `model.payload` 和无网关状态，改为消费 `residentRelationshipSubmitRequestState()` |
+| Gateway 合同 | 保持不变 | 实际 `POST /v1/resident-relationships/request|accept`、Bearer session、刷新 Gateway 投影仍由 `app.js` 编排，H5 不新增好友关系真值 |
+| 提交状态 | 已覆盖 | `residentRelationshipSubmitRequestState()` 统一产出 noop / offline / allowed 请求状态，并保留申请、接受、默认更新成功文案 |
+| 防回归测试 | 已完成 | `shell-governance-render.test.mjs` 覆盖提交状态；`shell-pages-static.test.mjs` 锁定 app.js 通过 helper 消费关系提交模型 |
+
+### 验证
+
+```bash
+node --test apps/lobster-web-shell/test/shell-governance-render.test.mjs --test-name-pattern "residentRelationship"
+node --test apps/lobster-web-shell/test/shell-pages-static.test.mjs --test-name-pattern "resident relationship"
+node --test apps/lobster-web-shell/test/fake-dom-import-rewrite.test.mjs
+```
+
+## 2026-06-28 P3 技术债推进: 私宅策略提交闸门纯状态下沉
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| app.js 降债 | 已完成 | `submitPersonalRoomAccessPolicy()` 不再内联判断 policy 集合、房主权限和响应 policy 兜底，改为消费 `shell-personal-room-policy.js` 的纯状态 helper |
+| Gateway 合同 | 保持不变 | 实际 `POST /v1/personal-room/access-policy`、Bearer session、刷新 Gateway 投影仍由 `app.js` 编排，H5 不新增私有权限真值 |
+| 提交闸门 | 已覆盖 | `personalRoomAccessPolicySubmitRequestState()` 统一产出 invalid-policy / not-owner / offline / allowed 请求状态，保留既有状态文案 |
+| 响应兜底 | 已覆盖 | `appliedPersonalRoomAccessPolicy()` 只接受 Gateway 返回的合法 policy；异常响应回退到请求 policy，再回退保守默认 `friends_only` |
+
+### 验证
+
+```bash
+node --test apps/lobster-web-shell/test/shell-personal-room-policy.test.mjs
+node --test apps/lobster-web-shell/test/shell-pages-static.test.mjs --test-name-pattern "personal room access policy"
+node --check apps/lobster-web-shell/app.js && node --check apps/lobster-web-shell/shell-personal-room-policy.js
+```
+
+## 2026-06-28 P3 技术债推进: 治理状态条纯状态下沉
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| app.js 降债 | 已完成 | 新增 `apps/lobster-web-shell/shell-governance-status.js`，把治理提示条文案前缀、错误状态和动态 class 清理规则从 `app.js` 下沉为纯 helper |
+| 交互行为 | 保持不变 | `app.js` 继续只负责选择 `#governance-status` / `worldStateEl` 并应用 text/class，不改变好友关系、私宅访问或 Gateway 写路径 |
+| fake-dom 映射 | 已同步 | `test/fake-dom.mjs` 已加入新模块，避免 app.js 本地 import 在 fake-dom 运行时遗漏重写 |
+| 防回归测试 | 已完成 | 新增 `shell-governance-status.test.mjs` 覆盖 user/非 user 文案、fallback 文案、错误 class 与私宅访问提示 class；静态测试锁定 app.js 通过模块消费 |
+
+### 验证
+
+```bash
+node --test apps/lobster-web-shell/test/shell-governance-status.test.mjs
+node --test apps/lobster-web-shell/test/shell-pages-static.test.mjs --test-name-pattern "resident relationship"
+node --test apps/lobster-web-shell/test/fake-dom-import-rewrite.test.mjs
+```
+
+## 2026-06-27 P3 技术债推进: 私宅访问策略控件纯状态下沉
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| app.js 降债 | 已完成 | 新增 `apps/lobster-web-shell/shell-personal-room-policy.js`，把私宅访问策略默认值、标签和控件状态计算从 `app.js` 下沉为纯 helper |
+| 控件行为 | 保持不变 | `app.js` 继续负责 DOM 应用与 Gateway `POST /v1/personal-room/access-policy`，不新增 H5 私有权限真值 |
+| fake-dom 映射 | 已同步 | `test/fake-dom.mjs` 已加入新模块，防止 app.js 本地 import 改动破坏运行时测试 |
+| 防回归测试 | 已完成 | 新增 `shell-personal-room-policy.test.mjs` 覆盖 owner/visitor/offline/saving/online 状态；`shell-pages-static.test.mjs` 锁定 app.js 通过模块消费 |
+
+### 验证
+
+```bash
+node --test apps/lobster-web-shell/test/shell-personal-room-policy.test.mjs
+node --test apps/lobster-web-shell/test/shell-pages-static.test.mjs --test-name-pattern "personal room access policy"
+node --test apps/lobster-web-shell/test/fake-dom-import-rewrite.test.mjs
+```
+
+## 2026-06-27 P2 收口: admin-ds 设备管理 UI 主内容接入
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 设备管理模块结构 | 已修复 | `mod-devices` 原本位于 `.ds-content` 结束后、右侧详情面板之后；现已移动到后台主内容区，跟随 `data-module="devices"` 正常模块切换 |
+| 设备管理控件 | 已覆盖 | 静态测试将 `deviceAddressInput` / `deviceLabelInput` / `deviceAddBtn` / `deviceTableBody` 纳入后台结构合同 |
+| Gateway 写操作 | 已复核 | 继续复用既有 `/v1/admin/devices/add|remove|block|unblock` 和 `GET /v1/admin/devices`，不新增 H5 私有状态 |
+| 防回归测试 | 已完成 | `admin-ds-static.test.mjs` 新增主内容区层级测试，防止设备模块再次漂移到后台布局外 |
+
+### 验证
+
+```bash
+node --test apps/lobster-web-shell/test/admin-ds-runtime.test.mjs apps/lobster-web-shell/test/admin-ds-static.test.mjs
+```
+
+## 2026-06-27 P2 收口: 私宅关系按钮移动端验收与未授权提示
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 住宅页关系反馈 | 已修复 | `creative.html` 新增 `#governance-status`，好友申请/接受与私宅访问拦截不再无处显示 |
+| 未授权私宅提示 | 已增强 | `residentPrivateRoomAccessPromptModel()` 返回的 `resident-room-access-note` / `is-locked` / `is-pending` / `is-actionable` class 现在会落到状态条，形成可识别的空态反馈 |
+| 移动端关系按钮 | 已验收 | `.creative-resident-list .resident-relationship-action` 最小高度提升到 34px；realness 在 390px 移动视口验证按钮可点击且未被覆盖 |
+| 防回归测试 | 已完成 | `shell-pages-static.test.mjs` 锁定状态节点、class 传递与 CSS；`verify-frontend-realness.mjs` 增加 mobile relationship actions 检查 |
+
+### 验证
+
+```bash
+node --test apps/lobster-web-shell/test/shell-pages-static.test.mjs --test-name-pattern "resident relationship"
+node apps/lobster-web-shell/verify-frontend-realness.mjs
+```
+
+## 2026-06-27 P0 收口: world-square / admin-ds 注册登录 JS 接线
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 共享登录接线 | 已完成 | 新增 `apps/lobster-web-shell/shell-auth-standalone.js`，复用 `shell-auth.js` 的 OTP 流程，统一处理 `loadAuthDraft()` / `persistAuthDraft()` / `requestEmailOtp()` / `verifyEmailOtp()` / `updateAuthFormState()` |
+| 世界广场登录 | 已接入 | `world-square.html` 改为调用 `initStandaloneAuthSurface()`；登录成功后继续刷新右上角“登录/连线中”状态 |
+| admin-ds 登录 | 已接入 | `admin-ds.html` 不再手写 `initAuth` 细节，改为共享 standalone 登录模块，避免后台页复制认证逻辑 |
+| 可选字段兼容 | 已修复 | `shell-auth.js` 的邮箱/手机 OTP 请求兼容没有 `auth-mobile-input` / `auth-device-input` 的页面；空的反滥用字段不再写入 payload |
+| 防回归测试 | 已完成 | `shell-auth.test.mjs`、`admin-ds-static.test.mjs`、`shell-pages-static.test.mjs` 已锁定共享接线和可选字段行为 |
+
+### 验证
+
+```bash
+node --test test/shell-auth.test.mjs test/admin-ds-static.test.mjs test/shell-pages-static.test.mjs
+npm test
+node --check shell-auth-standalone.js
+```
+
+## 2026-06-27 P0 复验: `?gateway=` 前端真实消息发送闭环
+
+### 复验结论
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 双浏览器真实发送 | 已验证 | `scripts/smoke-web-dual-browser.mjs` 启动真实 Gateway + 静态 Web 服务，分别打开 `index.html?gateway=...&identity=qa-a` 和 `creative.html?gateway=...&identity=qa-b` |
+| 消息闭环 | 已验证 | qa-a 与 qa-b 可跨页面互看 self/peer 投影；覆盖发送、编辑、撤回 |
+| 失败重发 | 已验证 | smoke 故意让一次 `/v1/shell/message` 返回 503，确认 H5 显示失败 pending 气泡并可重发，最终 peer 端收到提交后的消息 |
+| 当前门禁位置 | 已确认 | `make smoke-e2e` 会执行真实 Playwright 双浏览器 smoke；`smoke-release-gate.sh` 仅跑该脚本的 quick unit，避免发布快速门禁强制启动浏览器 |
+
+### 验证
+
+```bash
+SKIP_BUILD=1 node scripts/smoke-web-dual-browser.mjs
+```
+
+## 2026-06-27 P1 收口: admin-ds 场景编辑器 day/night URL 输入
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 正式场景编辑器 | 已接入 | `admin-ds` 的“场景编辑”模块现在和房间详情面板一致，支持白天背景图 URL 与夜晚背景图 URL 输入 |
+| Gateway payload | 已接入 | 保存场景时 `image_layer` 会携带 `day_image_url` / `night_image_url`；只填自定义图片、不选 preset 时也会提交 `preset: custom` |
+| 成对约束 | 复用 Gateway | 前端显示“白天+夜晚必须成对填写”，最终校验仍由 Gateway `SceneImageLayer` 合同负责，避免 H5 私有权限/素材真值 |
+| 防回归测试 | 已完成 | `admin-ds-static.test.mjs` 切入 `renderSceneEditor()` 函数体，防止只靠房间详情旧面板误判 |
+
+### 验证
+
+```bash
+node --test test/admin-ds-runtime.test.mjs test/admin-ds-static.test.mjs
+npm test
+git diff --check
+```
+
+## 2026-06-26 产品确权: 私宅主客访问权限边界
+
+### 新增蓝图约束
+
+| 项目 | 结论 |
+| --- | --- |
+| 主客访问前提 | 用户必须是已注册、已登录的 IM 居民，未登录访客不可进入任何居民私宅 |
+| 房主确权 | 是否允许他人访问由房主自己设置，不允许前端或 Gateway 默认把 `home:<resident>` 当作全公开房间 |
+| MVP 策略 | 至少支持 `registered_all`（所有已登录注册用户）和 `friends_only`（好友/互相关系）两档 |
+| 默认策略 | 未配置时采用保守默认；不自动等同于所有注册用户可访问。`friends_only` 仅对 Gateway 已确认的好友关系放行 |
+| 消息隔离 | 私宅场景展示与私聊消息流必须分层；允许进入场景不代表允许读取历史私聊消息 |
+| CC 必读 | 详见 `docs/DEVELOPMENT_BLUEPRINT.md` 的“私宅主客访问确权（2026-06-26）” |
+
+### 对当前 WIP 的影响
+
+本轮已把 Gateway 默认行为收口为登录 + 房主策略确权：
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 私宅识别 | 已收口 | 只有 `conversation_id == home:<owner>` 且参与者正好是 `<owner>` 的 1 人 Direct 才被视为 personal room；兼容旧 `dm:<id>` 半锚定 Direct |
+| 创建权限 | 已收口 | `open_personal_room()` 要求房主是已注册居民；`POST /v1/personal-room` 要求 Bearer token 与 `resident_id` 匹配 |
+| 默认可见性 | 已收口 | 未登录/匿名 shell state 不暴露私宅；默认 `friends_only` 下其他注册居民不能看到房主私宅；房主本人可见 |
+| 策略表 | 已完成后端合同 | 新增 `registered_all` / `friends_only` access policy，持久化到 `personal-room-access-policies.json`，并在个人房间 shell state 暴露 `personal_room_access_policy` |
+| 策略设置端点 | 已完成后端合同 | `POST /v1/personal-room/access-policy` 要求 Bearer token 与房主 `resident_id` 匹配 |
+| H5 房主策略控件 | 已接入 | 住宅页仅在“自己的私宅”显示 `好友` / `注册` 分段控件；提交复用现有 Bearer session，Gateway 仍负责最终房主校验 |
+| 好友关系模型 | 已完成后端合同 | 新增 `request` / `accept` 两步关系流，持久化到 `resident-relationships.json`；pending 不解锁，accepted friends 才能访问 `friends_only` 私宅场景 |
+| 居民目录关系投影 | 已完成 Gateway 合同 | `GET /v1/residents?resident_id=<viewer>` 会按访问者投影 `relationship_state` / `relationship_requested_by`；H5 不需要本地伪造好友状态 |
+| H5 关系入口 | 已接入 | H5 加载世界状态时会用带 `resident_id` 的居民目录覆盖 snapshot 居民列表；常规居民目录和住宅侧栏均显示 `申请好友` / `已申请` / `接受好友` / `好友`，提交复用 Bearer session |
+| H5 未授权私宅提示 | 已接入 | 点击未授权的 `personal_room_id` 时不再切到不可见 room；按登录/申请/等待/接受状态提示用户下一步，并保留 Gateway 作为唯一权限真源 |
+| 防消息泄漏 | 已收口 | `registered_all` 只开放私宅场景可见性；非房主访客看到 room 时不携带私宅历史消息 |
+| 后续体验提示 | 待完善 | 继续做真实移动端验收、按钮触控 polish 和更完整的空态视觉；仍必须复用 Gateway 关系端点，不在 H5 本地伪造好友状态 |
+
+CC/DS 后续不要再把 1 人 Direct 默认视为全公开主页；如要继续开放访问，必须复用 Gateway access policy 合同和测试，不要在 H5 私自放行。
 
 ## 2026-06-20 Codex 技术债推进: Rust 生产 panic 扫描门禁固化
 

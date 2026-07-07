@@ -292,71 +292,25 @@
 
     <!-- 居民登录：右上角按钮触发，登录后显示连线中 -->
     <script type="module">
-      import { initAuth } from "./shell-auth.js";
+      import { initStandaloneAuthSurface } from "./shell-auth-standalone.js";
 
       const gatewayUrl = new URLSearchParams(window.location.search).get("gateway") || "";
-
-      const els = {
-        statusEl: document.getElementById("auth-status"),
-        requestFormEl: document.getElementById("auth-request-form"),
-        deliverySelectEl: document.getElementById("auth-delivery-select"),
-        residentInputEl: document.getElementById("auth-resident-input"),
-        nicknameInputEl: document.getElementById("auth-nickname-input"),
-        emailInputEl: document.getElementById("auth-email-input"),
-        mobileInputEl: document.getElementById("auth-mobile-input"),
-        deviceInputEl: document.getElementById("auth-device-input"),
-        verifyFormEl: document.getElementById("auth-verify-form"),
-        challengeInputEl: document.getElementById("auth-challenge-input"),
-        codeInputEl: document.getElementById("auth-code-input"),
-        loginCardEl: document.getElementById("resident-login-card"),
-        loginOverlayEl: document.getElementById("resident-login-overlay"),
-        hudLoginToggleEl: document.getElementById("hud-login-toggle"),
-      };
-
       const connectionStatusEl = document.getElementById("hud-connection-status");
 
       function updateHudForIdentity() {
         const loggedIn = !!localStorage.getItem("lobster-identity");
         if (loggedIn) {
-          els.hudLoginToggleEl?.classList.add("shell-hidden");
+          document.getElementById("hud-login-toggle")?.classList.add("shell-hidden");
           connectionStatusEl?.classList.remove("shell-hidden");
         } else {
-          els.hudLoginToggleEl?.classList.remove("shell-hidden");
+          document.getElementById("hud-login-toggle")?.classList.remove("shell-hidden");
           connectionStatusEl?.classList.add("shell-hidden");
         }
       }
 
-      initAuth(els, {
-        gatewayUrl: () => gatewayUrl,
-        postJson: async (path, body) => {
-          if (!gatewayUrl) throw new Error("gateway not connected");
-          const res = await fetch(gatewayUrl.replace(/\/+$/, "") + path, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          });
-          return res.json();
-        },
-        refreshFromGateway: () => {},
-        persistIdentity: (id) => {
-          try { localStorage.setItem("lobster-identity", id); } catch(e) {}
-          updateHudForIdentity();
-        },
-        userProjection: () => null,
-        desiredResidentId: () => undefined,
-      });
-
-      const closeBtn = document.getElementById("resident-login-close");
-      const overlay = document.getElementById("resident-login-overlay");
-      const toggle = document.getElementById("hud-login-toggle");
-
-      toggle?.addEventListener("click", () => {
-        overlay?.removeAttribute("aria-hidden");
-        overlay?.classList.remove("shell-hidden");
-      });
-      closeBtn?.addEventListener("click", () => {
-        overlay?.setAttribute("aria-hidden", "true");
-        overlay?.classList.add("shell-hidden");
+      initStandaloneAuthSurface({
+        gatewayUrl,
+        onIdentityChanged: updateHudForIdentity,
       });
 
       updateHudForIdentity();

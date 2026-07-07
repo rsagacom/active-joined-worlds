@@ -51,6 +51,11 @@ import {
   resolveGatewayUrlCandidate,
 } from "./shell-gateway.js";
 import {
+  governanceStatusClassState,
+  governanceStatusText,
+} from "./shell-governance-status.js";
+import {
+  directSessionOpenRequestState,
   governanceActiveMemberListModel,
   governanceCityActionsModel,
   governanceCityCardBaseModel,
@@ -64,6 +69,9 @@ import {
   mirrorSourcesEmptyStateText,
   residentDirectoryEmptyStateText,
   residentDirectoryCardModel,
+  residentRelationshipActionModel,
+  residentRelationshipSubmitRequestState,
+  residentPrivateRoomAccessPromptModel,
   worldDirectoryCityCardModel,
   worldDirectoryEmptyStateText,
   worldSafetyAdvisoryCardModel,
@@ -90,6 +98,11 @@ import {
   translateSourceKind,
   translateTrustState,
 } from "./shell-labels.js";
+import {
+  appliedPersonalRoomAccessPolicy,
+  personalRoomAccessPolicyControlState,
+  personalRoomAccessPolicySubmitRequestState,
+} from "./shell-personal-room-policy.js";
 import {
   visiblePendingEchoesForRoomData,
 } from "./shell-message-state.js";
@@ -218,6 +231,7 @@ import {
   contractConversationMap,
   governanceFromWorldApiPayload,
   governanceFromWorldSnapshotBundle,
+  governanceWithResidentsPayload,
   mergeRoomWithContract,
   synthesizeRoomsFromContracts,
 } from "./shell-state-normalize.js";
@@ -325,6 +339,10 @@ import {
   roomFollowUpCountForState,
   roomChatStatusSummaryForState,
   roomQueueSummaryForState,
+  roomSummaryLineForState,
+  roomStatusLineForState,
+  roomOwnershipForState,
+  roomHostLabelForState,
 } from "./shell-room-summary.js";
 import {
   chatDetailRoomContextModelForState,
@@ -679,14 +697,18 @@ function syncUserRoomProjection(room, visual) {
   applyUserSceneImageLayer(room);
 
   // 标记房间所有权：自己的私宅 vs 访客模式
+  // room.owner_resident_id 由 gateway 暴露（personal_room 的主人；双方DM/公共为 None）。
+  // owner===identity → own；owner≠identity → visitor；None → 不显示。
   const identity = currentIdentity();
-  if (identity && room && room.id && room.id.startsWith("dm:")) {
-    const isOwner = room.participants && room.participants.some(function(p) {
-      return (typeof p === "string" ? p : p.id || p.resident_id || "") === identity;
-    });
-    setDatasetFlag(document.body, "roomOwnership", isOwner ? "own" : "visitor");
-  } else {
-    setDatasetFlag(document.body, "roomOwnership", "");
+  const ownership = roomOwnershipForState(room, identity);
+  setDatasetFlag(document.body, "roomOwnership", ownership);
+  if (ownership === "visitor") {
+    const hostLabel = roomHostLabelForState(room) || "对方";
+    if (hudOwnershipVisitorBadgeEl) {
+      hudOwnershipVisitorBadgeEl.textContent = `你在 ${hostLabel} 的私宅中`;
+    }
+  } else if (ownership === "own" && hudOwnershipOwnBadgeEl) {
+    hudOwnershipOwnBadgeEl.textContent = "我的私宅";
   }
 
   setDatasetFlag(document.body, "roomVariant", projection.variant);
@@ -1134,6 +1156,11 @@ const residentLoginCardEl = document.querySelector("#resident-login-card");
 const residentLoginOverlayEl = document.querySelector("#resident-login-overlay");
 const residentLoginCloseEl = document.querySelector("#resident-login-close");
 const hudLoginToggleEl = document.querySelector("#hud-login-toggle");
+const hudOwnershipOwnBadgeEl = document.querySelector(".creative-hud-ownership-badge--own");
+const hudOwnershipVisitorBadgeEl = document.querySelector(".creative-hud-ownership-badge--visitor");
+const personalRoomPolicyControlEl = document.querySelector("#personal-room-access-policy");
+const personalRoomPolicyStatusEl = document.querySelector("#personal-room-access-policy-status");
+const personalRoomPolicyButtons = Array.from(document.querySelectorAll("[data-personal-room-policy]"));
 const cityListEl = document.querySelector("#city-list");
 const residentListEl = document.querySelector("#resident-list");
 const exportFormatSelectEl = document.querySelector("#export-format-select");
@@ -1334,6 +1361,7 @@ let lastRefreshAtMs = null;
 let lastRefreshErrorMessage = "";
 let lastForegroundRefreshAtMs = 0;
 let isSendingMessage = false;
+let personalRoomAccessPolicySaving = false;
 let editingMessageTarget = null;
 let followTimelineToLatest = false;
 let residentLoginDismissed = false;
@@ -3815,11 +3843,13 @@ function syncRoomStageCanvas(room) {
   if (!roomStageCanvasEl) return;
 
   if (!room) {
+    syncPersonalRoomAccessPolicyControl();
     renderDefaultUserRoomStageCanvas();
     return;
   }
 
   renderUserRoomStageCanvas(room);
+  syncPersonalRoomAccessPolicyControl();
 }
 
 function renderDefaultUserRoomStageCanvas() {
@@ -4065,6 +4095,39 @@ function currentIdentity() {
   return senderIdentity.trim() || "访客";
 }
 
+function activeRoom() {
+  return activeRoomId ? state.rooms.find((room) => room.id === activeRoomId) : null;
+}
+
+function setPersonalRoomAccessPolicyStatus(message = "", isError = false) {
+  if (!personalRoomPolicyStatusEl) return;
+  personalRoomPolicyStatusEl.textContent = message;
+  personalRoomPolicyStatusEl.classList.toggle("is-error", Boolean(isError));
+}
+
+function syncPersonalRoomAccessPolicyControl() {
+  const controlState = personalRoomAccessPolicyControlState({
+    room: activeRoom(),
+    currentIdentity: currentIdentity(),
+    gatewayUrl,
+    saving: personalRoomAccessPolicySaving,
+    roomOwnershipForState,
+  });
+
+  if (personalRoomPolicyControlEl) {
+    personalRoomPolicyControlEl.hidden = controlState.hidden;
+    personalRoomPolicyControlEl.setAttribute("aria-hidden", controlState.ariaHidden);
+  }
+
+  for (const button of personalRoomPolicyButtons) {
+    const buttonPolicy = button.dataset.personalRoomPolicy;
+    button.setAttribute("aria-pressed", String(buttonPolicy === controlState.policy));
+    button.disabled = controlState.disabled;
+  }
+
+  setPersonalRoomAccessPolicyStatus(controlState.statusText, controlState.statusIsError);
+}
+
 function applyRailVisibility() {
   // 实现 HTML 中 [data-rail-visibility="owner-only"] 的访问控制：仅已登录居民
   // （currentIdentity 非"访客"）可见，避免访客进入 scene-editor 等仅 owner 可用的
@@ -4073,6 +4136,7 @@ function applyRailVisibility() {
   document.querySelectorAll('[data-rail-visibility="owner-only"]').forEach((node) => {
     node.style.display = isOwner ? "" : "none";
   });
+  syncPersonalRoomAccessPolicyControl();
 }
 
 function residentGatewayLoginRequired() {
@@ -4096,16 +4160,30 @@ function gatewayShellEventsUrl({ afterVersion = null } = {}) {
   });
 }
 
-function setGovernanceStatus(message, isError = false) {
-  if (!governanceStatusEl) {
-    if (worldStateEl) {
-      worldStateEl.textContent = `${isError ? "提示异常" : "提示"}：${message}`;
-      worldStateEl.classList.toggle("notice-pending", isError);
-    }
-    return;
+function applyGovernanceStatusClassState(target, classState) {
+  if (!target?.classList) return;
+  for (const className of classState.remove) {
+    target.classList.remove(className);
   }
-  governanceStatusEl.textContent = `${shellMode === "user" ? "边缘抽屉提示" : "侧栏提示"}：${message}`;
-  governanceStatusEl.classList.toggle("notice-pending", isError);
+  for (const className of classState.add) {
+    target.classList.add(className);
+  }
+}
+
+function setGovernanceStatus(message, isError = false, extraClassName = "") {
+  const hasGovernanceStatus = Boolean(governanceStatusEl);
+  const target = governanceStatusEl || worldStateEl;
+  if (!target) return;
+  target.textContent = governanceStatusText({
+    message,
+    isError,
+    shellMode,
+    hasGovernanceStatus,
+  });
+  applyGovernanceStatusClassState(
+    target,
+    governanceStatusClassState({ isError, extraClassName }),
+  );
 }
 
 function setAuthStatus(message, isError = false) {
@@ -4191,56 +4269,11 @@ function roomRouteLabel(room) {
 }
 
 function roomSummaryLine(room) {
-  if (!room) return "未选择聊天";
-  if (typeof room.list_summary === "string" && room.list_summary.trim()) {
-    return room.list_summary.trim();
-  }
-  const shellPage = currentShellPage();
-  const parts = [room.kind_hint || translateRoomKindForShellPage(roomKind(room), shellPage)];
-  if (roomKind(room) !== "system") {
-    parts.push(`${roomMemberCount(room)} 人`);
-  }
-  if ((room.messages || []).length) {
-    parts.push(`${room.messages.length} 条消息`);
-  }
-  if (roomQuickActionSummary(room)) {
-    parts.push(roomQuickActionSummary(room));
-  }
-  return joinOrFallback(
-    parts.filter(Boolean),
-    room.preview_text || room.overview_summary || room.subtitle || room.meta || "等待新消息",
-  );
+  return roomSummaryLineForState(room, roomSummaryDeps());
 }
 
 function roomStatusLine(room) {
-  if (!room) return "等待新消息";
-  if (typeof room.status_line === "string" && room.status_line.trim()) {
-    return room.status_line.trim();
-  }
-  const parts = [roomRouteLabel(room)];
-  const quickAction = latestRoomQuickAction(room);
-  const followUp = quickActionFollowUpLabel(quickAction, latestRoomQuickState(room));
-  const preview = resolveRoomQuickPreview(room, quickAction);
-  if (followUp) {
-    parts.push(`动作状态 ${followUp}`);
-  }
-  if (preview?.historyLabel) {
-    const previewFieldView = roomQuickPreviewFieldView(
-      room.id,
-      quickAction,
-      preview.state,
-      preview.snapshotIndex,
-    );
-    parts.push(`阶段预览 ${preview.historyLabel} · ${quickActionPreviewFieldViewLabel(previewFieldView)}`);
-  }
-  if (room.meta) {
-    parts.push(room.meta);
-  }
-  const lastActivity = roomLastActivity(room);
-  if (lastActivity && lastActivity !== "暂无消息") {
-    parts.push(lastActivity);
-  }
-  return joinOrFallback(parts.filter(Boolean), "等待新消息");
+  return roomStatusLineForState(room, roomSummaryDeps());
 }
 
 function roomContextSummary(room) {
@@ -4258,6 +4291,12 @@ function roomSummaryDeps() {
     latestRoomQuickState,
     get shellPage() { return currentShellPage(); },
     roomKind,
+    roomMemberCount,
+    roomQuickActionSummary,
+    roomRouteLabel,
+    resolveRoomQuickPreview,
+    roomQuickPreviewFieldView,
+    roomLastActivity,
   };
 }
 
@@ -4545,6 +4584,7 @@ function focusRoom(roomId) {
   syncChatPaneMode(window.matchMedia("(max-width: 960px)").matches ? "thread" : "split");
   markRoomRead(roomId);
   updateRoomToolbarState();
+  syncPersonalRoomAccessPolicyControl();
   setWorkspace("chat");
   updateCaretakerStatus();
   renderConversationOverview();
@@ -4724,19 +4764,29 @@ async function applyGatewayShellStatePayload(payload, { persist = false } = {}) 
 async function loadWorldState() {
   if (!gatewayUrl) return false;
   try {
+    const residentsUrl = new URL(`${gatewayUrl}/v1/residents`);
+    if (!isVisitorIdentity(currentIdentity())) {
+      residentsUrl.searchParams.set("resident_id", currentIdentity());
+    }
+    const residentsRequest = fetch(residentsUrl.toString());
     const snapshotResponse = await fetch(`${gatewayUrl}/v1/world-snapshot`);
     if (snapshotResponse.ok) {
       const bundle = await snapshotResponse.json();
       const snapshotGovernance = governanceFromWorldSnapshotBundle(bundle);
       if (snapshotGovernance) {
-        governance = snapshotGovernance;
+        const residentsResponse = await residentsRequest;
+        const scopedResidentsPayload = residentsResponse.ok
+          ? await residentsResponse.json()
+          : snapshotGovernance.residents;
+        const scopedGovernance = governanceWithResidentsPayload(snapshotGovernance, scopedResidentsPayload);
+        governance = scopedGovernance;
         return true;
       }
     }
 
     const [worldResponse, residentsResponse] = await Promise.all([
       fetch(`${gatewayUrl}/v1/world`),
-      fetch(`${gatewayUrl}/v1/residents`),
+      residentsRequest,
     ]);
     if (!worldResponse.ok) return false;
     const payload = await worldResponse.json();
@@ -6972,6 +7022,43 @@ function appendResidentDirectoryMetaRows(li, model) {
   }
 }
 
+async function submitResidentRelationshipAction(model) {
+  const requestState = residentRelationshipSubmitRequestState(model, { gatewayUrl });
+  if (!requestState.allowed) {
+    if (requestState.statusText) {
+      setGovernanceStatus(requestState.statusText, requestState.statusIsError);
+    }
+    return;
+  }
+  setGovernanceStatus(requestState.statusText);
+  try {
+    await postGatewayJson(requestState.endpoint, requestState.payload);
+    await refreshFromGateway({ requireShell: true });
+    setGovernanceStatus(requestState.successText);
+  } catch (error) {
+    setGovernanceStatus(localizedRuntimeError(error, "好友关系更新失败"), true);
+  }
+}
+
+function createResidentRelationshipActionButton(resident) {
+  const model = residentRelationshipActionModel(resident, {
+    currentResidentId: currentIdentity(),
+  });
+  if (!model) return null;
+  const button = document.createElement("button");
+  button.type = model.type;
+  button.className = model.className;
+  button.textContent = model.text;
+  button.disabled = Boolean(model.disabled);
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    submitResidentRelationshipAction(model).catch((err) => {
+      setGovernanceStatus(localizedRuntimeError(err, "好友关系更新失败"), true);
+    });
+  });
+  return button;
+}
+
 function createResidentDirectActionButton(resident) {
   const directButton = document.createElement("button");
   directButton.type = "button";
@@ -6988,6 +7075,10 @@ function createResidentDirectActionButton(resident) {
 function appendResidentDirectoryActions(li, resident) {
   const actions = document.createElement("div");
   actions.className = "city-actions";
+  const relationshipButton = createResidentRelationshipActionButton(resident);
+  if (relationshipButton) {
+    actions.appendChild(relationshipButton);
+  }
   actions.appendChild(createResidentDirectActionButton(resident));
   li.appendChild(actions);
 }
@@ -7122,6 +7213,10 @@ function createCompactResidentListItemNode(resident) {
   button.appendChild(createCompactResidentAvatar(resident, displayName));
   button.appendChild(createCompactResidentButtonContent(resident, displayName));
   li.appendChild(button);
+  const relationshipButton = createResidentRelationshipActionButton(resident);
+  if (relationshipButton) {
+    li.appendChild(relationshipButton);
+  }
   return li;
 }
 
@@ -7616,6 +7711,46 @@ async function postGatewayJson(path, payload) {
   return parsed;
 }
 
+async function submitPersonalRoomAccessPolicy(policy) {
+  const room = activeRoom();
+  const requestState = personalRoomAccessPolicySubmitRequestState({
+    policy,
+    room,
+    currentIdentity: currentIdentity(),
+    gatewayUrl,
+    roomOwnershipForState,
+  });
+  if (!requestState.allowed) {
+    if (requestState.statusText) {
+      setPersonalRoomAccessPolicyStatus(requestState.statusText, requestState.statusIsError);
+    }
+    if (requestState.shouldSyncControl) {
+      syncPersonalRoomAccessPolicyControl();
+    }
+    return;
+  }
+
+  personalRoomAccessPolicySaving = true;
+  syncPersonalRoomAccessPolicyControl();
+  let finalStatus = "";
+  let finalStatusIsError = false;
+  try {
+    const response = await postGatewayJson(requestState.endpoint, requestState.payload);
+    room.personal_room_access_policy = appliedPersonalRoomAccessPolicy(response, policy);
+    await refreshFromGateway({ requireShell: true });
+    finalStatus = "已保存";
+  } catch (error) {
+    finalStatus = localizedRuntimeError(error, "保存失败");
+    finalStatusIsError = true;
+  } finally {
+    personalRoomAccessPolicySaving = false;
+    syncPersonalRoomAccessPolicyControl();
+    if (finalStatus) {
+      setPersonalRoomAccessPolicyStatus(finalStatus, finalStatusIsError);
+    }
+  }
+}
+
 async function refreshFromGateway({ requireShell = false } = {}) {
   refreshInProgress = true;
   lastRefreshErrorMessage = "";
@@ -7657,6 +7792,7 @@ async function refreshFromGateway({ requireShell = false } = {}) {
     updateComposerState();
     updateAuthFormState();
     updateResidentLoginSurface();
+    syncPersonalRoomAccessPolicyControl();
     if (!userShellProjection()) {
       updateGovernanceFormState();
     }
@@ -7703,6 +7839,7 @@ function renderShellStateRefresh() {
   updateComposerState();
   updateAuthFormState();
   updateResidentLoginSurface();
+  syncPersonalRoomAccessPolicyControl();
   renderConversationOverview();
 }
 
@@ -8074,6 +8211,14 @@ async function submitFederationPolicy(city, policy) {
 async function enterResidentRoom(resident) {
   if (!gatewayUrl) return;
   const displayName = resident.nickname || resident.resident_id;
+  const accessPrompt = residentPrivateRoomAccessPromptModel(resident, {
+    currentResidentId: currentIdentity(),
+    roomVisible: state.rooms.some((room) => room.id === resident.personal_room_id),
+  });
+  if (accessPrompt) {
+    setGovernanceStatus(accessPrompt.text, accessPrompt.isError, accessPrompt.className);
+    return;
+  }
   const message = "进入「" + displayName + "」的房间私聊？";
   if (typeof window.confirm === "function" && !window.confirm(message)) return;
 
@@ -8081,6 +8226,10 @@ async function enterResidentRoom(resident) {
   if (resident.personal_room_id) {
     focusRoom(resident.personal_room_id);
     await refreshFromGateway();
+    // 空个人房间无消息，prepareTimelineSurface 不会触发 stage 渲染；
+    // 显式同步 stage canvas，确保主客徽章 + image_layer 背景生效
+    const activeRoom = state.rooms.find((r) => r.id === activeRoomId);
+    if (activeRoom) syncRoomStageCanvas(activeRoom);
     setGovernanceStatus("私聊已就绪：" + displayName);
     return;
   }
@@ -8089,27 +8238,23 @@ async function enterResidentRoom(resident) {
 }
 
 async function openDirectSession(peerId) {
-  if (!gatewayUrl) return;
-  const peer = peerId.trim();
-  if (!peer) {
-    setGovernanceStatus("请填写居民标识", true);
-    return;
-  }
-  if (peer === currentIdentity()) {
-    setGovernanceStatus("不能和自己发起私聊", true);
-    return;
-  }
-  setGovernanceStatus(`正在与 ${peer} 打开私聊`);
-  const result = await postGatewayJson("/v1/direct/open", {
-    requester_id: currentIdentity(),
-    requester_device_id: "browser-shell",
-    peer_id: peer,
-    peer_device_id: "browser-shell",
+  const requestState = directSessionOpenRequestState({
+    peerId,
+    currentIdentity: currentIdentity(),
+    gatewayUrl,
   });
+  if (!requestState.allowed) {
+    if (requestState.statusText) {
+      setGovernanceStatus(requestState.statusText, requestState.statusIsError);
+    }
+    return;
+  }
+  setGovernanceStatus(requestState.statusText);
+  const result = await postGatewayJson(requestState.endpoint, requestState.payload);
   directOpenFormEl?.reset();
   focusRoom(result.conversation_id);
   await refreshFromGateway();
-  setGovernanceStatus(`私聊已就绪：${peer}`);
+  setGovernanceStatus(requestState.successText);
 }
 
 async function submitProviderConnect() {
@@ -8442,6 +8587,7 @@ function renderInitialShell() {
   updateComposerState();
   updateAuthFormState();
   updateResidentLoginSurface();
+  syncPersonalRoomAccessPolicyControl();
   if (!userShellProjection()) {
     updateGovernanceFormState();
   }
@@ -8464,6 +8610,12 @@ composerFormEl?.addEventListener("submit", async (event) => {
   event.preventDefault();
   await submitComposerMessage();
 });
+
+for (const button of personalRoomPolicyButtons) {
+  button.addEventListener("click", async () => {
+    await submitPersonalRoomAccessPolicy(button.dataset.personalRoomPolicy);
+  });
+}
 
 document.addEventListener("visibilitychange", async () => {
   if (document.visibilityState === "visible") {

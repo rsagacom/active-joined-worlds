@@ -329,6 +329,183 @@ export function residentDirectoryCardModel(
   };
 }
 
+export function directSessionOpenRequestState({
+  peerId = "",
+  currentIdentity = "",
+  gatewayUrl = "",
+} = {}) {
+  if (!gatewayUrl) {
+    return {
+      allowed: false,
+      reason: "offline",
+      statusText: "",
+      statusIsError: false,
+    };
+  }
+
+  const peer = String(peerId || "").trim();
+  const requester = String(currentIdentity || "").trim() || "访客";
+  if (!peer) {
+    return {
+      allowed: false,
+      reason: "empty-peer",
+      statusText: "请填写居民标识",
+      statusIsError: true,
+    };
+  }
+  if (peer === requester) {
+    return {
+      allowed: false,
+      reason: "self",
+      statusText: "不能和自己发起私聊",
+      statusIsError: true,
+    };
+  }
+
+  return {
+    allowed: true,
+    reason: "",
+    peerId: peer,
+    endpoint: "/v1/direct/open",
+    payload: {
+      requester_id: requester,
+      requester_device_id: "browser-shell",
+      peer_id: peer,
+      peer_device_id: "browser-shell",
+    },
+    statusText: `正在与 ${peer} 打开私聊`,
+    successText: `私聊已就绪：${peer}`,
+  };
+}
+
+export function residentRelationshipActionModel(
+  resident = {},
+  { currentResidentId = "" } = {},
+) {
+  const residentId = resident?.resident_id || "";
+  if (!residentId || !currentResidentId || currentResidentId === "访客" || residentId === currentResidentId) {
+    return null;
+  }
+  const base = {
+    type: "button",
+    className: "secondary mini-button resident-relationship-action",
+  };
+  if (resident?.relationship_state === "friends") {
+    return {
+      ...base,
+      className: `${base.className} is-friends`,
+      text: "好友",
+      disabled: true,
+      endpoint: "",
+      payload: null,
+      statusText: "已是好友",
+      successText: "",
+    };
+  }
+  if (resident?.relationship_state === "pending") {
+    if (resident?.relationship_requested_by === currentResidentId) {
+      return {
+        ...base,
+        className: `${base.className} is-pending`,
+        text: "已申请",
+        disabled: true,
+        endpoint: "",
+        payload: null,
+        statusText: `等待 ${residentId} 接受好友申请`,
+        successText: "",
+      };
+    }
+    return {
+      ...base,
+      text: "接受好友",
+      disabled: false,
+      endpoint: "/v1/resident-relationships/accept",
+      payload: { actor_id: currentResidentId, peer_id: residentId },
+      statusText: `正在接受 ${residentId} 的好友申请`,
+      successText: `已成为好友：${residentId}`,
+    };
+  }
+  return {
+    ...base,
+    text: "申请好友",
+    disabled: false,
+    endpoint: "/v1/resident-relationships/request",
+    payload: { actor_id: currentResidentId, peer_id: residentId },
+    statusText: `正在向 ${residentId} 发送好友申请`,
+    successText: `已发送好友申请：${residentId}`,
+  };
+}
+
+export function residentRelationshipSubmitRequestState(model = null, { gatewayUrl = "" } = {}) {
+  if (!model?.endpoint || !model?.payload) {
+    return {
+      allowed: false,
+      reason: "noop",
+      statusText: "",
+      statusIsError: false,
+    };
+  }
+
+  if (!gatewayUrl) {
+    return {
+      allowed: false,
+      reason: "offline",
+      statusText: "请先连接网关后再操作好友关系",
+      statusIsError: true,
+    };
+  }
+
+  return {
+    allowed: true,
+    reason: "",
+    endpoint: model.endpoint,
+    payload: model.payload,
+    statusText: model.statusText || "正在更新好友关系",
+    successText: model.successText || "好友关系已更新",
+  };
+}
+
+export function residentPrivateRoomAccessPromptModel(
+  resident = {},
+  { currentResidentId = "", roomVisible = false } = {},
+) {
+  const residentId = resident?.resident_id || "";
+  if (!residentId || !resident?.personal_room_id || roomVisible) return null;
+  if (!currentResidentId || currentResidentId === "访客") {
+    return {
+      className: "resident-room-access-note is-locked",
+      text: `登录后才能访问 ${residentId} 的私宅。`,
+      isError: true,
+    };
+  }
+  if (resident?.relationship_state === "pending") {
+    if (resident?.relationship_requested_by === currentResidentId) {
+      return {
+        className: "resident-room-access-note is-pending",
+        text: `已向 ${residentId} 申请好友；对方接受后才能进入私宅。`,
+        isError: false,
+      };
+    }
+    return {
+      className: "resident-room-access-note is-actionable",
+      text: `${residentId} 已发来好友申请；先点「接受好友」再进入私宅。`,
+      isError: false,
+    };
+  }
+  if (resident?.relationship_state === "friends") {
+    return {
+      className: "resident-room-access-note is-pending",
+      text: `${residentId} 的好友权限已确认，正在等待网关同步私宅入口。`,
+      isError: false,
+    };
+  }
+  return {
+    className: "resident-room-access-note is-locked",
+    text: `访问 ${residentId} 的私宅需要先成为好友，请点「申请好友」。`,
+    isError: true,
+  };
+}
+
 export function worldSquareEmptyStateText({ gatewayUrl = "" } = {}) {
   return gatewayUrl
     ? "世界广场当前还没有新动态"

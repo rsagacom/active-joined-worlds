@@ -14,10 +14,11 @@ use crate::{
     AdminUnfreezeRoomRequest, AdminUpdateSceneRequest, AssignPermissionGroupRequest,
     CliSendRequest, ConnectProviderRequest, ConversationId, CreatePermissionGroupRequest,
     EditShellMessageRequest, GatewayRuntime, GatewayStateNotifier, IdentityId,
-    OpenDirectSessionRequest, RecallShellMessageRequest, SceneHotspotLayer, SceneImageLayer,
+    OpenDirectSessionRequest, PersonalRoomAccessPolicyRequest, PersonalRoomRequest,
+    RecallShellMessageRequest, ResidentRelationshipRequest, SceneHotspotLayer, SceneImageLayer,
     ShellMarkReadRequest, ShellMessageRequest, ShellPresenceRequest, ShellSetNicknameRequest,
     UpdateShellSceneRequest,
-    http_support::{ResponseHeaderExt, authorization_bearer_token, json_header},
+    http_support::{ResponseHeaderExt, authorization_bearer_token, json_header, read_request_body},
 };
 
 pub(crate) type HttpResponse = Response<Cursor<Vec<u8>>>;
@@ -257,6 +258,218 @@ pub(crate) fn handle_post_direct_open(
         .with_status_code(StatusCode(400))
         .with_optional_header(json_header()),
     }
+}
+
+pub(crate) fn handle_post_personal_room(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    notifier: &Arc<GatewayStateNotifier>,
+    request: &mut Request,
+) -> HttpResponse {
+    let auth_token = authorization_bearer_token(request);
+    let body = match read_request_body(request) {
+        Ok(body) => body,
+        Err(error) => {
+            return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
+                .with_status_code(StatusCode(400))
+                .with_optional_header(json_header());
+        }
+    };
+
+    match serde_json::from_slice::<PersonalRoomRequest>(&body) {
+        Ok(payload) => {
+            let actor = IdentityId(payload.resident_id.trim().to_string());
+            let result = match with_runtime(runtime, |runtime| {
+                let Some(token) = auth_token.as_deref() else {
+                    return Err((
+                        StatusCode(401),
+                        "personal room requires a valid Bearer token".to_string(),
+                    ));
+                };
+                if let Err(message) = runtime.validate_bearer_session_actor(token, &actor) {
+                    return Err((StatusCode(401), message));
+                }
+                runtime
+                    .open_personal_room(payload)
+                    .map_err(|message| (StatusCode(400), message))
+            }) {
+                Ok(result) => result,
+                Err(response) => return response,
+            };
+            match result {
+                Ok(response) => {
+                    notifier.notify_changed();
+                    Response::from_string(
+                        serde_json::to_string(&response).unwrap_or_else(|_| "{}".into()),
+                    )
+                    .with_status_code(StatusCode(200))
+                    .with_optional_header(json_header())
+                }
+                Err((status, message)) => Response::from_string(
+                    serde_json::to_string(&WakuGatewayResponse::Error { message })
+                        .unwrap_or_else(|_| "{\"error\":true}".into()),
+                )
+                .with_status_code(status)
+                .with_optional_header(json_header()),
+            }
+        }
+        Err(error) => Response::from_string(
+            serde_json::to_string(&WakuGatewayResponse::Error {
+                message: format!("decode personal room request failed: {error}"),
+            })
+            .unwrap_or_else(|_| "{\"error\":true}".into()),
+        )
+        .with_status_code(StatusCode(400))
+        .with_optional_header(json_header()),
+    }
+}
+
+pub(crate) fn handle_post_personal_room_access_policy(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    notifier: &Arc<GatewayStateNotifier>,
+    request: &mut Request,
+) -> HttpResponse {
+    let auth_token = authorization_bearer_token(request);
+    let body = match read_request_body(request) {
+        Ok(body) => body,
+        Err(error) => {
+            return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
+                .with_status_code(StatusCode(400))
+                .with_optional_header(json_header());
+        }
+    };
+
+    match serde_json::from_slice::<PersonalRoomAccessPolicyRequest>(&body) {
+        Ok(payload) => {
+            let actor = IdentityId(payload.resident_id.trim().to_string());
+            let result = match with_runtime(runtime, |runtime| {
+                let Some(token) = auth_token.as_deref() else {
+                    return Err((
+                        StatusCode(401),
+                        "personal room access policy requires a valid Bearer token".to_string(),
+                    ));
+                };
+                if let Err(message) = runtime.validate_bearer_session_actor(token, &actor) {
+                    return Err((StatusCode(401), message));
+                }
+                runtime
+                    .set_personal_room_access_policy(payload)
+                    .map_err(|message| (StatusCode(400), message))
+            }) {
+                Ok(result) => result,
+                Err(response) => return response,
+            };
+            match result {
+                Ok(response) => {
+                    notifier.notify_changed();
+                    Response::from_string(
+                        serde_json::to_string(&response).unwrap_or_else(|_| "{}".into()),
+                    )
+                    .with_status_code(StatusCode(200))
+                    .with_optional_header(json_header())
+                }
+                Err((status, message)) => Response::from_string(
+                    serde_json::to_string(&WakuGatewayResponse::Error { message })
+                        .unwrap_or_else(|_| "{\"error\":true}".into()),
+                )
+                .with_status_code(status)
+                .with_optional_header(json_header()),
+            }
+        }
+        Err(error) => Response::from_string(
+            serde_json::to_string(&WakuGatewayResponse::Error {
+                message: format!("decode personal room access policy request failed: {error}"),
+            })
+            .unwrap_or_else(|_| "{\"error\":true}".into()),
+        )
+        .with_status_code(StatusCode(400))
+        .with_optional_header(json_header()),
+    }
+}
+
+fn handle_resident_relationship_write(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    notifier: &Arc<GatewayStateNotifier>,
+    request: &mut Request,
+    action: &str,
+) -> HttpResponse {
+    let auth_token = authorization_bearer_token(request);
+    let body = match read_request_body(request) {
+        Ok(body) => body,
+        Err(error) => {
+            return Response::from_string(format!("{{\"error\":\"{error}\"}}"))
+                .with_status_code(StatusCode(400))
+                .with_optional_header(json_header());
+        }
+    };
+
+    match serde_json::from_slice::<ResidentRelationshipRequest>(&body) {
+        Ok(payload) => {
+            let actor = IdentityId(payload.actor_id.trim().to_string());
+            let result = match with_runtime(runtime, |runtime| {
+                let Some(token) = auth_token.as_deref() else {
+                    return Err((
+                        StatusCode(401),
+                        "resident relationship requires a valid Bearer token".to_string(),
+                    ));
+                };
+                if let Err(message) = runtime.validate_bearer_session_actor(token, &actor) {
+                    return Err((StatusCode(401), message));
+                }
+                match action {
+                    "request" => runtime
+                        .request_resident_friendship(payload)
+                        .map_err(|message| (StatusCode(400), message)),
+                    "accept" => runtime
+                        .accept_resident_friendship(payload)
+                        .map_err(|message| (StatusCode(400), message)),
+                    _ => Err((StatusCode(400), "unknown relationship action".into())),
+                }
+            }) {
+                Ok(result) => result,
+                Err(response) => return response,
+            };
+            match result {
+                Ok(response) => {
+                    notifier.notify_changed();
+                    Response::from_string(
+                        serde_json::to_string(&response).unwrap_or_else(|_| "{}".into()),
+                    )
+                    .with_status_code(StatusCode(200))
+                    .with_optional_header(json_header())
+                }
+                Err((status, message)) => Response::from_string(
+                    serde_json::to_string(&WakuGatewayResponse::Error { message })
+                        .unwrap_or_else(|_| "{\"error\":true}".into()),
+                )
+                .with_status_code(status)
+                .with_optional_header(json_header()),
+            }
+        }
+        Err(error) => Response::from_string(
+            serde_json::to_string(&WakuGatewayResponse::Error {
+                message: format!("decode resident relationship request failed: {error}"),
+            })
+            .unwrap_or_else(|_| "{\"error\":true}".into()),
+        )
+        .with_status_code(StatusCode(400))
+        .with_optional_header(json_header()),
+    }
+}
+
+pub(crate) fn handle_post_resident_relationship_request(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    notifier: &Arc<GatewayStateNotifier>,
+    request: &mut Request,
+) -> HttpResponse {
+    handle_resident_relationship_write(runtime, notifier, request, "request")
+}
+
+pub(crate) fn handle_post_resident_relationship_accept(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    notifier: &Arc<GatewayStateNotifier>,
+    request: &mut Request,
+) -> HttpResponse {
+    handle_resident_relationship_write(runtime, notifier, request, "accept")
 }
 
 pub(crate) fn handle_post_waku(

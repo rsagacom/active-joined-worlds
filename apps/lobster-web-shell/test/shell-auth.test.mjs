@@ -5,6 +5,7 @@ import {
   initAuth,
   enterDemoVerifyStep,
   verifyEmailOtp,
+  requestEmailOtp,
   updateAuthFormState,
   getSessionToken,
   getAuthSession,
@@ -162,5 +163,56 @@ describe("shell-auth setAuthStatus", () => {
     });
     setAuthStatus("ready");
     assert.equal(statusEl.textContent, "登录状态：ready");
+  });
+});
+
+describe("shell-auth optional anti-abuse fields", () => {
+  let originalWindow;
+
+  beforeEach(() => {
+    originalWindow = globalThis.window;
+    globalThis.window = { localStorage: createFakeStorage() };
+    clearSession();
+  });
+
+  afterEach(() => {
+    globalThis.window = originalWindow;
+  });
+
+  test("requestEmailOtp tolerates pages without mobile and device inputs", async () => {
+    const els = createElMap();
+    els.mobileInputEl = null;
+    els.deviceInputEl = null;
+    els.emailInputEl.value = "tester@example.com";
+    const posts = [];
+
+    initAuth(els, {
+      postJson: async (path, body) => {
+        posts.push({ path, body });
+        if (path === "/v1/auth/preflight") {
+          return { allowed: true, normalized_email: "tester@example.com", blocked_reasons: [] };
+        }
+        return {
+          challenge_id: "email-otp:tester",
+          masked_email: "t***@example.com",
+          expires_at_ms: Date.now() + 300000,
+          delivery_mode: "email",
+        };
+      },
+      refreshFromGateway: async () => {},
+      persistIdentity: () => {},
+      userProjection: () => null,
+      gatewayUrl: () => "http://127.0.0.1:8787",
+    });
+
+    await requestEmailOtp();
+
+    assert.deepEqual(posts.map((entry) => entry.path), [
+      "/v1/auth/preflight",
+      "/v1/auth/email-otp/request",
+    ]);
+    assert.equal(posts[0].body.email, "tester@example.com");
+    assert.equal(Object.hasOwn(posts[0].body, "mobile"), false);
+    assert.equal(Object.hasOwn(posts[0].body, "device_physical_address"), false);
   });
 });

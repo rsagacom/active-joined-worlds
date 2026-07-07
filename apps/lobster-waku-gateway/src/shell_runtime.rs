@@ -121,6 +121,44 @@ impl GatewayRuntime {
         self.shell_identity_anchor(conversation)
     }
 
+    fn personal_room_visible_to_viewer(
+        &self,
+        conversation: &Conversation,
+        viewer: Option<&IdentityId>,
+    ) -> bool {
+        let Some(owner) = Self::personal_room_owner(conversation) else {
+            return false;
+        };
+        let Some(viewer) = viewer else {
+            return false;
+        };
+
+        if owner == viewer {
+            return self.resident_has_authenticated_profile(viewer);
+        }
+        if !self.resident_has_authenticated_profile(viewer) {
+            return false;
+        }
+
+        match self.personal_room_access_policy(owner) {
+            PersonalRoomAccessPolicy::RegisteredAll => true,
+            PersonalRoomAccessPolicy::FriendsOnly => self.residents_are_friends(owner, viewer),
+        }
+    }
+
+    fn personal_room_messages_visible_to_viewer(
+        &self,
+        conversation: &Conversation,
+        viewer: Option<&IdentityId>,
+    ) -> bool {
+        let Some(owner) = Self::personal_room_owner(conversation) else {
+            return true;
+        };
+        viewer.is_some_and(|viewer| {
+            owner == viewer && self.resident_has_authenticated_profile(viewer)
+        })
+    }
+
     pub(crate) fn conversation_title_for_viewer(
         &self,
         conversation: &Conversation,
@@ -1022,16 +1060,24 @@ impl GatewayRuntime {
         viewer: Option<&IdentityId>,
     ) -> Vec<Conversation> {
         let mut conversations = self.timeline_store.active_conversations();
-        let Some(viewer) = viewer else {
-            return conversations;
-        };
 
         conversations.retain(|conversation| match conversation.kind {
-            ConversationKind::Direct => conversation
-                .participants
-                .iter()
-                .any(|participant| participant == viewer),
+            ConversationKind::Direct => {
+                if Self::personal_room_owner(conversation).is_some() {
+                    return self.personal_room_visible_to_viewer(conversation, viewer);
+                }
+                let Some(viewer) = viewer else {
+                    return true;
+                };
+                conversation
+                    .participants
+                    .iter()
+                    .any(|participant| participant == viewer)
+            }
             ConversationKind::Room => {
+                let Some(viewer) = viewer else {
+                    return true;
+                };
                 conversation
                     .participants
                     .iter()
@@ -1052,13 +1098,22 @@ impl GatewayRuntime {
             .shell_visible_conversations_for_viewer(viewer)
             .into_iter()
             .map(|conversation| {
-                let last_sender = self
-                    .timeline_store
-                    .recent_messages(&conversation.conversation_id, 1)
-                    .last()
-                    .map(|entry| entry.envelope.sender.0.clone())
-                    .unwrap_or_else(|| "system".into());
-                let room_messages = self.shell_recent_messages(&conversation.conversation_id, 32);
+                let messages_visible =
+                    self.personal_room_messages_visible_to_viewer(&conversation, viewer);
+                let last_sender = if messages_visible {
+                    self.timeline_store
+                        .recent_messages(&conversation.conversation_id, 1)
+                        .last()
+                        .map(|entry| entry.envelope.sender.0.clone())
+                        .unwrap_or_else(|| "system".into())
+                } else {
+                    "system".into()
+                };
+                let room_messages = if messages_visible {
+                    self.shell_recent_messages(&conversation.conversation_id, 32)
+                } else {
+                    Vec::new()
+                };
                 let last_count = room_messages.len();
                 let scene_summary = Self::summarize_scene(conversation.scene.as_ref());
                 let scene_banner = Self::room_scene_banner(&conversation);
@@ -1082,6 +1137,7 @@ impl GatewayRuntime {
                     peer_label.as_deref(),
                 );
                 let route_label = Self::room_route_label(&conversation.conversation_id);
+                let personal_room_owner = Self::personal_room_owner(&conversation);
                 let caretaker =
                     Self::shell_caretaker(&conversation.conversation_id, &participant_label);
                 let is_frozen = self
@@ -1111,6 +1167,9 @@ impl GatewayRuntime {
                     context_summary: None,
                     search_terms: Vec::new(),
                     member_count: Some(conversation.participants.len()),
+                    owner_resident_id: personal_room_owner.map(|owner| owner.0.clone()),
+                    personal_room_access_policy: personal_room_owner
+                        .map(|owner| self.personal_room_access_policy(owner)),
                     scene_banner,
                     scene_summary,
                     room_variant,
@@ -1215,6 +1274,7 @@ impl GatewayRuntime {
                         )),
                         search_terms: room.search_terms.clone(),
                         member_count: room.member_count,
+                        personal_room_access_policy: room.personal_room_access_policy,
                         caretaker,
                         detail_card,
                         workflow,
@@ -1345,6 +1405,8 @@ impl GatewayRuntime {
         room.activity_time_label.hash(hasher);
         room.search_terms.hash(hasher);
         room.member_count.hash(hasher);
+        room.owner_resident_id.hash(hasher);
+        room.personal_room_access_policy.hash(hasher);
         room.scene_banner.hash(hasher);
         room.scene_summary.hash(hasher);
         room.room_variant.hash(hasher);

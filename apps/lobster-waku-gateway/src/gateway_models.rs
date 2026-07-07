@@ -66,6 +66,10 @@ pub(crate) struct ShellRoomState {
     pub(crate) search_terms: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) member_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) owner_resident_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) personal_room_access_policy: Option<PersonalRoomAccessPolicy>,
     pub(crate) scene_banner: Option<String>,
     pub(crate) scene_summary: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -123,6 +127,8 @@ pub(crate) struct ConversationShellConversation {
     pub(crate) search_terms: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) member_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) personal_room_access_policy: Option<PersonalRoomAccessPolicy>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) caretaker: Option<ShellCaretakerProjection>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -308,6 +314,10 @@ pub(crate) struct ResidentDirectoryEntry {
     pub(crate) avatar_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) personal_room_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) relationship_state: Option<ResidentRelationshipState>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) relationship_requested_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1204,6 +1214,71 @@ pub(crate) struct OpenDirectSessionRequest {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+pub(crate) struct PersonalRoomRequest {
+    pub(crate) resident_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct PersonalRoomResponse {
+    pub(crate) room_id: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PersonalRoomAccessPolicy {
+    RegisteredAll,
+    FriendsOnly,
+}
+
+impl Default for PersonalRoomAccessPolicy {
+    fn default() -> Self {
+        Self::FriendsOnly
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct PersonalRoomAccessPolicyRequest {
+    pub(crate) resident_id: String,
+    pub(crate) policy: PersonalRoomAccessPolicy,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct PersonalRoomAccessPolicyResponse {
+    pub(crate) resident_id: String,
+    pub(crate) policy: PersonalRoomAccessPolicy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ResidentRelationshipState {
+    Pending,
+    Friends,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct ResidentRelationshipRecord {
+    pub(crate) resident_a: String,
+    pub(crate) resident_b: String,
+    pub(crate) state: ResidentRelationshipState,
+    pub(crate) requested_by: String,
+    pub(crate) created_at_ms: i64,
+    pub(crate) updated_at_ms: i64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ResidentRelationshipRequest {
+    pub(crate) actor_id: String,
+    pub(crate) peer_id: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ResidentRelationshipResponse {
+    pub(crate) resident_id: String,
+    pub(crate) peer_id: String,
+    pub(crate) state: ResidentRelationshipState,
+}
+
+#[derive(Debug, Clone, Deserialize)]
 pub(crate) struct ConnectProviderRequest {
     pub(crate) provider_url: String,
 }
@@ -1519,6 +1594,8 @@ pub(crate) struct GatewayRuntime {
     pub(crate) auth_state_path: PathBuf,
     pub(crate) invites_path: PathBuf,
     pub(crate) permission_groups_path: PathBuf,
+    pub(crate) personal_room_access_policies_path: PathBuf,
+    pub(crate) resident_relationships_path: PathBuf,
     pub(crate) audit_log_path: PathBuf,
     pub(crate) timeline_store: FileTimelineStore,
     pub(crate) secure_sessions: SkeletonSecureSessionManager,
@@ -1550,6 +1627,8 @@ pub(crate) struct GatewayRuntime {
     pub(crate) invites: HashMap<String, InviteCode>,
     pub(crate) permission_groups: HashMap<String, PermissionGroup>,
     pub(crate) resident_permission_groups: HashMap<String, String>,
+    pub(crate) personal_room_access_policies: HashMap<String, PersonalRoomAccessPolicy>,
+    pub(crate) resident_relationships: HashMap<String, ResidentRelationshipRecord>,
     pub(crate) audit_events: Vec<AuditEvent>,
     pub(crate) dev_auth_bypass: bool,
 }

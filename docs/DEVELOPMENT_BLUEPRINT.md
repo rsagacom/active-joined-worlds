@@ -20,24 +20,55 @@
 
 居民（房主）
   ├─ 管理自己私宅的场景和热点层
-  └─ 私宅背景可更换（白天+夜晚两张图，缺一不可）
+  ├─ 私宅背景可更换（白天+夜晚两张图，缺一不可）
+  └─ 决定自己私宅的主客访问策略
 
-访客
-  ├─ 只读访问他人私宅
-  └─ 公聊广场发言需登录
+注册居民（访问者）
+  ├─ 登录后才可请求访问他人私宅
+  └─ 是否可进入由房主访问策略 + 关系权限决定
+
+未登录访客
+  ├─ 不可访问任何居民私宅
+  └─ 只能看到登录引导或允许匿名只读的公共入口
 ```
+
+### 私宅主客访问确权（2026-06-26）
+
+私宅不是默认公开空间。进入他人私宅必须同时满足：
+
+1. 访问者必须是已注册并已登录的 IM 居民，不能用 `访客`、空身份或匿名 viewer 进入。
+2. Gateway 必须读取房主保存的私宅访问策略，H5 不能仅凭 `room.id`、`home:<resident>` 或前端状态自行放行。
+3. 房主至少可以在两档策略中选择：
+   - `registered_all`: 所有已登录注册居民都可以访问。
+   - `friends_only`: 只有好友/互相关系居民可以访问。
+4. 未配置策略时采用保守默认：不按“所有注册用户可访问”放行；MVP 阶段默认 `friends_only`，只有 Gateway 已确认的好友关系可以进入。
+5. 私宅场景展示与私聊消息流必须分层。即使访问者被允许进入私宅场景，也不能因此读取未经授权的历史私聊消息。
+6. 未来可扩展 `allowlist`、`blocklist`、一次性邀请等策略，但不能绕过上面的登录与房主确权前提。
+
+2026-06-26 实现状态：
+- Gateway 已持久化 `registered_all` / `friends_only` 两档策略，默认 `friends_only`。
+- `POST /v1/personal-room/access-policy` 要求 Bearer token 与房主 `resident_id` 匹配。
+- 个人房间 shell state 已暴露 `personal_room_access_policy`，用于 H5 显示当前策略。
+- H5 住宅页已接入房主专属 `好友` / `注册` 分段控件；控件只在“自己的私宅”显示，提交复用现有 Bearer session。
+- Gateway 已新增 `request` / `accept` 两步好友关系流：pending 不解锁，accepted friends 才能访问 `friends_only` 私宅场景。
+- `GET /v1/residents?resident_id=<viewer>` 已按访问者投影 `relationship_state` / `relationship_requested_by`，供 H5 判断申请、接受和好友态。
+- H5 居民目录和住宅侧栏已接入 `申请好友` / `已申请` / `接受好友` / `好友` 关系入口，提交复用 Bearer session 并通过 Gateway 端点落库。
+- H5 点击未授权私宅时会按登录/申请/等待/接受状态给出下一步提示，不再切到当前 shell state 不可见的 room。
+- `registered_all` 只开放私宅场景可见性；访客 shell 投影不携带房主私宅历史消息。
+- 后续继续做真实移动端验收、关系按钮触控 polish 和更完整的空态视觉，不允许在 H5 本地伪造好友状态。
 
 ## 二、热点层权限模型
 
 | 场景 | 编辑权限 | 查看权限 |
 |------|---------|---------|
-| 私宅（自己的） | 房主本人 | 所有人 |
-| 私宅（别人的） | 房主本人 | 所有人（只读） |
+| 私宅（自己的） | 房主本人 | 房主本人 |
+| 私宅（别人的） | 房主本人 | 已登录注册居民 + 房主访问策略授权 |
 | 主城/广场 | 城主 | 所有人 |
 | 世界入口/世界广场 | 平台管理员（我） | 所有人 |
 
 **实现位置**: `conversation_runtime.rs` → `check_scene_edit_permission()`
 - 私宅: 检查 `actor_id ∈ conversation.participants`
+- 私宅访问: 必须新增/维护独立的 access policy 校验，不能把 1 人 Direct 默认视为公开可见
 - 世界入口/广场 (`room:world:entry`, `room:world:square`): `actor_is_world_steward()`
 - 公共房间: `actor_is_world_steward()`
 
@@ -111,11 +142,11 @@
 
 | 优先级 | 事项 |
 |--------|------|
-| P0 | world-square + admin-ds 注册弹窗 JS 接线 |
-| P0 | 前端消息发送确认（URL 带 `?gateway=` 参数） |
-| P1 | admin-ds 场景编辑器加 day/night URL 输入 |
-| P2 | 城主后台设备管理 UI |
-| P2 | 私宅访问区分"自己的"/"别人的"（隐藏编辑按钮） |
+| P0 ✅ | world-square + admin-ds 注册弹窗 JS 接线（已接入 `shell-auth-standalone.js`） |
+| P0 ✅ | 前端消息发送确认（`?gateway=` 双浏览器 smoke 已验证发送/编辑/撤回/失败重发） |
+| P1 ✅ | admin-ds 场景编辑器加 day/night URL 输入（复用 Gateway `SceneImageLayer` 成对校验） |
+| P2 ✅ | 城主后台设备管理 UI（已接入 admin-ds 主内容区，复用 `/v1/admin/devices/*`） |
+| P2 ✅ | 私宅关系按钮移动端真实验收 + 未授权空态视觉 polish（住宅页状态节点 + 34px 移动按钮 realness） |
 | 阻塞 | 多城邦联邦、MLS 加密（PRODUCT_CHARTER 延后） |
 
 ## 十、关键文件速查

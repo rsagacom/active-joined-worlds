@@ -15,6 +15,14 @@ async function readShellModule(name) {
   return fs.readFile(new URL(`../${name}`, import.meta.url), "utf8");
 }
 
+function sliceBetween(source, startMarker, endMarker) {
+  const start = source.indexOf(startMarker);
+  assert.notEqual(start, -1, `missing start marker: ${startMarker}`);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.notEqual(end, -1, `missing end marker: ${endMarker}`);
+  return source.slice(start, end);
+}
+
 // ====== 文件存在性 ======
 
 test("admin-ds 正式后台文件完整存在", async () => {
@@ -35,10 +43,25 @@ test("admin-ds.html 引用正确的 CSS 和 JS", async () => {
   assert.match(html, /href="\.\/styles\.admin-ds\.css(?:\?v=[^"]+)?"/, "应引用独立样式文件 styles.admin-ds.css");
   assert.match(html, /src="\.\/admin-ds-data\.js"/, "应引用数据文件 admin-ds-data.js");
   assert.match(html, /src="\.\/admin-ds\.js"/, "应引用交互脚本 admin-ds.js");
+  assert.match(html, /import \{ initStandaloneAuthSurface \} from "\.\/shell-auth-standalone\.js";/, "注册登录应走共享 standalone auth 接线");
+  assert.match(html, /initStandaloneAuthSurface\(\{[\s\S]*gatewayUrl/, "应初始化 standalone auth 并传入 gatewayUrl");
+  assert.doesNotMatch(html, /import \{ initAuth \} from "\.\/shell-auth\.js";/, "后台页不应复制 shell-auth 初始化细节");
   assert.match(html, /<html lang="zh-CN"/, "应声明中文语言");
   assert.match(html, /<title>AJW聊天 · 管理后台<\/title>/, "应有正确的页面标题");
   assert.match(html, /正式后台 · 单城 IM 运营台/, "应明确作为正式后台而非候选页");
   assert.doesNotMatch(html, /候选方案/, "正式后台页面不应继续标记为候选方案");
+});
+
+test("standalone auth module wires OTP submit lifecycle", async () => {
+  const js = await readShellModule("shell-auth-standalone.js");
+
+  assert.match(js, /initAuth\(/, "应复用 shell-auth 初始化 DOM refs");
+  assert.match(js, /loadAuthDraft\(\)/, "初始化后应恢复验证码登录草稿");
+  assert.match(js, /updateAuthFormState\(\)/, "初始化和提交后应刷新按钮状态");
+  assert.match(js, /requestFormEl\?\.addEventListener\("submit"[\s\S]*requestEmailOtp\(\)/, "申请表单 submit 应调用 requestEmailOtp");
+  assert.match(js, /verifyFormEl\?\.addEventListener\("submit"[\s\S]*verifyEmailOtp\(\)/, "校验表单 submit 应调用 verifyEmailOtp");
+  assert.match(js, /persistAuthDraft\(\)/, "submit 前应保存当前邮箱/昵称/验证码草稿");
+  assert.match(js, /localizedRuntimeError\(/, "失败反馈应复用本地化错误文案");
 });
 
 // ====== 核心模块 DOM 存在 ======
@@ -56,6 +79,7 @@ test("admin-ds.html 包含全部核心模块面板", async () => {
     { id: "mod-world-notices", label: "世界公告" },
     { id: "mod-safety-advisories", label: "安全通告" },
     { id: "mod-sysconfig", label: "系统配置" },
+    { id: "mod-devices", label: "设备管理" },
     { id: "mod-scene", label: "场景编辑" },
     { id: "mod-logs", label: "日志与告警" },
   ];
@@ -66,10 +90,17 @@ test("admin-ds.html 包含全部核心模块面板", async () => {
   }
 
   // 侧栏导航项
-  const navModules = ["dashboard", "residents", "rooms", "messages", "permissions", "world-notices", "safety-advisories", "sysconfig", "scene", "logs"];
+  const navModules = ["dashboard", "residents", "rooms", "messages", "permissions", "world-notices", "safety-advisories", "sysconfig", "devices", "scene", "logs"];
   for (const nav of navModules) {
     assert.match(html, new RegExp(`data-module="${nav}"`), `导航项 data-module="${nav}" 应存在`);
   }
+});
+
+test("admin-ds.html 设备管理模块位于后台主内容区内", async () => {
+  const html = await readShellPage("admin-ds.html");
+  const mainContent = sliceBetween(html, '<div class="ds-content" id="dsContent">', '</div><!-- /.ds-content -->');
+
+  assert.match(mainContent, /id="mod-devices"/, "设备管理必须位于 #dsContent 内，才能跟随后台主内容布局和模块切换");
 });
 
 // ====== 侧栏与布局结构 ======
@@ -130,6 +161,7 @@ test("admin-ds.html 包含所有数据表格容器", async () => {
     "safetyAdvisoryTableBody",
     "safetyReportTableBody",
     "sanctionTableBody",
+    "deviceTableBody",
   ];
 
   for (const id of tableBodies) {
@@ -149,6 +181,7 @@ test("admin-ds.html 包含搜索和筛选 UI", async () => {
     "logSearch", "logLevelFilter", "logTypeFilter",
     "worldNoticeTitle", "worldNoticeBody", "worldNoticeSeverity", "worldNoticeTags",
     "safetyAdvisorySubjectKind", "safetyAdvisorySubjectRef", "safetyAdvisoryAction", "safetyAdvisoryReason",
+    "deviceAddressInput", "deviceLabelInput", "deviceAddBtn",
     "sceneRoomSelect", "sceneEditorContainer",
   ];
 
@@ -560,6 +593,19 @@ test("admin-ds.js 包含场景编辑相关函数", async () => {
   assert.match(js, /function loadSceneModule/, "应定义 loadSceneModule 函数");
   assert.match(js, /function renderSceneEditor/, "应定义 renderSceneEditor 函数");
   assert.match(js, /\/v1\/admin\/scene/, "应调用 admin/scene 端点");
+});
+
+test("admin-ds scene editor posts paired day/night image URLs", async () => {
+  const js = await readShellModule("admin-ds.js");
+  const sceneEditor = sliceBetween(js, "function renderSceneEditor(room, container)", "  // ====== Device Management ======");
+
+  assert.match(sceneEditor, /placeholder:\s*'白天背景图 URL（可选）'/, "正式场景编辑器应显示 day URL 输入");
+  assert.match(sceneEditor, /placeholder:\s*'夜晚背景图 URL（可选）'/, "正式场景编辑器应显示 night URL 输入");
+  assert.match(sceneEditor, /var dayUrl = dayUrlInput\.value\.trim\(\);/, "保存时应读取 day URL");
+  assert.match(sceneEditor, /var nightUrl = nightUrlInput\.value\.trim\(\);/, "保存时应读取 night URL");
+  assert.match(sceneEditor, /day_image_url:\s*dayUrl \|\| null/, "image_layer payload 应包含 day_image_url");
+  assert.match(sceneEditor, /night_image_url:\s*nightUrl \|\| null/, "image_layer payload 应包含 night_image_url");
+  assert.match(sceneEditor, /selectedPreset \|\| dayUrl \|\| nightUrl/, "只填自定义图片时也应提交 image_layer");
 });
 
 // ====== 写操作失败反馈（禁止假成功态）======

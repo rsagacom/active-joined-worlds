@@ -123,6 +123,16 @@ export function governanceFromWorldSnapshotBundle(bundle) {
   };
 }
 
+export function governanceWithResidentsPayload(governance, residentsPayload) {
+  if (!governance) return null;
+  return {
+    ...governance,
+    residents: Array.isArray(residentsPayload)
+      ? residentsPayload
+      : (governance.residents || []),
+  };
+}
+
 export function governanceFromWorldApiPayload(payload, residentsPayload) {
   if (!payload?.world) return null;
   return {

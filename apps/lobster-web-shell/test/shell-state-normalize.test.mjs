@@ -4,6 +4,7 @@ import {
   contractConversationMap,
   governanceFromWorldApiPayload,
   governanceFromWorldSnapshotBundle,
+  governanceWithResidentsPayload,
   mergeRoomWithContract,
   synthesizeRoomsFromContracts,
 } from "../shell-state-normalize.js";
@@ -170,6 +171,41 @@ test("governanceFromWorldSnapshotBundle returns null without a world and default
       world_safety: null,
     },
   );
+});
+
+test("governanceWithResidentsPayload overlays scoped resident projection", () => {
+  const governance = {
+    world: { id: "world" },
+    cities: [{ city_id: "main" }],
+    residents: [{ resident_id: "alice" }],
+    world_square: [{ id: "notice-1" }],
+  };
+
+  assert.deepEqual(
+    governanceWithResidentsPayload(governance, [
+      {
+        resident_id: "bob",
+        relationship_state: "pending",
+        relationship_requested_by: "alice",
+      },
+    ]),
+    {
+      world: { id: "world" },
+      cities: [{ city_id: "main" }],
+      residents: [
+        {
+          resident_id: "bob",
+          relationship_state: "pending",
+          relationship_requested_by: "alice",
+        },
+      ],
+      world_square: [{ id: "notice-1" }],
+    },
+  );
+  assert.deepEqual(governanceWithResidentsPayload(governance, null).residents, [
+    { resident_id: "alice" },
+  ]);
+  assert.equal(governanceWithResidentsPayload(null, []), null);
 });
 
 test("governanceFromWorldApiPayload maps legacy world and resident responses", () => {

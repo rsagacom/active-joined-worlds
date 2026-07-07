@@ -224,32 +224,31 @@ export async function requestEmailOtp() {
     setAuthStatus("设备验证将在后续版本支持", true);
     return;
   }
-  const email = _els.emailInputEl.value.trim();
-  const mobile = _els.mobileInputEl.value.trim();
-  const devicePhysicalAddress = _els.deviceInputEl.value.trim();
+  const email = _els.emailInputEl?.value?.trim() || "";
+  const mobile = _els.mobileInputEl?.value?.trim() || "";
+  const devicePhysicalAddress = _els.deviceInputEl?.value?.trim() || "";
   if (!email) {
     setAuthStatus("请填写邮箱地址", true);
     return;
   }
   setAuthStatus("正在检查注册句柄");
-  const preflight = await _callbacks.postJson("/v1/auth/preflight", {
-    email,
-    mobile: mobile || undefined,
-    device_physical_address: devicePhysicalAddress || undefined,
-  });
+  const preflightPayload = { email };
+  if (mobile) preflightPayload.mobile = mobile;
+  if (devicePhysicalAddress) preflightPayload.device_physical_address = devicePhysicalAddress;
+  const preflight = await _callbacks.postJson("/v1/auth/preflight", preflightPayload);
   if (!preflight.allowed) {
     setAuthStatus(preflight.blocked_reasons.join(" · ") || "认证预检未通过", true);
     return;
   }
   const nickname = _els.nicknameInputEl?.value?.trim() || undefined;
   setAuthStatus(`正在为 ${preflight.normalized_email || email} 申请邮箱验证码`);
-  const response = await _callbacks.postJson("/v1/auth/email-otp/request", {
-    email,
-    mobile: mobile || undefined,
-    device_physical_address: devicePhysicalAddress || undefined,
-    resident_id: _callbacks.desiredResidentId ? _callbacks.desiredResidentId() : undefined,
-    nickname,
-  });
+  const requestPayload = { email };
+  if (mobile) requestPayload.mobile = mobile;
+  if (devicePhysicalAddress) requestPayload.device_physical_address = devicePhysicalAddress;
+  const desiredResidentId = _callbacks.desiredResidentId ? _callbacks.desiredResidentId() : undefined;
+  if (desiredResidentId) requestPayload.resident_id = desiredResidentId;
+  if (nickname) requestPayload.nickname = nickname;
+  const response = await _callbacks.postJson("/v1/auth/email-otp/request", requestPayload);
   _authSession = {
     challengeId: response.challenge_id,
     maskedEmail: response.masked_email,
@@ -269,32 +268,31 @@ export async function requestEmailOtp() {
 }
 
 async function requestMobileOtp() {
-  const mobile = _els.mobileInputEl.value.trim();
-  const email = _els.emailInputEl.value.trim();
-  const devicePhysicalAddress = _els.deviceInputEl.value.trim();
+  const mobile = _els.mobileInputEl?.value?.trim() || "";
+  const email = _els.emailInputEl?.value?.trim() || "";
+  const devicePhysicalAddress = _els.deviceInputEl?.value?.trim() || "";
   if (!mobile) {
     setAuthStatus("请填写手机号码", true);
     return;
   }
   setAuthStatus("正在检查注册句柄");
-  const preflight = await _callbacks.postJson("/v1/auth/preflight", {
-    email: email || undefined,
-    mobile,
-    device_physical_address: devicePhysicalAddress || undefined,
-  });
+  const preflightPayload = { mobile };
+  if (email) preflightPayload.email = email;
+  if (devicePhysicalAddress) preflightPayload.device_physical_address = devicePhysicalAddress;
+  const preflight = await _callbacks.postJson("/v1/auth/preflight", preflightPayload);
   if (!preflight.allowed) {
     setAuthStatus(preflight.blocked_reasons.join(" · ") || "认证预检未通过", true);
     return;
   }
   const nickname = _els.nicknameInputEl?.value?.trim() || undefined;
   setAuthStatus(`正在为 ${preflight.normalized_mobile || mobile} 申请手机验证码`);
-  const response = await _callbacks.postJson("/v1/auth/mobile-otp/request", {
-    mobile,
-    email: email || undefined,
-    device_physical_address: devicePhysicalAddress || undefined,
-    resident_id: _callbacks.desiredResidentId ? _callbacks.desiredResidentId() : undefined,
-    nickname,
-  });
+  const requestPayload = { mobile };
+  if (email) requestPayload.email = email;
+  if (devicePhysicalAddress) requestPayload.device_physical_address = devicePhysicalAddress;
+  const desiredResidentId = _callbacks.desiredResidentId ? _callbacks.desiredResidentId() : undefined;
+  if (desiredResidentId) requestPayload.resident_id = desiredResidentId;
+  if (nickname) requestPayload.nickname = nickname;
+  const response = await _callbacks.postJson("/v1/auth/mobile-otp/request", requestPayload);
   _authSession = {
     challengeId: response.challenge_id,
     maskedEmail: response.masked_mobile,

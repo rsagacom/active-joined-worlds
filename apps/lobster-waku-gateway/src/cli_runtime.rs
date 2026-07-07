@@ -53,6 +53,7 @@ impl GatewayRuntime {
         let participant_label =
             Self::room_participant_label(&conversation.conversation_id, peer_label.as_deref());
         let route_label = Self::room_route_label(&conversation.conversation_id);
+        let personal_room_owner = Self::personal_room_owner(conversation);
         let caretaker = Self::shell_caretaker(&conversation.conversation_id, &participant_label);
         let room_messages = self.shell_recent_messages(&conversation.conversation_id, 32);
         let last_count = room_messages.len();
@@ -83,6 +84,9 @@ impl GatewayRuntime {
             context_summary: None,
             search_terms: Vec::new(),
             member_count: Some(conversation.participants.len()),
+            owner_resident_id: personal_room_owner.map(|owner| owner.0.clone()),
+            personal_room_access_policy: personal_room_owner
+                .map(|owner| self.personal_room_access_policy(owner)),
             scene_banner: None,
             scene_summary: None,
             room_variant: None,

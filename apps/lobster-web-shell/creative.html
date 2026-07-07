@@ -94,6 +94,18 @@
           <span class="creative-hud-chip">私聊</span>
           <span class="creative-hud-ownership-badge creative-hud-ownership-badge--own">我的私宅</span>
           <span class="creative-hud-ownership-badge creative-hud-ownership-badge--visitor">访客模式</span>
+          <div
+            id="personal-room-access-policy"
+            class="personal-room-policy"
+            data-rail-visibility="owner-only"
+            aria-label="私宅访问策略"
+            hidden
+          >
+            <span class="personal-room-policy-label">访问</span>
+            <button type="button" class="personal-room-policy-option" data-personal-room-policy="friends_only" aria-pressed="true">好友</button>
+            <button type="button" class="personal-room-policy-option" data-personal-room-policy="registered_all" aria-pressed="false">注册</button>
+            <span id="personal-room-access-policy-status" class="personal-room-policy-status" aria-live="polite"></span>
+          </div>
           <span id="hud-status" class="hud-pill">连线中</span>
           <button type="button" id="hud-login-toggle" class="hud-login-toggle shell-hidden" aria-label="打开登录窗口">登录</button>
           <button type="button" id="theme-toggle" class="theme-toggle" aria-label="切换亮色/暗色模式" title="切换亮色/暗色模式">☀️</button>
@@ -123,6 +135,7 @@
             <span>居民</span>
             <input id="room-search-input" class="rail-search-input" type="text" placeholder="搜索居民或房间..." autocomplete="off" />
           </div>
+          <p id="governance-status" class="governance-status resident-access-status" aria-live="polite"></p>
           <ul id="resident-list" class="rail-list creative-resident-list"></ul>
           <ul id="room-list" class="rail-list creative-room-list"></ul>
           <div class="creative-rail-note">头像是居民房间入口，点击后确认进入对方房间私聊。</div>
@@ -324,6 +337,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=20260616-clear-empty-skeleton"></script>
+    <script type="module" src="./app.js?v=20260626-ownership"></script>
   </body>
 </html>

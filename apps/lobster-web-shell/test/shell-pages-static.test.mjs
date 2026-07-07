@@ -78,10 +78,14 @@ test("creative page is the residential pixel room entry", async () => {
   assert.match(html, /头像是居民房间入口，点击后确认进入对方房间私聊。/);
   assert.match(html, /id="room-search-input"/);
   assert.match(html, /placeholder="搜索居民或房间..."/);
+  assert.match(html, /id="personal-room-access-policy"/);
+  assert.match(html, /data-rail-visibility="owner-only"/);
+  assert.match(html, /data-personal-room-policy="friends_only"/);
+  assert.match(html, /data-personal-room-policy="registered_all"/);
   assert.match(html, /styles\.creative\.css\?v=20260525-h5-shell-fix-v2/);
   assert.match(html, /styles\.user-shell\.css\?v=20260612-user-shell-extract/);
   assert.match(html, /styles\.pixel-map\.css\?v=20260525-h5-shell-fix-v2/);
-  assert.match(html, /app\.js\?v=20260616-clear-empty-skeleton/);
+  assert.match(html, /app\.js\?v=20260626-ownership/);
   assert.match(html, /data-symbol-trigger/);
   assert.match(html, /composer-symbol-category/);
   assert.match(html, /卖萌/);
@@ -753,6 +757,17 @@ test("world-square page is a readonly public square entry", async () => {
   assert.match(css, /\.world-square-card\[open\]/);
   assert.match(css, /\.world-square-card:not\(\[open\]\)/);
   assert.match(css, /@media \(max-width: 820px\)[\s\S]*\.world-square-card--compact/);
+});
+
+test("world-square resident login wires shared standalone OTP auth", async () => {
+  const html = await readShellPage("world-square.html");
+
+  assert.match(html, /id="resident-login-overlay"/);
+  assert.match(html, /id="auth-request-form"/);
+  assert.match(html, /id="auth-verify-form"/);
+  assert.match(html, /import \{ initStandaloneAuthSurface \} from "\.\/shell-auth-standalone\.js";/);
+  assert.match(html, /initStandaloneAuthSurface\(\{[\s\S]*gatewayUrl[\s\S]*onIdentityChanged:\s*updateHudForIdentity/);
+  assert.doesNotMatch(html, /import \{ initAuth \} from "\.\/shell-auth\.js";/);
 });
 
 test("world-square reuses the private-room rail chrome", async () => {
@@ -3483,6 +3498,95 @@ test("compact resident list DOM is delegated out of renderResidentList", async (
   assert.doesNotMatch(renderSource, /enterResidentRoom\(resident\)/);
 });
 
+test("resident relationship actions are wired to gateway relationship routes", async () => {
+  const creativeHtml = await readShellPage("creative.html");
+  const source = await readShellModule("app.js");
+  const creativeCss = await readShellModule("styles.creative.css");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
+  const statusStateSource = await readShellModule("shell-governance-status.js");
+  const statusSource = sliceBetween(
+    source,
+    "function setGovernanceStatus(message, isError = false",
+    "function setAuthStatus(message, isError = false)",
+  );
+  const submitSource = sliceBetween(
+    source,
+    "async function submitResidentRelationshipAction(model) {",
+    "function createResidentRelationshipActionButton(resident) {",
+  );
+  const relationshipButtonSource = sliceBetween(
+    source,
+    "function createResidentRelationshipActionButton(resident) {",
+    "function createResidentDirectActionButton(resident) {",
+  );
+  const directoryActionsSource = sliceBetween(
+    source,
+    "function appendResidentDirectoryActions(li, resident) {",
+    "function createResidentDirectoryCardNode(resident) {",
+  );
+  const compactItemSource = sliceBetween(
+    source,
+    "function createCompactResidentListItemNode(resident) {",
+    "function renderResidentList() {",
+  );
+  const entrySource = sliceBetween(
+    source,
+    "async function enterResidentRoom(resident) {",
+    "async function openDirectSession(peerId) {",
+  );
+
+  assert.match(creativeHtml, /id="governance-status"/, "住宅页必须提供好友关系/私宅访问反馈状态节点");
+  assert.match(source, /residentRelationshipActionModel,\s+residentRelationshipSubmitRequestState,\s+residentPrivateRoomAccessPromptModel,/);
+  assert.match(governanceRenderSource, /function residentRelationshipSubmitRequestState\(/);
+  assert.match(source, /governanceStatusClassState,\s+governanceStatusText,\s+} from "\.\/shell-governance-status\.js";/);
+  assert.doesNotMatch(source, /const GOVERNANCE_STATUS_DYNAMIC_CLASSES = \[/);
+  assert.match(statusStateSource, /GOVERNANCE_STATUS_DYNAMIC_CLASSES/);
+  assert.match(statusStateSource, /resident-room-access-note/, "治理状态条应清理私宅访问状态 class");
+  assert.match(statusStateSource, /function governanceStatusClassState/);
+  assert.match(statusStateSource, /function governanceStatusText/);
+  assert.match(statusSource, /extraClassName/, "治理状态条应支持未授权私宅 prompt 的视觉 class");
+  assert.match(statusSource, /governanceStatusText\(\{/);
+  assert.match(statusSource, /governanceStatusClassState\(\{/);
+  assert.match(submitSource, /residentRelationshipSubmitRequestState\(model, \{ gatewayUrl \}\)/);
+  assert.match(submitSource, /postGatewayJson\(requestState\.endpoint, requestState\.payload\)/);
+  assert.match(submitSource, /await refreshFromGateway\(\{ requireShell: true \}\)/);
+  assert.doesNotMatch(submitSource, /model\.endpoint|model\.payload/);
+  assert.match(relationshipButtonSource, /residentRelationshipActionModel\(resident, \{\s*currentResidentId: currentIdentity\(\),\s*\}\)/);
+  assert.match(relationshipButtonSource, /submitResidentRelationshipAction\(model\)/);
+  assert.match(directoryActionsSource, /createResidentRelationshipActionButton\(resident\)/);
+  assert.match(compactItemSource, /createResidentRelationshipActionButton\(resident\)/);
+  assert.match(entrySource, /residentPrivateRoomAccessPromptModel\(resident, \{/);
+  assert.match(entrySource, /roomVisible: state\.rooms\.some\(\(room\) => room\.id === resident\.personal_room_id\)/);
+  assert.match(entrySource, /setGovernanceStatus\(accessPrompt\.text, accessPrompt\.isError, accessPrompt\.className\)/);
+  assert.match(creativeCss, /\.creative-resident-list \.resident-relationship-action/);
+  assert.match(creativeCss, /\.creative-resident-list \.resident-relationship-action\.is-pending/);
+  assert.match(creativeCss, /\.creative-resident-list \.resident-relationship-action\.is-friends/);
+  assert.match(creativeCss, /\.governance-status\.resident-room-access-note/);
+  assert.match(creativeCss, /\.governance-status\.resident-room-access-note\.is-locked/);
+  assert.match(creativeCss, /\.governance-status\.resident-room-access-note\.is-actionable/);
+});
+
+test("direct session open request state is delegated out of openDirectSession", async () => {
+  const source = await readShellModule("app.js");
+  const governanceRenderSource = await readShellModule("shell-governance-render.js");
+  const openSource = sliceBetween(
+    source,
+    "async function openDirectSession(peerId) {",
+    "async function submitProviderConnect() {",
+  );
+
+  assert.match(source, /directSessionOpenRequestState,/);
+  assert.match(governanceRenderSource, /function directSessionOpenRequestState\(/);
+  assert.match(openSource, /directSessionOpenRequestState\(\{/);
+  assert.match(openSource, /peerId,/);
+  assert.match(openSource, /currentIdentity: currentIdentity\(\)/);
+  assert.match(openSource, /gatewayUrl,/);
+  assert.match(openSource, /postGatewayJson\(requestState\.endpoint, requestState\.payload\)/);
+  assert.match(openSource, /setGovernanceStatus\(requestState\.statusText/);
+  assert.match(openSource, /setGovernanceStatus\(requestState\.successText\)/);
+  assert.doesNotMatch(openSource, /peerId\.trim\(\)|\/v1\/direct\/open|requester_device_id|peer_device_id/);
+});
+
 test("caretaker panel DOM is delegated out of renderCaretakerPanel", async () => {
   const source = await readShellModule("app.js");
   const caretakerPanelSource = await readShellModule("shell-caretaker-panel.js");
@@ -3599,6 +3703,22 @@ test("world state payload normalization is delegated out of loadWorldState", asy
   assert.doesNotMatch(loadSource, /governance = \{/);
   assert.doesNotMatch(loadSource, /world_mirror_sources:/);
   assert.doesNotMatch(loadSource, /world_square:/);
+});
+
+test("world state loading scopes resident directory by current identity", async () => {
+  const source = await readShellModule("app.js");
+  const loadSource = sliceBetween(
+    source,
+    "async function loadWorldState() {",
+    "async function loadProviderState() {",
+  );
+
+  assert.match(loadSource, /const residentsUrl = new URL\(`\$\{gatewayUrl\}\/v1\/residents`\)/);
+  assert.match(loadSource, /if \(!isVisitorIdentity\(currentIdentity\(\)\)\)/);
+  assert.match(loadSource, /residentsUrl\.searchParams\.set\("resident_id", currentIdentity\(\)\)/);
+  assert.match(loadSource, /fetch\(residentsUrl\.toString\(\)\)/);
+  assert.match(loadSource, /const scopedGovernance = governanceWithResidentsPayload\(snapshotGovernance, scopedResidentsPayload\)/);
+  assert.match(loadSource, /governance = scopedGovernance/);
 });
 
 test("main startup orchestration is split into named phases", async () => {
@@ -4998,4 +5118,54 @@ test("owner-only rail visibility is enforced for logged-in residents", async () 
     "function persistSenderIdentity(value) {",
   );
   assert.match(loadBlock, /applyRailVisibility\(\)/);
+});
+
+test("personal room access policy control posts owner scoped session request", async () => {
+  const source = await readShellModule("app.js");
+  const policyModule = await readShellModule("shell-personal-room-policy.js");
+
+  assert.match(source, /const personalRoomPolicyControlEl/);
+  assert.match(source, /const personalRoomPolicyButtons/);
+  assert.match(source, /from "\.\/shell-personal-room-policy\.js"/);
+  assert.match(source, /personalRoomAccessPolicyControlState/);
+  assert.match(source, /personalRoomAccessPolicySubmitRequestState/);
+  assert.match(source, /appliedPersonalRoomAccessPolicy/);
+  assert.match(policyModule, /function personalRoomAccessPolicyForRoom\(room\)/);
+  assert.match(policyModule, /function personalRoomAccessPolicyControlState\(/);
+  assert.match(policyModule, /function personalRoomAccessPolicySubmitRequestState\(/);
+  assert.match(policyModule, /function appliedPersonalRoomAccessPolicy\(/);
+  assert.doesNotMatch(source, /function personalRoomAccessPolicyForRoom\(room\)/);
+  assert.match(source, /function syncPersonalRoomAccessPolicyControl\(\)/);
+  assert.match(source, /async function submitPersonalRoomAccessPolicy\(policy\)/);
+
+  const stageSyncer = sliceBetween(
+    source,
+    "function syncRoomStageCanvas(room) {",
+    "function renderDefaultUserRoomStageCanvas() {",
+  );
+  assert.match(stageSyncer, /syncPersonalRoomAccessPolicyControl\(\)/);
+  const policySyncer = sliceBetween(
+    source,
+    "function syncPersonalRoomAccessPolicyControl() {",
+    "function applyRailVisibility() {",
+  );
+  assert.match(policySyncer, /personalRoomAccessPolicyControlState\(\{/);
+  assert.match(policySyncer, /roomOwnershipForState,/);
+
+  const refreshFinalizer = sliceBetween(
+    source,
+    "async function refreshFromGateway({ requireShell = false } = {}) {",
+    "function startGatewayPolling() {",
+  );
+  assert.match(refreshFinalizer, /syncPersonalRoomAccessPolicyControl\(\)/);
+
+  const submitSource = sliceBetween(
+    source,
+    "async function submitPersonalRoomAccessPolicy(policy) {",
+    "async function refreshFromGateway({ requireShell = false } = {}) {",
+  );
+  assert.match(submitSource, /personalRoomAccessPolicySubmitRequestState\(\{/);
+  assert.match(submitSource, /postGatewayJson\(requestState\.endpoint, requestState\.payload\)/);
+  assert.match(submitSource, /appliedPersonalRoomAccessPolicy\(response, policy\)/);
+  assert.doesNotMatch(submitSource, /PERSONAL_ROOM_ACCESS_POLICIES\.has/);
 });

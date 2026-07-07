@@ -318,6 +318,35 @@ async function verifySceneEditorAccess(page, baseUrl) {
   assert(ownerDisplay !== "none", `logged-in resident must see scene-editor link, got display=${ownerDisplay}`);
 }
 
+async function verifyCreativeMobileRelationshipActions(page, baseUrl) {
+  // 守护私宅居民关系按钮在移动抽屉里可见、可点击，避免 26px 高度或被房间按钮覆盖。
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${baseUrl}/creative.html?verify=frontend-realness&identity=alice`, { waitUntil: "networkidle" });
+  await page.locator("#hud-rail-toggle").click();
+  await page.evaluate(() => {
+    const list = document.querySelector(".creative-resident-list");
+    if (!list) return;
+    const li = document.createElement("li");
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary mini-button resident-relationship-action";
+    button.textContent = "申请好友";
+    button.addEventListener("click", () => {
+      document.body.dataset.relationshipButtonClicked = "1";
+    });
+    li.appendChild(button);
+    list.appendChild(li);
+  });
+  const action = page.locator(".creative-resident-list .resident-relationship-action").last();
+  const minHeight = await action.evaluate((node) => parseFloat(getComputedStyle(node).minHeight));
+  assert(minHeight >= 34, `mobile relationship action min-height must be at least 34px, got ${minHeight}`);
+  await action.click();
+  assert(
+    await page.evaluate(() => document.body.dataset.relationshipButtonClicked === "1"),
+    "mobile relationship action should receive clicks without being covered",
+  );
+}
+
 async function verifySceneEditorMobile(page, baseUrl) {
   // 守护 scene-editor 移动端可用：pointer 事件替换 mouse 后加载无 JS 错误，且窄屏
   // 切单栏布局（不再被 280px 桌面侧栏挤爆）。P1 房间编辑器移动端交互闭环。
@@ -410,11 +439,12 @@ try {
   await verifySceneHotspotSizes(page, baseUrl);
   await verifyNoJavascriptErrors(page, baseUrl);
   await verifySceneEditorAccess(page, baseUrl);
+  await verifyCreativeMobileRelationshipActions(page, baseUrl);
   await verifySceneEditorMobile(page, baseUrl);
   await verifySceneEditorDayNight(page, baseUrl);
   await verifySceneEditorHotspotList(page, baseUrl);
   await verifySceneEditorUndoRedo(page, baseUrl);
-  console.log("frontend realness: composer, hotspot labels, shared scene rails, day/night backgrounds, formal admin, fixed hotspot sizes (64x34), zero uncaught JS errors, scene-editor owner-only access, mobile touch, day/night preview, hotspot list and undo/redo passed");
+  console.log("frontend realness: composer, hotspot labels, shared scene rails, day/night backgrounds, formal admin, fixed hotspot sizes (64x34), zero uncaught JS errors, scene-editor owner-only access, mobile relationship actions, mobile touch, day/night preview, hotspot list and undo/redo passed");
 } finally {
   await browser.close();
   await close(server);

@@ -173,7 +173,14 @@ pub(crate) fn handle_get_residents(
         .map(|value| value.trim())
         .filter(|value| !value.is_empty())
         .map(|value| value.to_lowercase());
-    let residents = match with_runtime(runtime, |runtime| runtime.enrich_resident_directory()) {
+    let viewer = query_params
+        .get("resident_id")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(|value| IdentityId(value.to_string()));
+    let residents = match with_runtime(runtime, |runtime| {
+        runtime.enrich_resident_directory_for_viewer(viewer.as_ref())
+    }) {
         Ok(residents) => residents,
         Err(response) => return response,
     };

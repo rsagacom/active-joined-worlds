@@ -747,6 +747,47 @@
         </div>
       </div>
 
+      <!-- ======== MODULE: 设备管理 ======== -->
+      <div class="ds-module" id="mod-devices">
+        <div class="ds-module-header">
+          <h2>设备管理</h2>
+          <p>管理城主设备白名单，封禁/解封设备控制城邦访问</p>
+        </div>
+        <div class="ds-card">
+          <div class="ds-card-header">
+            <span class="ds-card-title">添加设备</span>
+          </div>
+          <div class="ds-card-body" style="display:flex;gap:8px;flex-wrap:wrap;">
+            <input id="deviceAddressInput" type="text" class="ds-input" placeholder="MAC 地址 (如 1c:f6:4c:5f:3d:08)" style="flex:1;min-width:200px;" />
+            <input id="deviceLabelInput" type="text" class="ds-input" placeholder="设备标签 (如 我的MacBook)" style="flex:1;min-width:150px;" />
+            <button id="deviceAddBtn" class="ds-btn-primary ds-btn-sm">添加设备</button>
+          </div>
+        </div>
+        <div class="ds-card" style="margin-top:12px;">
+          <div class="ds-card-header">
+            <span class="ds-card-title">设备列表</span>
+            <span id="deviceCount" style="font-size:12px;color:var(--ds-text-secondary);"></span>
+          </div>
+          <div class="ds-card-body">
+            <table class="ds-table">
+              <thead>
+                <tr>
+                  <th>MAC 地址</th>
+                  <th>标签</th>
+                  <th>状态</th>
+                  <th>绑定居民</th>
+                  <th>添加时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="deviceTableBody">
+                <tr><td colspan="6" class="ds-empty">加载中...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- ======== MODULE: 场景编辑 ======== -->
       <div class="ds-module" id="mod-scene">
         <div class="ds-page-header">
@@ -844,89 +885,16 @@
     <div class="ds-detail-actions" id="dsDetailActions" style="display:none;"></div>
   </aside>
 
-  <!-- ======== MODULE: 设备管理 ======== -->
-  <div class="ds-module" id="mod-devices">
-    <div class="ds-module-header">
-      <h2>设备管理</h2>
-      <p>管理城主设备白名单，封禁/解封设备控制城邦访问</p>
-    </div>
-    <div class="ds-card">
-      <div class="ds-card-header">
-        <span class="ds-card-title">添加设备</span>
-      </div>
-      <div class="ds-card-body" style="display:flex;gap:8px;flex-wrap:wrap;">
-        <input id="deviceAddressInput" type="text" class="ds-input" placeholder="MAC 地址 (如 1c:f6:4c:5f:3d:08)" style="flex:1;min-width:200px;" />
-        <input id="deviceLabelInput" type="text" class="ds-input" placeholder="设备标签 (如 我的MacBook)" style="flex:1;min-width:150px;" />
-        <button id="deviceAddBtn" class="ds-btn-primary ds-btn-sm">添加设备</button>
-      </div>
-    </div>
-    <div class="ds-card" style="margin-top:12px;">
-      <div class="ds-card-header">
-        <span class="ds-card-title">设备列表</span>
-        <span id="deviceCount" style="font-size:12px;color:var(--ds-text-secondary);"></span>
-      </div>
-      <div class="ds-card-body">
-        <table class="ds-table">
-          <thead>
-            <tr>
-              <th>MAC 地址</th>
-              <th>标签</th>
-              <th>状态</th>
-              <th>绑定居民</th>
-              <th>添加时间</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody id="deviceTableBody">
-            <tr><td colspan="6" class="ds-empty">加载中...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
   <!-- ============ SCRIPTS ============ -->
   <script src="./admin-ds-data.js"></script>
   <script src="./admin-ds.js"></script>
 
   <!-- 注册登录模块 -->
   <script type="module">
-    import { initAuth } from "./shell-auth.js";
+    import { initStandaloneAuthSurface } from "./shell-auth-standalone.js";
     const gatewayUrl = new URLSearchParams(window.location.search).get("gateway") || "";
-    initAuth({
-      statusEl: document.getElementById("auth-status"),
-      requestFormEl: document.getElementById("auth-request-form"),
-      deliverySelectEl: document.getElementById("auth-delivery-select"),
-      residentInputEl: document.getElementById("auth-resident-input"),
-      nicknameInputEl: document.getElementById("auth-nickname-input"),
-      emailInputEl: document.getElementById("auth-email-input"),
-      mobileInputEl: document.getElementById("auth-mobile-input"),
-      deviceInputEl: document.getElementById("auth-device-input"),
-      verifyFormEl: document.getElementById("auth-verify-form"),
-      challengeInputEl: document.getElementById("auth-challenge-input"),
-      codeInputEl: document.getElementById("auth-code-input"),
-      loginCardEl: document.getElementById("resident-login-card"),
-      loginOverlayEl: document.getElementById("resident-login-overlay"),
-      hudLoginToggleEl: document.getElementById("hud-login-toggle"),
-    }, {
-      gatewayUrl: () => gatewayUrl,
-      postJson: async (path, body) => {
-        if (!gatewayUrl) throw new Error("gateway not connected");
-        const res = await fetch(gatewayUrl.replace(/\/+$/, "") + path, {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-        });
-        return res.json();
-      },
-      refreshFromGateway: () => {},
-      persistIdentity: (id) => { try { localStorage.setItem("lobster-identity", id); } catch(e) {} },
-      userProjection: () => null,
-      desiredResidentId: () => undefined,
-    });
+    initStandaloneAuthSurface({ gatewayUrl });
     const toggle = document.getElementById("hud-login-toggle");
-    const overlay = document.getElementById("resident-login-overlay");
-    const closeBtn = document.getElementById("resident-login-close");
-    toggle?.addEventListener("click", () => { overlay?.classList.remove("shell-hidden"); overlay?.removeAttribute("aria-hidden"); });
-    closeBtn?.addEventListener("click", () => { overlay?.classList.add("shell-hidden"); overlay?.setAttribute("aria-hidden", "true"); });
     if (gatewayUrl && !localStorage.getItem("lobster-identity")) { setTimeout(() => toggle?.classList.remove("shell-hidden"), 800); }
   </script>
 </body>

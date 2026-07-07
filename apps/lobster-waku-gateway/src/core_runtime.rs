@@ -39,6 +39,9 @@ impl GatewayRuntime {
             auth_state_path: storage_root.join("auth-state.json"),
             invites_path: storage_root.join("invites.json"),
             permission_groups_path: storage_root.join("permission-groups.json"),
+            personal_room_access_policies_path: storage_root
+                .join("personal-room-access-policies.json"),
+            resident_relationships_path: storage_root.join("resident-relationships.json"),
             audit_log_path: storage_root.join("audit-log.json"),
             device_state_path: storage_root.join("device-state.json"),
             timeline_store,
@@ -68,6 +71,8 @@ impl GatewayRuntime {
             invites: HashMap::new(),
             permission_groups: HashMap::new(),
             resident_permission_groups: HashMap::new(),
+            personal_room_access_policies: HashMap::new(),
+            resident_relationships: HashMap::new(),
             audit_events: Vec::new(),
             dev_auth_bypass: Self::dev_auth_bypass_default(),
             started_at_ms: Self::now_ms(),
@@ -83,6 +88,8 @@ impl GatewayRuntime {
         runtime.load_moderation_state()?;
         runtime.load_device_state()?;
         runtime.load_permission_groups()?;
+        runtime.load_personal_room_access_policies()?;
+        runtime.load_resident_relationships()?;
         runtime.load_audit_log()?;
         runtime.ensure_default_world_safety()?;
         if cli_provider_url.is_some() {
@@ -263,6 +270,227 @@ impl GatewayRuntime {
             nickname: None,
         });
         true
+    }
+
+    pub(crate) fn resident_has_authenticated_profile(&self, resident: &IdentityId) -> bool {
+        self.registrations
+            .iter()
+            .any(|registration| registration.resident_id == *resident)
+            || self
+                .world_stewards
+                .iter()
+                .any(|steward| steward == resident)
+    }
+
+    pub(crate) fn personal_room_owner<'a>(
+        conversation: &'a Conversation,
+    ) -> Option<&'a IdentityId> {
+        if conversation.kind != ConversationKind::Direct || conversation.participants.len() != 1 {
+            return None;
+        }
+        let owner = conversation.participants.first()?;
+        if conversation.conversation_id.0 == format!("home:{}", owner.0) {
+            Some(owner)
+        } else {
+            None
+        }
+    }
+
+    fn normalize_personal_room_policy_resident(raw: String) -> Result<IdentityId, String> {
+        let resident_id = raw.trim().to_string();
+        if resident_id.is_empty() || resident_id == "访客" {
+            Err("personal room access policy requires an authenticated resident".into())
+        } else {
+            Ok(IdentityId(resident_id))
+        }
+    }
+
+    pub(crate) fn personal_room_access_policy(
+        &self,
+        resident: &IdentityId,
+    ) -> PersonalRoomAccessPolicy {
+        self.personal_room_access_policies
+            .get(&resident.0)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn set_personal_room_access_policy(
+        &mut self,
+        request: PersonalRoomAccessPolicyRequest,
+    ) -> Result<PersonalRoomAccessPolicyResponse, String> {
+        let resident = Self::normalize_personal_room_policy_resident(request.resident_id)?;
+        if !self.resident_has_authenticated_profile(&resident) {
+            return Err(format!(
+                "personal room owner {} must be a registered resident",
+                resident.0
+            ));
+        }
+        self.personal_room_access_policies
+            .insert(resident.0.clone(), request.policy);
+        self.persist_personal_room_access_policies()?;
+        Ok(PersonalRoomAccessPolicyResponse {
+            resident_id: resident.0,
+            policy: request.policy,
+        })
+    }
+
+    pub(crate) fn persist_personal_room_access_policies(&self) -> Result<(), String> {
+        let bytes = serde_json::to_vec_pretty(&self.personal_room_access_policies)
+            .map_err(|error| format!("encode personal room access policies failed: {error}"))?;
+        atomic_write_file(&self.personal_room_access_policies_path, &bytes)
+            .map_err(|error| format!("write personal room access policies failed: {error}"))
+    }
+
+    pub(crate) fn load_personal_room_access_policies(&mut self) -> Result<(), String> {
+        if !self.personal_room_access_policies_path.exists() {
+            return Ok(());
+        }
+        let bytes = std::fs::read(&self.personal_room_access_policies_path)
+            .map_err(|error| format!("read personal room access policies failed: {error}"))?;
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        self.personal_room_access_policies = serde_json::from_slice(&bytes)
+            .map_err(|error| format!("decode personal room access policies failed: {error}"))?;
+        Ok(())
+    }
+
+    fn normalize_relationship_resident(raw: &str, field: &str) -> Result<IdentityId, String> {
+        let resident_id = raw.trim().to_string();
+        if resident_id.is_empty() || resident_id == "访客" {
+            Err(format!("{field} requires an authenticated resident"))
+        } else {
+            Ok(IdentityId(resident_id))
+        }
+    }
+
+    fn resident_relationship_key(a: &IdentityId, b: &IdentityId) -> String {
+        if a.0 <= b.0 {
+            format!("{}:{}", a.0, b.0)
+        } else {
+            format!("{}:{}", b.0, a.0)
+        }
+    }
+
+    fn sorted_relationship_pair(a: &IdentityId, b: &IdentityId) -> (String, String) {
+        if a.0 <= b.0 {
+            (a.0.clone(), b.0.clone())
+        } else {
+            (b.0.clone(), a.0.clone())
+        }
+    }
+
+    fn validate_relationship_pair(
+        &self,
+        request: &ResidentRelationshipRequest,
+    ) -> Result<(IdentityId, IdentityId, String), String> {
+        let actor = Self::normalize_relationship_resident(&request.actor_id, "actor_id")?;
+        let peer = Self::normalize_relationship_resident(&request.peer_id, "peer_id")?;
+        if actor == peer {
+            return Err("resident relationship requires two distinct residents".into());
+        }
+        if !self.resident_has_authenticated_profile(&actor) {
+            return Err(format!("resident {} must be registered", actor.0));
+        }
+        if !self.resident_has_authenticated_profile(&peer) {
+            return Err(format!("resident {} must be registered", peer.0));
+        }
+        let key = Self::resident_relationship_key(&actor, &peer);
+        Ok((actor, peer, key))
+    }
+
+    pub(crate) fn residents_are_friends(&self, a: &IdentityId, b: &IdentityId) -> bool {
+        if a == b {
+            return true;
+        }
+        let key = Self::resident_relationship_key(a, b);
+        self.resident_relationships
+            .get(&key)
+            .is_some_and(|record| record.state == ResidentRelationshipState::Friends)
+    }
+
+    pub(crate) fn request_resident_friendship(
+        &mut self,
+        request: ResidentRelationshipRequest,
+    ) -> Result<ResidentRelationshipResponse, String> {
+        let (actor, peer, key) = self.validate_relationship_pair(&request)?;
+        if let Some(record) = self.resident_relationships.get(&key) {
+            return Ok(ResidentRelationshipResponse {
+                resident_id: actor.0,
+                peer_id: peer.0,
+                state: record.state,
+            });
+        }
+
+        let now = Self::now_ms();
+        let (resident_a, resident_b) = Self::sorted_relationship_pair(&actor, &peer);
+        self.resident_relationships.insert(
+            key,
+            ResidentRelationshipRecord {
+                resident_a,
+                resident_b,
+                state: ResidentRelationshipState::Pending,
+                requested_by: actor.0.clone(),
+                created_at_ms: now,
+                updated_at_ms: now,
+            },
+        );
+        self.persist_resident_relationships()?;
+        Ok(ResidentRelationshipResponse {
+            resident_id: actor.0,
+            peer_id: peer.0,
+            state: ResidentRelationshipState::Pending,
+        })
+    }
+
+    pub(crate) fn accept_resident_friendship(
+        &mut self,
+        request: ResidentRelationshipRequest,
+    ) -> Result<ResidentRelationshipResponse, String> {
+        let (actor, peer, key) = self.validate_relationship_pair(&request)?;
+        let Some(record) = self.resident_relationships.get_mut(&key) else {
+            return Err("friendship request does not exist".into());
+        };
+        if record.state == ResidentRelationshipState::Friends {
+            return Ok(ResidentRelationshipResponse {
+                resident_id: actor.0,
+                peer_id: peer.0,
+                state: ResidentRelationshipState::Friends,
+            });
+        }
+        if record.requested_by == actor.0 {
+            return Err("requester cannot accept their own friendship request".into());
+        }
+        record.state = ResidentRelationshipState::Friends;
+        record.updated_at_ms = Self::now_ms();
+        self.persist_resident_relationships()?;
+        Ok(ResidentRelationshipResponse {
+            resident_id: actor.0,
+            peer_id: peer.0,
+            state: ResidentRelationshipState::Friends,
+        })
+    }
+
+    pub(crate) fn persist_resident_relationships(&self) -> Result<(), String> {
+        let bytes = serde_json::to_vec_pretty(&self.resident_relationships)
+            .map_err(|error| format!("encode resident relationships failed: {error}"))?;
+        atomic_write_file(&self.resident_relationships_path, &bytes)
+            .map_err(|error| format!("write resident relationships failed: {error}"))
+    }
+
+    pub(crate) fn load_resident_relationships(&mut self) -> Result<(), String> {
+        if !self.resident_relationships_path.exists() {
+            return Ok(());
+        }
+        let bytes = std::fs::read(&self.resident_relationships_path)
+            .map_err(|error| format!("read resident relationships failed: {error}"))?;
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        self.resident_relationships = serde_json::from_slice(&bytes)
+            .map_err(|error| format!("decode resident relationships failed: {error}"))?;
+        Ok(())
     }
 
     pub(crate) fn admin_clear_processed_logs(&mut self) -> usize {
@@ -705,14 +933,33 @@ impl GatewayRuntime {
                     .active_conversations()
                     .into_iter()
                     .find(|conversation| {
-                        conversation.kind == ConversationKind::Direct
-                            && conversation
-                                .participants
-                                .iter()
-                                .any(|p| p.0 == entry.resident_id)
-                            && conversation.participants.len() == 1
+                        Self::personal_room_owner(conversation)
+                            .is_some_and(|owner| owner.0 == entry.resident_id)
                     });
             entry.personal_room_id = personal_room.map(|c| c.conversation_id.0.clone());
+        }
+        residents
+    }
+
+    pub(crate) fn enrich_resident_directory_for_viewer(
+        &self,
+        viewer: Option<&IdentityId>,
+    ) -> Vec<ResidentDirectoryEntry> {
+        let mut residents = self.enrich_resident_directory();
+        let Some(viewer) = viewer else {
+            return residents;
+        };
+
+        for entry in &mut residents {
+            if entry.resident_id == viewer.0 {
+                continue;
+            }
+            let peer = IdentityId(entry.resident_id.clone());
+            let key = Self::resident_relationship_key(viewer, &peer);
+            if let Some(record) = self.resident_relationships.get(&key) {
+                entry.relationship_state = Some(record.state);
+                entry.relationship_requested_by = Some(record.requested_by.clone());
+            }
         }
         residents
     }
@@ -1211,6 +1458,8 @@ impl GatewayRuntime {
                     last_seen_at_ms: None,
                     avatar_id: None,
                     personal_room_id: None,
+                    relationship_state: None,
+                    relationship_requested_by: None,
                     nickname: None,
                 });
             let city_label = city_labels

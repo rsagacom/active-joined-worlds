@@ -2,6 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  directSessionOpenRequestState,
   governanceActiveMemberListModel,
   governanceCityCardBaseModel,
   governanceCityActionsModel,
@@ -15,6 +16,9 @@ import {
   mirrorSourcesEmptyStateText,
   residentDirectoryCardModel,
   residentDirectoryEmptyStateText,
+  residentPrivateRoomAccessPromptModel,
+  residentRelationshipActionModel,
+  residentRelationshipSubmitRequestState,
   worldDirectoryCityCardModel,
   worldDirectoryEmptyStateText,
   worldSafetyAdvisoryCardModel,
@@ -625,6 +629,309 @@ test("residentDirectoryCardModel: uses injected resident label and row fallbacks
         { className: "city-sub", text: "已加入城市：暂无" },
         { className: "city-role", text: "身份：居民" },
       ],
+    },
+  );
+});
+
+test("residentRelationshipActionModel: maps gateway relationship state to resident actions", () => {
+  assert.deepEqual(
+    residentRelationshipActionModel(
+      { resident_id: "bob" },
+      { currentResidentId: "alice" },
+    ),
+    {
+      type: "button",
+      className: "secondary mini-button resident-relationship-action",
+      text: "申请好友",
+      disabled: false,
+      endpoint: "/v1/resident-relationships/request",
+      payload: { actor_id: "alice", peer_id: "bob" },
+      statusText: "正在向 bob 发送好友申请",
+      successText: "已发送好友申请：bob",
+    },
+  );
+  assert.deepEqual(
+    residentRelationshipActionModel(
+      {
+        resident_id: "bob",
+        relationship_state: "pending",
+        relationship_requested_by: "alice",
+      },
+      { currentResidentId: "alice" },
+    ),
+    {
+      type: "button",
+      className: "secondary mini-button resident-relationship-action is-pending",
+      text: "已申请",
+      disabled: true,
+      endpoint: "",
+      payload: null,
+      statusText: "等待 bob 接受好友申请",
+      successText: "",
+    },
+  );
+  assert.deepEqual(
+    residentRelationshipActionModel(
+      {
+        resident_id: "bob",
+        relationship_state: "pending",
+        relationship_requested_by: "bob",
+      },
+      { currentResidentId: "alice" },
+    ),
+    {
+      type: "button",
+      className: "secondary mini-button resident-relationship-action",
+      text: "接受好友",
+      disabled: false,
+      endpoint: "/v1/resident-relationships/accept",
+      payload: { actor_id: "alice", peer_id: "bob" },
+      statusText: "正在接受 bob 的好友申请",
+      successText: "已成为好友：bob",
+    },
+  );
+  assert.deepEqual(
+    residentRelationshipActionModel(
+      {
+        resident_id: "bob",
+        relationship_state: "friends",
+        relationship_requested_by: "bob",
+      },
+      { currentResidentId: "alice" },
+    ),
+    {
+      type: "button",
+      className: "secondary mini-button resident-relationship-action is-friends",
+      text: "好友",
+      disabled: true,
+      endpoint: "",
+      payload: null,
+      statusText: "已是好友",
+      successText: "",
+    },
+  );
+});
+
+test("residentRelationshipSubmitRequestState: ignores disabled or missing relationship actions", () => {
+  assert.deepEqual(
+    residentRelationshipSubmitRequestState(null, { gatewayUrl: "http://gateway" }),
+    {
+      allowed: false,
+      reason: "noop",
+      statusText: "",
+      statusIsError: false,
+    },
+  );
+  assert.deepEqual(
+    residentRelationshipSubmitRequestState(
+      {
+        endpoint: "",
+        payload: null,
+        statusText: "已是好友",
+        successText: "",
+      },
+      { gatewayUrl: "http://gateway" },
+    ),
+    {
+      allowed: false,
+      reason: "noop",
+      statusText: "",
+      statusIsError: false,
+    },
+  );
+});
+
+test("residentRelationshipSubmitRequestState: blocks gateway-offline relationship writes", () => {
+  assert.deepEqual(
+    residentRelationshipSubmitRequestState(
+      {
+        endpoint: "/v1/resident-relationships/request",
+        payload: { actor_id: "alice", peer_id: "bob" },
+        statusText: "正在向 bob 发送好友申请",
+        successText: "已发送好友申请：bob",
+      },
+      { gatewayUrl: "" },
+    ),
+    {
+      allowed: false,
+      reason: "offline",
+      statusText: "请先连接网关后再操作好友关系",
+      statusIsError: true,
+    },
+  );
+});
+
+test("residentRelationshipSubmitRequestState: returns gateway request and status copy", () => {
+  assert.deepEqual(
+    residentRelationshipSubmitRequestState(
+      {
+        endpoint: "/v1/resident-relationships/request",
+        payload: { actor_id: "alice", peer_id: "bob" },
+        statusText: "正在向 bob 发送好友申请",
+        successText: "已发送好友申请：bob",
+      },
+      { gatewayUrl: "http://gateway" },
+    ),
+    {
+      allowed: true,
+      reason: "",
+      endpoint: "/v1/resident-relationships/request",
+      payload: { actor_id: "alice", peer_id: "bob" },
+      statusText: "正在向 bob 发送好友申请",
+      successText: "已发送好友申请：bob",
+    },
+  );
+});
+
+test("residentRelationshipSubmitRequestState: falls back to generic relationship status copy", () => {
+  assert.deepEqual(
+    residentRelationshipSubmitRequestState(
+      {
+        endpoint: "/v1/resident-relationships/accept",
+        payload: { actor_id: "alice", peer_id: "bob" },
+      },
+      { gatewayUrl: "http://gateway" },
+    ),
+    {
+      allowed: true,
+      reason: "",
+      endpoint: "/v1/resident-relationships/accept",
+      payload: { actor_id: "alice", peer_id: "bob" },
+      statusText: "正在更新好友关系",
+      successText: "好友关系已更新",
+    },
+  );
+});
+
+test("directSessionOpenRequestState: ignores direct open while gateway is offline", () => {
+  assert.deepEqual(
+    directSessionOpenRequestState({
+      peerId: "bob",
+      currentIdentity: "alice",
+      gatewayUrl: "",
+    }),
+    {
+      allowed: false,
+      reason: "offline",
+      statusText: "",
+      statusIsError: false,
+    },
+  );
+});
+
+test("directSessionOpenRequestState: blocks empty peer and self chat with status copy", () => {
+  assert.deepEqual(
+    directSessionOpenRequestState({
+      peerId: "  ",
+      currentIdentity: "alice",
+      gatewayUrl: "http://gateway",
+    }),
+    {
+      allowed: false,
+      reason: "empty-peer",
+      statusText: "请填写居民标识",
+      statusIsError: true,
+    },
+  );
+  assert.deepEqual(
+    directSessionOpenRequestState({
+      peerId: "alice",
+      currentIdentity: "alice",
+      gatewayUrl: "http://gateway",
+    }),
+    {
+      allowed: false,
+      reason: "self",
+      statusText: "不能和自己发起私聊",
+      statusIsError: true,
+    },
+  );
+});
+
+test("directSessionOpenRequestState: builds the gateway direct-open request", () => {
+  assert.deepEqual(
+    directSessionOpenRequestState({
+      peerId: " bob ",
+      currentIdentity: "alice",
+      gatewayUrl: "http://gateway",
+    }),
+    {
+      allowed: true,
+      reason: "",
+      peerId: "bob",
+      endpoint: "/v1/direct/open",
+      payload: {
+        requester_id: "alice",
+        requester_device_id: "browser-shell",
+        peer_id: "bob",
+        peer_device_id: "browser-shell",
+      },
+      statusText: "正在与 bob 打开私聊",
+      successText: "私聊已就绪：bob",
+    },
+  );
+});
+
+test("residentPrivateRoomAccessPromptModel: explains blocked private-room entry", () => {
+  assert.equal(
+    residentPrivateRoomAccessPromptModel(
+      { resident_id: "bob", personal_room_id: "home:bob" },
+      { currentResidentId: "alice", roomVisible: true },
+    ),
+    null,
+  );
+  assert.deepEqual(
+    residentPrivateRoomAccessPromptModel(
+      { resident_id: "bob", personal_room_id: "home:bob" },
+      { currentResidentId: "访客", roomVisible: false },
+    ),
+    {
+      className: "resident-room-access-note is-locked",
+      text: "登录后才能访问 bob 的私宅。",
+      isError: true,
+    },
+  );
+  assert.deepEqual(
+    residentPrivateRoomAccessPromptModel(
+      { resident_id: "bob", personal_room_id: "home:bob" },
+      { currentResidentId: "alice", roomVisible: false },
+    ),
+    {
+      className: "resident-room-access-note is-locked",
+      text: "访问 bob 的私宅需要先成为好友，请点「申请好友」。",
+      isError: true,
+    },
+  );
+  assert.deepEqual(
+    residentPrivateRoomAccessPromptModel(
+      {
+        resident_id: "bob",
+        personal_room_id: "home:bob",
+        relationship_state: "pending",
+        relationship_requested_by: "alice",
+      },
+      { currentResidentId: "alice", roomVisible: false },
+    ),
+    {
+      className: "resident-room-access-note is-pending",
+      text: "已向 bob 申请好友；对方接受后才能进入私宅。",
+      isError: false,
+    },
+  );
+  assert.deepEqual(
+    residentPrivateRoomAccessPromptModel(
+      {
+        resident_id: "bob",
+        personal_room_id: "home:bob",
+        relationship_state: "pending",
+        relationship_requested_by: "bob",
+      },
+      { currentResidentId: "alice", roomVisible: false },
+    ),
+    {
+      className: "resident-room-access-note is-actionable",
+      text: "bob 已发来好友申请；先点「接受好友」再进入私宅。",
+      isError: false,
     },
   );
 });
