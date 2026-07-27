@@ -100,10 +100,46 @@ sudoedit /etc/lobster-chat/gateway.env
 LOBSTER_CORS_ORIGIN=https://chat.example.com
 LOBSTER_DEV_AUTH_BYPASS=0
 LOBSTER_DEV_EMAIL_OTP_INLINE=0
-LOBSTER_EMAIL_OTP_MAILER_URL=https://mailer.example.com/lobster/email-otp
+LOBSTER_EMAIL_OTP_MAILER_URL=http://127.0.0.1:8791/lobster/email-otp
 LOBSTER_EMAIL_OTP_MAILER_BEARER_TOKEN=replace-with-secret
 LOBSTER_EMAIL_OTP_FROM=Lobster Chat <no-reply@example.com>
 ```
+
+`LOBSTER_EMAIL_OTP_MAILER_URL` 指向同机部署的 `apps/lobster-mailer`（推荐，
+loopback HTTP 是 Gateway 唯一放行的非 HTTPS 情形）；使用外部邮件 Webhook
+时必须为 HTTPS。
+
+### 5.1 同机部署 lobster-mailer（真实邮件 OTP）
+
+`apps/lobster-mailer` 是无第三方依赖的 Node 22 服务，把 Gateway 的 OTP
+webhook 转成 Resend API 调用。前置条件：Resend 账号、API Key、完成发信域名
+验证。
+
+```bash
+sudo install -d -m 0755 /opt/lobster-chat/mailer
+sudo cp -R apps/lobster-mailer/src /opt/lobster-chat/mailer/
+sudo install -m 0644 apps/lobster-mailer/deploy/lobster-mailer.service \
+  /etc/systemd/system/lobster-mailer.service
+sudo install -m 0600 /dev/null /etc/lobster-chat/mailer.env
+sudoedit /etc/lobster-chat/mailer.env
+```
+
+`/etc/lobster-chat/mailer.env`：
+
+```dotenv
+LOBSTER_MAILER_BEARER_TOKEN=<与 gateway.env 中 LOBSTER_EMAIL_OTP_MAILER_BEARER_TOKEN 相同>
+RESEND_API_KEY=re_xxxxxxxx
+LOBSTER_MAILER_FROM=Lobster Chat <no-reply@example.com>
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now lobster-mailer
+curl -fsS http://127.0.0.1:8791/health
+```
+
+验收：发送 OTP 后真实邮箱收到验证码邮件；mailer 日志只记录上游状态码，
+不输出 Bearer 或验证码正文。
 
 部署前可执行 scripts/production-readiness.sh 做只读配置检查。设置 CHECK_PUBLIC=1 并提供 BASE_URL=https://chat.example.com 后，还会探测公网 health、provider 和 CORS；脚本不会输出 Bearer 密钥。
 

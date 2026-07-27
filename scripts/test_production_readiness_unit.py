@@ -72,6 +72,30 @@ def main() -> int:
         )
         invalid_dev_flag = subprocess.run(["bash", str(SCRIPT)], env=base_env, capture_output=True, text=True)
         assert invalid_dev_flag.returncode != 0
+
+        # 同机 lobster-mailer 的 loopback http 放行(与 Gateway email_otp_mailer 例外一致)
+        env_file.write_text(
+            env_file.read_text(encoding="utf-8")
+            .replace("LOBSTER_DEV_AUTH_BYPASS=maybe", "LOBSTER_DEV_AUTH_BYPASS=0")
+            .replace(
+                "LOBSTER_EMAIL_OTP_MAILER_URL=https://mailer.example.com/otp",
+                "LOBSTER_EMAIL_OTP_MAILER_URL=http://127.0.0.1:8791/lobster/email-otp",
+            ),
+            encoding="utf-8",
+        )
+        loopback_mailer = subprocess.run(["bash", str(SCRIPT)], env=base_env, capture_output=True, text=True)
+        assert loopback_mailer.returncode == 0, loopback_mailer.stderr
+
+        # 非 loopback 的明文 http 仍然拒绝
+        env_file.write_text(
+            env_file.read_text(encoding="utf-8").replace(
+                "LOBSTER_EMAIL_OTP_MAILER_URL=http://127.0.0.1:8791/lobster/email-otp",
+                "LOBSTER_EMAIL_OTP_MAILER_URL=http://mailer.example.com/otp",
+            ),
+            encoding="utf-8",
+        )
+        plaintext_mailer = subprocess.run(["bash", str(SCRIPT)], env=base_env, capture_output=True, text=True)
+        assert plaintext_mailer.returncode != 0
     return 0
 
 

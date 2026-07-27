@@ -99,6 +99,9 @@ jobs:
         working-directory: apps/lobster-web-shell
         run: npm ci
 
+      - name: Install root dependencies (playwright for repo-root smokes)
+        run: npm ci --ignore-scripts
+
       - name: Install Playwright chromium
         working-directory: apps/lobster-web-shell
         run: npx playwright install --with-deps chromium

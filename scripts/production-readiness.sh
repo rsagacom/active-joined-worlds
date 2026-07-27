@@ -25,7 +25,11 @@ cors_origin="${LOBSTER_CORS_ORIGIN:-}"
 [[ "${LOBSTER_DEV_EMAIL_OTP_INLINE:-0}" == "0" ]] || fail "LOBSTER_DEV_EMAIL_OTP_INLINE must be 0 or unset"
 
 mailer_url="${LOBSTER_EMAIL_OTP_MAILER_URL:-}"
-[[ "$mailer_url" =~ ^https://[^[:space:]]+$ ]] || fail "LOBSTER_EMAIL_OTP_MAILER_URL must use https"
+if [[ ! "$mailer_url" =~ ^https://[^[:space:]]+$ ]]; then
+  # 与 Gateway email_otp_mailer 的例外一致:仅放行 loopback http(同机 lobster-mailer)
+  [[ "$mailer_url" =~ ^http://(127\.0\.0\.1|localhost|\[::1\])[:/][^[:space:]]*$ ]] \
+    || fail "LOBSTER_EMAIL_OTP_MAILER_URL must use https (loopback http allowed for co-located mailer)"
+fi
 [[ -n "${LOBSTER_EMAIL_OTP_MAILER_BEARER_TOKEN:-}" ]] || fail "LOBSTER_EMAIL_OTP_MAILER_BEARER_TOKEN is empty"
 
 if [[ "$CHECK_PUBLIC" == "1" ]]; then

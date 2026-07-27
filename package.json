@@ -4,5 +4,8 @@
   "scripts": {
     "test": "npm --prefix apps/lobster-web-shell test",
     "test:frontend": "npm --prefix apps/lobster-web-shell test"
+  },
+  "devDependencies": {
+    "playwright": "1.59.1"
   }
 }
