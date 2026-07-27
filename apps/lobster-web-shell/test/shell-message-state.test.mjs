@@ -1,11 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
+import * as messageState from "../shell-message-state.js";
+
+const {
   messageIsDeliveredCopyOfPending,
   messageMatchesPendingEcho,
   normalizedMessageText,
   visiblePendingEchoesForRoomData,
-} from "../shell-message-state.js";
+} = messageState;
 
 test("normalizedMessageText trims strings and blanks non-strings", () => {
   assert.equal(normalizedMessageText("  hello  "), "hello");
@@ -40,4 +42,56 @@ test("visiblePendingEchoesForRoomData keeps failed echoes and hides committed co
     "retry me",
     "still pending",
   ]);
+});
+
+test("createPendingMessageEchoStore owns isolated enqueue and mutation state", () => {
+  assert.equal(
+    typeof messageState.createPendingMessageEchoStore,
+    "function",
+    "pending echo state should be owned by an instance factory",
+  );
+
+  const first = messageState.createPendingMessageEchoStore({
+    getIdentity: () => "alice",
+    now: () => 1710000000000,
+    random: () => 0.5,
+    formatTimestamp: () => "09:30",
+  });
+  const second = messageState.createPendingMessageEchoStore({ getIdentity: () => "bob" });
+
+  const echoId = first.enqueue("room:one", "hello", "续聊");
+  assert.equal(echoId, "pending:1710000000000:8");
+  assert.deepEqual(first.forRoom("room:one"), [{
+    id: echoId,
+    sender: "alice",
+    timestamp: "09:30",
+    text: "hello",
+    quick_action: "续聊",
+    pending: true,
+    failed: false,
+  }]);
+  assert.deepEqual(second.forRoom("room:one"), [], "store instances must not share state");
+
+  first.markFailed("room:one", echoId, true);
+  assert.equal(first.forRoom("room:one")[0].failed, true);
+  first.remove("room:one", echoId);
+  assert.deepEqual(first.forRoom("room:one"), []);
+});
+
+test("createPendingMessageEchoStore clears one room or every room", () => {
+  assert.equal(typeof messageState.createPendingMessageEchoStore, "function");
+  const store = messageState.createPendingMessageEchoStore({
+    getIdentity: () => "alice",
+    now: (() => { let value = 1; return () => value++; })(),
+    random: () => 0.25,
+    formatTimestamp: () => "now",
+  });
+  store.enqueue("room:one", "one");
+  store.enqueue("room:two", "two");
+
+  store.clearRoom("room:one");
+  assert.deepEqual(store.forRoom("room:one"), []);
+  assert.equal(store.forRoom("room:two").length, 1);
+  store.clearAll();
+  assert.deepEqual(store.snapshot(), {});
 });

@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import { loadUserShellApp } from "./fake-dom.mjs";
 
 const serial = { concurrency: false };
+const TEST_SESSION_TOKEN = "lbst_test_session_token";
 
 async function flushAsyncWork() {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -64,7 +65,10 @@ test("recalled message renders 消息已撤回 without leaking original text", s
     generatedShellFixture: "generated/state.contract.json",
     locationSearch: "?gateway=http://127.0.0.1:50651",
     gatewayBaseUrl: "http://127.0.0.1:50651",
-    localStorageEntries: { "lobster-identity": "qa" },
+    localStorageEntries: {
+      "lobster-identity": "qa",
+      "lobster-session-token": TEST_SESSION_TOKEN,
+    },
   });
   try {
     const { document, emitEventSource } = app;
@@ -103,7 +107,10 @@ test("edited message renders updated text and 已编辑 chip", serial, async () 
     generatedShellFixture: "generated/state.contract.json",
     locationSearch: "?gateway=http://127.0.0.1:50651",
     gatewayBaseUrl: "http://127.0.0.1:50651",
-    localStorageEntries: { "lobster-identity": "qa" },
+    localStorageEntries: {
+      "lobster-identity": "qa",
+      "lobster-session-token": TEST_SESSION_TOKEN,
+    },
   });
   try {
     const { document, emitEventSource } = app;
@@ -142,7 +149,10 @@ test("recall takes precedence over edit mark", serial, async () => {
     generatedShellFixture: "generated/state.contract.json",
     locationSearch: "?gateway=http://127.0.0.1:50651",
     gatewayBaseUrl: "http://127.0.0.1:50651",
-    localStorageEntries: { "lobster-identity": "qa" },
+    localStorageEntries: {
+      "lobster-identity": "qa",
+      "lobster-session-token": TEST_SESSION_TOKEN,
+    },
   });
   try {
     const { document, emitEventSource } = app;
@@ -183,7 +193,10 @@ test("message body uses textContent not innerHTML for recalled content", serial,
     generatedShellFixture: "generated/state.contract.json",
     locationSearch: "?gateway=http://127.0.0.1:50651",
     gatewayBaseUrl: "http://127.0.0.1:50651",
-    localStorageEntries: { "lobster-identity": "qa" },
+    localStorageEntries: {
+      "lobster-identity": "qa",
+      "lobster-session-token": TEST_SESSION_TOKEN,
+    },
   });
   try {
     const { document, emitEventSource } = app;
@@ -218,7 +231,10 @@ test("message body uses textContent not innerHTML for edited content", serial, a
     generatedShellFixture: "generated/state.contract.json",
     locationSearch: "?gateway=http://127.0.0.1:50651",
     gatewayBaseUrl: "http://127.0.0.1:50651",
-    localStorageEntries: { "lobster-identity": "qa" },
+    localStorageEntries: {
+      "lobster-identity": "qa",
+      "lobster-session-token": TEST_SESSION_TOKEN,
+    },
   });
   try {
     const { document, emitEventSource } = app;

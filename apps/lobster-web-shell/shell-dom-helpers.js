@@ -112,3 +112,20 @@ export function createChatDetailCardMetaRow(label, value) {
   row.appendChild(valueEl);
   return row;
 }
+
+/**
+ * Recursively create a DOM node from a spec object.
+ */
+export function createDomNodeFromSpec(spec = {}, doc = globalThis.document) {
+  const node = doc.createElement(spec.tag || "div");
+  if (spec.className) node.className = spec.className;
+  if (spec.type) node.type = spec.type;
+  if (spec.placeholder) node.placeholder = spec.placeholder;
+  if (spec.text !== undefined) node.textContent = spec.text;
+  if (spec.display !== undefined) node.style.display = spec.display;
+  if (spec.messageId) node.dataset.messageId = spec.messageId;
+  for (const child of spec.children || []) {
+    node.appendChild(createDomNodeFromSpec(child, doc));
+  }
+  return node;
+}

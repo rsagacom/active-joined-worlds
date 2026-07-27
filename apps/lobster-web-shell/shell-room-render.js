@@ -310,6 +310,160 @@ export function threadStatusRailModelForState({
   return { visible: true, items };
 }
 
+export function conversationOverviewHeaderModel({
+  shellPage = "",
+  threadHeadline = "",
+  summaryLine = "",
+  overviewSummary = "",
+  contextSummary = "",
+  subtitle = "",
+  roomKind = "",
+  roomKindLabel = "",
+  audienceLabel = "",
+  identity = "",
+  compactChatShell = false,
+  sceneBanner = "",
+  caretaker = null,
+} = {}) {
+  const summary =
+    shellPage === "user"
+      ? overviewSummary || contextSummary || subtitle || summaryLine
+      : shellPage === "admin"
+        ? `后台对象 · ${summaryLine}`
+        : summaryLine;
+  const pills = [
+    { text: roomKindLabel, tone: roomKind === "direct" ? "accent" : "muted" },
+    { text: audienceLabel, tone: "muted" },
+  ];
+  if (!compactChatShell) {
+    pills.push({ text: `身份 ${identity}`, tone: "muted" });
+  }
+  if (sceneBanner) {
+    pills.push({ text: sceneBanner, tone: "warm" });
+  }
+  if (caretaker) {
+    pills.push({ text: `${caretaker.name} · ${caretaker.role_label}`, tone: "accent" });
+  }
+  return { title: threadHeadline, summary, pills };
+}
+
+export function conversationOverviewContextModel({
+  shellPage = "",
+  summaryLine = "",
+  contextSummary = "",
+  statusLine = "",
+} = {}) {
+  return {
+    title: shellPage === "admin" ? `后台摘要 · ${summaryLine}` : summaryLine,
+    copies: [contextSummary, statusLine],
+  };
+}
+
+export function conversationOverviewBaseStatusPills({
+  chatStatusSummary = "",
+  queueSummary = "",
+  syncLabel = "",
+  routeLabel = "",
+  hasSendError = false,
+  pendingEchoCount = 0,
+  caretakerPendingCount = 0,
+  unreadCount = 0,
+  refreshInProgress = false,
+  compactChatShell = false,
+  messageCount = 0,
+} = {}) {
+  const pills = [
+    {
+      text: chatStatusSummary,
+      tone: hasSendError ? "danger" : pendingEchoCount ? "warm" : "accent",
+    },
+    {
+      text: queueSummary,
+      tone: caretakerPendingCount > 0 || unreadCount > 0 ? "warm" : "muted",
+    },
+    { text: syncLabel, tone: refreshInProgress ? "warm" : "accent" },
+    { text: routeLabel, tone: hasSendError ? "danger" : "muted" },
+  ];
+  if (!compactChatShell) {
+    pills.push({ text: `${messageCount} 条消息`, tone: "muted" });
+  }
+  pills.push({
+    text: unreadCount > 0 ? `${unreadCount} 条未读` : "已读",
+    tone: unreadCount > 0 ? "warm" : "muted",
+  });
+  return pills;
+}
+
+export function conversationOverviewDraftPill({ hasDraft = false, draftLength = 0 } = {}) {
+  if (!hasDraft) return null;
+  return { text: `${draftLength} 字草稿`, tone: "accent" };
+}
+
+export function conversationOverviewCaretakerStatusPillModel({
+  caretaker = null,
+  caretakerPendingCount = 0,
+} = {}) {
+  if (!caretaker) return null;
+  return {
+    text: `${caretaker.status} · ${caretakerPendingCount} 条访客提醒`,
+    tone: caretakerPendingCount > 0 ? "warm" : "accent",
+  };
+}
+
+export function conversationOverviewRuntimeStatusPills({
+  isSendingMessage = false,
+  hasSendError = false,
+  hasSyncFallback = false,
+} = {}) {
+  const pills = [];
+  if (isSendingMessage) {
+    pills.push({ text: "发送中", tone: "warm" });
+  }
+  if (hasSendError) {
+    pills.push({ text: "发送失败", tone: "danger" });
+  }
+  if (hasSyncFallback) {
+    pills.push({ text: "回退快照", tone: "warm" });
+  }
+  return pills;
+}
+
+export function userConversationStatusPills({
+  syncLabel = "",
+  refreshInProgress = false,
+  unreadCount = 0,
+  caretaker = null,
+  caretakerPendingCount = 0,
+  hasDraft = false,
+  hasSendError = false,
+  isSendingMessage = false,
+} = {}) {
+  const leadingPills = [
+    { text: syncLabel, tone: refreshInProgress ? "warm" : "accent" },
+    {
+      text: unreadCount > 0 ? `${unreadCount} 条未读` : "已读",
+      tone: unreadCount > 0 ? "warm" : "muted",
+    },
+  ];
+  const trailingPills = [];
+  if (caretaker) {
+    trailingPills.push({
+      text: `${caretaker.name} 在线`,
+      tone: caretakerPendingCount > 0 ? "warm" : "accent",
+    });
+  }
+  if (hasDraft) {
+    trailingPills.push({ text: "草稿已保存", tone: "accent" });
+  }
+  if (hasSendError) {
+    trailingPills.push({ text: "发送失败", tone: "danger" });
+  }
+  if (isSendingMessage) {
+    trailingPills.push({ text: "发送中", tone: "warm" });
+  }
+  return { leadingPills, trailingPills };
+}
+
 export function composerHeroKicker(shellPage) {
   if (shellPage === "admin") return "管理后台消息区";
   if (shellPage === "user") return "房间内聊天主界面";

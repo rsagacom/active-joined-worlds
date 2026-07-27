@@ -109,6 +109,12 @@ test("resolveChatPaneMode: 无效 stored 值返回 'split'", () => {
   assert.equal(mod.resolveChatPaneMode("index", "sfc"), "split");
 });
 
+test("resolveChatPaneMode: 无存储值时保留调用方的响应式 fallback", () => {
+  resetStorage();
+  assert.equal(mod.resolveChatPaneMode("index", "sfc", "list"), "list");
+  assert.equal(mod.resolveChatPaneMode("index", "sfc", "thread"), "thread");
+});
+
 // ─── Room Read Markers ────────────────────────────────────
 
 test("loadRoomReadMarkers: 空存储返回空对象", () => {

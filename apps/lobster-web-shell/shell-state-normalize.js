@@ -1,4 +1,24 @@
-import { normalizeShellMessages } from "./shell-payload.js";
+import { hasAnyShellPayload, normalizeShellMessages } from "./shell-payload.js";
+
+export function normalizeShellStateForState(payload, fallbackState = {}) {
+  if (!hasAnyShellPayload(payload)) {
+    return structuredClone(fallbackState);
+  }
+  const contracts = contractConversationMap(payload);
+  const legacyRooms = new Map(
+    (Array.isArray(payload.rooms) ? payload.rooms : []).map((room) => [room?.id, room]),
+  );
+  const normalizedRooms =
+    contracts.size > 0
+      ? Array.from(contracts.values()).map((contractRoom) =>
+          mergeRoomWithContract(legacyRooms.get(contractRoom.id) || {}, contractRoom),
+        )
+      : Array.from(legacyRooms.values()).map((room) => mergeRoomWithContract(room, contracts.get(room.id)));
+  return {
+    ...payload,
+    rooms: normalizedRooms,
+  };
+}
 
 export function contractConversationMap(payload) {
   const scenes = new Map(

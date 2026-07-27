@@ -20,7 +20,7 @@ async function main() {
     // ============ TEST 1: Enter sends message ============
     console.log('\n📋 测试 1: Enter 发送消息');
     const pageA = await browser.newPage();
-    await pageA.goto(`${BASE}/index.html?gateway=${GATEWAY}&identity=qa-enter`, { waitUntil: 'domcontentloaded' });
+    await pageA.goto(`${BASE}/index.html?gateway=${GATEWAY}&identity=qa-enter&qa=browser`, { waitUntil: 'domcontentloaded' });
     await pageA.waitForTimeout(4000);
 
     // Find input
@@ -140,7 +140,7 @@ async function main() {
 
     // Open creative.html for scene hotspots
     const pageC = await browser.newPage();
-    await pageC.goto(`${BASE}/creative.html?gateway=${GATEWAY}&identity=qa-hotspot`, { waitUntil: 'domcontentloaded' });
+    await pageC.goto(`${BASE}/creative.html?gateway=${GATEWAY}&identity=qa-hotspot&qa=browser`, { waitUntil: 'domcontentloaded' });
     await pageC.waitForTimeout(4000);
 
     const hotspotInfo = await pageC.evaluate(() => {
@@ -273,7 +273,7 @@ async function main() {
     // ============ TEST 6: Dual-client message relay ============
     console.log('\n📋 测试 6: 双端消息收发');
     const pageB = await browser.newPage();
-    await pageB.goto(`${BASE}/creative.html?gateway=${GATEWAY}&identity=qa-peer`, { waitUntil: 'domcontentloaded' });
+    await pageB.goto(`${BASE}/creative.html?gateway=${GATEWAY}&identity=qa-peer&qa=browser`, { waitUntil: 'domcontentloaded' });
     await pageB.waitForTimeout(4000);
 
     const inputB = await pageB.$(inputSelector);

@@ -3,14 +3,27 @@ export function computeComposerAvailability({
   hasDraftText = false,
   isSendingMessage = false,
   hasGateway = false,
+  hasGatewaySession = true,
   hasIdentity = false,
   requiresIdentity = false,
+  allowSyntheticIdentity = false,
   gatewayUnavailable = false,
 } = {}) {
   const gatewayOffline = Boolean(hasGateway && gatewayUnavailable);
-  const identityRequiredButMissing = Boolean(requiresIdentity && hasGateway && !hasIdentity);
+  const sessionRequiredButMissing = Boolean(
+    hasGateway && !hasGatewaySession && !allowSyntheticIdentity,
+  );
+  const identityRequiredButMissing = Boolean(
+    requiresIdentity && hasGateway && (!hasIdentity || sessionRequiredButMissing),
+  );
   const canDraft = !isSendingMessage && !identityRequiredButMissing && !gatewayOffline;
-  const canLiveSend = Boolean(hasGateway && !gatewayOffline && hasActiveRoom && hasIdentity);
+  const canLiveSend = Boolean(
+    hasGateway &&
+    !gatewayOffline &&
+    !sessionRequiredButMissing &&
+    hasActiveRoom &&
+    hasIdentity,
+  );
   const canSend = Boolean(canDraft && hasActiveRoom && hasDraftText);
 
   let draftState = "empty";

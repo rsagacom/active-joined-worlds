@@ -232,6 +232,15 @@ async function verifyAdminDs(page, baseUrl) {
   await page.setViewportSize({ width: 390, height: 820 });
   await page.reload({ waitUntil: "networkidle" });
   await page.waitForFunction(() => document.querySelector("#dsSidebar")?.classList.contains("collapsed"));
+  const mobileLayout = await page.evaluate(() => {
+    const sidebar = document.querySelector("#dsSidebar")?.getBoundingClientRect();
+    const mainArea = document.querySelector("#dsMainArea")?.getBoundingClientRect();
+    return { sidebarRight: sidebar?.right ?? 0, mainLeft: mainArea?.left ?? 0 };
+  });
+  assert(
+    mobileLayout.mainLeft >= mobileLayout.sidebarRight - 1,
+    `admin-ds mobile main content must clear collapsed sidebar (sidebarRight=${mobileLayout.sidebarRight}, mainLeft=${mobileLayout.mainLeft})`,
+  );
   await page.locator("#dsSidebarToggle").click();
   await page.waitForFunction(() => document.querySelector("#dsSidebarOverlay")?.classList.contains("show"));
   await page.locator("#dsSidebarOverlay").click();
@@ -382,6 +391,46 @@ async function verifySceneEditorDayNight(page, baseUrl) {
   assert(await page.locator("#emptyHint").evaluate((n) => getComputedStyle(n).display === "none"), "empty hint must hide once a background is loaded");
 }
 
+async function verifySceneEditorCoordinateCanvas(page, baseUrl) {
+  // 背景和热点必须共享同一 16:9 逻辑画布：移动端容器比例变化时，热点不能落在图片留白上，缩放也必须同步。
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${baseUrl}/scene-editor.html?verify=frontend-realness`, { waitUntil: "networkidle" });
+  await page.locator("#dayUrl").fill("data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=");
+  await page.locator("#nightUrl").fill("data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=");
+  await page.locator("#previewBtn").click();
+  await page.locator("#addHotspotBtn").click();
+  await page.locator("#zoomIn").click();
+  await page.waitForTimeout(120);
+  const metrics = await page.evaluate(() => {
+    const canvas = document.querySelector("#sceneCanvas");
+    const image = document.querySelector("#sceneImage");
+    const hotspot = document.querySelector(".editor-hotspot");
+    const canvasRect = canvas?.getBoundingClientRect();
+    const imageRect = image?.getBoundingClientRect();
+    const hotspotRect = hotspot?.getBoundingClientRect();
+    return {
+      canvasParent: image?.parentElement?.id || "",
+      canvasRatio: canvasRect ? canvasRect.width / canvasRect.height : 0,
+      imageInsideCanvas: canvas && image ? canvas.contains(image) : false,
+      hotspotInsideCanvas: canvas && hotspot ? canvas.contains(hotspot) : false,
+      hotspotWithinCanvas: Boolean(canvasRect && hotspotRect &&
+        hotspotRect.left >= canvasRect.left - 1 &&
+        hotspotRect.top >= canvasRect.top - 1 &&
+        hotspotRect.right <= canvasRect.right + 1 &&
+        hotspotRect.bottom <= canvasRect.bottom + 1),
+      imageTransform: image?.style.transform || "",
+      canvasTransform: canvas?.style.transform || "",
+    };
+  });
+  assert(metrics.canvasParent === "sceneCanvas", `background should be inside scene canvas: ${metrics.canvasParent}`);
+  assert(metrics.imageInsideCanvas, "background image must be a child of scene canvas");
+  assert(metrics.hotspotInsideCanvas, "hotspot must be a child of scene canvas");
+  assert(Math.abs(metrics.canvasRatio - 16 / 9) < 0.03, `scene canvas must be 16:9, got ${metrics.canvasRatio}`);
+  assert(metrics.hotspotWithinCanvas, "hotspot must remain within the logical canvas");
+  assert(metrics.imageTransform === "", `image should not own zoom transform: ${metrics.imageTransform}`);
+  assert(metrics.canvasTransform.includes("scale"), `scene canvas should own zoom transform: ${metrics.canvasTransform}`);
+}
+
 async function verifySceneEditorHotspotList(page, baseUrl) {
   // 守护侧栏热点列表（多热点管理 UX）：添加后列表显示 + 计数更新，点击列表项选中，× 删除后同步。
   // 页面加载不触发 renderHotspots，必须靠 addHotspotBtn 驱动才能执行列表渲染逻辑。
@@ -441,6 +490,7 @@ try {
   await verifySceneEditorAccess(page, baseUrl);
   await verifyCreativeMobileRelationshipActions(page, baseUrl);
   await verifySceneEditorMobile(page, baseUrl);
+  await verifySceneEditorCoordinateCanvas(page, baseUrl);
   await verifySceneEditorDayNight(page, baseUrl);
   await verifySceneEditorHotspotList(page, baseUrl);
   await verifySceneEditorUndoRedo(page, baseUrl);

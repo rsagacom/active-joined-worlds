@@ -7,55 +7,85 @@
       "meta": "跨城共响线",
       "kind_hint": "世界广场",
       "participant_label": "跨城共响回廊",
-      "member_count": 3,
+      "member_count": 5,
       "scene_banner": "世界广场",
-      "scene_summary": "先把广场回声跑顺，再慢慢展开世界门牌与护阵簿。",
+      "scene_summary": "公共频道、公告板与像素座位区",
       "messages": [
         {
-          "message_id": "m-0-1",
-          "sender": "builder",
-          "timestamp": "1 小时前",
-          "timestamp_ms": 1779701934819,
+          "message_id": "gw-1785132284851-1",
+          "sender": "system",
+          "timestamp": "20 分钟前",
+          "timestamp_ms": 1785131084851,
           "delivery_status": "delivered",
           "is_recalled": false,
           "is_edited": false,
-          "text": "本地航路已连上，回声可以先顺着流转。"
+          "text": "world lobby online. Cities and residents can discover each other here."
         },
         {
-          "message_id": "m-2-1",
+          "message_id": "gw-1785132284882-2",
           "sender": "builder",
-          "timestamp": "1 小时前",
-          "timestamp_ms": 1779701934296,
+          "timestamp": "5 分钟前",
+          "timestamp_ms": 1785131984851,
           "delivery_status": "delivered",
           "is_recalled": false,
           "is_edited": false,
-          "text": "本地航路已连上，回声可以先顺着流转。"
+          "text": "Local gateway online. H5 shell can now poll and post through localhost."
         },
         {
-          "message_id": "local-rsaga-1779705534568",
+          "message_id": "gw-1785132285080-6",
+          "sender": "openclaw",
+          "timestamp": "刚刚",
+          "timestamp_ms": 1785132285080,
+          "delivery_status": "delivered",
+          "is_recalled": false,
+          "is_edited": false,
+          "text": "TUI_SMOKE_预置消息"
+        },
+        {
+          "message_id": "local-tiyan-1785132285566",
+          "sender": "tiyan",
+          "timestamp": "刚刚",
+          "timestamp_ms": 1785132285566,
+          "delivery_status": "delivered",
+          "is_recalled": false,
+          "is_edited": false,
+          "text": "USER_WORLD_COMMAND_探针消息"
+        },
+        {
+          "message_id": "local-rsaga-1785132286044",
           "sender": "rsaga",
           "timestamp": "刚刚",
-          "timestamp_ms": 1779705534568,
+          "timestamp_ms": 1785132286044,
+          "delivery_status": "delivered",
+          "is_recalled": false,
+          "is_edited": false,
+          "text": "WORLD_TUI_SEND_SMOKE_探针消息"
+        },
+        {
+          "message_id": "local-rsaga-1785132286594",
+          "sender": "rsaga",
+          "timestamp": "刚刚",
+          "timestamp_ms": 1785132286594,
           "delivery_status": "delivered",
           "is_recalled": false,
           "is_edited": false,
           "text": "ADMIN_WORLD_COMMAND_探针消息"
         },
         {
-          "message_id": "local-rsaga-1779705538459",
+          "message_id": "local-rsaga-1785132291228",
           "sender": "rsaga",
           "timestamp": "刚刚",
-          "timestamp_ms": 1779705538459,
+          "timestamp_ms": 1785132291228,
           "delivery_status": "delivered",
           "is_recalled": false,
           "is_edited": false,
           "text": "WORLD_RUNNING_SESSION_OFFLINE_SEND_探针消息"
         },
         {
-          "message_id": "gw-1779705541496-1",
+          "message_id": "gw-1785132293800-1",
           "sender": "openclaw",
           "timestamp": "刚刚",
-          "timestamp_ms": 1779705541496,
+          "timestamp_ms": 1785132293800,
           "delivery_status": "delivered",
           "is_recalled": false,
           "is_edited": false,
@@ -71,9 +101,20 @@
       "kind_hint": "居所",
       "participant_label": "你与 builder",
       "member_count": 2,
-      "scene_banner": "夜航居所",
-      "scene_summary": "适合贴耳对句、补一笔居所回声。",
-      "messages": []
+      "scene_banner": "个人房间",
+      "scene_summary": "木地板、工作台、沙发与像素人物",
+      "messages": [
+        {
+          "message_id": "gw-1785132284908-3",
+          "sender": "builder",
+          "timestamp": "1 小时前",
+          "timestamp_ms": 1785128684851,
+          "delivery_status": "delivered",
+          "is_recalled": false,
+          "is_edited": false,
+          "text": "Core split: headless chat, host adapter, optional AI sidecar."
+        }
+      ]
     },
     {
       "id": "room:city:core-harbor:lobby",
@@ -84,19 +125,84 @@
       "participant_label": "核心港回声大厅",
       "member_count": 3,
       "scene_banner": "城邦大厅",
-      "scene_summary": "先把公共频道聊顺，城主府、居民区和传送阵都要贴在一起。",
+      "scene_summary": "公共频道、公告板与像素座位区",
       "messages": [
         {
-          "message_id": "m-1-1",
+          "message_id": "gw-1785132285299-7",
           "sender": "builder",
-          "timestamp": "1 小时前",
-          "timestamp_ms": 1779701634819,
+          "timestamp": "刚刚",
+          "timestamp_ms": 1785132285299,
           "delivery_status": "delivered",
           "is_recalled": false,
           "is_edited": false,
-          "text": "先把城主府、居民区和传送阵摆顺，世界词再往后放。"
+          "text": "USER_SMOKE_城邦大厅探针消息"
+        },
+        {
+          "message_id": "local-tiyan-1785132285405",
+          "sender": "tiyan",
+          "timestamp": "刚刚",
+          "timestamp_ms": 1785132285405,
+          "delivery_status": "delivered",
+          "is_recalled": false,
+          "is_edited": false,
+          "text": "USER_TUI_SEND_SMOKE_探针消息"
         }
       ]
+    },
+    {
+      "id": "room:city:aurora-hub:announcements",
+      "title": "城主告示",
+      "subtitle": "城务与告示",
+      "meta": "城内回响线",
+      "kind_hint": "城主告示",
+      "participant_label": "城务与告示",
+      "member_count": 2,
+      "scene_banner": "城主告示",
+      "scene_summary": "公共频道、公告板与像素座位区",
+      "messages": [
+        {
+          "message_id": "gw-1785132286488-1",
+          "sender": "builder",
+          "timestamp": "刚刚",
+          "timestamp_ms": 1785132286488,
+          "delivery_status": "delivered",
+          "is_recalled": false,
+          "is_edited": false,
+          "text": "ADMIN_SMOKE_城务告示探针消息"
+        },
+        {
+          "message_id": "local-rsaga-1785132286752",
+          "sender": "rsaga",
+          "timestamp": "刚刚",
+          "timestamp_ms": 1785132286752,
+          "delivery_status": "delivered",
+          "is_recalled": false,
+          "is_edited": false,
+          "text": "ADMIN_GOVERNANCE_COMMAND_探针消息"
+        },
+        {
+          "message_id": "local-rsaga-1785132286910",
+          "sender": "rsaga",
+          "timestamp": "刚刚",
+          "timestamp_ms": 1785132286910,
+          "delivery_status": "delivered",
+          "is_recalled": false,
+          "is_edited": false,
+          "text": "ADMIN_TUI_SEND_SMOKE_探针消息"
+        }
+      ]
+    },
+    {
+      "id": "dm:guide:rsaga",
+      "title": "居所 · guide:rsaga",
+      "subtitle": "2 人居所",
+      "meta": "居所直达",
+      "kind_hint": "居所",
+      "participant_label": "2 人居所",
+      "member_count": 2,
+      "scene_banner": "个人房间",
+      "scene_summary": "木地板、工作台、沙发与像素人物",
+      "messages": []
     }
   ]
 }

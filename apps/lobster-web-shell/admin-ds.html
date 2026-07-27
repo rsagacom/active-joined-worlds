@@ -74,7 +74,7 @@
         <button class="ds-nav-item" data-module="messages">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
           <span class="ds-nav-item-text">消息审核</span>
-          <span class="ds-nav-badge" id="msgAuditBadge">3</span>
+          <span class="ds-nav-badge" id="msgAuditBadge" aria-label="待处理消息数">0</span>
         </button>
       </div>
 
@@ -118,7 +118,7 @@
         <button class="ds-nav-item" data-module="logs">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
           <span class="ds-nav-item-text">日志与告警</span>
-          <span class="ds-nav-badge" style="background:var(--ds-warning)">7</span>
+          <span class="ds-nav-badge" id="logAlertBadge" style="background:var(--ds-warning)" aria-label="日志告警数">0</span>
         </button>
       </div>
     </nav>
@@ -193,36 +193,9 @@
               <span class="ds-card-title">最近系统事件</span>
               <span class="ds-card-subtitle">近 24 小时</span>
             </div>
-            <div class="ds-event-list">
+            <div class="ds-event-list" data-state="unavailable">
               <div class="ds-event-item">
-                <span class="ds-event-time">14:32</span>
-                <span class="ds-event-text">居民 <strong>@resident_demo</strong> 登录成功 · IP 192.0.2.1</span>
-                <span class="ds-event-type info">登录</span>
-              </div>
-              <div class="ds-event-item">
-                <span class="ds-event-time">14:28</span>
-                <span class="ds-event-text">房间 <strong>#主城大厅</strong> 消息量达到 1,200 条/小时</span>
-                <span class="ds-event-type info">流量</span>
-              </div>
-              <div class="ds-event-item">
-                <span class="ds-event-time">14:15</span>
-                <span class="ds-event-text">消息审核标记：居民 <strong>@test_user_03</strong> 发送疑似广告内容</span>
-                <span class="ds-event-type warn">审核</span>
-              </div>
-              <div class="ds-event-item">
-                <span class="ds-event-time">13:50</span>
-                <span class="ds-event-text">Gateway 连接池使用率超过 80%，自动扩容中</span>
-                <span class="ds-event-type warn">资源</span>
-              </div>
-              <div class="ds-event-item">
-                <span class="ds-event-time">13:22</span>
-                <span class="ds-event-text">居民 <strong>@wangdana</strong> 被邀请加入房间 #望海别墅</span>
-                <span class="ds-event-type info">邀请</span>
-              </div>
-              <div class="ds-event-item">
-                <span class="ds-event-time">12:08</span>
-                <span class="ds-event-text">AI 助手通道 <strong>gpt-4o-mini</strong> 响应超时，已切换备用通道</span>
-                <span class="ds-event-type warn">AI</span>
+                <span class="ds-event-text" style="color:var(--ds-text-secondary);">Gateway 未连接，暂无实时审计事件</span>
               </div>
             </div>
           </div>
@@ -436,35 +409,10 @@
             <div class="ds-card-header">
               <span class="ds-card-title">房间加入规则</span>
             </div>
-            <div style="font-size:13px;">
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--ds-border-light);">
-                <div>
-                  <strong>#主城大厅</strong>
-                  <div style="color:var(--ds-text-muted);font-size:12px;">自由加入 · 所有居民</div>
-                </div>
-                <span class="ds-tag success">开放</span>
-              </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--ds-border-light);">
-                <div>
-                  <strong>#望海别墅</strong>
-                  <div style="color:var(--ds-text-muted);font-size:12px;">邀请制 · 需邀请码</div>
-                </div>
-                <span class="ds-tag warning">邀请</span>
-              </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--ds-border-light);">
-                <div>
-                  <strong>#世界广场</strong>
-                  <div style="color:var(--ds-text-muted);font-size:12px;">自由加入 · 含访客</div>
-                </div>
-                <span class="ds-tag success">开放</span>
-              </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;">
-                <div>
-                  <strong>#AJW文学社</strong>
-                  <div style="color:var(--ds-text-muted);font-size:12px;">白名单制 · 仅限正式居民</div>
-                </div>
-                <span class="ds-tag info">白名单</span>
-              </div>
+            <div id="roomJoinRulesState" class="ds-empty" data-state="unavailable" style="font-size:13px;">
+              <div>暂不可展示房间加入规则</div>
+              <div style="margin-top:8px;font-size:12px;">当前 Gateway 合同未提供房间加入规则，待正式字段接入后再显示。</div>
+              <span class="ds-tag default" style="display:inline-block;margin-top:12px;">待接入 Gateway 合同</span>
             </div>
           </div>
         </div>
@@ -630,6 +578,7 @@
                     <th>原因</th>
                     <th>状态</th>
                     <th>发布者</th>
+                    <th>操作</th>
                   </tr>
                 </thead>
                 <tbody id="sanctionTableBody"></tbody>
@@ -646,85 +595,11 @@
           <p>管理 Gateway 连接、邮箱服务与 AI 助手通道状态</p>
         </div>
 
-        <div class="ds-config-grid">
-          <!-- Gateway -->
-          <div class="ds-config-item">
-            <div class="ds-config-info">
-              <h4>Gateway 端点</h4>
-              <p>wss://gw.lobster-chat.io/ws</p>
-              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">协议版本: v2 · 心跳间隔: 30s</p>
-            </div>
-            <span class="ds-tag success">已连接</span>
-          </div>
-
-          <!-- 备份 Gateway -->
-          <div class="ds-config-item">
-            <div class="ds-config-info">
-              <h4>备用 Gateway 端点</h4>
-              <p>wss://gw-backup.lobster-chat.io/ws</p>
-              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">故障自动切换: 已启用</p>
-            </div>
-            <span class="ds-tag default">待命</span>
-          </div>
-
-          <!-- 邮箱验证码 -->
-          <div class="ds-config-item">
-            <div class="ds-config-info">
-              <h4>邮箱验证码服务</h4>
-              <p>SMTP 发信 · smtp.lobster-chat.io:587</p>
-              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">发信人: noreply@lobster-chat.io · 模板: 6位数字验证码</p>
-            </div>
-            <span class="ds-tag success">正常</span>
-          </div>
-
-          <!-- 验证码配额 -->
-          <div class="ds-config-item">
-            <div class="ds-config-info">
-              <h4>验证码发送配额</h4>
-              <p>每邮箱每日上限 5 次</p>
-              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">今日已发送: 23 次 · 月累计: 412 次</p>
-            </div>
-            <span class="ds-tag info">配额正常</span>
-          </div>
-
-          <!-- AI 主通道 -->
-          <div class="ds-config-item">
-            <div class="ds-config-info">
-              <h4>AI 助手 · 主通道</h4>
-              <p>GPT-4o-mini · api.openai.com</p>
-              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">上下文窗口: 128K · 速率限制: 500 RPM</p>
-            </div>
-            <span class="ds-tag success">可用</span>
-          </div>
-
-          <!-- AI 备用通道 -->
-          <div class="ds-config-item">
-            <div class="ds-config-info">
-              <h4>AI 助手 · 备用通道</h4>
-              <p>Claude Sonnet 4.6 · api.anthropic.com</p>
-              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">上下文窗口: 200K · 自动切换: 已启用</p>
-            </div>
-            <span class="ds-tag info">待命</span>
-          </div>
-
-          <!-- 存储服务 -->
-          <div class="ds-config-item">
-            <div class="ds-config-info">
-              <h4>消息持久化存储</h4>
-              <p>本地历史 + 云端同步</p>
-              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">保留期限: 90 天 · 存储用量: 2.3 GB</p>
-            </div>
-            <span class="ds-tag success">正常</span>
-          </div>
-
-          <!-- Webhook -->
-          <div class="ds-config-item">
-            <div class="ds-config-info">
-              <h4>事件 Webhook</h4>
-              <p>https://hooks.lobster-chat.io/events</p>
-              <p style="margin-top:4px;font-size:11px;color:var(--ds-text-muted);">推送: 消息事件 · 登录事件 · 异常事件</p>
-            </div>
-            <span class="ds-tag success">活跃</span>
+        <div class="ds-config-grid" id="serviceHealthState" data-state="unavailable">
+          <div class="ds-empty" style="grid-column:1 / -1;">
+            <div>暂不可展示服务健康明细</div>
+            <div style="margin-top:8px;font-size:12px;">当前 Gateway 合同未提供服务健康明细，待正式字段接入后再显示。</div>
+            <span class="ds-tag default" style="display:inline-block;margin-top:12px;">待接入 Gateway 合同</span>
           </div>
         </div>
 
@@ -893,9 +768,21 @@
   <script type="module">
     import { initStandaloneAuthSurface } from "./shell-auth-standalone.js";
     const gatewayUrl = new URLSearchParams(window.location.search).get("gateway") || "";
-    initStandaloneAuthSurface({ gatewayUrl });
+    initStandaloneAuthSurface({
+      gatewayUrl,
+      onIdentityChanged: () => window.__adminDsRefresh?.(),
+    });
     const toggle = document.getElementById("hud-login-toggle");
-    if (gatewayUrl && !localStorage.getItem("lobster-identity")) { setTimeout(() => toggle?.classList.remove("shell-hidden"), 800); }
+    if (gatewayUrl) {
+      setTimeout(() => {
+        toggle?.classList.remove("shell-hidden");
+        const signedIn = Boolean(localStorage.getItem("lobster-identity") && localStorage.getItem("lobster-session-token"));
+        if (toggle) {
+          toggle.textContent = signedIn ? "退出登录" : "登录";
+          toggle.setAttribute("aria-label", signedIn ? "退出登录" : "打开登录窗口");
+        }
+      }, 800);
+    }
   </script>
 </body>
 </html>

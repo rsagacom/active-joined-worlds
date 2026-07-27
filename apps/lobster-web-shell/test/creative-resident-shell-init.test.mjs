@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 import { loadUserShellApp } from "./fake-dom.mjs";
 
 const serial = { concurrency: false };
+const TEST_SESSION_TOKEN = "lbst_test_session_token";
 
 async function flushAsyncWork() {
   await new Promise((resolve) => setTimeout(resolve, 0));
@@ -238,7 +239,10 @@ test("creative resident gateway offline state disables composer and marks the sh
     generatedShellFixture: "generated/state.contract.json",
     locationSearch: "?gateway=http://127.0.0.1:50651",
     gatewayBaseUrl: "http://127.0.0.1:50651",
-    localStorageEntries: { "lobster-identity": "rsaga" },
+    localStorageEntries: {
+      "lobster-identity": "rsaga",
+      "lobster-session-token": TEST_SESSION_TOKEN,
+    },
     gatewayProviderState: {
       mode: "cloudflare",
       reachable: false,
@@ -267,7 +271,10 @@ test("gateway creative resident shell scopes state and opens SSE stream by store
     generatedShellFixture: "generated/state.contract.json",
     locationSearch: "?gateway=http://127.0.0.1:50651",
     gatewayBaseUrl: "http://127.0.0.1:50651",
-    localStorageEntries: { "lobster-identity": "rsaga" },
+    localStorageEntries: {
+      "lobster-identity": "rsaga",
+      "lobster-session-token": TEST_SESSION_TOKEN,
+    },
   });
   try {
     const { document, fetchCalls, eventSourceCalls } = app;
@@ -288,7 +295,10 @@ test("gateway creative resident SSE reopens with state version wait cursor", ser
     generatedShellFixture: "generated/state.contract.json",
     locationSearch: "?gateway=http://127.0.0.1:50651",
     gatewayBaseUrl: "http://127.0.0.1:50651",
-    localStorageEntries: { "lobster-identity": "rsaga" },
+    localStorageEntries: {
+      "lobster-identity": "rsaga",
+      "lobster-session-token": TEST_SESSION_TOKEN,
+    },
   });
   try {
     const { eventSourceCalls, emitEventSource } = app;
@@ -318,6 +328,7 @@ test("gateway creative resident send clears composer and posts once", serial, as
     gatewayBaseUrl: "http://127.0.0.1:50651",
     localStorageEntries: {
       "lobster-identity": "qa2",
+      "lobster-session-token": TEST_SESSION_TOKEN,
     },
   });
   try {
@@ -352,6 +363,7 @@ test("gateway creative resident Enter key sends and Shift Enter keeps a draft", 
     gatewayBaseUrl: "http://127.0.0.1:50651",
     localStorageEntries: {
       "lobster-identity": "qa2",
+      "lobster-session-token": TEST_SESSION_TOKEN,
     },
   });
   try {
@@ -390,7 +402,10 @@ test("Enter sends on scene composer regardless of viewport width", serial, async
     generatedShellFixture: "generated/state.contract.json",
     locationSearch: "?gateway=http://127.0.0.1:50651",
     gatewayBaseUrl: "http://127.0.0.1:50651",
-    localStorageEntries: { "lobster-identity": "qa2" },
+    localStorageEntries: {
+      "lobster-identity": "qa2",
+      "lobster-session-token": TEST_SESSION_TOKEN,
+    },
   });
   try {
     const { document, fetchCalls } = app;
@@ -422,9 +437,12 @@ test("gateway creative resident send commits one stable self bubble with avatar"
   const app = await loadUserShellApp({
     useGeneratedFixtures: true,
     generatedShellFixture: "generated/state.contract.json",
-    locationSearch: "?gateway=http://127.0.0.1:50651&identity=qa-a",
+    locationSearch: "?gateway=http://127.0.0.1:50651&identity=qa-a&qa=browser",
     gatewayBaseUrl: "http://127.0.0.1:50651",
-    localStorageEntries: { "lobster-identity": "qa-a" },
+    localStorageEntries: {
+      "lobster-identity": "qa-a",
+      "lobster-session-token": TEST_SESSION_TOKEN,
+    },
   });
   try {
     const { document, fetchCalls } = app;
@@ -467,9 +485,12 @@ test("gateway creative resident export surfaces gateway Error message", serial, 
   const app = await loadUserShellApp({
     useGeneratedFixtures: true,
     generatedShellFixture: "generated/state.contract.json",
-    locationSearch: "?gateway=http://127.0.0.1:50651&identity=rsaga",
+    locationSearch: "?gateway=http://127.0.0.1:50651&identity=rsaga&qa=browser",
     gatewayBaseUrl: "http://127.0.0.1:50651",
-    localStorageEntries: { "lobster-identity": "rsaga" },
+    localStorageEntries: {
+      "lobster-identity": "rsaga",
+      "lobster-session-token": TEST_SESSION_TOKEN,
+    },
     exportResponse: {
       status: 403,
       body: {
@@ -527,9 +548,12 @@ test("gateway creative resident peer message renders on the left with its own av
     const app = await loadUserShellApp({
       useGeneratedFixtures: true,
       generatedShellFixture: `generated/${tempFixtureName}`,
-      locationSearch: "?gateway=http://127.0.0.1:50651&identity=qa-b",
+      locationSearch: "?gateway=http://127.0.0.1:50651&identity=qa-b&qa=browser",
       gatewayBaseUrl: "http://127.0.0.1:50651",
-      localStorageEntries: { "lobster-identity": "qa-b" },
+      localStorageEntries: {
+        "lobster-identity": "qa-b",
+        "lobster-session-token": TEST_SESSION_TOKEN,
+      },
     });
     try {
       const { document, fetchCalls, eventSourceCalls } = app;
@@ -571,6 +595,28 @@ test("gateway creative resident shell keeps visitor scoped and blocks sending be
     assert.equal(composerSend?.disabled, true);
     assert.match(composerInput?.placeholder || "", /请先登录后发送/);
     assert.equal(loginCard?.classList.contains("shell-hidden"), false);
+  } finally {
+    app.cleanup();
+  }
+});
+
+test("gateway creative shell ignores an unauthenticated query identity and keeps visitor sending disabled", serial, async () => {
+  const app = await loadUserShellApp({
+    useGeneratedFixtures: true,
+    generatedShellFixture: "generated/state.contract.json",
+    locationSearch: "?gateway=http://127.0.0.1:50651&identity=qa-visitor",
+    gatewayBaseUrl: "http://127.0.0.1:50651",
+  });
+  try {
+    const { document, fetchCalls, eventSourceCalls } = app;
+    const composerInput = document.querySelector("#composer-input");
+    const composerSend = document.querySelector("#composer-send");
+
+    assert.ok(fetchCalls.includes("http://127.0.0.1:50651/v1/shell/state?resident_id=%E8%AE%BF%E5%AE%A2"));
+    assert.ok(eventSourceCalls.includes("http://127.0.0.1:50651/v1/shell/events?resident_id=%E8%AE%BF%E5%AE%A2"));
+    assert.equal(composerInput?.disabled, true);
+    assert.equal(composerSend?.disabled, true);
+    assert.match(composerInput?.placeholder || "", /请先登录后发送/);
   } finally {
     app.cleanup();
   }

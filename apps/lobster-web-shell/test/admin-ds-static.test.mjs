@@ -45,6 +45,7 @@ test("admin-ds.html 引用正确的 CSS 和 JS", async () => {
   assert.match(html, /src="\.\/admin-ds\.js"/, "应引用交互脚本 admin-ds.js");
   assert.match(html, /import \{ initStandaloneAuthSurface \} from "\.\/shell-auth-standalone\.js";/, "注册登录应走共享 standalone auth 接线");
   assert.match(html, /initStandaloneAuthSurface\(\{[\s\S]*gatewayUrl/, "应初始化 standalone auth 并传入 gatewayUrl");
+  assert.match(html, /onIdentityChanged:\s*\(\) => window\.__adminDsRefresh\?\.\(\)/, "登录状态变化后应刷新后台 Gateway 投影");
   assert.doesNotMatch(html, /import \{ initAuth \} from "\.\/shell-auth\.js";/, "后台页不应复制 shell-auth 初始化细节");
   assert.match(html, /<html lang="zh-CN"/, "应声明中文语言");
   assert.match(html, /<title>AJW聊天 · 管理后台<\/title>/, "应有正确的页面标题");
@@ -55,11 +56,14 @@ test("admin-ds.html 引用正确的 CSS 和 JS", async () => {
 test("standalone auth module wires OTP submit lifecycle", async () => {
   const js = await readShellModule("shell-auth-standalone.js");
 
-  assert.match(js, /initAuth\(/, "应复用 shell-auth 初始化 DOM refs");
+  assert.match(js, /createAuthController\(els,/, "应复用实例化 shell-auth 控制器初始化 DOM refs");
+  assert.doesNotMatch(js, /\binitAuth\s*\(/, "独立登录页不应复用模块级认证单例");
   assert.match(js, /loadAuthDraft\(\)/, "初始化后应恢复验证码登录草稿");
   assert.match(js, /updateAuthFormState\(\)/, "初始化和提交后应刷新按钮状态");
   assert.match(js, /requestFormEl\?\.addEventListener\("submit"[\s\S]*requestEmailOtp\(\)/, "申请表单 submit 应调用 requestEmailOtp");
   assert.match(js, /verifyFormEl\?\.addEventListener\("submit"[\s\S]*verifyEmailOtp\(\)/, "校验表单 submit 应调用 verifyEmailOtp");
+  assert.match(js, /postGatewayJsonAuthenticated[\s\S]*Authorization:\s*`Bearer \$\{token\}`/, "退出登录应把当前 session token 发送给 Gateway");
+  assert.match(js, /authController\.logout\(\)/, "后台 HUD 登录按钮应支持服务端 logout");
   assert.match(js, /persistAuthDraft\(\)/, "submit 前应保存当前邮箱/昵称/验证码草稿");
   assert.match(js, /localizedRuntimeError\(/, "失败反馈应复用本地化错误文案");
 });
@@ -96,6 +100,37 @@ test("admin-ds.html 包含全部核心模块面板", async () => {
   }
 });
 
+test("admin-ds 房间加入规则没有 Gateway 合同时显示禁用原因", async () => {
+  const html = await readShellPage("admin-ds.html");
+  const roomRules = sliceBetween(
+    html,
+    '<span class="ds-card-title">房间加入规则</span>',
+    '<!-- 邀请码 -->',
+  );
+
+  assert.match(roomRules, /data-state="unavailable"/, "无正式合同的房间规则应明确标记不可用");
+  assert.match(roomRules, /Gateway 合同未提供房间加入规则/, "应说明不可用的根因");
+  assert.doesNotMatch(roomRules, /#主城大厅|#望海别墅|#世界广场|#AJW文学社/, "不能继续展示硬编码房间规则");
+});
+
+test("admin-ds 系统服务健康没有 Gateway 合同时显示禁用原因", async () => {
+  const html = await readShellPage("admin-ds.html");
+  const serviceHealth = sliceBetween(html, '<div class="ds-config-grid"', '<div class="ds-page-section"');
+
+  assert.match(serviceHealth, /data-state="unavailable"/, "无正式合同的服务健康应明确标记不可用");
+  assert.match(serviceHealth, /Gateway 合同未提供服务健康明细/, "应说明服务健康不可用的根因");
+  assert.doesNotMatch(serviceHealth, /gw\.lobster-chat\.io|smtp\.lobster-chat\.io|GPT-4o-mini|Claude Sonnet|2\.3 GB|hooks\.lobster-chat\.io/, "不能继续展示硬编码服务健康样例");
+});
+
+test("admin-ds 仪表盘没有 Gateway 时不展示硬编码系统事件", async () => {
+  const html = await readShellPage("admin-ds.html");
+  const events = sliceBetween(html, '<div class="ds-event-list"', '<span class="ds-card-title">Gateway 连接详情</span>');
+
+  assert.match(events, /data-state="unavailable"/, "无 Gateway 的系统事件应明确标记不可用");
+  assert.match(events, /Gateway 未连接/, "应说明暂无实时审计事件的根因");
+  assert.doesNotMatch(events, /resident_demo|192\.0\.2\.1|gpt-4o-mini|14:32|14:28/, "不能继续展示硬编码系统事件样例");
+});
+
 test("admin-ds.html 设备管理模块位于后台主内容区内", async () => {
   const html = await readShellPage("admin-ds.html");
   const mainContent = sliceBetween(html, '<div class="ds-content" id="dsContent">', '</div><!-- /.ds-content -->');
@@ -118,6 +153,8 @@ test("admin-ds.html 包含左侧导航、顶部状态栏、详情面板", async 
   assert.match(html, /id="dsGatewayStatus"/, "应有 Gateway 状态指示器");
   assert.match(html, /id="dsOnlineCount"/, "应有在线人数显示");
   assert.match(html, /id="dsAlertCount"/, "应有告警数显示");
+  assert.match(html, /id="msgAuditBadge"[^>]*aria-label="待处理消息数"/, "消息审核 badge 应有明确的真实数据语义");
+  assert.match(html, /id="logAlertBadge"[^>]*aria-label="日志告警数"/, "日志告警 badge 应有明确的真实数据语义");
 
   // 仪表盘必须能被真实数据刷新，不能只展示硬编码样例
   for (const id of [
@@ -225,7 +262,7 @@ test("admin-ds.js 读取 gateway 投影并通过统一 helper 执行受控写操
   assert.match(js, /function resolveGatewayUrl\(\)/, "应支持 ?gateway= 只读接入");
   assert.match(js, /function loadGatewayAdminData\(\)/, "应有后台只读同步入口");
   assert.match(js, /function updateDashboardSummary\(/, "仪表盘应跟随真实 gateway 或当前投影刷新");
-  assert.match(js, /fetchGatewayJson\('\/v1\/residents'\)/, "应读取居民目录");
+  assert.match(js, /fetchGatewayJson\('\/v1\/admin\/residents'\)/, "应读取居民注册管理投影");
   assert.match(js, /fetchGatewayJson\('\/v1\/shell\/state\?resident_id=' \+ identity\)/, "应读取当前视角 shell state");
   assert.match(js, /normalizeGatewayResidents/, "应把 gateway resident projection 转成后台表格数据");
   assert.match(js, /normalizeGatewayRooms/, "应把 gateway conversations 转成房间表格数据");
@@ -258,6 +295,7 @@ test("admin-ds.js 读取 gateway 投影并通过统一 helper 执行受控写操
     "/v1/world-safety/advisories",
     "/v1/admin/residents/ban",
     "/v1/admin/residents/unban",
+    "/v1/admin/residents/unsanction",
     "/v1/admin/rooms/freeze",
     "/v1/admin/rooms/unfreeze",
   ]) {
@@ -435,6 +473,12 @@ test("admin-ds.js normalizeGatewayResidents 处理 is_banned 字段", async () =
   assert.match(js, /status:\s*banned\s*\?\s*'banned'/, "banned 状态应在 online/offline 之前判断");
 });
 
+test("admin-ds.js 居民后台读取管理投影而非公开目录", async () => {
+  const js = await readShellModule("admin-ds.js");
+  assert.match(js, /fetchGatewayJson\('\/v1\/admin\/residents'\)/, "居民后台应读取含注册审计字段的管理端点");
+  assert.doesNotMatch(js, /fetchGatewayJson\('\/v1\/residents'\)/, "居民后台不应继续读取缺少注册账号的公开目录");
+});
+
 test("admin-ds.js 包含 freezeRoom 和 unfreezeRoom 函数", async () => {
   const js = await readShellModule("admin-ds.js");
   assert.match(js, /async function freezeRoom\(/, "应定义 freezeRoom 函数");
@@ -536,6 +580,14 @@ test("admin-ds.js 各渲染函数包含空状态分支", async () => {
     assert.match(js, /暂无居民制裁/, "renderResidentSanctions 应有居民制裁空状态");
 });
 
+test("admin-ds.js 告警 badge 与仪表盘计数复用同一真实数据投影", async () => {
+  const js = await readShellModule("admin-ds.js");
+  assert.match(js, /function updateAlertCounts\(\)/, "应有统一告警计数投影");
+  assert.match(js, /logAlertBadge\.textContent = String\(warningLogs\)/, "日志 badge 必须来自 warning/error 日志计数");
+  assert.match(js, /renderLogs\(filterLevel, filterType, searchTerm\) \{\s*updateAlertCounts\(\);/, "审计日志异步刷新后必须更新 badge");
+  assert.match(js, /updateAlertCounts\(\);\s*\n\s*\}/, "仪表盘刷新应同步告警计数");
+});
+
 test("admin-ds.js loadGatewayAdminData 包含加载和错误状态处理", async () => {
   const js = await readShellModule("admin-ds.js");
 
@@ -582,10 +634,12 @@ test("admin-ds.js 包含安全通告相关函数", async () => {
   assert.match(js, /function renderSafetyReports/, "应定义 renderSafetyReports 函数");
   assert.match(js, /function renderResidentSanctions/, "应定义 renderResidentSanctions 函数");
   assert.match(js, /async function reviewSafetyReport/, "应定义 reviewSafetyReport 函数");
+  assert.match(js, /async function unsanctionResident/, "应定义 unsanctionResident 函数");
   assert.match(js, /async function publishSafetyAdvisory/, "应定义 publishSafetyAdvisory 函数");
   assert.match(js, /\/v1\/world-safety/, "应调用 world-safety 端点");
   assert.match(js, /\/v1\/world-safety\/advisories/, "应调用 world-safety/advisories 端点");
   assert.match(js, /\/v1\/world-safety\/reports\/review/, "应调用 world-safety/reports/review 端点");
+  assert.match(js, /\/v1\/admin\/residents\/unsanction/, "应调用 admin/residents/unsanction 端点");
 });
 
 test("admin-ds.js 包含场景编辑相关函数", async () => {
@@ -606,6 +660,20 @@ test("admin-ds scene editor posts paired day/night image URLs", async () => {
   assert.match(sceneEditor, /day_image_url:\s*dayUrl \|\| null/, "image_layer payload 应包含 day_image_url");
   assert.match(sceneEditor, /night_image_url:\s*nightUrl \|\| null/, "image_layer payload 应包含 night_image_url");
   assert.match(sceneEditor, /selectedPreset \|\| dayUrl \|\| nightUrl/, "只填自定义图片时也应提交 image_layer");
+  assert.match(sceneEditor, /var ilPayload = null;/, "清除预设和昼夜图片时应显式发送 image_layer:null");
+  assert.match(sceneEditor, /var hlPayload = null;/, "删除全部热点时应显式发送 hotspot_layer:null");
+  assert.match(sceneEditor, /image_layer: ilPayload/, "场景保存应透传图像层清除语义");
+  assert.match(sceneEditor, /hotspot_layer: hlPayload/, "场景保存应透传热点层清除语义");
+});
+
+test("admin-ds scene editor keeps hotspot title count aligned with the editable list", async () => {
+  const js = await readShellModule("admin-ds.js");
+  const sceneEditor = sliceBetween(js, "function renderSceneEditor(room, container)", "  // ====== Device Management ======");
+
+  assert.match(sceneEditor, /var hotspotTitle = el\('span', \{ class: 'ds-card-title' \}/, "热点标题应保留可更新的 DOM 节点");
+  assert.match(sceneEditor, /hotspotTitle\.textContent = '热点配置 \(' \+ existingHotspots\.length \+ ' 个\)'/, "重绘热点列表时应同步标题计数");
+  assert.match(sceneEditor, /existingHotspots\.push\(\{[\s\S]*?renderHotspotRows\(\);/, "添加热点后应触发列表和计数重绘");
+  assert.match(sceneEditor, /existingHotspots\.splice\(idx, 1\);[\s\S]*?renderHotspotRows\(\);/, "删除热点后应触发列表和计数重绘");
 });
 
 // ====== 写操作失败反馈（禁止假成功态）======
@@ -680,6 +748,24 @@ test("admin-ds.js 所有 .then 写操作成功判定用 r.ok（系统性防 HTTP
       snippet,
       /else if \(r\.ok\)|else if \(r && r\.ok\)/,
       `${ep} 成功判定必须用 r.ok，禁止裸 else 导致 HTTP 失败假成功`
+    );
+  }
+});
+
+test("admin-ds.js await 写操作不能把 HTTP 失败当成功", async () => {
+  const js = await readShellModule("admin-ds.js");
+  const cases = [
+    ["fetchGatewayJsonPost('/v1/admin/devices/add'", "设备添加"],
+    ["fetchGatewayJsonPost('/v1/admin/permission-groups'", "权限组创建"],
+  ];
+  for (const [endpoint, label] of cases) {
+    const idx = js.indexOf(endpoint);
+    assert.ok(idx !== -1, `应存在 ${label}端点 ${endpoint}`);
+    const snippet = js.slice(idx, idx + 620);
+    assert.match(
+      snippet,
+      /else if \((?:res|resp)\.ok\)/,
+      `${label}成功判定必须显式使用 res/resp.ok，禁止仅检查 error`
     );
   }
 });

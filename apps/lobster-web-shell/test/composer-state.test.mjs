@@ -62,6 +62,41 @@ test("gateway resident mode requires a non-visitor identity before drafting", ()
   assert.equal(state.draftState, "login-required");
 });
 
+test("gateway resident mode requires a live session even when a query identity is present", () => {
+  const state = computeComposerAvailability({
+    hasActiveRoom: true,
+    hasDraftText: true,
+    isSendingMessage: false,
+    hasGateway: true,
+    hasGatewaySession: false,
+    hasIdentity: true,
+    requiresIdentity: true,
+  });
+
+  assert.equal(state.canDraft, false);
+  assert.equal(state.canLiveSend, false);
+  assert.equal(state.canSend, false);
+  assert.equal(state.draftState, "login-required");
+});
+
+test("local QA synthetic identity can send without a real session", () => {
+  const state = computeComposerAvailability({
+    hasActiveRoom: true,
+    hasDraftText: true,
+    isSendingMessage: false,
+    hasGateway: true,
+    hasGatewaySession: false,
+    hasIdentity: true,
+    requiresIdentity: true,
+    allowSyntheticIdentity: true,
+  });
+
+  assert.equal(state.canDraft, true);
+  assert.equal(state.canLiveSend, true);
+  assert.equal(state.canSend, true);
+  assert.equal(state.draftState, "ready");
+});
+
 test("gateway offline state locks drafting and sending", () => {
   const state = computeComposerAvailability({
     hasActiveRoom: true,

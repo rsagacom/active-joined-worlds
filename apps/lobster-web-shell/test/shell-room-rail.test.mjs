@@ -16,6 +16,7 @@ import {
   roomButtonClassSpec,
   roomEmptyStateSpec,
   roomStatsSpec,
+  roomDigestMetricsSpec,
   roomToolbarNoteSpec,
   roomTitleStackSpec,
   roomTopMetaSpec,
@@ -1208,6 +1209,33 @@ test("roomStatsSpec: 过滤后房间与全部房间分离统计", serial, () => 
   assert.equal(stats.unreadTotal, 3);
   assert.equal(stats.directCount, 1);
   assert.equal(stats.publicCount, 0);
+});
+
+test("roomDigestMetricsSpec: 聚合会话摘要指标并保持类型安全", serial, () => {
+  const metrics = roomDigestMetricsSpec([
+    { id: "dm:alice", kind: "direct" },
+    { id: "room:town", kind: "public" },
+    { id: "system:notice", kind: "system" },
+  ], {
+    roomKind: (room) => room.kind,
+    unreadCount: (room) => room.id === "dm:alice" ? 2 : 0,
+    roomHasDraft: (roomId) => roomId === "room:town",
+    roomFollowUpCount: (room) => room.id === "room:town" ? 1 : 0,
+    caretakerPendingCount: (room) => room.id === "dm:alice" ? 2 : 0,
+    caretakerNotificationCount: (room) => room.id === "system:notice" ? 3 : 0,
+  });
+
+  assert.deepEqual(metrics, {
+    activeRoom: null,
+    directCount: 1,
+    publicCount: 1,
+    systemCount: 1,
+    unreadTotal: 2,
+    draftTotal: 1,
+    followUpCount: 1,
+    caretakerQueue: 2,
+    notificationTotal: 3,
+  });
 });
 
 // ====== roomEmptyStateSpec ======

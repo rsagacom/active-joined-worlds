@@ -23,7 +23,9 @@ body { margin:0; background:var(--editor-bg); color:var(--editor-text); font-fam
 .editor-sidebar .prop-row { display:flex; gap:8px; }
 .editor-sidebar .prop-row > * { flex:1; }
 .editor-stage { position:relative; overflow:hidden; display:flex; align-items:center; justify-content:center; touch-action: none; }
-.editor-stage img { max-width:100%; max-height:100%; object-fit:contain; image-rendering:pixelated; }
+/* 所有背景与热点共享此 16:9 逻辑画布；stage 只负责居中和容纳，不参与百分比坐标计算。 */
+.scene-canvas { position:relative; flex:0 0 auto; width:min(100%, calc(100vh * 16 / 9)); max-width:100%; max-height:100%; aspect-ratio:16 / 9; transform-origin:center; overflow:visible; }
+.scene-canvas img { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; image-rendering:pixelated; }
 .editor-hotspot { position:absolute; border:2px dashed rgba(241,201,120,0.5); background:rgba(241,201,120,0.1); cursor:move; display:flex; align-items:center; justify-content:center; min-width:40px; min-height:24px; touch-action:none; }
 .editor-hotspot:hover { border-color:var(--editor-accent); background:rgba(241,201,120,0.2); }
 .editor-hotspot.selected { border:2px solid var(--editor-accent); background:rgba(241,201,120,0.25); box-shadow:0 0 0 2px rgba(241,201,120,0.15); }
@@ -114,7 +116,9 @@ body { margin:0; background:var(--editor-bg); color:var(--editor-text); font-fam
       <p>🏗️ 场景编辑器</p>
       <p>填入白天/夜晚背景 URL，或加载当前房间场景后开始编辑热点</p>
     </div>
-    <img id="sceneImage" src="" alt="场景预览" style="display:none;" />
+    <div class="scene-canvas" id="sceneCanvas">
+      <img id="sceneImage" src="" alt="场景预览" style="display:none;" />
+    </div>
     <div class="editor-toolbar">
       <button id="undoBtn" title="撤销 (Ctrl+Z)">↶ 撤销</button>
       <button id="redoBtn" title="重做 (Ctrl+Y)">↷ 重做</button>
@@ -129,6 +133,7 @@ body { margin:0; background:var(--editor-bg); color:var(--editor-text); font-fam
 <script type="module">
 const $ = (id) => document.getElementById(id);
 const stage = $('stage');
+const sceneCanvas = $('sceneCanvas');
 const img = $('sceneImage');
 const statusEl = $('status');
 const coordEl = $('coordDisplay');
@@ -191,6 +196,10 @@ const params = new URLSearchParams(location.search);
 $('roomId').value = params.get('room') || params.get('room_id') || '';
 $('gatewayUrl').value = params.get('gateway') || 'http://127.0.0.1:8787';
 $('sessionToken').value = params.get('token') || localStorage.getItem('lobster-session-token') || '';
+
+function sceneActor() {
+  return (params.get('identity') || localStorage.getItem('lobster-identity') || '').trim();
+}
 
 function status(msg, isError) { statusEl.textContent = msg; statusEl.style.color = isError ? '#ff6060' : '#888'; }
 
@@ -320,14 +329,14 @@ function renderHotspots() {
       isDragging = true;
       preDragSnapshot = sceneSnapshot();
       selectedHotspot = i;
-      var rect = stage.getBoundingClientRect();
+      var rect = sceneCanvas.getBoundingClientRect();
       dragOffset.x = e.clientX - rect.left - (h.x_permyriad / 100) * rect.width;
       dragOffset.y = e.clientY - rect.top - (h.y_permyriad / 100) * rect.height;
       renderHotspots();
       updatePropsPanel();
     });
     el.addEventListener('click', function(e) { e.stopPropagation(); selectHotspot(i); });
-    stage.appendChild(el);
+    sceneCanvas.appendChild(el);
 
     if (selectedHotspot === i) el.classList.add('selected');
   });
@@ -375,23 +384,33 @@ async function loadCurrentScene() {
   btn.disabled = true; btn.textContent = '📥 加载中...';
   status('加载中...');
   try {
-    var data = await api('/v1/shell/state?room_id=' + encodeURIComponent(room), 'GET');
-    var rooms = data?.rooms || data?.conversation_state?.rooms || [];
+    var stateQuery = new URLSearchParams({ room_id: room });
+    var actor = sceneActor();
+    if (actor && actor !== '访客') stateQuery.set('resident_id', actor);
+    var data = await api('/v1/shell/state?' + stateQuery.toString(), 'GET');
+    var rooms = [];
+    for (var candidate of [data?.rooms, data?.scene_render?.scenes, data?.conversation_state?.rooms, data?.conversation_shell?.conversations]) {
+      if (Array.isArray(candidate)) rooms = rooms.concat(candidate);
+    }
     var found = rooms.find(function(r) { return r.id === room || r.conversation_id === room; });
     if (found) {
-      if (found.image_layer) {
-        $('dayUrl').value = found.image_layer.day_image_url || '';
-        $('nightUrl').value = found.image_layer.night_image_url || '';
-        var bg = document.body.dataset.timeOfDay === 'day' ? found.image_layer.day_image_url : found.image_layer.night_image_url;
-        if (bg) { img.src = bg; img.style.display = 'block'; }
-      }
-      if (found.hotspot_layer?.hotspots) {
-        hotspots = JSON.parse(JSON.stringify(found.hotspot_layer.hotspots));
-        selectedHotspot = null;
-        renderHotspots();
-      }
+      var imageLayer = found.image_layer || null;
+      $('dayUrl').value = imageLayer?.day_image_url || '';
+      $('nightUrl').value = imageLayer?.night_image_url || '';
+      var bg = document.body.dataset.timeOfDay === 'day' ? $('dayUrl').value : $('nightUrl').value;
+      if (bg) { img.src = bg; img.style.display = 'block'; }
+      else { img.removeAttribute('src'); img.style.display = 'none'; }
+      hotspots = JSON.parse(JSON.stringify(found.hotspot_layer?.hotspots || []));
+      selectedHotspot = null;
+      renderHotspots();
       status('已加载', false);
     } else {
+      $('dayUrl').value = '';
+      $('nightUrl').value = '';
+      img.removeAttribute('src'); img.style.display = 'none';
+      hotspots = [];
+      selectedHotspot = null;
+      renderHotspots();
       status('未找到房间场景数据，将创建新场景', false);
     }
     markClean(); // 加载完成（无论找到与否），当前状态作为干净基线
@@ -415,7 +434,7 @@ $('addHotspotBtn').onclick = function() {
 // Drag (move) — global
 document.addEventListener('pointermove', function(e) {
   if (!isDragging || selectedHotspot == null) return;
-  var rect = stage.getBoundingClientRect();
+  var rect = sceneCanvas.getBoundingClientRect();
   var h = hotspots[selectedHotspot];
   var nx = Math.max(0, Math.min(10000 - h.width_permyriad, ((e.clientX - rect.left - dragOffset.x) / rect.width * 10000)));
   var ny = Math.max(0, Math.min(10000 - h.height_permyriad, ((e.clientY - rect.top - dragOffset.y) / rect.height * 10000)));
@@ -428,7 +447,7 @@ document.addEventListener('pointermove', function(e) {
 // Resize — global
 document.addEventListener('pointermove', function(e) {
   if (!isResizing || selectedHotspot == null || !resizeCorner) return;
-  var rect = stage.getBoundingClientRect();
+  var rect = sceneCanvas.getBoundingClientRect();
   var h = hotspots[selectedHotspot];
   var mx = (e.clientX - rect.left) / rect.width * 10000;
   var my = (e.clientY - rect.top) / rect.height * 10000;
@@ -503,9 +522,11 @@ $('saveBtn').onclick = async function() {
   if (!room) return status('请输入房间 ID', true);
   var dayUrl = $('dayUrl').value.trim();
   var nightUrl = $('nightUrl').value.trim();
+  var actor = sceneActor();
+  if (!actor || actor === '访客') return status('缺少已登录居民身份，不能保存场景', true);
   var payload = {
     room_id: room,
-    actor: localStorage.getItem('lobster-identity') || 'user',
+    actor: actor,
     image_layer: { layer_id: 'user-custom', preset: 'custom', asset_hint: 'custom', aspect_ratio_permyriad: 5625, owner_editable: true, day_image_url: dayUrl || null, night_image_url: nightUrl || null },
     hotspot_layer: hotspots.length ? { layer_id: 'user-hotspots', coordinate_system: 'scene-permyriad', owner_editable: true, hotspots: hotspots } : null
   };
@@ -540,9 +561,9 @@ $('previewBtn').onclick = function() {
   img.style.display = 'block';
   status('预览 ' + (next === 'day' ? '白天' : '夜晚') + ' 背景', false);
 };
-$('zoomIn').onclick = function() { scale = Math.min(3, scale + 0.25); img.style.transform = 'scale(' + scale + ')'; };
-$('zoomOut').onclick = function() { scale = Math.max(0.25, scale - 0.25); img.style.transform = 'scale(' + scale + ')'; };
-$('fitBtn').onclick = function() { scale = 1; img.style.transform = 'scale(1)'; };
+$('zoomIn').onclick = function() { scale = Math.min(3, scale + 0.25); sceneCanvas.style.transform = 'scale(' + scale + ')'; };
+$('zoomOut').onclick = function() { scale = Math.max(0.25, scale - 0.25); sceneCanvas.style.transform = 'scale(' + scale + ')'; };
+$('fitBtn').onclick = function() { scale = 1; sceneCanvas.style.transform = 'scale(1)'; };
 $('undoBtn').onclick = undo;
 $('redoBtn').onclick = redo;
 

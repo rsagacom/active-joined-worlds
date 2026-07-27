@@ -1,0 +1,496 @@
+/* ============================================================
+   styles.theme-neon-pixel.css — 霓虹像素城邦主题（Additive）
+   作用域：全部以 body[data-theme="neon-pixel"] 限定，不覆盖旧 UI
+   加载顺序：放在 styles.tokens.css / styles.base.css / styles.scene.css /
+   styles.chat.css / styles.css 之后，作为主题变体启用。
+   ============================================================ */
+
+body[data-theme="neon-pixel"] {
+  /* ----- Neon color tokens ----- */
+  --neon-bg-deep: #05030d;
+  --neon-bg: #0a0718;
+  --neon-bg-elevated: #100d24;
+  --neon-panel: #12122a;
+  --neon-panel-soft: #1a1a3a;
+  --neon-panel-inner: #24224a;
+  --neon-ink: #f0f4ff;
+  --neon-ink-soft: #d4d9f0;
+  --neon-muted: #9aa3c7;
+  --neon-muted-soft: #6d7699;
+  --neon-line: rgba(126, 253, 199, 0.16);
+  --neon-line-strong: rgba(126, 253, 199, 0.28);
+  --neon-cyan: #7efdc7;
+  --neon-cyan-soft: rgba(126, 253, 199, 0.12);
+  --neon-cyan-glow: rgba(126, 253, 199, 0.25);
+  --neon-magenta: #ff6bc7;
+  --neon-magenta-soft: rgba(255, 107, 199, 0.12);
+  --neon-magenta-glow: rgba(255, 107, 199, 0.25);
+  --neon-warm: #ffa45c;
+  --neon-warm-soft: rgba(255, 164, 92, 0.12);
+  --neon-shadow-soft: 0 16px 32px rgba(2, 4, 14, 0.7);
+  --neon-shadow-glow: 0 0 24px rgba(126, 253, 199, 0.12);
+
+  background: var(--neon-bg-deep);
+  color: var(--neon-ink);
+}
+
+/* ----- Scrollbars ----- */
+body[data-theme="neon-pixel"] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+body[data-theme="neon-pixel"] ::-webkit-scrollbar-track {
+  background: var(--neon-bg);
+}
+body[data-theme="neon-pixel"] ::-webkit-scrollbar-thumb {
+  background: var(--neon-panel-inner);
+  border-radius: 4px;
+  border: 1px solid var(--neon-line);
+}
+body[data-theme="neon-pixel"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--neon-cyan);
+}
+
+/* ============================================================
+   Shell frame
+   ============================================================ */
+body[data-theme="neon-pixel"] .app,
+body[data-theme="neon-pixel"] .city-hub-shell,
+body[data-theme="neon-pixel"] .creative-shell,
+body[data-theme="neon-pixel"] .world-entry-shell {
+  background: transparent;
+}
+
+/* ============================================================
+   HUD / Top bar
+   ============================================================ */
+body[data-theme="neon-pixel"] .sfc-hud,
+body[data-theme="neon-pixel"] .public-square-hud,
+body[data-theme="neon-pixel"] .creative-hud,
+body[data-theme="neon-pixel"] .world-entry-hud {
+  background:
+    linear-gradient(90deg, rgba(18, 18, 42, 0.96), rgba(26, 26, 58, 0.92)),
+    var(--neon-panel);
+  border-bottom: 1px solid var(--neon-line-strong);
+  box-shadow: 0 0 20px rgba(126, 253, 199, 0.08);
+  color: var(--neon-ink);
+}
+
+body[data-theme="neon-pixel"] .hud-title,
+body[data-theme="neon-pixel"] .hub-hud-title,
+body[data-theme="neon-pixel"] .creative-hud-copy .hud-title {
+  color: var(--neon-cyan);
+  text-shadow: 0 0 8px var(--neon-cyan-glow);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+body[data-theme="neon-pixel"] .hud-kicker,
+body[data-theme="neon-pixel"] .hub-hud-kicker,
+body[data-theme="neon-pixel"] .creative-hud-copy .hud-kicker {
+  color: var(--neon-muted);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+body[data-theme="neon-pixel"] .hud-pill,
+body[data-theme="neon-pixel"] .hub-hud-chip,
+body[data-theme="neon-pixel"] .creative-hud-chip {
+  background: var(--neon-cyan-soft);
+  color: var(--neon-cyan);
+  border: 1px solid var(--neon-line);
+  box-shadow: 0 0 8px var(--neon-cyan-glow);
+}
+
+body[data-theme="neon-pixel"] .hud-rail-toggle {
+  background: var(--neon-panel-soft);
+  color: var(--neon-cyan);
+  border: 1px solid var(--neon-line);
+}
+body[data-theme="neon-pixel"] .hud-rail-toggle:hover {
+  background: var(--neon-cyan-soft);
+  box-shadow: 0 0 10px var(--neon-cyan-glow);
+}
+
+body[data-theme="neon-pixel"] .theme-toggle,
+body[data-theme="neon-pixel"] .hud-login-toggle {
+  background: var(--neon-panel-soft);
+  color: var(--neon-ink);
+  border: 1px solid var(--neon-line);
+}
+body[data-theme="neon-pixel"] .theme-toggle:hover,
+body[data-theme="neon-pixel"] .hud-login-toggle:hover {
+  border-color: var(--neon-cyan);
+  color: var(--neon-cyan);
+  box-shadow: 0 0 10px var(--neon-cyan-glow);
+}
+
+/* ============================================================
+   Left rail / Navigation
+   ============================================================ */
+body[data-theme="neon-pixel"] .sfc-rail,
+body[data-theme="neon-pixel"] .public-square-rail,
+body[data-theme="neon-pixel"] .creative-rail,
+body[data-theme="neon-pixel"] .world-entry-rail {
+  background:
+    linear-gradient(180deg, rgba(10, 7, 24, 0.98), rgba(18, 18, 42, 0.96));
+  border-right: 1px solid var(--neon-line-strong);
+  box-shadow: inset -8px 0 16px rgba(0, 0, 0, 0.35);
+  color: var(--neon-ink);
+}
+
+body[data-theme="neon-pixel"] .rail-title,
+body[data-theme="neon-pixel"] .rail-section-title {
+  color: var(--neon-muted);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+body[data-theme="neon-pixel"] .rail-actions .rail-item,
+body[data-theme="neon-pixel"] .rail-list .room-button,
+body[data-theme="neon-pixel"] .room-section-list .room-button {
+  background: transparent;
+  color: var(--neon-ink-soft);
+  border: 1px solid transparent;
+  border-radius: 10px;
+}
+body[data-theme="neon-pixel"] .rail-actions .rail-item:hover,
+body[data-theme="neon-pixel"] .rail-list .room-button:hover,
+body[data-theme="neon-pixel"] .room-section-list .room-button:hover {
+  background: var(--neon-panel-soft);
+  border-color: var(--neon-line);
+  color: var(--neon-ink);
+}
+body[data-theme="neon-pixel"] .rail-actions .rail-item.is-active,
+body[data-theme="neon-pixel"] .rail-list .room-button.active,
+body[data-theme="neon-pixel"] .room-section-list .room-button.active {
+  background: var(--neon-cyan-soft);
+  border-color: var(--neon-cyan);
+  color: var(--neon-cyan);
+  box-shadow: 0 0 12px var(--neon-cyan-glow);
+}
+
+body[data-theme="neon-pixel"] .rail-item-label,
+body[data-theme="neon-pixel"] .rail-list .room-button .room-name,
+body[data-theme="neon-pixel"] .room-section-list .room-button .room-name {
+  color: inherit;
+  font-weight: 600;
+}
+
+body[data-theme="neon-pixel"] .rail-list .room-button .room-preview,
+body[data-theme="neon-pixel"] .rail-list .room-button .room-sub,
+body[data-theme="neon-pixel"] .room-section-list .room-button .room-preview,
+body[data-theme="neon-pixel"] .room-section-list .room-button .room-sub {
+  color: var(--neon-muted);
+}
+
+body[data-theme="neon-pixel"] .rail-list .room-button .room-avatar,
+body[data-theme="neon-pixel"] .room-section-list .room-button .room-avatar {
+  border: 1px solid var(--neon-line);
+  box-shadow: 0 0 0 2px var(--neon-bg);
+}
+body[data-theme="neon-pixel"] .rail-list .room-button:hover .room-avatar,
+body[data-theme="neon-pixel"] .room-section-list .room-button:hover .room-avatar {
+  box-shadow: 0 0 10px var(--neon-magenta-glow);
+  border-color: var(--neon-magenta);
+}
+
+/* ============================================================
+   Stage / Scene layer
+   ============================================================ */
+body[data-theme="neon-pixel"] .sfc-stage,
+body[data-theme="neon-pixel"] .public-square-stage,
+body[data-theme="neon-pixel"] .creative-stage,
+body[data-theme="neon-pixel"] .world-entry-stage {
+  border: 1px solid var(--neon-line);
+  box-shadow: var(--neon-shadow-glow);
+}
+
+body[data-theme="neon-pixel"][data-shell-page="hub"][data-shell-variant="public-square"]::before,
+body[data-theme="neon-pixel"][data-shell-page="hub"][data-shell-variant="public-square"] .public-square-stage {
+  filter: hue-rotate(-10deg) saturate(1.2) contrast(1.05);
+}
+
+/* ============================================================
+   Hotspots
+   ============================================================ */
+body[data-theme="neon-pixel"] .hotspot-label,
+body[data-theme="neon-pixel"] .scene-hotspot-label,
+body[data-theme="neon-pixel"] .pixel-hotspot-label {
+  background: rgba(10, 7, 24, 0.9);
+  color: var(--neon-magenta);
+  border: 1px solid var(--neon-magenta);
+  box-shadow: 0 0 10px var(--neon-magenta-glow);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+body[data-theme="neon-pixel"] .hotspot-hitarea:focus .hotspot-label,
+body[data-theme="neon-pixel"] .hotspot-hitarea:hover .hotspot-label,
+body[data-theme="neon-pixel"] .scene-hotspot:hover .scene-hotspot-label {
+  color: var(--neon-cyan);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 12px var(--neon-cyan-glow);
+}
+
+/* ============================================================
+   Conversation panel
+   ============================================================ */
+body[data-theme="neon-pixel"] .conversation,
+body[data-theme="neon-pixel"][data-shell-page="user"] .conversation,
+body[data-theme="neon-pixel"][data-shell-page="admin"] .conversation,
+body[data-theme="neon-pixel"][data-shell-page="unified"] .conversation {
+  background: rgba(10, 7, 24, 0.82);
+  border: 1px solid var(--neon-line);
+  box-shadow: var(--neon-shadow-soft);
+  backdrop-filter: blur(6px);
+}
+
+body[data-theme="neon-pixel"] .chat-priority-badge {
+  background: var(--neon-cyan-soft);
+  color: var(--neon-cyan);
+  border: 1px solid var(--neon-line);
+}
+
+body[data-theme="neon-pixel"] .chat-quick-links button {
+  background: var(--neon-panel-soft);
+  color: var(--neon-cyan);
+  border: 1px solid var(--neon-line);
+}
+body[data-theme="neon-pixel"] .chat-quick-links button:hover {
+  background: var(--neon-cyan-soft);
+  box-shadow: 0 0 10px var(--neon-cyan-glow);
+}
+
+body[data-theme="neon-pixel"] .conversation-callout {
+  background: var(--neon-panel);
+  border: 1px solid var(--neon-line);
+  color: var(--neon-ink-soft);
+}
+body[data-theme="neon-pixel"] .conversation-callout strong {
+  color: var(--neon-cyan);
+}
+
+/* ============================================================
+   Messages
+   ============================================================ */
+body[data-theme="neon-pixel"] .message-row,
+body[data-theme="neon-pixel"][data-shell-page="user"] .message-row,
+body[data-theme="neon-pixel"][data-shell-page="admin"] .message-row,
+body[data-theme="neon-pixel"][data-shell-page="unified"] .message-row {
+  --message-bg-peer: var(--neon-panel);
+  --message-bg-self: var(--neon-cyan-soft);
+}
+
+body[data-theme="neon-pixel"] .message,
+body[data-theme="neon-pixel"][data-shell-page="user"] .message,
+body[data-theme="neon-pixel"][data-shell-page="admin"] .message,
+body[data-theme="neon-pixel"][data-shell-page="unified"] .message {
+  background: var(--message-bg-peer);
+  color: var(--neon-ink);
+  border: 1px solid var(--neon-magenta);
+  box-shadow: 0 0 12px var(--neon-magenta-glow);
+}
+
+body[data-theme="neon-pixel"] .message.self,
+body[data-theme="neon-pixel"][data-shell-page="user"] .message.self,
+body[data-theme="neon-pixel"][data-shell-page="admin"] .message.self,
+body[data-theme="neon-pixel"][data-shell-page="unified"] .message.self {
+  background: var(--message-bg-self);
+  color: var(--neon-cyan);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 12px var(--neon-cyan-glow);
+}
+
+body[data-theme="neon-pixel"] .message[data-message-kind="system"],
+body[data-theme="neon-pixel"][data-shell-page="user"] .message[data-message-kind="system"],
+body[data-theme="neon-pixel"][data-shell-page="admin"] .message[data-message-kind="system"],
+body[data-theme="neon-pixel"][data-shell-page="unified"] .message[data-message-kind="system"] {
+  background: transparent;
+  color: var(--neon-warm);
+  border: 1px dashed var(--neon-warm);
+  box-shadow: none;
+}
+
+body[data-theme="neon-pixel"] .message-header,
+body[data-theme="neon-pixel"] .message-sender {
+  color: var(--neon-ink-soft);
+}
+body[data-theme="neon-pixel"] .message-role-self,
+body[data-theme="neon-pixel"] .message-row.self .message-sender {
+  color: var(--neon-cyan);
+}
+body[data-theme="neon-pixel"] .message-body {
+  color: var(--neon-ink);
+}
+body[data-theme="neon-pixel"] .message-edited {
+  color: var(--neon-muted);
+}
+
+body[data-theme="neon-pixel"] .message-avatar,
+body[data-theme="neon-pixel"] .message-avatar-self,
+body[data-theme="neon-pixel"] .message-avatar-direct,
+body[data-theme="neon-pixel"] .message-avatar-room,
+body[data-theme="neon-pixel"] .message-avatar-system {
+  border: 1px solid var(--neon-line);
+}
+body[data-theme="neon-pixel"] .message-avatar-self {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 8px var(--neon-cyan-glow);
+}
+
+/* ============================================================
+   Composer
+   ============================================================ */
+body[data-theme="neon-pixel"] .composer,
+body[data-theme="neon-pixel"][data-shell-page="user"] .composer,
+body[data-theme="neon-pixel"][data-shell-page="admin"] .composer,
+body[data-theme="neon-pixel"][data-shell-page="unified"] .composer {
+  background: var(--neon-panel);
+  border-top: 1px solid var(--neon-line-strong);
+}
+
+body[data-theme="neon-pixel"] .composer-hero,
+body[data-theme="neon-pixel"][data-shell-page="user"] .composer-hero,
+body[data-theme="neon-pixel"][data-shell-page="admin"] .composer-hero,
+body[data-theme="neon-pixel"][data-shell-page="unified"] .composer-hero {
+  background: var(--neon-panel-soft);
+  color: var(--neon-muted);
+}
+
+body[data-theme="neon-pixel"] .composer-row textarea,
+body[data-theme="neon-pixel"][data-shell-page="user"] .composer-row textarea,
+body[data-theme="neon-pixel"][data-shell-page="admin"] .composer-row textarea,
+body[data-theme="neon-pixel"][data-shell-page="unified"] .composer-row textarea {
+  background: var(--neon-bg);
+  color: var(--neon-ink);
+  border: 1px solid var(--neon-line);
+  caret-color: var(--neon-cyan);
+}
+body[data-theme="neon-pixel"] .composer-row textarea:focus {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 12px var(--neon-cyan-glow);
+  outline: none;
+}
+body[data-theme="neon-pixel"] .composer-row textarea::placeholder {
+  color: var(--neon-muted-soft);
+}
+
+body[data-theme="neon-pixel"] .composer-row button,
+body[data-theme="neon-pixel"][data-shell-page="user"] .composer-row button,
+body[data-theme="neon-pixel"][data-shell-page="admin"] .composer-row button,
+body[data-theme="neon-pixel"][data-shell-page="unified"] .composer-row button,
+body[data-theme="neon-pixel"] .composer button {
+  background: var(--neon-cyan);
+  color: var(--neon-bg-deep);
+  border: 1px solid var(--neon-cyan);
+  font-weight: 700;
+}
+body[data-theme="neon-pixel"] .composer-row button:hover,
+body[data-theme="neon-pixel"] .composer button:hover {
+  background: var(--neon-ink);
+  color: var(--neon-bg-deep);
+  box-shadow: 0 0 16px var(--neon-cyan-glow);
+}
+body[data-theme="neon-pixel"] .composer-row button:disabled,
+body[data-theme="neon-pixel"] .composer button:disabled {
+  background: var(--neon-panel-inner);
+  color: var(--neon-muted);
+  border-color: var(--neon-line);
+  box-shadow: none;
+}
+
+body[data-theme="neon-pixel"] .composer-hints,
+body[data-theme="neon-pixel"][data-shell-page="user"] .composer-hints,
+body[data-theme="neon-pixel"][data-shell-page="admin"] .composer-hints,
+body[data-theme="neon-pixel"][data-shell-page="unified"] .composer-hints {
+  color: var(--neon-muted);
+}
+body[data-theme="neon-pixel"] .composer-hints span {
+  color: var(--neon-cyan);
+}
+
+/* ============================================================
+   Login overlay
+   ============================================================ */
+body[data-theme="neon-pixel"] .resident-login-overlay {
+  background: rgba(5, 3, 13, 0.85);
+  backdrop-filter: blur(4px);
+}
+body[data-theme="neon-pixel"] .resident-login-card {
+  background: var(--neon-panel);
+  border: 1px solid var(--neon-line-strong);
+  box-shadow: var(--neon-shadow-soft), var(--neon-shadow-glow);
+}
+body[data-theme="neon-pixel"] .resident-login-copy strong {
+  color: var(--neon-cyan);
+}
+body[data-theme="neon-pixel"] .resident-login-kicker {
+  color: var(--neon-muted);
+}
+body[data-theme="neon-pixel"] .resident-login-field-label {
+  color: var(--neon-ink-soft);
+}
+body[data-theme="neon-pixel"] .resident-login-card input {
+  background: var(--neon-bg);
+  color: var(--neon-ink);
+  border: 1px solid var(--neon-line);
+}
+body[data-theme="neon-pixel"] .resident-login-card input:focus {
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 10px var(--neon-cyan-glow);
+}
+body[data-theme="neon-pixel"] .resident-login-card button[type="submit"] {
+  background: var(--neon-cyan);
+  color: var(--neon-bg-deep);
+  font-weight: 700;
+}
+body[data-theme="neon-pixel"] .resident-login-card button[type="submit"]:hover {
+  background: var(--neon-ink);
+}
+body[data-theme="neon-pixel"] .resident-login-close {
+  color: var(--neon-muted);
+}
+body[data-theme="neon-pixel"] .resident-login-close:hover {
+  color: var(--neon-magenta);
+}
+
+/* ============================================================
+   Utility / States
+   ============================================================ */
+body[data-theme="neon-pixel"] .shell-hidden {
+  display: none !important;
+}
+body[data-theme="neon-pixel"] .hud-status--online,
+body[data-theme="neon-pixel"] .status-online {
+  color: var(--neon-cyan);
+}
+body[data-theme="neon-pixel"] .hud-status--offline,
+body[data-theme="neon-pixel"] .status-offline {
+  color: var(--neon-muted-soft);
+}
+body[data-theme="neon-pixel"] .hud-status--error,
+body[data-theme="neon-pixel"] .status-error {
+  color: var(--neon-magenta);
+}
+
+/* Clear-screen mode: dim chrome but keep hotspots interactive */
+body[data-theme="neon-pixel"].scene-clear-mode .sfc-hud,
+body[data-theme="neon-pixel"].scene-clear-mode .sfc-rail,
+body[data-theme="neon-pixel"].scene-clear-mode .conversation,
+body[data-theme="neon-pixel"].scene-clear-mode .composer {
+  opacity: 0.12;
+  pointer-events: none;
+}
+body[data-theme="neon-pixel"].scene-clear-mode .sfc-stage {
+  opacity: 1;
+}
+
+/* Focus outlines */
+body[data-theme="neon-pixel"] *:focus-visible {
+  outline: 2px solid var(--neon-cyan);
+  outline-offset: 2px;
+}

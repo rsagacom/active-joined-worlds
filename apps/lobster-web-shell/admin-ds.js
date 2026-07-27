@@ -21,6 +21,7 @@
   var detailClose = document.getElementById('dsDetailClose');
   var dashboardTime = document.getElementById('dashboardTime');
   var msgAuditBadge = document.getElementById('msgAuditBadge');
+  var logAlertBadge = document.getElementById('logAlertBadge');
   var statGateway = document.getElementById('statGateway');
   var statGatewaySub = document.getElementById('statGatewaySub');
   var statOnlineResidents = document.getElementById('statOnlineResidents');
@@ -129,7 +130,10 @@
 
   async function fetchGatewayJson(path) {
     if (!gatewayUrl) return null;
-    var response = await fetch(gatewayUrl + path, { headers: { Accept: 'application/json' } });
+    var sessionToken = safeLocalStorageGet('lobster-session-token');
+    var response = await fetch(gatewayUrl + path, {
+      headers: { Accept: 'application/json', ...(sessionToken ? { Authorization: 'Bearer ' + sessionToken } : {}) }
+    });
     if (!response.ok) return null;
     return response.json();
   }
@@ -137,9 +141,10 @@
   async function fetchGatewayJsonPost(path, body) {
     if (!gatewayUrl) return { error: 'Gateway 未连接' };
     try {
+      var sessionToken = safeLocalStorageGet('lobster-session-token');
       var response = await fetch(gatewayUrl + path, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(sessionToken ? { Authorization: 'Bearer ' + sessionToken } : {}) },
         body: JSON.stringify(body)
       });
       var data = await response.json();
@@ -277,6 +282,23 @@
     return count;
   }
 
+  function updateAlertCounts() {
+    var pendingMessages = countPendingMessages();
+    var warningLogs = countWarningLogs();
+    var alertTotal = pendingMessages + warningLogs;
+    if (msgAuditBadge) {
+      msgAuditBadge.textContent = String(pendingMessages);
+      msgAuditBadge.style.display = pendingMessages > 0 ? '' : 'none';
+    }
+    if (logAlertBadge) {
+      logAlertBadge.textContent = String(warningLogs);
+      logAlertBadge.style.display = warningLogs > 0 ? '' : 'none';
+    }
+    if (statPendingAlerts) statPendingAlerts.textContent = formatNumber(alertTotal);
+    if (statAlertSub) statAlertSub.textContent = '消息审核 ' + formatNumber(pendingMessages) + ' · 日志告警 ' + formatNumber(warningLogs);
+    if (topbarAlertCount) topbarAlertCount.textContent = '告警 ' + formatNumber(alertTotal);
+  }
+
   function updateGatewayConnectionTag(text, tagClass) {
     if (!gatewayConnection) return;
     gatewayConnection.textContent = text;
@@ -284,12 +306,13 @@
   }
 
   function updateDashboardSummary(source, summary) {
-    var hasGateway = source === 'gateway';
+    var hasGateway = source === 'gateway' || source === 'gateway-partial';
+    var partialGateway = source === 'gateway-partial';
     var currentIdentity = currentGatewayIdentity();
     var syncLabel = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
     var residentCount, roomCount, messageCount, onlineCount, uptimeSec;
-    if (hasGateway && summary && typeof summary.resident_count === 'number') {
+    if (hasGateway && !partialGateway && summary && typeof summary.resident_count === 'number') {
       residentCount = summary.resident_count;
       roomCount = summary.room_count;
       messageCount = summary.message_count;
@@ -303,40 +326,38 @@
       uptimeSec = 0;
     }
 
-    var pendingMessages = countPendingMessages();
-    var warningLogs = countWarningLogs();
-    var alertTotal = pendingMessages + warningLogs;
-
-    if (statGateway) statGateway.textContent = hasGateway ? '在线' : '本地';
+    if (statGateway) statGateway.textContent = partialGateway ? '部分同步' : (hasGateway ? '在线' : '本地');
     if (statGatewaySub) {
-      statGatewaySub.textContent = hasGateway
-        ? gatewayUrl + ' · 当前居民 ' + currentIdentity + (uptimeSec ? ' · 运行 ' + Math.floor(uptimeSec / 3600) + 'h ' + Math.floor((uptimeSec % 3600) / 60) + 'm' : '')
-        : '本地预览数据 · 未连接 Gateway';
+      if (partialGateway) {
+        statGatewaySub.textContent = gatewayUrl + ' · 部分数据读取失败 · 当前居民 ' + currentIdentity;
+      } else if (hasGateway) {
+        statGatewaySub.textContent = gatewayUrl + ' · 当前居民 ' + currentIdentity + (uptimeSec ? ' · 运行 ' + Math.floor(uptimeSec / 3600) + 'h ' + Math.floor((uptimeSec % 3600) / 60) + 'm' : '');
+      } else {
+        statGatewaySub.textContent = '本地预览数据 · 未连接 Gateway';
+      }
     }
     if (statOnlineResidents) statOnlineResidents.textContent = formatNumber(onlineCount);
     if (statOnlineSub) statOnlineSub.textContent = '居民总数 ' + formatNumber(residentCount);
     if (statTodayMessages) statTodayMessages.textContent = formatNumber(messageCount);
     if (statMessageSub) statMessageSub.textContent = '可见会话 ' + formatNumber(roomCount);
-    if (statPendingAlerts) statPendingAlerts.textContent = formatNumber(alertTotal);
-    if (statAlertSub) statAlertSub.textContent = '消息审核 ' + formatNumber(pendingMessages) + ' · 日志告警 ' + formatNumber(warningLogs);
     if (topbarOnlineCount) topbarOnlineCount.textContent = '在线 ' + formatNumber(onlineCount) + ' 人';
-    if (topbarAlertCount) topbarAlertCount.textContent = '告警 ' + formatNumber(alertTotal);
     if (gatewayEndpoint) gatewayEndpoint.textContent = gatewayUrl || '未连接';
     if (gatewayResident) gatewayResident.textContent = currentIdentity;
     if (gatewayRoomCount) gatewayRoomCount.textContent = formatNumber(roomCount);
     if (gatewayMessageCount) gatewayMessageCount.textContent = formatNumber(messageCount);
     if (gatewayLastSync) gatewayLastSync.textContent = syncLabel + (hasGateway ? ' · Gateway' : ' · 本地');
     if (gatewayUptime) {
-      gatewayUptime.textContent = (hasGateway && uptimeSec)
+      gatewayUptime.textContent = (hasGateway && !partialGateway && uptimeSec)
         ? Math.floor(uptimeSec / 3600) + 'h ' + Math.floor((uptimeSec % 3600) / 60) + 'm ' + (uptimeSec % 60) + 's'
         : '--';
     }
     if (gatewayStateVersion) {
-      gatewayStateVersion.textContent = (hasGateway && summary && summary.state_version)
+      gatewayStateVersion.textContent = (hasGateway && !partialGateway && summary && summary.state_version)
         ? summary.state_version
         : '--';
     }
-    updateGatewayConnectionTag(hasGateway ? '已连接' : '本地预览', hasGateway ? 'success' : 'default');
+    updateGatewayConnectionTag(partialGateway ? '部分同步' : (hasGateway ? '已连接' : '本地预览'), partialGateway ? 'warning' : (hasGateway ? 'success' : 'default'));
+    updateAlertCounts();
   }
 
   function renderDashboardEvents(auditPayload) {
@@ -389,7 +410,8 @@
       var roles = Array.isArray(item.roles) ? item.roles : [];
       var cityCount = Array.isArray(item.active_cities) ? item.active_cities.length : 0;
       var online = item.online === true;
-      var banned = item.is_banned === true;
+      var registrationState = String(item.registration_state || 'unknown').toLowerCase();
+      var banned = item.is_banned === true || registrationState === 'suspended';
       var lastSeenMs = item.last_seen_at_ms;
       var lastSeenText = '网关同步';
       if (lastSeenMs) {
@@ -402,7 +424,11 @@
       return {
         id: id,
         nick: item.nickname || id,
-        email: (item.avatar_id || id) + '@resident.local',
+        email: item.email_masked || (item.avatar_id || id) + '@resident.local',
+        registrationState: registrationState,
+        createdAtMs: Number(item.created_at_ms || 0),
+        verifiedAtMs: Number(item.verified_at_ms || 0),
+        lastLoginAtMs: Number(item.last_login_at_ms || 0),
         role: roleFromGatewayRoles(roles),
         status: banned ? 'banned' : (online ? 'online' : 'offline'),
         lastSeen: lastSeenText,
@@ -482,7 +508,7 @@
     try {
       var identity = encodeURIComponent(currentGatewayIdentity());
       var results = await Promise.allSettled([
-        fetchGatewayJson('/v1/residents'),
+        fetchGatewayJson('/v1/admin/residents'),
         fetchGatewayJson('/v1/shell/state?resident_id=' + identity),
         fetchGatewayJson('/v1/admin/summary'),
         fetchGatewayJson('/v1/admin/audit-log')
@@ -491,17 +517,27 @@
       var shellPayload = results[1].status === 'fulfilled' ? results[1].value : null;
       var summaryPayload = results[2].status === 'fulfilled' ? results[2].value : null;
       var auditPayload = results[3].status === 'fulfilled' ? results[3].value : null;
-      if (results[0].status === 'rejected' || results[1].status === 'rejected') fetchFailed = true;
-      var nextResidents = normalizeGatewayResidents(residentPayload);
-      var nextRooms = normalizeGatewayRooms(shellPayload || {});
-      var nextMessages = normalizeGatewayMessages(shellPayload || {});
-      if (nextResidents.length) residents = nextResidents;
-      if (nextRooms.length) rooms = nextRooms;
-      if (nextMessages.length) messages = nextMessages;
+      var residentReadOk = results[0].status === 'fulfilled' && Array.isArray(residentPayload);
+      var shellReadOk = results[1].status === 'fulfilled' && shellPayload && typeof shellPayload === 'object' && (
+        Array.isArray(shellPayload.rooms) ||
+        (shellPayload.conversation_shell && Array.isArray(shellPayload.conversation_shell.conversations))
+      );
+      var summaryReadOk = results[2].status === 'fulfilled' && summaryPayload &&
+        typeof summaryPayload.resident_count === 'number' &&
+        typeof summaryPayload.room_count === 'number' &&
+        typeof summaryPayload.message_count === 'number' &&
+        typeof summaryPayload.online_count === 'number';
+      var auditReadOk = results[3].status === 'fulfilled' && auditPayload && Array.isArray(auditPayload.events);
+      var anyRejected = results.some(function (result) { return result.status === 'rejected'; });
+      fetchFailed = anyRejected || !residentReadOk || !shellReadOk || !summaryReadOk || !auditReadOk;
+      // Gateway 是正式真源：有效空数组也必须覆盖旧本地 mock，失败/畸形响应则显示空态。
+      residents = residentReadOk ? normalizeGatewayResidents(residentPayload) : [];
+      rooms = shellReadOk ? normalizeGatewayRooms(shellPayload) : [];
+      messages = shellReadOk ? normalizeGatewayMessages(shellPayload) : [];
       renderResidents('all', 'all', '');
       renderRooms('all', '');
       renderMessages('all', 'all', '');
-      updateDashboardSummary(fetchFailed ? 'local' : 'gateway', summaryPayload);
+      updateDashboardSummary(fetchFailed ? 'gateway-partial' : 'gateway', summaryPayload);
       renderDashboardEvents(auditPayload);
       setGatewayStatus(fetchFailed ? 'Gateway 部分读取失败' : 'Gateway 在线', fetchFailed ? 'warning' : 'online');
       // Preload secondary data types so modules render from Gateway data on first visit
@@ -511,7 +547,13 @@
       loadAuditLog().catch(function () {});
     } catch (error) {
       console.warn('admin-ds gateway sync failed', error);
-      updateDashboardSummary('local');
+      residents = [];
+      rooms = [];
+      messages = [];
+      renderResidents('all', 'all', '');
+      renderRooms('all', '');
+      renderMessages('all', 'all', '');
+      updateDashboardSummary('gateway-partial');
       setGatewayStatus('Gateway 读取失败', 'warning');
     } finally {
       setSectionLoading('mod-residents', false);
@@ -537,9 +579,15 @@
             status: ic.revoked ? 'revoked' : (expired ? 'expired' : 'active')
           };
         });
+      } else {
+        // Gateway 已连接时，空/失败响应必须展示真实空态，不能回退到本地 mock。
+        inviteCodes = [];
+        showAdminNotice('Gateway 邀请码读取失败，已显示空态', 'error');
       }
     } catch (e) {
       console.warn('admin-ds load invites failed', e);
+      inviteCodes = [];
+      showAdminNotice('Gateway 邀请码读取失败，已显示空态', 'error');
     }
     renderInvites();
   }
@@ -550,9 +598,14 @@
       var result = await fetchGatewayJson('/v1/admin/permission-groups');
       if (Array.isArray(result)) {
         permissionGroups = result;
+      } else {
+        permissionGroups = [];
+        showAdminNotice('Gateway 权限组读取失败，已显示空态', 'error');
       }
     } catch (e) {
       console.warn('admin-ds load permission groups failed', e);
+      permissionGroups = [];
+      showAdminNotice('Gateway 权限组读取失败，已显示空态', 'error');
     }
     renderPermissionGroups();
   }
@@ -566,17 +619,30 @@
     return [];
   }
 
-  function renderPermissionGroups() {
-    var container = document.getElementById('permissionGroupList');
-    if (!container) return;
-    clear(container);
-
-    var groups = permissionGroups.length ? permissionGroups : [
+  function builtinPermissionGroups() {
+    return [
       { id: 'builtin-admin', name: '管理员', description: '全部权限 · 可管理居民、房间、消息审核', capabilities: [] },
       { id: 'builtin-resident', name: '正式居民', description: '可创建房间、发送消息、邀请他人', capabilities: [] },
       { id: 'builtin-restricted', name: '受限居民', description: '仅可加入已有房间、发送消息需审核', capabilities: [] },
       { id: 'builtin-guest', name: '访客', description: '仅可浏览世界广场、不可私聊', capabilities: [] }
     ];
+  }
+
+  function permissionGroupItems() {
+    if (gatewayUrl) return permissionGroups;
+    return permissionGroups.length ? permissionGroups : builtinPermissionGroups();
+  }
+
+  function renderPermissionGroups() {
+    var container = document.getElementById('permissionGroupList');
+    if (!container) return;
+    clear(container);
+
+    var groups = permissionGroupItems();
+    if (!groups.length) {
+      container.appendChild(el('p', { style: 'color:var(--ds-text-secondary);' }, 'Gateway 暂无已创建权限组'));
+      return;
+    }
 
     // Count people per group
     var counts = {};
@@ -983,6 +1049,10 @@
               container.appendChild(detailField('状态', makeStatusDot(st2, sc2)));
               container.appendChild(detailField('最近在线', resident.lastSeen));
               container.appendChild(detailField('累计消息', resident.msgCount.toLocaleString()));
+              container.appendChild(detailField('注册状态', resident.registrationState === 'suspended' ? '已暂停' : (resident.registrationState === 'active' ? '正常' : '无注册记录')));
+              container.appendChild(detailField('注册时间', resident.createdAtMs ? new Date(resident.createdAtMs).toLocaleString('zh-CN') : '-'));
+              container.appendChild(detailField('验证时间', resident.verifiedAtMs ? new Date(resident.verifiedAtMs).toLocaleString('zh-CN') : '-'));
+              container.appendChild(detailField('最近登录', resident.lastLoginAtMs ? new Date(resident.lastLoginAtMs).toLocaleString('zh-CN') : '-'));
             },
             function (actions) {
               var viewSessionsBtn = makeBtn('查看会话', 'ds-btn-outline ds-btn-sm');
@@ -1420,15 +1490,7 @@
       return true;
     });
 
-    // Badge
-    var pendingCount = 0;
-    for (var pi = 0; pi < messages.length; pi++) {
-      if (messages[pi].status === 'pending' || messages[pi].status === 'flagged') pendingCount++;
-    }
-    if (msgAuditBadge) {
-      msgAuditBadge.textContent = String(pendingCount);
-      msgAuditBadge.style.display = pendingCount > 0 ? '' : 'none';
-    }
+    updateAlertCounts();
 
     clear(tbody);
 
@@ -1751,25 +1813,25 @@
     }
     try {
       var result = await fetchGatewayJson('/v1/admin/audit-log?limit=200');
-      if (result && result.events) {
+      if (result && Array.isArray(result.events)) {
         auditEvents = result.events;
         gatewayAuditLogs = [];
         for (var i = 0; i < auditEvents.length; i++) {
           gatewayAuditLogs.push(auditEventToLog(auditEvents[i]));
         }
-        if (gatewayAuditLogs.length > 0) {
-          logs = gatewayAuditLogs;
-        } else if (DS && DS.logs && DS.logs.length > 0) {
-          logs = DS.logs;
-        }
-      } else if (DS && DS.logs && DS.logs.length > 0) {
-        logs = DS.logs;
+        // Gateway 返回空数组也是正式空态，不能回退到本地 mock。
+        logs = gatewayAuditLogs;
+      } else {
+        auditEvents = [];
+        gatewayAuditLogs = [];
+        logs = [];
+        showAdminNotice('Gateway 审计日志读取失败，已显示空态', 'error');
       }
     } catch (e) {
       showAdminNotice('加载审计日志失败: ' + (e.message || '网络错误'), 'error');
-      if (DS && DS.logs && DS.logs.length > 0) {
-        logs = DS.logs;
-      }
+      auditEvents = [];
+      gatewayAuditLogs = [];
+      logs = [];
     }
     renderLogs(
       document.getElementById('logLevelFilter') ? document.getElementById('logLevelFilter').value : 'all',
@@ -1781,6 +1843,7 @@
   // ====== Render Logs ======
 
   function renderLogs(filterLevel, filterType, searchTerm) {
+    updateAlertCounts();
     var tbody = document.getElementById('logTableBody');
     var filtered = logs.filter(function (l) {
       if (filterLevel && filterLevel !== 'all' && l.level !== filterLevel) return false;
@@ -1977,14 +2040,16 @@
 
     // Hotspot layer section
     var hsSection = el('div', { class: 'ds-card', style: 'margin-bottom:1rem;' });
+    var hotspotTitle = el('span', { class: 'ds-card-title' }, '热点配置 (' + ((hl && hl.hotspots && hl.hotspots.length) || 0) + ' 个)');
     hsSection.appendChild(el('div', { class: 'ds-card-header' },
-      el('span', { class: 'ds-card-title' }, '热点配置 (' + ((hl && hl.hotspots && hl.hotspots.length) || 0) + ' 个)')
+      hotspotTitle
     ));
 
     var existingHotspots = (hl && hl.hotspots && hl.hotspots.length) ? hl.hotspots.slice() : [];
     var hotspotList = el('div', { style: 'padding:0 1rem;' });
 
     function renderHotspotRows() {
+      hotspotTitle.textContent = '热点配置 (' + existingHotspots.length + ' 个)';
       clear(hotspotList);
       for (var hi = 0; hi < existingHotspots.length; hi++) {
         (function (hs, idx) {
@@ -2234,7 +2299,8 @@
           label: (label && label.value.trim()) ? label.value.trim() : '未命名设备'
         });
         if (res.error) { showAdminNotice('添加失败: ' + res.error, 'error'); }
-        else { showAdminNotice('设备已添加', 'success'); addr.value = ''; if (label) label.value = ''; loadDevices(); }
+        else if (res.ok) { showAdminNotice('设备已添加', 'success'); addr.value = ''; if (label) label.value = ''; loadDevices(); }
+        else { showAdminNotice('添加失败 (HTTP ' + res.status + ')', 'error'); }
       } catch (e) {
         showAdminNotice('添加失败: ' + (e.message || '网络错误'), 'error');
       } finally {
@@ -2316,7 +2382,8 @@
             actor_id: currentGatewayIdentity(), name: name, description: desc, capabilities: capList
           });
           if (resp.error) { showAdminNotice('创建失败: ' + resp.error, 'error'); }
-          else { showAdminNotice('权限组 ' + name + ' 已创建', 'success'); await loadPermissionGroups(); }
+          else if (resp.ok) { showAdminNotice('权限组 ' + name + ' 已创建', 'success'); await loadPermissionGroups(); }
+          else { showAdminNotice('创建失败 (HTTP ' + resp.status + ')', 'error'); }
         } catch (e) { showAdminNotice('创建请求失败', 'error'); }
         createPgBtn.disabled = false; createPgBtn.textContent = '+ 新建权限组';
       });
@@ -2562,15 +2629,25 @@
   // ====== World Notices ======
 
   async function loadWorldNotices() {
-    if (!gatewayUrl) return;
+    if (!gatewayUrl) {
+      worldNotices = [];
+      renderWorldNotices();
+      return;
+    }
     try {
       var result = await fetchGatewayJson('/v1/world-square');
       if (Array.isArray(result)) {
         worldNotices = result;
-        renderWorldNotices();
+      } else {
+        worldNotices = [];
+        showAdminNotice('Gateway 世界公告读取失败，已显示空态', 'error');
       }
+      renderWorldNotices();
     } catch (e) {
       console.warn('admin-ds load world notices failed', e);
+      worldNotices = [];
+      renderWorldNotices();
+      showAdminNotice('Gateway 世界公告读取失败，已显示空态', 'error');
     }
   }
 
@@ -2654,19 +2731,43 @@
   // ====== Safety Advisories ======
 
   async function loadSafetyData() {
-    if (!gatewayUrl) return;
+    if (!gatewayUrl) {
+      safetyAdvisories = [];
+      safetyReports = [];
+      residentSanctions = [];
+      renderSafetyAdvisories();
+      renderSafetyReports();
+      renderResidentSanctions();
+      return;
+    }
     try {
       var result = await fetchGatewayJson('/v1/world-safety');
-      if (result && typeof result === 'object') {
+      var safetyReadOk = result && typeof result === 'object' &&
+        Array.isArray(result.advisories) &&
+        Array.isArray(result.reports) &&
+        Array.isArray(result.resident_sanctions);
+      if (safetyReadOk) {
         safetyAdvisories = Array.isArray(result.advisories) ? result.advisories : [];
         safetyReports = Array.isArray(result.reports) ? result.reports : [];
         residentSanctions = Array.isArray(result.resident_sanctions) ? result.resident_sanctions : [];
-        renderSafetyAdvisories();
-        renderSafetyReports();
-        renderResidentSanctions();
+      } else {
+        safetyAdvisories = [];
+        safetyReports = [];
+        residentSanctions = [];
+        showAdminNotice('Gateway 安全治理读取失败，已显示空态', 'error');
       }
+      renderSafetyAdvisories();
+      renderSafetyReports();
+      renderResidentSanctions();
     } catch (e) {
       console.warn('admin-ds load safety data failed', e);
+      safetyAdvisories = [];
+      safetyReports = [];
+      residentSanctions = [];
+      renderSafetyAdvisories();
+      renderSafetyReports();
+      renderResidentSanctions();
+      showAdminNotice('Gateway 安全治理读取失败，已显示空态', 'error');
     }
   }
 
@@ -2776,7 +2877,7 @@
     clear(tbody);
 
     if (!residentSanctions.length) {
-      renderEmptyRow(tbody, 4, '暂无居民制裁');
+      renderEmptyRow(tbody, 5, '暂无居民制裁');
       return;
     }
 
@@ -2794,8 +2895,46 @@
         tdStatus.appendChild(makeTag(sl, sc));
         tr.appendChild(tdStatus);
         tr.appendChild(makeTd(sanction.issued_by));
+        var tdActions = el('td');
+        var btnGroup = makeBtnGroup();
+        if (sanction.status === 'Active') {
+          var liftBtn = makeBtn('解除制裁', 'ds-btn-outline ds-btn-xs');
+          liftBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            unsanctionResident(sanction.sanction_id, liftBtn);
+          });
+          btnGroup.appendChild(liftBtn);
+        }
+        tdActions.appendChild(btnGroup);
+        tr.appendChild(tdActions);
         tbody.appendChild(tr);
       })(residentSanctions[i]);
+    }
+  }
+
+  async function unsanctionResident(sanctionId, btn) {
+    if (!sanctionId) { showAdminNotice('缺少制裁 ID', 'error'); return; }
+    if (!gatewayUrl) { showAdminNotice('Gateway 未连接，无法执行解除制裁', 'error'); return; }
+    setBtnLoading(btn, true);
+    try {
+      var result = await fetchGatewayJsonPost('/v1/admin/residents/unsanction', {
+        actor_id: currentGatewayIdentity(),
+        sanction_id: sanctionId
+      });
+      if (result.error) {
+        setBtnResult(btn, false, result.error);
+        showAdminNotice('解除制裁失败: ' + result.error, 'error');
+      } else if (result.ok) {
+        setBtnResult(btn, true);
+        showAdminNotice('制裁 ' + sanctionId + ' 已解除', 'success');
+        loadSafetyData();
+      } else {
+        setBtnResult(btn, false, 'HTTP ' + result.status);
+        showAdminNotice('解除制裁失败 (HTTP ' + result.status + ')', 'error');
+      }
+    } catch (e) {
+      setBtnResult(btn, false, e.message);
+      showAdminNotice('网络错误: ' + e.message, 'error');
     }
   }
 
@@ -3002,6 +3141,10 @@
   renderInvites();
   renderLogs('all', 'all', '');
   updateDashboardSummary('local');
+  // The standalone auth surface lives in a module script loaded after this
+  // file. Expose only the refresh boundary so a successful login/logout can
+  // rehydrate the same Gateway-owned projection without a page reload.
+  window.__adminDsRefresh = loadGatewayAdminData;
   loadGatewayAdminData();
 
   // ====== Keyboard shortcuts ======

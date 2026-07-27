@@ -8,11 +8,11 @@ async function main() {
 
   try {
     const pageA = await browser.newPage();
-    await pageA.goto(`${BASE}/index.html?gateway=${GATEWAY}&identity=qa-a`, { waitUntil: 'domcontentloaded' });
+    await pageA.goto(`${BASE}/index.html?gateway=${GATEWAY}&identity=qa-a&qa=browser`, { waitUntil: 'domcontentloaded' });
     await pageA.waitForTimeout(3000);
 
     const pageB = await browser.newPage();
-    await pageB.goto(`${BASE}/creative.html?gateway=${GATEWAY}&identity=qa-b`, { waitUntil: 'domcontentloaded' });
+    await pageB.goto(`${BASE}/creative.html?gateway=${GATEWAY}&identity=qa-b&qa=browser`, { waitUntil: 'domcontentloaded' });
     await pageB.waitForTimeout(3000);
 
     const titleA = await pageA.title();

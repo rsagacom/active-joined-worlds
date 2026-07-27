@@ -1,5 +1,6 @@
 import { safeLocalStorageGet, safeLocalStorageSet, translateDeliveryMode } from "./shell-shared.js";
 
+export function createAuthController(initialElMap = {}, initialCbs = {}) {
 // --- module-scoped state ---
 let _authSession = {
   challengeId: null,
@@ -15,6 +16,7 @@ let _els = {};
 // --- callbacks to app.js ---
 let _callbacks = {
   postJson: null,
+  postAuthenticated: null,
   refreshFromGateway: null,
   persistIdentity: null,
   userProjection: null,
@@ -25,9 +27,9 @@ let _callbacks = {
 /**
  * Initialize auth module with DOM element references and required callbacks.
  * @param {object} elMap - DOM element references
- * @param {object} cbs   - Required callbacks { postJson, refreshFromGateway, persistIdentity, userProjection, gatewayUrl }
+ * @param {object} cbs   - Required callbacks { postJson, postAuthenticated, refreshFromGateway, persistIdentity, userProjection, gatewayUrl }
  */
-export function initAuth(elMap, cbs) {
+function initAuth(elMap, cbs) {
   _els = {
     statusEl: elMap.statusEl || null,
     requestFormEl: elMap.requestFormEl || null,
@@ -46,6 +48,7 @@ export function initAuth(elMap, cbs) {
   };
   _callbacks = {
     postJson: cbs.postJson || null,
+    postAuthenticated: cbs.postAuthenticated || null,
     refreshFromGateway: cbs.refreshFromGateway || null,
     persistIdentity: cbs.persistIdentity || null,
     userProjection: cbs.userProjection || null,
@@ -77,46 +80,101 @@ function _applyDeliveryInputVisibility() {
 }
 
 // --- state accessors ---
-export function getSessionToken() {
+function getSessionToken() {
   return _sessionToken;
 }
 
-export function getAuthSession() {
+function getAuthSession() {
   return _authSession;
 }
 
-export function clearSession() {
+function clearSession() {
   _sessionToken = null;
   safeLocalStorageSet("lobster-session-token", "");
 }
 
-export function setSessionToken(token) {
+function setSessionToken(token) {
   _sessionToken = token || null;
   safeLocalStorageSet("lobster-session-token", token || "");
 }
 
+async function logout() {
+  const token = _sessionToken;
+  let serverError = null;
+
+  if (token) {
+    if (typeof _callbacks.postAuthenticated !== "function") {
+      serverError = new Error("authenticated logout is not configured");
+    } else {
+      try {
+        await _callbacks.postAuthenticated("/v1/auth/logout", {}, token);
+      } catch (error) {
+        // Always clear the browser session, but do not claim that the server
+        // session was revoked when the network call failed.
+        serverError = error;
+      }
+    }
+  }
+
+  clearSession();
+  _authSession = {
+    challengeId: null,
+    maskedEmail: null,
+    expiresAtMs: null,
+    deliveryMode: null,
+  };
+  if (_els.challengeInputEl) _els.challengeInputEl.value = "";
+  if (_els.codeInputEl) _els.codeInputEl.value = "";
+  if (_els.residentInputEl) _els.residentInputEl.value = "";
+  persistAuthDraft();
+  if (_callbacks.persistIdentity) {
+    _callbacks.persistIdentity("访客");
+  }
+  if (_callbacks.refreshFromGateway) {
+    await _callbacks.refreshFromGateway();
+  }
+  setAuthStatus(
+    serverError ? "已退出本地登录，网关退出待重试" : "已退出登录",
+    Boolean(serverError),
+  );
+  updateAuthFormState();
+  return { serverLogout: !serverError, error: serverError };
+}
+
 // --- auth UI helpers ---
-export function setAuthStatus(message, isError = false) {
+function setAuthStatus(message, isError = false) {
   if (!_els.statusEl) return;
   _els.statusEl.textContent = `登录状态：${message}`;
   _els.statusEl.classList.toggle("notice-pending", isError);
 }
 
-export function currentDesiredResidentId() {
+function currentDesiredResidentId() {
   const value = _els.residentInputEl?.value?.trim();
   return value || undefined;
 }
 
-export function residentGatewayLoginRequired(userProjection, gatewayUrl, senderIdentity) {
+function residentGatewayLoginRequired(
+  userProjection,
+  gatewayUrl,
+  senderIdentity,
+  sessionToken = null,
+  allowSyntheticIdentity = false,
+) {
   const isVisitor = !senderIdentity || String(senderIdentity).trim() === "访客" || !String(senderIdentity).trim();
-  return Boolean(userProjection && gatewayUrl && isVisitor);
+  return Boolean(
+    userProjection &&
+    gatewayUrl &&
+    !allowSyntheticIdentity &&
+    (!sessionToken || isVisitor),
+  );
 }
 
-export function updateResidentLoginSurface(userProjection, gatewayUrl, senderIdentity, dismissed) {
+function updateResidentLoginSurface(userProjection, gatewayUrl, senderIdentity, dismissed, authenticated = false) {
   if (!_els.loginCardEl) return;
   const needsLogin = Boolean(userProjection && gatewayUrl &&
     (!senderIdentity || String(senderIdentity).trim() === "访客" || !String(senderIdentity).trim()));
   const showOverlay = needsLogin && !dismissed;
+  const signedIn = Boolean(authenticated && senderIdentity && String(senderIdentity).trim() !== "访客");
 
   _els.loginCardEl.classList.toggle("shell-hidden", !needsLogin);
   _els.loginCardEl.dataset.loginState = needsLogin ? "visitor" : "signed-in";
@@ -126,14 +184,16 @@ export function updateResidentLoginSurface(userProjection, gatewayUrl, senderIde
     _els.loginOverlayEl.setAttribute("aria-hidden", !showOverlay ? "true" : "false");
   }
   if (_els.hudLoginToggleEl) {
-    _els.hudLoginToggleEl.classList.toggle("shell-hidden", !(needsLogin && dismissed));
+    _els.hudLoginToggleEl.classList.toggle("shell-hidden", !(signedIn || (needsLogin && dismissed)));
+    _els.hudLoginToggleEl.textContent = signedIn ? "退出登录" : "登录";
+    _els.hudLoginToggleEl.setAttribute("aria-label", signedIn ? "退出登录" : "打开登录窗口");
   }
   if (needsLogin && _els.statusEl && !_authSession.challengeId) {
     setAuthStatus("访客模式 · 请登录后发送");
   }
 }
 
-export function updateAuthFormState() {
+function updateAuthFormState() {
   const gatewayUrl = typeof _callbacks.gatewayUrl === "function" ? _callbacks.gatewayUrl() : null;
   const enabled = Boolean(gatewayUrl);
   const verifyStep = Boolean(_authSession.challengeId);
@@ -166,7 +226,7 @@ export function updateAuthFormState() {
 }
 
 // --- persistence ---
-export function loadAuthDraft() {
+function loadAuthDraft() {
   const email = safeLocalStorageGet("lobster-auth-email");
   const mobile = safeLocalStorageGet("lobster-auth-mobile");
   const nickname = safeLocalStorageGet("lobster-auth-nickname");
@@ -191,7 +251,7 @@ export function loadAuthDraft() {
   };
 }
 
-export function persistAuthDraft() {
+function persistAuthDraft() {
   safeLocalStorageSet("lobster-auth-resident-id", _els.residentInputEl?.value?.trim() || "");
   safeLocalStorageSet("lobster-auth-nickname", _els.nicknameInputEl?.value?.trim() || "");
   safeLocalStorageSet("lobster-auth-email", _els.emailInputEl?.value?.trim() || "");
@@ -206,7 +266,7 @@ export function persistAuthDraft() {
 }
 
 // --- gateway auth failure ---
-export function handleGatewayAuthFailure(status) {
+function handleGatewayAuthFailure(status) {
   if (status !== 401 && status !== 403) return false;
   _sessionToken = null;
   safeLocalStorageSet("lobster-session-token", "");
@@ -215,7 +275,7 @@ export function handleGatewayAuthFailure(status) {
 }
 
 // --- OTP flow ---
-export async function requestEmailOtp() {
+async function requestEmailOtp() {
   const deliveryMode = _els.deliverySelectEl?.value || "email";
   if (deliveryMode === "mobile") {
     return requestMobileOtp();
@@ -311,7 +371,7 @@ async function requestMobileOtp() {
   setAuthStatus(`手机验证码已发往 ${response.masked_mobile} · ${deliveryNote}`);
 }
 
-export function enterDemoVerifyStep(maskedEmail) {
+function enterDemoVerifyStep(maskedEmail) {
   _authSession = {
     challengeId: "demo-challenge",
     maskedEmail: maskedEmail || "demo@example.com",
@@ -322,7 +382,7 @@ export function enterDemoVerifyStep(maskedEmail) {
   updateAuthFormState();
 }
 
-export async function verifyEmailOtp() {
+async function verifyEmailOtp() {
   const challengeId = (_authSession.challengeId || _els.challengeInputEl?.value || "").trim();
   const code = _els.codeInputEl?.value?.trim() || "";
   if (!challengeId) {
@@ -384,7 +444,7 @@ export async function verifyEmailOtp() {
   setAuthStatus(`已登录为 ${displayName} · ${masked}`);
 }
 
-export async function updateMyNickname(nickname) {
+async function updateMyNickname(nickname) {
   if (!_sessionToken) {
     setAuthStatus("请先登录", true);
     return null;
@@ -401,3 +461,50 @@ export async function updateMyNickname(nickname) {
   }
   return null;
 }
+
+  if (Object.keys(initialElMap).length || Object.keys(initialCbs).length) {
+    initAuth(initialElMap, initialCbs);
+  }
+
+  return {
+    clearSession,
+    currentDesiredResidentId,
+    enterDemoVerifyStep,
+    getAuthSession,
+    getSessionToken,
+    handleGatewayAuthFailure,
+    initAuth,
+    loadAuthDraft,
+    persistAuthDraft,
+    requestEmailOtp,
+    logout,
+    residentGatewayLoginRequired,
+    setAuthStatus,
+    setSessionToken,
+    updateAuthFormState,
+    updateMyNickname,
+    updateResidentLoginSurface,
+    verifyEmailOtp,
+  };
+}
+
+const defaultAuthController = createAuthController();
+
+export const initAuth = (...args) => defaultAuthController.initAuth(...args);
+export const getSessionToken = (...args) => defaultAuthController.getSessionToken(...args);
+export const getAuthSession = (...args) => defaultAuthController.getAuthSession(...args);
+export const clearSession = (...args) => defaultAuthController.clearSession(...args);
+export const setSessionToken = (...args) => defaultAuthController.setSessionToken(...args);
+export const setAuthStatus = (...args) => defaultAuthController.setAuthStatus(...args);
+export const currentDesiredResidentId = (...args) => defaultAuthController.currentDesiredResidentId(...args);
+export const residentGatewayLoginRequired = (...args) => defaultAuthController.residentGatewayLoginRequired(...args);
+export const updateResidentLoginSurface = (...args) => defaultAuthController.updateResidentLoginSurface(...args);
+export const updateAuthFormState = (...args) => defaultAuthController.updateAuthFormState(...args);
+export const loadAuthDraft = (...args) => defaultAuthController.loadAuthDraft(...args);
+export const persistAuthDraft = (...args) => defaultAuthController.persistAuthDraft(...args);
+export const handleGatewayAuthFailure = (...args) => defaultAuthController.handleGatewayAuthFailure(...args);
+export const requestEmailOtp = (...args) => defaultAuthController.requestEmailOtp(...args);
+export const logout = (...args) => defaultAuthController.logout(...args);
+export const enterDemoVerifyStep = (...args) => defaultAuthController.enterDemoVerifyStep(...args);
+export const verifyEmailOtp = (...args) => defaultAuthController.verifyEmailOtp(...args);
+export const updateMyNickname = (...args) => defaultAuthController.updateMyNickname(...args);

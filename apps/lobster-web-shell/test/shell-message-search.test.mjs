@@ -58,7 +58,7 @@ test("searchResultItemDomSpec: 渲染 sender / text / time 三段结构", () => 
 });
 
 test("searchResultItemDomSpec: 保留可字符串化的 message_id", () => {
-  assert.equal(
+  assert.deepEqual(
     searchResultItemDomSpec({
       message_id: 0,
       sender: "system",
@@ -131,13 +131,15 @@ test("messageSearchRequestModel: builds encoded gateway search URL", () => {
     messageSearchRequestModel({
       gatewayUrl: "http://127.0.0.1:8808",
       roomId: "room:world/lobby",
+      residentId: "alice",
       query: "  龙虾 & IM  ",
     }),
     {
       query: "龙虾 & IM",
       roomId: "room:world/lobby",
+      residentId: "alice",
       limit: 20,
-      url: "http://127.0.0.1:8808/v1/shell/messages/search?q=%E9%BE%99%E8%99%BE%20%26%20IM&room_id=room%3Aworld%2Flobby&limit=20",
+      url: "http://127.0.0.1:8808/v1/shell/messages/search?q=%E9%BE%99%E8%99%BE%20%26%20IM&room_id=room%3Aworld%2Flobby&resident_id=alice&limit=20",
     },
   );
 });
@@ -145,6 +147,7 @@ test("messageSearchRequestModel: builds encoded gateway search URL", () => {
 test("messageSearchRequestModel: returns null without required search inputs", () => {
   assert.equal(messageSearchRequestModel({ gatewayUrl: "", roomId: "r", query: "hi" }), null);
   assert.equal(messageSearchRequestModel({ gatewayUrl: "http://g", roomId: "", query: "hi" }), null);
+  assert.equal(messageSearchRequestModel({ gatewayUrl: "http://g", roomId: "r", residentId: "", query: "hi" }), null);
   assert.equal(messageSearchRequestModel({ gatewayUrl: "http://g", roomId: "r", query: "   " }), null);
 });
 
@@ -153,10 +156,11 @@ test("messageSearchRequestModel: supports custom limit", () => {
     messageSearchRequestModel({
       gatewayUrl: "http://g",
       roomId: "r",
+      residentId: "alice",
       query: "hi",
       limit: 5,
     }).url,
-    "http://g/v1/shell/messages/search?q=hi&room_id=r&limit=5",
+    "http://g/v1/shell/messages/search?q=hi&room_id=r&resident_id=alice&limit=5",
   );
 });
 
@@ -167,4 +171,160 @@ test("messageSearchRowMatchesId: 用 dataset 精确匹配特殊 message_id", () 
   assert.equal(messageSearch.messageSearchRowMatchesId(row, 'msg-"other"]'), false);
   assert.equal(messageSearch.messageSearchRowMatchesId({ dataset: {} }, 'msg-"x"]'), false);
   assert.equal(messageSearch.messageSearchRowMatchesId(null, 'msg-"x"]'), false);
+});
+
+test("mountMessageSearchChrome wires search controls into timeline and stage side", () => {
+  assert.equal(typeof messageSearch.mountMessageSearchChrome, "function");
+
+  const clickHandlers = [];
+  const inserted = [];
+  const stageChildren = [];
+  const searchBar = { className: "message-search-bar" };
+  const doc = {
+    createElement(tagName) {
+      return {
+        tagName: tagName.toUpperCase(),
+        className: "",
+        textContent: "",
+        title: "",
+        children: [],
+        addEventListener(type, handler) {
+          clickHandlers.push([type, handler]);
+        },
+        appendChild(child) {
+          this.children.push(child);
+        },
+      };
+    },
+  };
+  const timelineEl = {
+    parentNode: {
+      insertBefore(node, anchor) {
+        inserted.push([node, anchor]);
+      },
+    },
+  };
+  const stageSideEl = {
+    appendChild(child) {
+      stageChildren.push(child);
+    },
+  };
+  let toggles = 0;
+
+  const chrome = messageSearch.mountMessageSearchChrome(
+    { timelineEl, stageSideEl, onToggle: () => { toggles += 1; } },
+    { doc, createNode: () => searchBar },
+  );
+
+  assert.equal(chrome.searchBar, searchBar);
+  assert.equal(chrome.toggleButton.className, "search-toggle-btn");
+  assert.equal(chrome.toggleButton.textContent, "🔍");
+  assert.equal(chrome.toggleButton.title, "搜索消息");
+  assert.deepEqual(inserted, [[searchBar, timelineEl]]);
+  assert.equal(stageChildren[0].className, "stage-chip");
+  assert.equal(stageChildren[0].children[0], chrome.toggleButton);
+  clickHandlers[0][1]();
+  assert.equal(toggles, 1);
+});
+
+test("createMessageSearchController owns search, result selection, and close lifecycle", async () => {
+  assert.equal(typeof messageSearch.createMessageSearchController, "function");
+  const inputHandlers = {};
+  const closeHandlers = {};
+  const resultChildren = [];
+  const resultContainer = {
+    replaceChildren() { resultChildren.length = 0; },
+    appendChild(child) { resultChildren.push(child); },
+  };
+  const input = {
+    value: "",
+    dataset: {},
+    focusCount: 0,
+    addEventListener(type, handler) { inputHandlers[type] = handler; },
+    removeEventListener() {},
+    focus() { this.focusCount += 1; },
+  };
+  const closeButton = {
+    addEventListener(type, handler) { closeHandlers[type] = handler; },
+    removeEventListener() {},
+  };
+  const searchBar = {
+    style: { display: "none" },
+    querySelector(selector) {
+      return {
+        ".message-search-input": input,
+        ".message-search-close": closeButton,
+        ".message-search-results": resultContainer,
+      }[selector] || null;
+    },
+  };
+  const targetRow = {
+    dataset: { messageId: "msg-1" },
+    classList: {
+      values: new Set(),
+      add(value) { this.values.add(value); },
+      remove(value) { this.values.delete(value); },
+    },
+    scrollIntoView(options) { this.scrollOptions = options; },
+  };
+  const doc = {
+    querySelectorAll() { return [targetRow]; },
+  };
+  const requests = [];
+  const created = [];
+  const controller = messageSearch.createMessageSearchController({
+    doc,
+    searchBar,
+    getGatewayUrl: () => "http://gateway.test",
+    getRoomId: () => "room:main",
+    getResidentId: () => "alice",
+    getSessionToken: () => "session-token",
+    fetchFn: async (url, options) => {
+      requests.push({ url, options });
+      return {
+        ok: true,
+        async json() {
+          return [{ message_id: "msg-1", sender: "alice", text: "hello", timestamp_ms: 1 }];
+        },
+      };
+    },
+    createNode(spec) {
+      const handlers = {};
+      const node = {
+        spec,
+        addEventListener(type, handler) { handlers[type] = handler; },
+        handlers,
+      };
+      created.push(node);
+      return node;
+    },
+    setTimeoutFn() { return 1; },
+    clearTimeoutFn() {},
+  });
+
+  const cleanup = controller.bind();
+  controller.toggle();
+  assert.equal(searchBar.style.display, "block");
+  assert.equal(input.focusCount, 1);
+
+  await controller.search(" hello ");
+  assert.deepEqual(
+    requests[0],
+    {
+      url: "http://gateway.test/v1/shell/messages/search?q=hello&room_id=room%3Amain&resident_id=alice&limit=20",
+      options: { headers: { Authorization: "Bearer session-token" } },
+    },
+  );
+  assert.equal(resultChildren.length, 1);
+  resultChildren[0].handlers.click();
+  assert.deepEqual(targetRow.scrollOptions, { behavior: "smooth", block: "center" });
+  assert.equal(targetRow.classList.values.has("message-highlight"), true);
+  assert.equal(searchBar.style.display, "none");
+  assert.equal(resultChildren.length, 0);
+
+  assert.equal(typeof inputHandlers.input, "function");
+  assert.equal(typeof closeHandlers.click, "function");
+  assert.equal(typeof cleanup, "function");
+  cleanup();
+  assert.equal(created.length, 1);
 });

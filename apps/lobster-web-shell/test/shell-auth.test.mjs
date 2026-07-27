@@ -2,6 +2,7 @@
 import { describe, test, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import {
+  createAuthController,
   initAuth,
   enterDemoVerifyStep,
   verifyEmailOtp,
@@ -71,6 +72,120 @@ function createElMap() {
     hudLoginToggleEl: new FakeElement("button"),
   };
 }
+
+describe("shell-auth instance isolation", () => {
+  let originalWindow;
+
+  beforeEach(() => {
+    originalWindow = globalThis.window;
+    globalThis.window = { localStorage: createFakeStorage() };
+  });
+
+  afterEach(() => {
+    globalThis.window = originalWindow;
+  });
+
+  test("two auth controllers keep challenge and session state isolated", async () => {
+    const firstEls = createElMap();
+    const secondEls = createElMap();
+    const first = createAuthController(firstEls, {
+      postJson: async () => { throw new Error("unexpected network call"); },
+      refreshFromGateway: async () => {},
+      persistIdentity: () => {},
+      gatewayUrl: () => "http://127.0.0.1:8787",
+      desiredResidentId: () => "resident-first",
+    });
+    const second = createAuthController(secondEls, {
+      postJson: async () => { throw new Error("unexpected network call"); },
+      refreshFromGateway: async () => {},
+      persistIdentity: () => {},
+      gatewayUrl: () => "http://127.0.0.1:8787",
+      desiredResidentId: () => "resident-second",
+    });
+
+    first.enterDemoVerifyStep("first@example.com");
+    first.setSessionToken("first-token");
+    second.setSessionToken("second-token");
+
+    assert.equal(first.getAuthSession().challengeId, "demo-challenge");
+    assert.equal(second.getAuthSession().challengeId, null);
+    assert.equal(first.getSessionToken(), "first-token");
+    assert.equal(second.getSessionToken(), "second-token");
+
+    firstEls.codeInputEl.value = "123456";
+    await first.verifyEmailOtp();
+
+    assert.equal(first.getSessionToken(), "demo-session-token");
+    assert.equal(first.getAuthSession().challengeId, null);
+    assert.equal(second.getSessionToken(), "second-token");
+    assert.equal(second.getAuthSession().challengeId, null);
+  });
+});
+
+describe("shell-auth logout", () => {
+  let storage;
+  let originalWindow;
+
+  beforeEach(() => {
+    storage = createFakeStorage();
+    originalWindow = globalThis.window;
+    globalThis.window = { localStorage: storage };
+  });
+
+  afterEach(() => {
+    globalThis.window = originalWindow;
+  });
+
+  test("revokes the Gateway session before clearing the local session", async () => {
+    const posts = [];
+    const identities = [];
+    let refreshCount = 0;
+    const controller = createAuthController(createElMap(), {
+      postAuthenticated: async (path, body, token) => {
+        posts.push({ path, body, token });
+        return { ok: true };
+      },
+      refreshFromGateway: async () => { refreshCount += 1; },
+      persistIdentity: (id) => identities.push(id),
+      gatewayUrl: () => "http://127.0.0.1:8787",
+    });
+
+    controller.setSessionToken("session-for-logout");
+    const result = await controller.logout();
+
+    assert.deepEqual(posts, [{
+      path: "/v1/auth/logout",
+      body: {},
+      token: "session-for-logout",
+    }]);
+    assert.equal(result.serverLogout, true);
+    assert.equal(result.error, null);
+    assert.equal(controller.getSessionToken(), null);
+    assert.equal(storage.getItem("lobster-session-token"), "");
+    assert.deepEqual(identities, ["访客"]);
+    assert.equal(refreshCount, 1);
+  });
+
+  test("clears local state and exposes server logout failure", async () => {
+    const identities = [];
+    const els = createElMap();
+    const controller = createAuthController(els, {
+      postAuthenticated: async () => { throw new Error("gateway unavailable"); },
+      refreshFromGateway: async () => {},
+      persistIdentity: (id) => identities.push(id),
+      gatewayUrl: () => "http://127.0.0.1:8787",
+    });
+
+    controller.setSessionToken("session-needs-retry");
+    const result = await controller.logout();
+
+    assert.equal(result.serverLogout, false);
+    assert.equal(result.error?.message, "gateway unavailable");
+    assert.equal(controller.getSessionToken(), null);
+    assert.deepEqual(identities, ["访客"]);
+    assert.match(els.statusEl.textContent, /网关退出待重试/);
+  });
+});
 
 describe("shell-auth demo fallback", () => {
   let storage;

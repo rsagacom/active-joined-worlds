@@ -6,12 +6,49 @@ import {
   governanceFromWorldSnapshotBundle,
   governanceWithResidentsPayload,
   mergeRoomWithContract,
+  normalizeShellStateForState,
   synthesizeRoomsFromContracts,
 } from "../shell-state-normalize.js";
 
 // Stub normalizeShellMessages — called by the module under test via shell-payload.js
 // The test verifies contractConversationMap / mergeRoomWithContract pass-through,
 // not the normalizeShellMessages implementation itself.
+
+test("normalizeShellStateForState clones fallback for empty payloads", () => {
+  const fallback = { rooms: [{ id: "fallback", messages: [] }], marker: "fallback" };
+  const normalized = normalizeShellStateForState({}, fallback);
+  assert.deepEqual(normalized, fallback);
+  assert.notEqual(normalized, fallback);
+  assert.notEqual(normalized.rooms, fallback.rooms);
+});
+
+test("normalizeShellStateForState merges conversation contract over legacy rooms", () => {
+  const normalized = normalizeShellStateForState({
+    rooms: [{ id: "room:lobby", title: "旧标题", messages: [{ id: "legacy" }] }],
+    conversation_shell: {
+      conversations: [{
+        conversation_id: "room:lobby",
+        title: "合同标题",
+        context_summary: "合同上下文",
+        messages: [{ id: "contract" }],
+      }],
+    },
+    scene_render: { scenes: [] },
+  }, { rooms: [] });
+  assert.equal(normalized.rooms.length, 1);
+  assert.equal(normalized.rooms[0].title, "合同标题");
+  assert.equal(normalized.rooms[0].context_summary, "合同上下文");
+  assert.deepEqual(normalized.rooms[0].messages.map((message) => message.id), ["legacy"]);
+});
+
+test("normalizeShellStateForState keeps legacy rooms when no conversation contract exists", () => {
+  const normalized = normalizeShellStateForState({
+    rooms: [{ id: "room:legacy", title: "旧房间", messages: [] }],
+    other: "preserved",
+  }, { rooms: [] });
+  assert.equal(normalized.other, "preserved");
+  assert.deepEqual(normalized.rooms.map((room) => room.id), ["room:legacy"]);
+});
 
 test("contractConversationMap builds a Map keyed by conversation_id", () => {
   const payload = {

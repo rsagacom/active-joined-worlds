@@ -1,12 +1,4 @@
-import {
-  initAuth,
-  loadAuthDraft,
-  persistAuthDraft,
-  requestEmailOtp,
-  setAuthStatus,
-  updateAuthFormState,
-  verifyEmailOtp,
-} from "./shell-auth.js";
+import { createAuthController } from "./shell-auth.js";
 import { gatewayErrorMessage, localizedRuntimeError } from "./shell-errors.js";
 
 function byId(id) {
@@ -25,6 +17,31 @@ async function postGatewayJson(gatewayUrl, path, body) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+  });
+  const text = await response.text();
+  let parsed = {};
+  if (text) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = {};
+    }
+  }
+  if (!response.ok) {
+    throw new Error(gatewayErrorMessage(parsed, text, response.status));
+  }
+  return parsed;
+}
+
+async function postGatewayJsonAuthenticated(gatewayUrl, path, body, token) {
+  if (!gatewayUrl) throw new Error("gateway not connected");
+  const response = await fetch(gatewayUrl.replace(/\/+$/, "") + path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body ?? {}),
   });
   const text = await response.text();
   let parsed = {};
@@ -70,19 +87,35 @@ export function initStandaloneAuthSurface(options = {}) {
     hudLoginToggleEl: byId("hud-login-toggle"),
   };
 
-  initAuth(els, {
+  const authController = createAuthController(els, {
     gatewayUrl,
     postJson: options.postJson || ((path, body) => postGatewayJson(gatewayUrl(), path, body)),
+    postAuthenticated: options.postAuthenticated || ((path, body, token) =>
+      postGatewayJsonAuthenticated(gatewayUrl(), path, body, token)),
     refreshFromGateway: options.refreshFromGateway || (async () => {}),
     persistIdentity: (id) => {
       try {
         localStorage.setItem(options.identityStorageKey || "lobster-identity", id);
       } catch {}
+      const signedIn = Boolean(id && id !== "访客");
+      if (els.hudLoginToggleEl) {
+        els.hudLoginToggleEl.classList.toggle("shell-hidden", !signedIn && !gatewayUrl());
+        els.hudLoginToggleEl.textContent = signedIn ? "退出登录" : "登录";
+        els.hudLoginToggleEl.setAttribute("aria-label", signedIn ? "退出登录" : "打开登录窗口");
+      }
       options.onIdentityChanged?.(id);
     },
     userProjection: options.userProjection || (() => null),
     desiredResidentId: options.desiredResidentId || (() => undefined),
   });
+  const {
+    loadAuthDraft,
+    persistAuthDraft,
+    requestEmailOtp,
+    setAuthStatus,
+    updateAuthFormState,
+    verifyEmailOtp,
+  } = authController;
 
   loadAuthDraft();
   updateAuthFormState();
@@ -117,6 +150,15 @@ export function initStandaloneAuthSurface(options = {}) {
   });
 
   els.hudLoginToggleEl?.addEventListener("click", () => {
+    if (authController.getSessionToken()) {
+      els.hudLoginToggleEl.disabled = true;
+      authController.logout().finally(() => {
+        els.hudLoginToggleEl.disabled = false;
+        els.hudLoginToggleEl.textContent = "登录";
+        els.hudLoginToggleEl.setAttribute("aria-label", "打开登录窗口");
+      });
+      return;
+    }
     openLoginOverlay(els);
   });
   byId("resident-login-close")?.addEventListener("click", () => {
@@ -129,5 +171,6 @@ export function initStandaloneAuthSurface(options = {}) {
     open: () => openLoginOverlay(els),
     close: () => closeLoginOverlay(els),
     refresh: updateAuthFormState,
+    authController,
   };
 }

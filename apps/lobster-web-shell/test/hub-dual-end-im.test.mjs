@@ -41,7 +41,7 @@ test("hub shell self messages stay on the right and peer messages stay on the le
   const app = await loadHubShellApp({
     useGeneratedFixtures: true,
     generatedShellFixture: "generated/state.contract.json",
-    locationSearch: "?gateway=http://127.0.0.1:50651&identity=builder",
+    locationSearch: "?gateway=http://127.0.0.1:50651&identity=builder&qa=browser",
     gatewayBaseUrl: "http://127.0.0.1:50651",
     localStorageEntries: { "lobster-identity": "builder" },
   });
@@ -79,7 +79,7 @@ test("hub shell switching identity re-renders message sides for same room", seri
   const app = await loadHubShellApp({
     useGeneratedFixtures: true,
     generatedShellFixture: "generated/state.contract.json",
-    locationSearch: "?gateway=http://127.0.0.1:50651&identity=qa1",
+    locationSearch: "?gateway=http://127.0.0.1:50651&identity=qa1&qa=browser",
     gatewayBaseUrl: "http://127.0.0.1:50651",
     localStorageEntries: { "lobster-identity": "qa1" },
   });
@@ -121,7 +121,7 @@ test("hub shell gateway send clears input and leaves exactly one committed row",
   const app = await loadHubShellApp({
     useGeneratedFixtures: true,
     generatedShellFixture: "generated/state.contract.json",
-    locationSearch: "?gateway=http://127.0.0.1:50651&identity=qa1",
+    locationSearch: "?gateway=http://127.0.0.1:50651&identity=qa1&qa=browser",
     gatewayBaseUrl: "http://127.0.0.1:50651",
     localStorageEntries: { "lobster-identity": "qa1" },
   });
@@ -173,7 +173,7 @@ test("hub shell keeps local-memory gateway composer online without upstream prov
   const app = await loadHubShellApp({
     useGeneratedFixtures: true,
     generatedShellFixture: "generated/state.contract.json",
-    locationSearch: "?gateway=http://127.0.0.1:50651&identity=qa-a",
+    locationSearch: "?gateway=http://127.0.0.1:50651&identity=qa-a&qa=browser",
     gatewayBaseUrl: "http://127.0.0.1:50651",
     localStorageEntries: { "lobster-identity": "qa-a" },
     gatewayProviderState: {
@@ -308,7 +308,7 @@ test("hub shell self messages expose edit and recall actions backed by gateway s
   const app = await loadHubShellApp({
     useGeneratedFixtures: true,
     generatedShellFixture: "generated/state.contract.json",
-    locationSearch: "?gateway=http://127.0.0.1:50651&identity=qa1",
+    locationSearch: "?gateway=http://127.0.0.1:50651&identity=qa1&qa=browser",
     gatewayBaseUrl: "http://127.0.0.1:50651",
     localStorageEntries: { "lobster-identity": "qa1" },
   });

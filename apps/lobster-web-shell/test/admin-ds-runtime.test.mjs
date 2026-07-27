@@ -75,11 +75,15 @@ function setupMinimalGlobals(gatewayUrl = null) {
     "dsGatewayRoomCount", "dsGatewayMessageCount", "dsGatewayLastSync",
     "dsGatewayStatus", "dsOnlineCount", "dsAlertCount", "dashboardTime",
     "msgAuditBadge", "dsSidebar", "dsSidebarToggle", "dsSidebarOverlay",
+    "logAlertBadge",
     "dsDetailPanel", "dsDetailTitle", "dsDetailBody", "dsDetailActions",
     "dsDetailClose", "dsContent", "dsAdminNotice",
   ]) { el(id); }
 
-  for (const id of ["residentTableBody", "roomTableBody", "msgTableBody", "inviteTableBody", "logTableBody"]) {
+  for (const id of [
+    "residentTableBody", "roomTableBody", "msgTableBody", "inviteTableBody", "logTableBody",
+    "worldNoticeTableBody", "safetyAdvisoryTableBody", "safetyReportTableBody", "sanctionTableBody",
+  ]) {
     el(id, { tag: "tbody" });
   }
   for (const id of [
@@ -141,6 +145,7 @@ async function loadAdminDsWithExports(opts = {}) {
     "window.__adminTest.normalizeGatewayRooms = normalizeGatewayRooms;\n" +
     "window.__adminTest.normalizeGatewayMessages = normalizeGatewayMessages;\n" +
     "window.__adminTest.updateDashboardSummary = updateDashboardSummary;\n" +
+    "window.__adminTest.updateAlertCounts = updateAlertCounts;\n" +
     "window.__adminTest.fetchGatewayJson = fetchGatewayJson;\n" +
     "window.__adminTest.fetchGatewayJsonPost = fetchGatewayJsonPost;\n" +
     "window.__adminTest.resolveGatewayUrl = resolveGatewayUrl;\n" +
@@ -148,8 +153,25 @@ async function loadAdminDsWithExports(opts = {}) {
     "window.__adminTest.showAdminNotice = showAdminNotice;\n" +
     "window.__adminTest.banResident = banResident;\n" +
     "window.__adminTest.unbanResident = unbanResident;\n" +
+    "window.__adminTest.unsanctionResident = unsanctionResident;\n" +
     "window.__adminTest.freezeRoom = freezeRoom;\n" +
     "window.__adminTest.unfreezeRoom = unfreezeRoom;\n" +
+    "window.__adminTest.loadInviteCodes = loadInviteCodes;\n" +
+    "window.__adminTest.loadAuditLog = loadAuditLog;\n" +
+    "window.__adminTest.loadGatewayAdminData = loadGatewayAdminData;\n" +
+    "window.__adminTest.loadPermissionGroups = loadPermissionGroups;\n" +
+    "window.__adminTest.permissionGroupItems = permissionGroupItems;\n" +
+    "window.__adminTest.loadWorldNotices = loadWorldNotices;\n" +
+    "window.__adminTest.loadSafetyData = loadSafetyData;\n" +
+    "window.__adminTest.getInviteCodes = () => inviteCodes;\n" +
+    "window.__adminTest.getLogs = () => logs;\n" +
+    "window.__adminTest.getWorldNotices = () => worldNotices;\n" +
+    "window.__adminTest.getSafetyAdvisories = () => safetyAdvisories;\n" +
+    "window.__adminTest.getSafetyReports = () => safetyReports;\n" +
+    "window.__adminTest.getResidentSanctions = () => residentSanctions;\n" +
+    "window.__adminTest.getResidents = () => residents;\n" +
+    "window.__adminTest.getRooms = () => rooms;\n" +
+    "window.__adminTest.getMessages = () => messages;\n" +
     "window.__adminTest.summarizeBatchResults = summarizeBatchResults;\n" +
     "function bindStaticAdminActions"
   );
@@ -197,6 +219,30 @@ test("admin-ds runtime: normalizeGatewayResidents 正确转换 gateway 数据", 
   // 安全验证：不应包含 HTML 标签或实体
   assert.equal(first.nick.includes("<"), false, "数据不应包含 HTML 标签");
   assert.equal(first.nick.includes(">"), false, "数据不应包含 HTML 标签");
+});
+
+test("admin-ds runtime: 注册审计字段映射到居民后台", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  const api = await loadAdminDsWithExports();
+  const result = api.normalizeGatewayResidents([{
+    resident_id: "registered-only",
+    nickname: "新居民",
+    email_masked: "r***@example.com",
+    registration_state: "suspended",
+    roles: [],
+    active_cities: [],
+    online: false,
+    created_at_ms: 1710000000000,
+    verified_at_ms: 1710000001000,
+    last_login_at_ms: 1710000002000
+  }]);
+
+  assert.equal(result[0].email, "r***@example.com");
+  assert.equal(result[0].status, "banned");
+  assert.equal(result[0].registrationState, "suspended");
+  assert.equal(result[0].createdAtMs, 1710000000000);
+  assert.equal(result[0].verifiedAtMs, 1710000001000);
+  assert.equal(result[0].lastLoginAtMs, 1710000002000);
 });
 
 test("admin-ds runtime: normalizeGatewayRooms 正确转换 shell state", serial, async () => {
@@ -411,6 +457,43 @@ test("admin-ds runtime: unbanResident 无 gateway 时提前返回", serial, asyn
   assert.equal(called, false, "无 gateway 时不应请求 Gateway");
 });
 
+test("admin-ds runtime: unsanctionResident 发送正确的 POST 请求", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+
+  const fetchCalls = [];
+  globalThis.fetch = async (url, init) => {
+    fetchCalls.push({ url: String(url), method: init?.method || "GET", body: init?.body });
+    return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
+  };
+
+  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
+  const btn = globalThis.document.createElement("button");
+  await api.unsanctionResident("sanction-123", btn);
+
+  const call = fetchCalls.find((item) => item.url.includes("/v1/admin/residents/unsanction"));
+  assert.ok(call, "应存在 /unsanction 请求");
+  assert.equal(call.method, "POST", "应为 POST 方法");
+  const body = JSON.parse(call.body);
+  assert.equal(body.sanction_id, "sanction-123");
+  assert.equal(body.actor_id, "rsaga");
+});
+
+test("admin-ds runtime: unsanctionResident 无 gateway 时提前返回", serial, async () => {
+  setupMinimalGlobals(null);
+
+  let called = false;
+  globalThis.fetch = async () => {
+    called = true;
+    return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" };
+  };
+
+  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
+  const btn = globalThis.document.createElement("button");
+  await api.unsanctionResident("sanction-123", btn);
+
+  assert.equal(called, false, "无 gateway 时不应请求 Gateway");
+});
+
 test("admin-ds runtime: freezeRoom 发送正确的 POST 请求", serial, async () => {
   setupMinimalGlobals("http://127.0.0.1:8787");
 
@@ -487,6 +570,26 @@ test("admin-ds runtime: fetchGatewayJsonPost 发送 JSON POST 请求", serial, a
   assert.equal(result.ok, true);
 });
 
+test("admin-ds runtime: gateway 请求转发本地 session bearer token", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  window.localStorage.setItem("lobster-session-token", "lbst_admin_test");
+
+  const captured = [];
+  globalThis.fetch = async (_url, init) => {
+    captured.push(init);
+    return { ok: true, status: 200, json: async () => ({ ok: true }), text: async () => "{}" };
+  };
+
+  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
+  await api.fetchGatewayJson("/v1/admin/summary");
+  await api.fetchGatewayJsonPost("/v1/admin/logs/clear", {});
+
+  assert.ok(captured.length >= 2);
+  for (const init of captured.slice(-2)) {
+    assert.equal(init.headers.Authorization, "Bearer lbst_admin_test");
+  }
+});
+
 test("admin-ds runtime: fetchGatewayJsonPost HTTP 失败时返回 ok:false 且无 error 字段", serial, async () => {
   // 这是「HTTP 失败假成功态」bug 的根因：HTTP 4xx/5xx 时返回 {ok:false,status,data}，
   // 没有 error 字段。若调用方用 `if (r.error) ... else { 成功 }` 判定，HTTP 失败会落入 else。
@@ -503,6 +606,171 @@ test("admin-ds runtime: fetchGatewayJsonPost HTTP 失败时返回 ok:false 且�
   assert.equal(result.ok, false, "HTTP 500 时 ok 必须为 false");
   assert.equal(result.status, 500);
   assert.equal("error" in result, false, "HTTP 失败返回结构无顶层 error 字段——!r.error 判定会漏，必须用 r.ok");
+});
+
+test("admin-ds runtime: Gateway 空/失败时不回退邀请码和审计日志 mock", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  globalThis.fetch = async (url) => {
+    if (url.includes("/v1/admin/invites")) {
+      return { ok: true, status: 200, json: async () => [], text: async () => "[]" };
+    }
+    if (url.includes("/v1/admin/audit-log")) {
+      return { ok: true, status: 200, json: async () => ({ events: [], total: 0 }), text: async () => '{"events":[]}' };
+    }
+    return { ok: false, status: 500, json: async () => ({}), text: async () => "error" };
+  };
+
+  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
+  await api.loadInviteCodes();
+  await api.loadAuditLog();
+
+  assert.deepEqual(api.getInviteCodes(), [], "Gateway 空邀请码应显示空态，不能保留本地 mock");
+  assert.deepEqual(api.getLogs(), [], "Gateway 空审计日志应显示空态，不能保留本地 mock");
+  assert.equal(_dsElements.logAlertBadge.textContent, "0", "Gateway 空审计日志时日志 badge 必须为 0");
+  assert.equal(_dsElements.logAlertBadge.style.display, "none", "Gateway 空审计日志时日志 badge 必须隐藏");
+});
+
+test("admin-ds runtime: Gateway 次级读取失败时清空旧邀请码和审计日志 mock", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 503,
+    json: async () => ({ error: "temporarily unavailable" }),
+    text: async () => '{"error":"temporarily unavailable"}',
+  });
+
+  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
+  await api.loadInviteCodes();
+  await api.loadAuditLog();
+
+  assert.deepEqual(api.getInviteCodes(), [], "Gateway 邀请码读取失败时不能回退本地 mock");
+  assert.deepEqual(api.getLogs(), [], "Gateway 审计日志读取失败时不能回退本地 mock");
+});
+
+test("admin-ds runtime: Gateway 主投影空数组不回退居民房间消息 mock", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  globalThis.fetch = async (url) => {
+    if (url.includes("/v1/admin/residents")) {
+      return { ok: true, status: 200, json: async () => [], text: async () => "[]" };
+    }
+    if (url.includes("/v1/shell/state")) {
+      const emptyState = { conversation_shell: { conversations: [] } };
+      return { ok: true, status: 200, json: async () => emptyState, text: async () => JSON.stringify(emptyState) };
+    }
+    if (url.includes("/v1/admin/summary")) {
+      const emptySummary = { resident_count: 0, room_count: 0, message_count: 0, online_count: 0, state_version: 1 };
+      return { ok: true, status: 200, json: async () => emptySummary, text: async () => JSON.stringify(emptySummary) };
+    }
+    if (url.includes("/v1/admin/audit-log")) {
+      const emptyAudit = { events: [], total: 0 };
+      return { ok: true, status: 200, json: async () => emptyAudit, text: async () => JSON.stringify(emptyAudit) };
+    }
+    if (url.includes("/v1/admin/invites") || url.includes("/v1/admin/permission-groups")) {
+      return { ok: true, status: 200, json: async () => [], text: async () => "[]" };
+    }
+    return { ok: false, status: 404, json: async () => ({}), text: async () => "not found" };
+  };
+
+  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
+  await api.loadGatewayAdminData();
+
+  assert.deepEqual(api.getResidents(), [], "Gateway 空居民投影应显示空态，不能保留本地 mock");
+  assert.deepEqual(api.getRooms(), [], "Gateway 空房间投影应显示空态，不能保留本地 mock");
+  assert.deepEqual(api.getMessages(), [], "Gateway 空消息投影应显示空态，不能保留本地 mock");
+  assert.equal(_dsElements.statGateway.textContent, "在线", "有效空投影仍应标记 Gateway 在线");
+});
+
+test("admin-ds runtime: Gateway 主投影 HTTP 失败清空居民房间消息 mock", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 503,
+    json: async () => ({ error: "temporarily unavailable" }),
+    text: async () => '{"error":"temporarily unavailable"}',
+  });
+
+  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
+  await api.loadGatewayAdminData();
+
+  assert.deepEqual(api.getResidents(), [], "Gateway 居民读取失败时不能回退本地 mock");
+  assert.deepEqual(api.getRooms(), [], "Gateway 房间读取失败时不能回退本地 mock");
+  assert.deepEqual(api.getMessages(), [], "Gateway 消息读取失败时不能回退本地 mock");
+  assert.equal(_dsElements.statGateway.textContent, "部分同步", "主投影失败应明确显示部分同步");
+  assert.match(_dsElements.statGatewaySub.textContent, /部分数据读取失败/, "主投影失败应说明读取失败");
+});
+
+test("admin-ds runtime: Gateway 空权限组不回退内置展示 mock", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  globalThis.fetch = async (url) => {
+    if (url.includes("/v1/admin/permission-groups")) {
+      return { ok: true, status: 200, json: async () => [], text: async () => "[]" };
+    }
+    return { ok: false, status: 503, json: async () => ({}), text: async () => "error" };
+  };
+
+  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
+  await api.loadPermissionGroups();
+
+  assert.deepEqual(api.permissionGroupItems(), [], "Gateway 空权限组应显示空态，不能回退内置 mock");
+});
+
+test("admin-ds runtime: 无 Gateway 时权限组保留本地内置说明", serial, async () => {
+  setupMinimalGlobals();
+  const api = await loadAdminDsWithExports();
+
+  assert.equal(api.permissionGroupItems().length, 4, "离线本地预览仍应保留四类内置权限说明");
+});
+
+test("admin-ds runtime: 世界公告失败时清空旧投影并显示空态", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  let failed = false;
+  globalThis.fetch = async (url) => {
+    if (url.includes("/v1/world-square")) {
+      if (failed) return { ok: false, status: 503, json: async () => ({}), text: async () => "error" };
+      const payload = [{ posted_at_ms: 1, title: "正式公告", body: "公告正文", severity: "info", author_id: "alice", tags: [] }];
+      return { ok: true, status: 200, json: async () => payload, text: async () => JSON.stringify(payload) };
+    }
+    return { ok: false, status: 503, json: async () => ({}), text: async () => "error" };
+  };
+
+  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
+  await api.loadWorldNotices();
+  assert.equal(api.getWorldNotices().length, 1, "公告成功读取后应有一条正式投影");
+
+  failed = true;
+  await api.loadWorldNotices();
+  assert.deepEqual(api.getWorldNotices(), [], "公告读取失败时不能保留旧投影");
+  const lastNoticeRow = _dsElements.worldNoticeTableBody.children.at(-1);
+  assert.match(lastNoticeRow?.children?.[0]?.textContent || "", /暂无世界公告/, "失败后应显示公告空态");
+});
+
+test("admin-ds runtime: 安全治理失败时清空通告举报制裁旧投影", serial, async () => {
+  setupMinimalGlobals("http://127.0.0.1:8787");
+  let failed = false;
+  globalThis.fetch = async (url) => {
+    if (url.includes("/v1/world-safety")) {
+      if (failed) return { ok: false, status: 503, json: async () => ({}), text: async () => "error" };
+      const payload = {
+        advisories: [{ issued_at_ms: 1, subject_kind: "resident", subject_ref: "alice", action: "warn", reason: "测试", issued_by: "admin" }],
+        reports: [{ report_id: "report-1", target_kind: "resident", target_ref: "alice", reporter_id: "bob", summary: "测试举报", status: "Submitted" }],
+        resident_sanctions: [{ resident_id: "alice", reason: "测试制裁", status: "active", issued_by: "admin" }],
+      };
+      return { ok: true, status: 200, json: async () => payload, text: async () => JSON.stringify(payload) };
+    }
+    return { ok: false, status: 503, json: async () => ({}), text: async () => "error" };
+  };
+
+  const api = await loadAdminDsWithExports({ fetchMock: globalThis.fetch });
+  await api.loadSafetyData();
+  assert.equal(api.getSafetyAdvisories().length, 1, "安全通告成功读取后应有正式投影");
+  assert.equal(api.getSafetyReports().length, 1, "安全举报成功读取后应有正式投影");
+  assert.equal(api.getResidentSanctions().length, 1, "居民制裁成功读取后应有正式投影");
+
+  failed = true;
+  await api.loadSafetyData();
+  assert.deepEqual(api.getSafetyAdvisories(), [], "安全通告失败时不能保留旧投影");
+  assert.deepEqual(api.getSafetyReports(), [], "安全举报失败时不能保留旧投影");
+  assert.deepEqual(api.getResidentSanctions(), [], "居民制裁失败时不能保留旧投影");
 });
 
 test("admin-ds runtime: 外部数据写入使用安全 DOM API", serial, async () => {

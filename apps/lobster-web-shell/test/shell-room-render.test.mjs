@@ -2,6 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   chatRuntimeDetailModelForState,
+  conversationOverviewBaseStatusPills,
+  conversationOverviewContextModel,
+  conversationOverviewCaretakerStatusPillModel,
+  conversationOverviewDraftPill,
+  conversationOverviewHeaderModel,
+  conversationOverviewRuntimeStatusPills,
   composerContextItemsForState,
   composerHeroModelForState,
   composerPlaceholderForState,
@@ -14,6 +20,7 @@ import {
   roomLastActivity,
   roomPreview,
   threadStatusRailModelForState,
+  userConversationStatusPills,
 } from "../shell-room-render.js";
 
 const serial = { concurrency: false };
@@ -611,4 +618,351 @@ test("roomLastActivity: 无消息返回暂无消息", serial, () => {
   const room = {};
   const result = roomLastActivity(room, () => null);
   assert.equal(result, "暂无消息");
+});
+
+// ====== conversationOverviewHeaderModel ======
+
+test("conversationOverviewHeaderModel: user 页摘要按 overview/context/subtitle/summary 依次回退", serial, () => {
+  const base = {
+    shellPage: "user",
+    threadHeadline: "小张的房间",
+    summaryLine: "私聊 · 小张",
+    roomKind: "direct",
+    roomKindLabel: "私聊",
+    audienceLabel: "小张",
+    identity: "qa-a",
+    compactChatShell: true,
+  };
+  assert.equal(
+    conversationOverviewHeaderModel({ ...base, overviewSummary: "总览摘要", contextSummary: "上下文", subtitle: "副标题" }).summary,
+    "总览摘要",
+  );
+  assert.equal(
+    conversationOverviewHeaderModel({ ...base, contextSummary: "上下文", subtitle: "副标题" }).summary,
+    "上下文",
+  );
+  assert.equal(conversationOverviewHeaderModel({ ...base, subtitle: "副标题" }).summary, "副标题");
+  assert.equal(conversationOverviewHeaderModel(base).summary, "私聊 · 小张");
+});
+
+test("conversationOverviewHeaderModel: admin 页摘要带后台对象前缀，标题保持 threadHeadline", serial, () => {
+  const model = conversationOverviewHeaderModel({
+    shellPage: "admin",
+    threadHeadline: "城邦大厅",
+    summaryLine: "公共频道 · 大厅",
+    overviewSummary: "总览摘要",
+    roomKind: "public",
+    roomKindLabel: "公共频道",
+    audienceLabel: "全体居民",
+    identity: "admin-a",
+    compactChatShell: false,
+  });
+  assert.equal(model.title, "城邦大厅");
+  assert.equal(model.summary, "后台对象 · 公共频道 · 大厅");
+});
+
+test("conversationOverviewHeaderModel: 非 user/admin 页摘要用 summaryLine", serial, () => {
+  const model = conversationOverviewHeaderModel({
+    shellPage: "world",
+    threadHeadline: "世界广场",
+    summaryLine: "公共频道 · 广场",
+    overviewSummary: "总览摘要",
+    roomKind: "public",
+    roomKindLabel: "公共频道",
+    audienceLabel: "全体居民",
+    identity: "qa-a",
+    compactChatShell: false,
+  });
+  assert.equal(model.summary, "公共频道 · 广场");
+});
+
+test("conversationOverviewHeaderModel: direct 会话首个徽章 accent，非 direct 为 muted", serial, () => {
+  const direct = conversationOverviewHeaderModel({
+    shellPage: "user",
+    threadHeadline: "小张的房间",
+    summaryLine: "私聊 · 小张",
+    roomKind: "direct",
+    roomKindLabel: "私聊",
+    audienceLabel: "小张",
+    identity: "qa-a",
+    compactChatShell: true,
+  });
+  assert.deepEqual(direct.pills[0], { text: "私聊", tone: "accent" });
+  assert.deepEqual(direct.pills[1], { text: "小张", tone: "muted" });
+  const publicRoom = conversationOverviewHeaderModel({
+    shellPage: "world",
+    threadHeadline: "世界广场",
+    summaryLine: "公共频道 · 广场",
+    roomKind: "public",
+    roomKindLabel: "公共频道",
+    audienceLabel: "全体居民",
+    identity: "qa-a",
+    compactChatShell: false,
+  });
+  assert.deepEqual(publicRoom.pills[0], { text: "公共频道", tone: "muted" });
+});
+
+test("conversationOverviewHeaderModel: 紧凑聊天壳隐藏身份徽章，宽屏显示", serial, () => {
+  const base = {
+    shellPage: "user",
+    threadHeadline: "小张的房间",
+    summaryLine: "私聊 · 小张",
+    roomKind: "direct",
+    roomKindLabel: "私聊",
+    audienceLabel: "小张",
+    identity: "qa-a",
+  };
+  const compact = conversationOverviewHeaderModel({ ...base, compactChatShell: true });
+  assert.ok(!compact.pills.some((pill) => pill.text === "身份 qa-a"));
+  const wide = conversationOverviewHeaderModel({ ...base, compactChatShell: false });
+  assert.deepEqual(wide.pills[2], { text: "身份 qa-a", tone: "muted" });
+});
+
+test("conversationOverviewHeaderModel: 场景横幅 warm、管家徽章 accent 依序追加", serial, () => {
+  const model = conversationOverviewHeaderModel({
+    shellPage: "user",
+    threadHeadline: "小张的房间",
+    summaryLine: "私聊 · 小张",
+    roomKind: "direct",
+    roomKindLabel: "私聊",
+    audienceLabel: "小张",
+    identity: "qa-a",
+    compactChatShell: true,
+    sceneBanner: "夜晚 · 客厅",
+    caretaker: { name: "阿福", role_label: "房间管家" },
+  });
+  assert.deepEqual(model.pills.slice(-2), [
+    { text: "夜晚 · 客厅", tone: "warm" },
+    { text: "阿福 · 房间管家", tone: "accent" },
+  ]);
+});
+
+test("conversationOverviewHeaderModel: 无横幅无管家时不追加多余徽章", serial, () => {
+  const model = conversationOverviewHeaderModel({
+    shellPage: "user",
+    threadHeadline: "小张的房间",
+    summaryLine: "私聊 · 小张",
+    roomKind: "direct",
+    roomKindLabel: "私聊",
+    audienceLabel: "小张",
+    identity: "qa-a",
+    compactChatShell: true,
+    sceneBanner: "",
+    caretaker: null,
+  });
+  assert.equal(model.pills.length, 2);
+});
+
+// ====== conversationOverviewContextModel ======
+
+test("conversationOverviewContextModel: admin 页标题带后台摘要前缀", serial, () => {
+  const model = conversationOverviewContextModel({
+    shellPage: "admin",
+    summaryLine: "公共频道 · 大厅",
+    contextSummary: "上下文摘要",
+    statusLine: "状态行",
+  });
+  assert.equal(model.title, "后台摘要 · 公共频道 · 大厅");
+  assert.deepEqual(model.copies, ["上下文摘要", "状态行"]);
+});
+
+test("conversationOverviewContextModel: 非 admin 页标题直接用 summaryLine", serial, () => {
+  const model = conversationOverviewContextModel({
+    shellPage: "world",
+    summaryLine: "公共频道 · 广场",
+    contextSummary: "上下文摘要",
+    statusLine: "状态行",
+  });
+  assert.equal(model.title, "公共频道 · 广场");
+  assert.deepEqual(model.copies, ["上下文摘要", "状态行"]);
+});
+
+// ====== conversationOverviewBaseStatusPills ======
+
+function baseStatusInput(overrides = {}) {
+  return {
+    chatStatusSummary: "消息已同步",
+    queueSummary: "队列空",
+    syncLabel: "已同步",
+    routeLabel: "本地路由",
+    hasSendError: false,
+    pendingEchoCount: 0,
+    caretakerPendingCount: 0,
+    unreadCount: 0,
+    refreshInProgress: false,
+    compactChatShell: false,
+    messageCount: 5,
+    ...overrides,
+  };
+}
+
+test("conversationOverviewBaseStatusPills: 默认全量六枚徽章与安静 tone", serial, () => {
+  const pills = conversationOverviewBaseStatusPills(baseStatusInput());
+  assert.deepEqual(pills, [
+    { text: "消息已同步", tone: "accent" },
+    { text: "队列空", tone: "muted" },
+    { text: "已同步", tone: "accent" },
+    { text: "本地路由", tone: "muted" },
+    { text: "5 条消息", tone: "muted" },
+    { text: "已读", tone: "muted" },
+  ]);
+});
+
+test("conversationOverviewBaseStatusPills: 发送失败时聊天状态与路由转 danger", serial, () => {
+  const pills = conversationOverviewBaseStatusPills(baseStatusInput({ hasSendError: true }));
+  assert.equal(pills[0].tone, "danger");
+  assert.equal(pills[3].tone, "danger");
+});
+
+test("conversationOverviewBaseStatusPills: pending echo 转 warm，仅影响聊天状态", serial, () => {
+  const pills = conversationOverviewBaseStatusPills(baseStatusInput({ pendingEchoCount: 2 }));
+  assert.equal(pills[0].tone, "warm");
+  assert.equal(pills[3].tone, "muted");
+});
+
+test("conversationOverviewBaseStatusPills: 待跟进或未读让队列 warm，刷新中同步 warm", serial, () => {
+  const withCaretaker = conversationOverviewBaseStatusPills(baseStatusInput({ caretakerPendingCount: 1 }));
+  assert.equal(withCaretaker[1].tone, "warm");
+  const withUnread = conversationOverviewBaseStatusPills(baseStatusInput({ unreadCount: 3 }));
+  assert.equal(withUnread[1].tone, "warm");
+  const refreshing = conversationOverviewBaseStatusPills(baseStatusInput({ refreshInProgress: true }));
+  assert.equal(refreshing[2].tone, "warm");
+});
+
+test("conversationOverviewBaseStatusPills: 紧凑壳隐藏消息数徽章", serial, () => {
+  const pills = conversationOverviewBaseStatusPills(baseStatusInput({ compactChatShell: true }));
+  assert.equal(pills.length, 5);
+  assert.ok(!pills.some((pill) => pill.text.endsWith("条消息")));
+});
+
+test("conversationOverviewBaseStatusPills: 未读徽章计数与 warm tone", serial, () => {
+  const pills = conversationOverviewBaseStatusPills(baseStatusInput({ unreadCount: 4 }));
+  assert.deepEqual(pills[pills.length - 1], { text: "4 条未读", tone: "warm" });
+});
+
+// ====== conversationOverviewDraftPill ======
+
+test("conversationOverviewDraftPill: 有草稿显示字数 accent 徽章", serial, () => {
+  assert.deepEqual(
+    conversationOverviewDraftPill({ hasDraft: true, draftLength: 12 }),
+    { text: "12 字草稿", tone: "accent" },
+  );
+});
+
+test("conversationOverviewDraftPill: 无草稿返回 null", serial, () => {
+  assert.equal(conversationOverviewDraftPill({ hasDraft: false, draftLength: 0 }), null);
+});
+
+// ====== conversationOverviewCaretakerStatusPillModel ======
+
+test("conversationOverviewCaretakerStatusPillModel: 有待跟进转 warm", serial, () => {
+  assert.deepEqual(
+    conversationOverviewCaretakerStatusPillModel({
+      caretaker: { status: "值守中" },
+      caretakerPendingCount: 2,
+    }),
+    { text: "值守中 · 2 条访客提醒", tone: "warm" },
+  );
+});
+
+test("conversationOverviewCaretakerStatusPillModel: 无待跟进 accent", serial, () => {
+  assert.deepEqual(
+    conversationOverviewCaretakerStatusPillModel({
+      caretaker: { status: "在线" },
+      caretakerPendingCount: 0,
+    }),
+    { text: "在线 · 0 条访客提醒", tone: "accent" },
+  );
+});
+
+test("conversationOverviewCaretakerStatusPillModel: 无管家返回 null", serial, () => {
+  assert.equal(
+    conversationOverviewCaretakerStatusPillModel({ caretaker: null, caretakerPendingCount: 0 }),
+    null,
+  );
+});
+
+// ====== conversationOverviewRuntimeStatusPills ======
+
+test("conversationOverviewRuntimeStatusPills: 发送中/发送失败/回退快照按序追加", serial, () => {
+  assert.deepEqual(
+    conversationOverviewRuntimeStatusPills({
+      isSendingMessage: true,
+      hasSendError: true,
+      hasSyncFallback: true,
+    }),
+    [
+      { text: "发送中", tone: "warm" },
+      { text: "发送失败", tone: "danger" },
+      { text: "回退快照", tone: "warm" },
+    ],
+  );
+});
+
+test("conversationOverviewRuntimeStatusPills: 静默态返回空列表", serial, () => {
+  assert.deepEqual(
+    conversationOverviewRuntimeStatusPills({
+      isSendingMessage: false,
+      hasSendError: false,
+      hasSyncFallback: false,
+    }),
+    [],
+  );
+});
+
+// ====== userConversationStatusPills ======
+
+function userStatusInput(overrides = {}) {
+  return {
+    syncLabel: "已同步",
+    refreshInProgress: false,
+    unreadCount: 0,
+    caretaker: null,
+    caretakerPendingCount: 0,
+    hasDraft: false,
+    hasSendError: false,
+    isSendingMessage: false,
+    ...overrides,
+  };
+}
+
+test("userConversationStatusPills: 静默态只有同步与已读两枚前置徽章", serial, () => {
+  const model = userConversationStatusPills(userStatusInput());
+  assert.deepEqual(model.leadingPills, [
+    { text: "已同步", tone: "accent" },
+    { text: "已读", tone: "muted" },
+  ]);
+  assert.deepEqual(model.trailingPills, []);
+});
+
+test("userConversationStatusPills: 刷新中同步 warm，未读计数 warm", serial, () => {
+  const model = userConversationStatusPills(
+    userStatusInput({ refreshInProgress: true, unreadCount: 3 }),
+  );
+  assert.deepEqual(model.leadingPills, [
+    { text: "已同步", tone: "warm" },
+    { text: "3 条未读", tone: "warm" },
+  ]);
+});
+
+test("userConversationStatusPills: 管家在线徽章按待跟进转 warm", serial, () => {
+  const quiet = userConversationStatusPills(
+    userStatusInput({ caretaker: { name: "阿福" }, caretakerPendingCount: 0 }),
+  );
+  assert.deepEqual(quiet.trailingPills, [{ text: "阿福 在线", tone: "accent" }]);
+  const busy = userConversationStatusPills(
+    userStatusInput({ caretaker: { name: "阿福" }, caretakerPendingCount: 2 }),
+  );
+  assert.deepEqual(busy.trailingPills, [{ text: "阿福 在线", tone: "warm" }]);
+});
+
+test("userConversationStatusPills: 草稿/发送失败/发送中按序追加", serial, () => {
+  const model = userConversationStatusPills(
+    userStatusInput({ hasDraft: true, hasSendError: true, isSendingMessage: true }),
+  );
+  assert.deepEqual(model.trailingPills, [
+    { text: "草稿已保存", tone: "accent" },
+    { text: "发送失败", tone: "danger" },
+    { text: "发送中", tone: "warm" },
+  ]);
 });

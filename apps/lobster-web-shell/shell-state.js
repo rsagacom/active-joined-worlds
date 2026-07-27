@@ -71,12 +71,14 @@ export function defaultChatPaneForViewport(matchMedia, activeRoomId) {
   return "split";
 }
 
-export function resolveChatPaneMode(page, mode) {
+export function resolveChatPaneMode(page, mode, fallback = "split") {
   const stored = safeLocalStorageGet(chatPaneStorageKey(page, mode));
   if (stored === "list" || stored === "thread" || stored === "split") {
     return stored;
   }
-  return "split";
+  return fallback === "list" || fallback === "thread" || fallback === "split"
+    ? fallback
+    : "split";
 }
 
 // ─── Room Read Markers ────────────────────────────────────

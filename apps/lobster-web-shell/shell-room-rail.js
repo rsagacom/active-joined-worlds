@@ -519,6 +519,28 @@ export function roomStatsSpec(rooms, allRooms, roomHasDraftFn, unreadCountFn, vi
   return { unreadTotal, draftTotal, followUpTotal, directCount, publicCount };
 }
 
+export function roomDigestMetricsSpec(rooms, {
+  roomKind,
+  unreadCount,
+  roomHasDraft,
+  roomFollowUpCount,
+  caretakerPendingCount,
+  caretakerNotificationCount,
+} = {}) {
+  const list = Array.isArray(rooms) ? rooms : [];
+  return {
+    activeRoom: null,
+    directCount: list.filter((room) => roomKind(room) === "direct").length,
+    publicCount: list.filter((room) => roomKind(room) === "public").length,
+    systemCount: list.filter((room) => roomKind(room) === "system").length,
+    unreadTotal: list.reduce((sum, room) => sum + Number(unreadCount(room) || 0), 0),
+    draftTotal: list.reduce((sum, room) => sum + Number(Boolean(roomHasDraft(room?.id))), 0),
+    followUpCount: list.reduce((sum, room) => sum + Number((roomFollowUpCount(room) || 0) > 0), 0),
+    caretakerQueue: list.reduce((sum, room) => sum + Number(caretakerPendingCount(room) || 0), 0),
+    notificationTotal: list.reduce((sum, room) => sum + Number(caretakerNotificationCount(room) || 0), 0),
+  };
+}
+
 export function roomEmptyStateSpec(gatewayUrl) {
   return gatewayUrl
     ? "没有匹配到频道或私信，可以切换筛选、清空搜索，或先从左侧打开一个会话。"

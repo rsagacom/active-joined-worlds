@@ -887,6 +887,9 @@
 }
 
 @media (max-width: 768px) {
+  .admin-ds-main-area {
+    margin-left: var(--ds-sidebar-collapsed);
+  }
   .ds-sidebar {
     position: fixed;
     left: 0;

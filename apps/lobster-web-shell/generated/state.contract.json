@@ -189,7 +189,7 @@
           "layer_id": "image-layer",
           "preset": "contract-square-night",
           "asset_hint": "contract-square-night",
-          "aspect_ratio_permyriad": 16000,
+          "aspect_ratio_permyriad": 5625,
           "owner_editable": true
         },
         "hotspot_layer": {
@@ -232,7 +232,7 @@
           "layer_id": "image-layer",
           "preset": "contract-private-room",
           "asset_hint": "contract-private-room",
-          "aspect_ratio_permyriad": 16000,
+          "aspect_ratio_permyriad": 5625,
           "owner_editable": true
         },
         "hotspot_layer": {

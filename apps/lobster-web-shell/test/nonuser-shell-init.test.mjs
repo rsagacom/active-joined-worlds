@@ -37,7 +37,10 @@ test("admin shell can hydrate contract-driven callout and thread status rail", s
     assert.equal(activeRoomName?.textContent, "合同线程标题 · 广场群聊");
     assert.equal(roomStageTitle?.textContent, "合同线程标题 · 广场群聊");
     assert.match(caretakerStatus?.textContent || "", /合同线程标题 · 广场群聊/);
-    assert.equal(composerInput?.placeholder, "发到 合同线程标题 · 广场群聊");
+    assert.match(
+      composerInput?.placeholder || "",
+      /^发到 合同线程标题 · 广场群聊(?:（会先保存在本地，等待同步）)?$/,
+    );
     assert.ok(conversationMeta);
     assert.match(conversationMeta?.textContent || "", /合同线程标题 · 广场群聊/);
     assert.match(
@@ -159,7 +162,10 @@ test("unified shell can hydrate contract-driven callout and thread status rail",
     assert.equal(activeRoomName?.textContent, "合同线程标题 · 广场群聊");
     assert.equal(roomStageTitle?.textContent, "合同线程标题 · 广场群聊");
     assert.match(caretakerStatus?.textContent || "", /合同线程标题 · 广场群聊/);
-    assert.equal(composerInput?.placeholder, "在 合同线程标题 · 广场群聊 里说点什么");
+    assert.match(
+      composerInput?.placeholder || "",
+      /^在 合同线程标题 · 广场群聊 里说点什么(?:（会先保存在本地，等待同步）)?$/,
+    );
     assert.ok(conversationMeta);
     assert.match(conversationMeta?.textContent || "", /合同线程标题 · 广场群聊/);
     assert.match(
@@ -296,9 +302,9 @@ test("non-user shells can switch to direct threads without leaking raw room titl
       assert.match(chatDetailContent?.textContent || "", /合同线程标题 · 居所直聊/);
       assert.match(chatDetailContent?.textContent || "", /你与 builder/);
       assert.doesNotMatch(chatDetailContent?.textContent || "", /会话对象\s*居所\s*·\s*builder/);
-      assert.ok(
-        composerInput?.placeholder === "发消息给 合同线程标题 · 居所直聊" ||
-          composerInput?.placeholder === "发给 合同线程标题 · 居所直聊",
+      assert.match(
+        composerInput?.placeholder || "",
+        /^发(?:消息给|给) 合同线程标题 · 居所直聊(?:（会先保存在本地，等待同步）)?$/,
       );
     } finally {
       app.cleanup();
