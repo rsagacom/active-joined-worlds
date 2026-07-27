@@ -88,6 +88,21 @@ jobs:
       - name: Provider federation smoke
         run: scripts/smoke-provider-federation.sh
 
+      - name: Install Node.js for web smokes
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/lobster-web-shell/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: apps/lobster-web-shell
+        run: npm ci
+
+      - name: Install Playwright chromium
+        working-directory: apps/lobster-web-shell
+        run: npx playwright install --with-deps chromium
+
       - name: Web shell smoke
         run: scripts/smoke-web-shell.sh
 
@@ -120,6 +135,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci
+
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Web shell tests
         run: npm test
