@@ -7,8 +7,9 @@ use super::*;
 use crate::compact_shell::compact_terminal_shell_lines;
 use crate::terminal_smoke_script::run_submission_script;
 use crate::terminal_submission::{
-    build_edit_message_request, build_recall_message_request,
-    handle_terminal_submission_with_gateway_post,
+    build_cli_search_path, build_edit_message_request, build_recall_message_request,
+    gateway_bearer_header_value, handle_terminal_submission_with_gateway_post,
+    resolve_direct_conversation_id, run_cli_search_command,
 };
 use crate::transport_sync::{merge_polled_messages, republish_pending_messages};
 use chat_core::{
@@ -949,6 +950,7 @@ fn help_command_lists_admin_governance_commands() {
     assert!(help_text.contains("/invite revoke"));
     assert!(help_text.contains("/rooms"));
     assert!(help_text.contains("/config"));
+    assert!(help_text.contains("/search <关键词>"));
     assert!(help_text.contains("/world-status"));
     assert!(help_text.contains("/cities"));
     assert!(help_text.contains("/world-safety"));
@@ -956,6 +958,75 @@ fn help_command_lists_admin_governance_commands() {
     assert!(help_text.contains("/safety-residents"));
     assert!(help_text.contains("/world-directory"));
     assert!(help_text.contains("/world-square"));
+    let _ = fs::remove_dir_all(&temp_root);
+}
+
+#[test]
+fn cli_search_path_scopes_identity_room_and_encoded_query() {
+    let path = build_cli_search_path(
+        "zhangsan",
+        &ConversationId("dm:openclaw:zhangsan".into()),
+        "晚上 一起吃饭",
+        20,
+    )
+    .expect("search path should build");
+    assert_eq!(
+        path,
+        "/v1/cli/search?for=user%3Azhangsan&q=%E6%99%9A%E4%B8%8A%20%E4%B8%80%E8%B5%B7%E5%90%83%E9%A5%AD&room_id=dm%3Aopenclaw%3Azhangsan&limit=20"
+    );
+}
+
+#[test]
+fn cli_search_command_projects_gateway_hits_into_tui_notice() {
+    let (temp_root, mut store) = temp_store("lobster-tui-cli-search");
+    let conversation = launch_conversation(LaunchSurface::User);
+    let conversation_id = conversation.conversation_id.clone();
+    store.upsert_conversation(conversation).unwrap();
+    let transport = RecordingTransport::new();
+    let mut active_conversation_id = conversation_id.clone();
+    let mut selected_conversation_id = conversation_id.clone();
+    let mut calls = Vec::new();
+
+    run_cli_search_command(
+        &mut store,
+        &mut active_conversation_id,
+        &mut selected_conversation_id,
+        "zhangsan",
+        "晚上",
+        &mut |path| {
+            calls.push(path.to_string());
+            Ok(serde_json::json!([
+                {
+                    "sender": "openclaw",
+                    "text": "晚上一起吃饭吗",
+                    "timestamp_label": "now"
+                }
+            ]))
+        },
+    )
+    .expect("search should project gateway hits");
+
+    assert_eq!(calls.len(), 1);
+    assert!(calls[0].starts_with("/v1/cli/search?for=user%3Azhangsan"));
+    assert_eq!(active_conversation_id, conversation_id);
+    assert_eq!(selected_conversation_id, conversation_id);
+    assert!(transport.published.is_empty());
+    let entries = store.export_messages(&conversation_id);
+    assert_eq!(entries.len(), 1);
+    assert!(
+        entries[0]
+            .envelope
+            .body
+            .plain_text
+            .contains("搜索「晚上」命中 1 条")
+    );
+    assert!(
+        entries[0]
+            .envelope
+            .body
+            .plain_text
+            .contains("openclaw: 晚上一起吃饭吗")
+    );
     let _ = fs::remove_dir_all(&temp_root);
 }
 
@@ -1229,6 +1300,35 @@ fn dm_command_opens_new_direct_conversation_and_selects_it() {
 }
 
 #[test]
+fn dm_gateway_failure_does_not_fallback_to_local_conversation() {
+    let mut requested_url = None;
+    let result =
+        resolve_direct_conversation_id("tiyan", "builder", Some("http://127.0.0.1:8790/"), |url| {
+            requested_url = Some(url);
+            Err("Gateway 返回 401".to_string())
+        });
+
+    assert_eq!(result.unwrap_err(), "Gateway 返回 401");
+    assert_eq!(
+        requested_url.as_deref(),
+        Some("http://127.0.0.1:8790/v1/direct/open")
+    );
+}
+
+#[test]
+fn dm_gateway_empty_conversation_id_does_not_create_invalid_room() {
+    let result =
+        resolve_direct_conversation_id("tiyan", "builder", Some("http://127.0.0.1:8790"), |_url| {
+            Ok(ConversationId("   ".into()))
+        });
+
+    assert_eq!(
+        result.unwrap_err(),
+        "Gateway 私聊响应缺少有效 conversation_id"
+    );
+}
+
+#[test]
 fn dm_command_is_noop_for_self_target() {
     let (temp_root, mut store) = temp_store("lobster-tui-dm-self");
     let active = launch_conversation(LaunchSurface::User);
@@ -1484,14 +1584,16 @@ fn recall_command_without_args_shows_usage_without_publishing_plain_text() {
 
 #[test]
 fn terminal_edit_command_request_matches_gateway_shell_contract() {
-    let request = build_edit_message_request("rsaga", "msg-42", "修订后的正文");
+    let room_id = ConversationId("room:world:lobby".into());
+    let request = build_edit_message_request("rsaga", &room_id, "msg-42", "修订后的正文");
 
     assert_eq!(request.0, "/v1/shell/message/edit");
     assert_eq!(
         request.1,
         serde_json::json!({
-            "sender": "rsaga",
+            "room_id": "room:world:lobby",
             "message_id": "msg-42",
+            "actor": "rsaga",
             "text": "修订后的正文",
         })
     );
@@ -1499,16 +1601,28 @@ fn terminal_edit_command_request_matches_gateway_shell_contract() {
 
 #[test]
 fn terminal_recall_command_request_matches_gateway_shell_contract() {
-    let request = build_recall_message_request("rsaga", "msg-42");
+    let room_id = ConversationId("room:world:lobby".into());
+    let request = build_recall_message_request("rsaga", &room_id, "msg-42");
 
     assert_eq!(request.0, "/v1/shell/message/recall");
     assert_eq!(
         request.1,
         serde_json::json!({
-            "sender": "rsaga",
+            "room_id": "room:world:lobby",
             "message_id": "msg-42",
+            "actor": "rsaga",
         })
     );
+}
+
+#[test]
+fn tui_gateway_auth_header_normalizes_optional_bearer_token() {
+    assert_eq!(
+        gateway_bearer_header_value(Some("  session-123  ")).as_deref(),
+        Some("Bearer session-123")
+    );
+    assert_eq!(gateway_bearer_header_value(Some("   ")), None);
+    assert_eq!(gateway_bearer_header_value(None), None);
 }
 
 #[test]
@@ -4913,6 +5027,37 @@ fn user_mode_guide_companion_uses_canonical_direct_id() {
             .iter()
             .all(|item| item.conversation_id.0 != "dm:tiyan:guide")
     );
+}
+
+#[test]
+fn open_slots_keep_seeded_user_conversations_before_gateway_dynamic_rooms() {
+    let (temp_root, mut store) = temp_store("lobster-tui-open-slots");
+    let active = launch_conversation(LaunchSurface::User);
+    store.upsert_conversation(active.clone()).unwrap();
+    for conversation in launch_companion_conversations(LaunchSurface::User) {
+        store.upsert_conversation(conversation).unwrap();
+    }
+
+    let mut gateway_room = active.clone();
+    gateway_room.conversation_id = ConversationId("room:city:aurora-hub:announcements".into());
+    gateway_room.scope = ConversationScope::CityPrivate;
+    store.upsert_conversation(gateway_room).unwrap();
+
+    let ordered = selectable_conversations(&store, LaunchSurface::User, &active.conversation_id);
+    let ids = ordered
+        .iter()
+        .map(|conversation| conversation.conversation_id.0.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        ids,
+        vec![
+            "room:city:core-harbor:lobby",
+            "room:world:lobby",
+            "dm:guide:tiyan",
+            "room:city:aurora-hub:announcements",
+        ]
+    );
+    let _ = fs::remove_dir_all(&temp_root);
 }
 
 #[test]

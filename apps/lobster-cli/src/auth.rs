@@ -233,6 +233,37 @@ where
         .map_err(|error| format!("decode {action} response failed: {error}"))
 }
 
+/// Mirror `run_query` for sensitive GET endpoints, injecting the Bearer token.
+pub(crate) fn get_authenticated<R>(url: &str, token: &str, action: &str) -> Result<R, String>
+where
+    R: serde::de::DeserializeOwned,
+{
+    let response = match ureq::get(url)
+        .set("Authorization", &format!("Bearer {token}"))
+        .call()
+    {
+        Ok(response) => response,
+        Err(ureq::Error::Status(status, response)) => {
+            let body = response.into_string().ok();
+            if status == 401 {
+                return Err(format!(
+                    "{action} failed: session token invalid or expired (401). run `lobster-cli login` to re-authenticate"
+                ));
+            }
+            return Err(format_gateway_status_error(
+                &format!("{action} request"),
+                status,
+                body.as_deref(),
+            ));
+        }
+        Err(error) => return Err(format!("{action} request failed: {error}")),
+    };
+
+    response
+        .into_json::<R>()
+        .map_err(|error| format!("decode {action} response failed: {error}"))
+}
+
 // ───────────────────────── 请求/响应结构体（CLI 本地视图，对齐 gateway_models.rs） ─────────────────────────
 
 #[derive(Debug, Clone, Serialize)]

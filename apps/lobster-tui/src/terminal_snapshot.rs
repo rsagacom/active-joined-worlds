@@ -1,7 +1,7 @@
 use chat_storage::ArchiveStore;
 use serde::Serialize;
 
-use crate::app_bootstrap::bootstrap_app;
+use crate::app_bootstrap::{AppBootstrap, bootstrap_app};
 use crate::compact_shell::compact_terminal_shell_lines;
 use crate::transport_sync::merge_polled_messages;
 use crate::{
@@ -18,9 +18,35 @@ pub(crate) fn smoke_dump_requested() -> bool {
 
 pub(crate) fn dump_terminal_shell_once(launch_mode: LaunchSurface) -> Result<String, String> {
     let context = build_smoke_context(launch_mode)?;
+    dump_terminal_shell_context(&context)
+}
+
+pub(crate) fn dump_terminal_shell_from_bootstrap(
+    launch_mode: LaunchSurface,
+    bootstrap: &AppBootstrap,
+) -> Result<String, String> {
+    let transport_state_summary = format!(
+        "{} · 脚本合流",
+        friendly_connection_label(bootstrap.transport.connection_state())
+    );
+    let context = crate::build_launch_context(
+        launch_mode,
+        &bootstrap.store,
+        &bootstrap.active_conversation_id,
+        &bootstrap.selected_conversation_id,
+        transport_state_summary,
+        bootstrap.desktop_render,
+        bootstrap.transcript_scroll,
+        bootstrap.focus_area,
+        &bootstrap.input_buffer,
+    )?;
+    dump_terminal_shell_context(&context)
+}
+
+pub(crate) fn dump_terminal_shell_context(context: &LaunchContext) -> Result<String, String> {
     match std::env::var("LOBSTER_TUI_SMOKE_DUMP").ok().as_deref() {
-        Some("json") => dump_terminal_shell_snapshot_json(&context),
-        _ => Ok(compact_terminal_shell_lines(&context, 104, 34).join("\n")),
+        Some("json") => dump_terminal_shell_snapshot_json(context),
+        _ => Ok(compact_terminal_shell_lines(context, 104, 34).join("\n")),
     }
 }
 
@@ -56,6 +82,8 @@ struct TerminalSnapshot {
     active_conversation_id: String,
     selected_conversation_id: String,
     active_title: String,
+    message_count: usize,
+    latest_message_hint: String,
     visible_panels: Vec<String>,
 }
 
@@ -67,6 +95,8 @@ fn dump_terminal_shell_snapshot_json(context: &LaunchContext) -> Result<String, 
         active_conversation_id: context.active_conversation_id.0.clone(),
         selected_conversation_id: context.selected_conversation_id.0.clone(),
         active_title: context.active_conversation.clone(),
+        message_count: context.message_count,
+        latest_message_hint: context.latest_message_hint.clone(),
         visible_panels: visible_panels(context),
     })
     .map_err(|error| format!("serialize smoke snapshot failed: {error}"))

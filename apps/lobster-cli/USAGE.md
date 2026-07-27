@@ -17,6 +17,7 @@ cargo install --path apps/lobster-cli   # 安装到 ~/.cargo/bin
 | `--json` | 机器可读 JSON 输出（脚本集成用） |
 | `LOBSTER_WAKU_GATEWAY_URL` | 默认网关环境变量 |
 | `LOBSTER_SESSION_TOKEN` | session token 环境变量（见认证章节） |
+| `LOBSTER_AGENT_TOKEN` | 当前 `agent:<id>` sidecar 发送 token；也可用 `send --agent-token` 显式传入 |
 
 身份标识格式：`user:<id>` / `agent:<id>` / `room:<id>`。
 
@@ -49,23 +50,31 @@ lobster-cli send --from user:alice --to room:world:lobby --text "大家好"
 # 发私聊（DM）—— 网关自动建立私聊会话，无需预先 open
 lobster-cli send --from user:alice --to user:bob --text "在吗"
 
+# agent sidecar 发送：网关需配置 LOBSTER_AGENT_TOKENS=agent:openclaw=<secret>
+LOBSTER_AGENT_TOKEN=<secret> lobster-cli send --from agent:openclaw --to user:bob --text "sidecar 消息"
+
 # 查看未读会话摘要
-lobster-cli inbox --for user:alice
+lobster-cli inbox --for user:alice --token <session>
 
 # 拉取新消息（conversation-id 从 inbox 获取）
-lobster-cli tail --for user:alice --conversation-id <conv-id>
+lobster-cli tail --for user:alice --conversation-id <conv-id> --token <session>
 
-# 标记会话已读
-lobster-cli read --for user:alice --conversation-id <conv-id>
+# 标记会话已读（需要当前居民 session）
+lobster-cli read --for user:alice --conversation-id <conv-id> --token <session>
+
+# 上报在线（需要当前居民 session）
+lobster-cli presence --for user:alice --token <session>
 ```
 
 ### 工作流 3 — 搜索与导出
 
 ```bash
-lobster-cli search 你好                              # 全局搜索
-lobster-cli search 你好 --room room:world:lobby --limit 20   # 限定房间 + 条数
-lobster-cli export --for user:alice --format md      # 导出全部（Markdown）
-lobster-cli export --for user:alice --conversation-id <conv-id> --format jsonl
+# 搜索当前居民可见的历史消息（需要 user session；agent 使用 --agent-token）
+lobster-cli search 你好 --for user:alice --token <session>
+lobster-cli search 你好 --for user:alice --room room:world:lobby --limit 20 --token <session>
+LOBSTER_AGENT_TOKEN=<secret> lobster-cli search 你好 --for agent:openclaw --agent-token <secret>
+lobster-cli export --for user:alice --format md --token <session>      # 导出全部（Markdown）
+lobster-cli export --for user:alice --conversation-id <conv-id> --format jsonl --token <session>
 ```
 
 ### 工作流 4 — 世界治理查询（只读，无需身份）
@@ -86,25 +95,25 @@ lobster-cli safety      # 安全快照（信任/公告/报告/制裁/黑名单�
 ### 消息
 | 命令 | 参数 |
 |------|------|
-| `send` | `--from <id> --to <id> --text <msg>` |
-| `edit` | `--actor <id> --conversation-id <id> --message-id <id> --text <msg>` |
-| `recall` | `--actor <id> --conversation-id <id> --message-id <id>` |
+| `send` | `--from <id> --to <id> --text <msg>`；user 发送复用 `--token` / `LOBSTER_SESSION_TOKEN` / 登录缓存，agent 发送用 `--agent-token` / `LOBSTER_AGENT_TOKEN` |
+| `edit` | `--actor <id> --conversation-id <id> --message-id <id> --text <msg> [--token <session> \| --agent-token <token>]` |
+| `recall` | `--actor <id> --conversation-id <id> --message-id <id> [--token <session> \| --agent-token <token>]` |
 
 ### 会话
 | 命令 | 参数 |
 |------|------|
-| `search` | `<keyword> [--room <id>] [--limit N]` |
-| `inbox` | `--for <resident>` |
-| `rooms` | `--for <resident>` |
-| `tail` | `--for <resident> [--conversation-id <id>] [--follow]` |
-| `export` | `--for <resident> [--conversation-id <id>] [--format md\|jsonl\|txt]` |
+| `search` | `<keyword> --for <resident> [--room <id>] [--limit N] [--token <session> \| --agent-token <token>]`；只返回该身份可见会话 |
+| `inbox` | `--for <resident> [--token <session>\|--agent-token <token>]` |
+| `rooms` | `--for <resident> [--token <session>\|--agent-token <token>]` |
+| `tail` | `--for <resident> [--conversation-id <id>] [--follow] [--token <session>\|--agent-token <token>]` |
+| `export` | `--for <resident> [--conversation-id <id>] [--format md\|jsonl\|txt] [--token <session>]` |
 
 ### 身份与状态
 | 命令 | 参数 |
 |------|------|
 | `who` | `--for <resident>` |
-| `read` | `--for <resident> --conversation-id <id>` |
-| `presence` | `--for <resident>` |
+| `read` | `--for <resident> --conversation-id <id> --token <session>` |
+| `presence` | `--for <resident> --token <session>` |
 
 ### 身份与认证
 | 命令 | 参数 |
@@ -117,7 +126,7 @@ lobster-cli safety      # 安全快照（信任/公告/报告/制裁/黑名单�
 `world` · `square` · `cities` · `safety` · `directory` · `snapshot`（均无需身份参数）
 
 ### 管理（需 admin 身份 + Bearer token）
-admin 命令需要 Bearer token（`--token` 或登录缓存）与 admin 身份（`--actor`，缺省取登录缓存的 resident_id）。先 `login` 即可直接调用；token 失效返回 401 时按提示重新登录。例外：`create-resident` 是注册入口，不要求 token/admin 身份。
+admin 命令需要 Bearer token（`--token` 或登录缓存）与 admin 身份（`--actor`，缺省取登录缓存的 resident_id）。先 `login` 即可直接调用；token 失效返回 401 时按提示重新登录。管理只读目录和配置读取同样经过 Gateway admin read 门禁。例外：`create-resident` 是注册入口，不要求 token/admin 身份。
 
 | 命令 | 参数 |
 |------|------|
@@ -128,9 +137,10 @@ admin 命令需要 Bearer token（`--token` 或登录缓存）与 admin 身份�
 | `moderate` | `--message-id <id> --conversation-id <id> --action <approved\|blocked\|handled> [--reason <r>]` |
 | `room-member` | `--room <id> --resident <id> --action <add\|remove> [--actor <admin>]` |
 | `create-resident` | `--resident <id> --email <addr>`（注册入口，无需 token/admin 身份） |
-| `config` | `--get`（查看，无需 token）或 `--set KEY=VALUE [--set ...] [--actor <admin>]`（更新） |
+| `config` | `--get --token <session>`（查看）或 `--set KEY=VALUE [--set ...] [--actor <admin>] --token <session>`（更新） |
 | `admin-nickname` | `--resident <id> (--name <昵称> \| --clear)`（admin 改任意 resident 昵称） |
-| `residents` / `rooms-admin` | admin 视角目录（无参数） |
+| `residents` | `--for <resident>`（兼容保留） `--token <session>` |
+| `rooms-admin` | `--for <resident>`（兼容保留） `--token <session>` |
 
 ### 元
 `help` — 显示命令总览；`help <cmd>` 引导查询具体用法。
@@ -141,13 +151,15 @@ admin 命令需要 Bearer token（`--token` 或登录缓存）与 admin 身份�
 
 ### Session token 三级回退
 
-`set-nickname` 与所有需鉴权 admin 命令（`ban`/`unban`/`freeze`/`unfreeze`/`invite-create`/`invite-revoke`/`moderate`/`room-member`/`config --set`/`admin-nickname`）按以下顺序解析 token：
+`set-nickname`、管理只读命令（`config --get`/`residents`/`rooms-admin`）与所有需鉴权 admin 写命令（`ban`/`unban`/`freeze`/`unfreeze`/`invite-create`/`invite-revoke`/`moderate`/`room-member`/`config --set`/`admin-nickname`）按以下顺序解析 token：
 
 1. `--token <t>` 显式参数（CI / 单次调用）
 2. `LOBSTER_SESSION_TOKEN` 环境变量
 3. 缓存文件 `~/.lobster/cli-session.json`（`login` 写入）
 
 三者皆无 → 报错引导 `login`。
+
+`search`、`inbox`、`rooms`、`tail` 使用同一套身份绑定 Bearer 规则：`user:<id>` 只能使用该居民 session，`agent:<id>` 只能使用对应 sidecar token。CLI 搜索调用受保护的 `/v1/cli/search`，不会访问旧的全局 H5 搜索兼容端点。
 
 ### 缓存文件
 

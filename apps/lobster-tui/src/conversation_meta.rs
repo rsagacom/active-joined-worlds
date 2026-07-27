@@ -197,24 +197,48 @@ pub(crate) fn selectable_conversations(
     mode: LaunchSurface,
     active_conversation_id: &ConversationId,
 ) -> Vec<Conversation> {
-    let mut conversations = store.active_conversations();
-    let mut seeded = vec![launch_conversation(mode)];
-    seeded.extend(launch_companion_conversations(mode));
-    for conversation in seeded {
+    let stored = store.active_conversations();
+    let mut conversations = Vec::new();
+
+    let mut append_unique = |conversation: Conversation| {
         if conversations
             .iter()
-            .all(|item| item.conversation_id != conversation.conversation_id)
+            .all(|item: &Conversation| item.conversation_id != conversation.conversation_id)
         {
             conversations.push(conversation);
         }
+    };
+
+    if let Some(active) = stored
+        .iter()
+        .find(|conversation| conversation.conversation_id == *active_conversation_id)
+    {
+        append_unique(active.clone());
     }
-    conversations.sort_by(|left, right| {
-        let left_rank = usize::from(left.conversation_id != *active_conversation_id);
-        let right_rank = usize::from(right.conversation_id != *active_conversation_id);
-        left_rank
-            .cmp(&right_rank)
-            .then_with(|| conversation_title(left).cmp(&conversation_title(right)))
-    });
+
+    let mut seeded = vec![launch_conversation(mode)];
+    seeded.extend(launch_companion_conversations(mode));
+    seeded.sort_by_key(conversation_title);
+    for conversation in seeded {
+        append_unique(
+            stored
+                .iter()
+                .find(|item| item.conversation_id == conversation.conversation_id)
+                .cloned()
+                .unwrap_or(conversation),
+        );
+    }
+
+    let mut dynamic = stored
+        .into_iter()
+        .filter(|conversation| {
+            conversations
+                .iter()
+                .all(|item| item.conversation_id != conversation.conversation_id)
+        })
+        .collect::<Vec<_>>();
+    dynamic.sort_by_key(conversation_title);
+    conversations.extend(dynamic);
     conversations
 }
 

@@ -20,12 +20,33 @@ fn gateway_base_url() -> Option<String> {
     env::var("LOBSTER_WAKU_GATEWAY_URL").ok()
 }
 
+pub(crate) fn gateway_bearer_header_value(token: Option<&str>) -> Option<String> {
+    token
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .map(|token| format!("Bearer {token}"))
+}
+
+fn gateway_auth_header() -> Option<String> {
+    for variable in ["LOBSTER_SESSION_TOKEN", "LOBSTER_AGENT_TOKEN"] {
+        let value = env::var(variable).ok();
+        if let Some(header) = gateway_bearer_header_value(value.as_deref()) {
+            return Some(header);
+        }
+    }
+    None
+}
+
 fn gateway_post(path: &str, body: serde_json::Value) -> Result<serde_json::Value, String> {
     let base = gateway_base_url()
         .ok_or_else(|| "Gateway 未配置 (LOBSTER_WAKU_GATEWAY_URL)".to_string())?;
     let url = format!("{}{}", base.trim_end_matches('/'), path);
-    ureq::post(&url)
-        .set("Content-Type", "application/json")
+    let auth_header = gateway_auth_header();
+    let mut request = ureq::post(&url).set("Content-Type", "application/json");
+    if let Some(header) = auth_header.as_deref() {
+        request = request.set("Authorization", header);
+    }
+    request
         .send_json(body)
         .map_err(|e| format!("Gateway 请求失败: {e}"))?
         .into_json::<serde_json::Value>()
@@ -36,37 +57,140 @@ fn gateway_get(path: &str) -> Result<serde_json::Value, String> {
     let base = gateway_base_url()
         .ok_or_else(|| "Gateway 未配置 (LOBSTER_WAKU_GATEWAY_URL)".to_string())?;
     let url = format!("{}{}", base.trim_end_matches('/'), path);
-    ureq::get(&url)
+    let auth_header = gateway_auth_header();
+    let mut request = ureq::get(&url);
+    if let Some(header) = auth_header.as_deref() {
+        request = request.set("Authorization", header);
+    }
+    request
         .call()
         .map_err(|e| format!("Gateway 请求失败: {e}"))?
         .into_json::<serde_json::Value>()
         .map_err(|e| format!("Gateway 响应解析失败: {e}"))
 }
 
+fn query_escape(value: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let mut escaped = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+            escaped.push(byte as char);
+        } else {
+            escaped.push('%');
+            escaped.push(HEX[(byte >> 4) as usize] as char);
+            escaped.push(HEX[(byte & 0x0F) as usize] as char);
+        }
+    }
+    escaped
+}
+
+pub(crate) fn build_cli_search_path(
+    identity: &str,
+    conversation_id: &ConversationId,
+    query: &str,
+    limit: usize,
+) -> Result<String, String> {
+    let identity = identity.trim();
+    let conversation_id = conversation_id.0.trim();
+    let query = query.trim();
+    if identity.is_empty() {
+        return Err("TUI 搜索缺少身份".into());
+    }
+    if conversation_id.is_empty() {
+        return Err("TUI 搜索缺少当前会话".into());
+    }
+    if query.is_empty() {
+        return Err("用法：/search <关键词>".into());
+    }
+    let target = if identity.starts_with("user:") || identity.starts_with("agent:") {
+        identity.to_string()
+    } else {
+        format!("user:{identity}")
+    };
+    let limit = limit.clamp(1, 200);
+    Ok(format!(
+        "/v1/cli/search?for={}&q={}&room_id={}&limit={limit}",
+        query_escape(&target),
+        query_escape(query),
+        query_escape(conversation_id),
+    ))
+}
+
+fn cli_search_notice(query: &str, payload: &serde_json::Value) -> String {
+    let Some(results) = payload.as_array() else {
+        return "搜索失败：Gateway 返回格式无效".into();
+    };
+    if results.is_empty() {
+        return format!("搜索「{query}」未找到匹配消息");
+    }
+    let mut lines = vec![format!("搜索「{query}」命中 {} 条：", results.len())];
+    for result in results {
+        let sender = result["sender"].as_str().unwrap_or("?");
+        let text = result["text"].as_str().unwrap_or("");
+        let timestamp = result["timestamp_label"].as_str().unwrap_or("");
+        if timestamp.is_empty() {
+            lines.push(format!("  {sender}: {text}"));
+        } else {
+            lines.push(format!("  [{timestamp}] {sender}: {text}"));
+        }
+    }
+    lines.join("\n")
+}
+
+pub(crate) fn run_cli_search_command<G>(
+    store: &mut FileTimelineStore,
+    active_conversation_id: &mut ConversationId,
+    selected_conversation_id: &mut ConversationId,
+    identity: &str,
+    query: &str,
+    gateway_get_fn: &mut G,
+) -> Result<(), String>
+where
+    G: FnMut(&str) -> Result<serde_json::Value, String>,
+{
+    let query = query.trim();
+    let notice = if query.is_empty() {
+        "用法：/search <关键词>".to_string()
+    } else {
+        let path = build_cli_search_path(identity, active_conversation_id, query, 20)?;
+        match gateway_get_fn(&path) {
+            Ok(payload) => cli_search_notice(query, &payload),
+            Err(error) => format!("搜索失败：{error}"),
+        }
+    };
+    append_terminal_notice(store, active_conversation_id, &notice)?;
+    *selected_conversation_id = active_conversation_id.clone();
+    Ok(())
+}
+
 pub(crate) fn build_edit_message_request(
-    sender: &str,
+    actor: &str,
+    room_id: &ConversationId,
     message_id: &str,
     text: &str,
 ) -> (&'static str, serde_json::Value) {
     (
         "/v1/shell/message/edit",
         serde_json::json!({
-            "sender": sender,
+            "room_id": room_id.0,
             "message_id": message_id,
+            "actor": actor,
             "text": text,
         }),
     )
 }
 
 pub(crate) fn build_recall_message_request(
-    sender: &str,
+    actor: &str,
+    room_id: &ConversationId,
     message_id: &str,
 ) -> (&'static str, serde_json::Value) {
     (
         "/v1/shell/message/recall",
         serde_json::json!({
-            "sender": sender,
+            "room_id": room_id.0,
             "message_id": message_id,
+            "actor": actor,
         }),
     )
 }
@@ -81,22 +205,48 @@ struct OpenDirectSessionResponse {
     conversation_id: String,
 }
 
-fn open_direct_conversation_id(requester_id: &str, peer_id: &str) -> ConversationId {
+pub(crate) fn resolve_direct_conversation_id<F>(
+    requester_id: &str,
+    peer_id: &str,
+    gateway_url: Option<&str>,
+    gateway_request: F,
+) -> Result<ConversationId, String>
+where
+    F: FnOnce(String) -> Result<ConversationId, String>,
+{
     let fallback = direct_conversation(requester_id, peer_id);
-    let Ok(base_url) = env::var("LOBSTER_WAKU_GATEWAY_URL") else {
-        return fallback;
+    let Some(base_url) = gateway_url.map(str::trim).filter(|url| !url.is_empty()) else {
+        return Ok(fallback);
     };
     let url = format!("{}/v1/direct/open", base_url.trim_end_matches('/'));
-    match ureq::post(&url).send_json(serde_json::json!({
-        "requester_id": requester_id,
-        "peer_id": peer_id,
-    })) {
-        Ok(response) => response
+    let conversation = gateway_request(url)?;
+    if conversation.0.trim().is_empty() {
+        return Err("Gateway 私聊响应缺少有效 conversation_id".to_string());
+    }
+    Ok(conversation)
+}
+
+fn open_direct_conversation_id(
+    requester_id: &str,
+    peer_id: &str,
+) -> Result<ConversationId, String> {
+    let base_url = env::var("LOBSTER_WAKU_GATEWAY_URL").ok();
+    let auth_header = gateway_auth_header();
+    resolve_direct_conversation_id(requester_id, peer_id, base_url.as_deref(), |url| {
+        let mut request = ureq::post(&url);
+        if let Some(header) = auth_header.as_deref() {
+            request = request.set("Authorization", header);
+        }
+        request
+            .send_json(serde_json::json!({
+                "requester_id": requester_id,
+                "peer_id": peer_id,
+            }))
+            .map_err(|error| format!("Gateway 打开私聊失败: {error}"))?
             .into_json::<OpenDirectSessionResponse>()
             .map(|payload| ConversationId(payload.conversation_id))
-            .unwrap_or(fallback),
-        Err(_) => fallback,
-    }
+            .map_err(|error| format!("Gateway 私聊响应解析失败: {error}"))
+    })
 }
 
 fn build_direct_conversation(
@@ -104,7 +254,7 @@ fn build_direct_conversation(
     requester_id: &str,
     peer_id: &str,
 ) -> Result<Conversation, String> {
-    let conversation_id = open_direct_conversation_id(requester_id, peer_id);
+    let conversation_id = open_direct_conversation_id(requester_id, peer_id)?;
     if let Some(existing) = store
         .active_conversations()
         .into_iter()
@@ -178,7 +328,7 @@ fn append_terminal_notice(
 }
 
 fn terminal_help_notice() -> &'static str {
-    "终端命令：/help 查看帮助；/status 查看当前会话与连接；/refresh 刷新当前视图；/edit <消息ID> <新正文> 编辑消息；/recall <消息ID> 撤回消息；/world-status 世界治理总览；/cities 城市信任列表；/world-safety 安全快照；/safety-reports 安全报告；/safety-residents 制裁名单；/world-directory 世界黄页；/world-square 世界广场公告；/governance 进入治理房间；/dm <身份> 打开私聊；/open <序号> 打开会话；/residents 居民名单；/rooms 房间列表；/ban <居民> <原因> 封禁居民；/unban <居民> 解封居民；/freeze <房间> 冻结房间；/unfreeze <房间> 解冻房间；/invite create [次数] 创建邀请码；/invite revoke <码> 撤销邀请码；/config <key> 查看配置；/config set <key> <val> 修改配置；/quit 退出。"
+    "终端命令：/help 查看帮助；/status 查看当前会话与连接；/refresh 刷新当前视图；/search <关键词> 搜索当前会话；/edit <消息ID> <新正文> 编辑消息；/recall <消息ID> 撤回消息；/world-status 世界治理总览；/cities 城市信任列表；/world-safety 安全快照；/safety-reports 安全报告；/safety-residents 制裁名单；/world-directory 世界黄页；/world-square 世界广场公告；/governance 进入治理房间；/dm <身份> 打开私聊；/open <序号> 打开会话；/residents 居民名单；/rooms 房间列表；/ban <居民> <原因> 封禁居民；/unban <居民> 解封居民；/freeze <房间> 冻结房间；/unfreeze <房间> 解冻房间；/invite create [次数] 创建邀请码；/invite revoke <码> 撤销邀请码；/config <key> 查看配置；/config set <key> <val> 修改配置；/quit 退出。"
 }
 
 fn terminal_status_notice(
@@ -250,6 +400,28 @@ where
             *selected_conversation_id = active_conversation_id.clone();
             Ok(SubmissionAction::Continue)
         }
+        "/search" => {
+            run_cli_search_command(
+                store,
+                active_conversation_id,
+                selected_conversation_id,
+                &launch_identity(launch_mode),
+                "",
+                &mut |path| gateway_get(path),
+            )?;
+            Ok(SubmissionAction::Continue)
+        }
+        text if text.starts_with("/search ") => {
+            run_cli_search_command(
+                store,
+                active_conversation_id,
+                selected_conversation_id,
+                &launch_identity(launch_mode),
+                text.trim_start_matches("/search"),
+                &mut |path| gateway_get(path),
+            )?;
+            Ok(SubmissionAction::Continue)
+        }
         "/edit" => {
             append_terminal_notice(
                 store,
@@ -272,7 +444,12 @@ where
                 )?;
             } else {
                 let identity = launch_identity(launch_mode);
-                let (path, body) = build_edit_message_request(&identity, message_id, new_text);
+                let (path, body) = build_edit_message_request(
+                    &identity,
+                    active_conversation_id,
+                    message_id,
+                    new_text,
+                );
                 let notice = match gateway_post_fn(path, body) {
                     Ok(_) => format!("已编辑消息 {message_id}"),
                     Err(e) => format!("编辑消息失败：{e}"),
@@ -293,7 +470,8 @@ where
                 append_terminal_notice(store, active_conversation_id, "用法：/recall <消息ID>")?;
             } else {
                 let identity = launch_identity(launch_mode);
-                let (path, body) = build_recall_message_request(&identity, message_id);
+                let (path, body) =
+                    build_recall_message_request(&identity, active_conversation_id, message_id);
                 let notice = match gateway_post_fn(path, body) {
                     Ok(_) => format!("已撤回消息 {message_id}"),
                     Err(e) => format!("撤回消息失败：{e}"),

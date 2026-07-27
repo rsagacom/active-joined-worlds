@@ -70,6 +70,72 @@ fn cli_inbox_and_rooms_accept_identity() {
 }
 
 #[test]
+fn cli_scoped_reads_without_token_hint_login() {
+    let home = tempfile::tempdir().unwrap();
+    let cases = [
+        ("inbox", vec!["inbox", "--for", "user:alice"]),
+        ("rooms", vec!["rooms", "--for", "user:alice"]),
+        ("tail", vec!["tail", "--for", "user:alice"]),
+        (
+            "read",
+            vec![
+                "read",
+                "--for",
+                "user:alice",
+                "--conversation-id",
+                "room:world:lobby",
+            ],
+        ),
+        ("search", vec!["search", "secret", "--for", "user:alice"]),
+        ("presence", vec!["presence", "--for", "user:alice"]),
+    ];
+    for (command, args) in cases {
+        let out = cli_binary()
+            .args(args)
+            .arg("--gateway")
+            .arg("http://127.0.0.1:1")
+            .env("HOME", home.path())
+            .env_remove("LOBSTER_SESSION_TOKEN")
+            .env_remove("LOBSTER_AGENT_TOKEN")
+            .output()
+            .expect("run");
+        assert!(!out.status.success(), "{command} without token should fail");
+        let s = combined_output(&out);
+        assert!(
+            s.contains("login"),
+            "{command} should hint to run login: {s}"
+        );
+    }
+}
+
+#[test]
+fn cli_admin_reads_without_token_hint_login() {
+    let home = tempfile::tempdir().unwrap();
+    let cases = [
+        ("config", vec!["config", "--get"]),
+        ("residents", vec!["residents", "--for", "user:admin"]),
+        ("rooms-admin", vec!["rooms-admin", "--for", "user:admin"]),
+    ];
+    for (command, args) in cases {
+        let out = cli_binary()
+            .args(args)
+            .arg("--gateway")
+            .arg("http://127.0.0.1:1")
+            .env("HOME", home.path())
+            .env_remove("LOBSTER_SESSION_TOKEN")
+            .env_remove("LOBSTER_AGENT_TOKEN")
+            .output()
+            .expect("run");
+        assert!(!out.status.success(), "{command} without token should fail");
+        let s = combined_output(&out);
+        assert!(
+            s.contains("login"),
+            "{command} should hint to run login instead of attempting an unauthenticated GET: {s}"
+        );
+    }
+}
+
+#[test]
 fn cli_send_rejects_invalid_to_format() {
     let out = cli_binary()
         .args(["send", "--from", "agent:t", "--to", "dm:a:b", "--text", "x"])
@@ -240,6 +306,27 @@ fn cli_admin_ban_without_token_hints_login() {
         .output()
         .expect("run");
     assert!(!out.status.success(), "ban without any token should fail");
+    let s = combined_output(&out);
+    assert!(s.contains("login"), "should hint to run login: {s}");
+}
+
+/// 导出包含私聊历史，必须先通过 session Bearer 认证；没有 token 时在 CLI 本地直接提示登录。
+#[test]
+fn cli_export_without_token_hints_login() {
+    let home = tempfile::tempdir().unwrap();
+    let out = cli_binary()
+        .args([
+            "export",
+            "--for",
+            "user:alice",
+            "--gateway",
+            "http://127.0.0.1:1",
+        ])
+        .env("HOME", home.path())
+        .env_remove("LOBSTER_SESSION_TOKEN")
+        .output()
+        .expect("run");
+    assert!(!out.status.success(), "export without token should fail");
     let s = combined_output(&out);
     assert!(s.contains("login"), "should hint to run login: {s}");
 }

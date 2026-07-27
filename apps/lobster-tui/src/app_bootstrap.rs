@@ -7,6 +7,7 @@ use host_adapter::{HostCapabilities, TerminalRenderProfile};
 use crate::bootstrap_paths::{default_mobile_bootstrap_from_env, resolve_bootstrap_paths};
 use crate::conversation_bootstrap::bootstrap_conversations;
 use crate::seed_bootstrap::seed_missing_messages;
+use crate::shell_state_bootstrap::bootstrap_from_gateway;
 use crate::transport_bootstrap::{
     TransportAdapter, build_transport, conversation_topic_subscriptions, desktop_light_endpoint,
 };
@@ -43,7 +44,12 @@ pub(crate) fn bootstrap_app(launch_mode: LaunchSurface) -> Result<AppBootstrap, 
     let endpoint = desktop_light_endpoint();
     let (mut transport, _transport_backend) = build_transport(endpoint, 64)?;
 
-    let conversation_bootstrap = bootstrap_conversations(launch_mode);
+    let gateway_url = std::env::var("LOBSTER_WAKU_GATEWAY_URL").ok();
+    let conversation_bootstrap = if let Some(base_url) = gateway_url.as_deref() {
+        bootstrap_from_gateway(&mut store, base_url, launch_mode)?
+    } else {
+        bootstrap_conversations(launch_mode)
+    };
     let known_conversations = conversation_bootstrap.known_conversations;
     for conversation in &known_conversations {
         store.upsert_conversation(conversation.clone())?;
@@ -51,7 +57,9 @@ pub(crate) fn bootstrap_app(launch_mode: LaunchSurface) -> Result<AppBootstrap, 
     let active_conversation_id = conversation_bootstrap.active_conversation_id;
     let selected_conversation_id = conversation_bootstrap.selected_conversation_id;
 
-    seed_missing_messages(&mut store, transport.as_mut(), &known_conversations)?;
+    if gateway_url.is_none() {
+        seed_missing_messages(&mut store, transport.as_mut(), &known_conversations)?;
+    }
 
     let subscriptions = conversation_topic_subscriptions(&known_conversations);
     transport.subscribe_topics(&subscriptions)?;

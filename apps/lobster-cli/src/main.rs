@@ -46,6 +46,8 @@ struct SendCommand {
     from: String,
     to: String,
     text: String,
+    session_token: Option<String>,
+    agent_token: Option<String>,
     gateway: String,
     json: bool,
 }
@@ -56,6 +58,8 @@ struct EditCommand {
     conversation_id: String,
     message_id: String,
     text: String,
+    session_token: Option<String>,
+    agent_token: Option<String>,
     gateway: String,
     json: bool,
 }
@@ -65,6 +69,8 @@ struct RecallCommand {
     actor: String,
     conversation_id: String,
     message_id: String,
+    session_token: Option<String>,
+    agent_token: Option<String>,
     gateway: String,
     json: bool,
 }
@@ -75,6 +81,7 @@ struct ExportCommand {
     conversation_id: Option<String>,
     format: String,
     include_public: bool,
+    session_token: Option<String>,
     gateway: String,
     json: bool,
 }
@@ -82,6 +89,8 @@ struct ExportCommand {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct QueryCommand {
     target: String,
+    session_token: Option<String>,
+    agent_token: Option<String>,
     gateway: String,
     json: bool,
 }
@@ -123,6 +132,8 @@ struct LogoutCommand {
 struct TailCommand {
     target: String,
     conversation_id: Option<String>,
+    session_token: Option<String>,
+    agent_token: Option<String>,
     gateway: String,
     json: bool,
     follow: bool,
@@ -130,9 +141,12 @@ struct TailCommand {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SearchCommand {
+    target: String,
     query: String,
     room_id: Option<String>,
     limit: Option<u32>,
+    session_token: Option<String>,
+    agent_token: Option<String>,
     gateway: String,
     json: bool,
 }
@@ -141,6 +155,8 @@ struct SearchCommand {
 struct ReadCommand {
     target: String,
     conversation_id: String,
+    session_token: Option<String>,
+    agent_token: Option<String>,
     gateway: String,
     json: bool,
 }
@@ -158,6 +174,8 @@ struct ShellMessageEditRequest {
     room_id: String,
     message_id: String,
     actor: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    actor_address: Option<String>,
     text: String,
 }
 
@@ -166,6 +184,8 @@ struct ShellMessageRecallRequest {
     room_id: String,
     message_id: String,
     actor: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    actor_address: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -538,6 +558,17 @@ fn default_gateway_url() -> String {
     std::env::var("LOBSTER_WAKU_GATEWAY_URL").unwrap_or_else(|_| "http://127.0.0.1:8787".into())
 }
 
+fn resolve_agent_token(explicit: Option<&str>) -> Option<String> {
+    explicit
+        .filter(|token| !token.trim().is_empty())
+        .map(|token| token.trim().to_owned())
+        .or_else(|| {
+            std::env::var("LOBSTER_AGENT_TOKEN")
+                .ok()
+                .filter(|token| !token.trim().is_empty())
+        })
+}
+
 fn parse_args<I, S>(args: I) -> Result<Command, String>
 where
     I: IntoIterator<Item = S>,
@@ -620,6 +651,8 @@ fn parse_send_command(args: Vec<String>) -> Result<SendCommand, String> {
     let mut from = None;
     let mut to = None;
     let mut text = None;
+    let mut session_token = None;
+    let mut agent_token = None;
     let mut gateway = default_gateway_url();
     let mut json = false;
 
@@ -629,6 +662,8 @@ fn parse_send_command(args: Vec<String>) -> Result<SendCommand, String> {
             "--from" => from = iter.next(),
             "--to" => to = iter.next(),
             "--text" => text = iter.next(),
+            "--token" => session_token = iter.next(),
+            "--agent-token" => agent_token = iter.next(),
             "--gateway" => {
                 gateway = iter
                     .next()
@@ -647,6 +682,8 @@ fn parse_send_command(args: Vec<String>) -> Result<SendCommand, String> {
         from,
         to,
         text: text.ok_or_else(|| "missing required flag --text".to_string())?,
+        session_token,
+        agent_token,
         gateway,
         json,
     })
@@ -657,6 +694,8 @@ fn parse_edit_command(args: Vec<String>) -> Result<EditCommand, String> {
     let mut conversation_id = None;
     let mut message_id = None;
     let mut text = None;
+    let mut session_token = None;
+    let mut agent_token = None;
     let mut gateway = default_gateway_url();
     let mut json = false;
 
@@ -667,6 +706,8 @@ fn parse_edit_command(args: Vec<String>) -> Result<EditCommand, String> {
             "--conversation-id" => conversation_id = iter.next(),
             "--message-id" => message_id = iter.next(),
             "--text" => text = iter.next(),
+            "--token" => session_token = iter.next(),
+            "--agent-token" => agent_token = iter.next(),
             "--gateway" => {
                 gateway = iter
                     .next()
@@ -683,6 +724,8 @@ fn parse_edit_command(args: Vec<String>) -> Result<EditCommand, String> {
             .ok_or_else(|| "missing required flag --conversation-id".to_string())?,
         message_id: message_id.ok_or_else(|| "missing required flag --message-id".to_string())?,
         text: text.ok_or_else(|| "missing required flag --text".to_string())?,
+        session_token,
+        agent_token,
         gateway,
         json,
     })
@@ -692,6 +735,8 @@ fn parse_recall_command(args: Vec<String>) -> Result<RecallCommand, String> {
     let mut actor = None;
     let mut conversation_id = None;
     let mut message_id = None;
+    let mut session_token = None;
+    let mut agent_token = None;
     let mut gateway = default_gateway_url();
     let mut json = false;
 
@@ -701,6 +746,8 @@ fn parse_recall_command(args: Vec<String>) -> Result<RecallCommand, String> {
             "--actor" => actor = iter.next(),
             "--conversation-id" => conversation_id = iter.next(),
             "--message-id" => message_id = iter.next(),
+            "--token" => session_token = iter.next(),
+            "--agent-token" => agent_token = iter.next(),
             "--gateway" => {
                 gateway = iter
                     .next()
@@ -716,6 +763,8 @@ fn parse_recall_command(args: Vec<String>) -> Result<RecallCommand, String> {
         conversation_id: conversation_id
             .ok_or_else(|| "missing required flag --conversation-id".to_string())?,
         message_id: message_id.ok_or_else(|| "missing required flag --message-id".to_string())?,
+        session_token,
+        agent_token,
         gateway,
         json,
     })
@@ -726,6 +775,7 @@ fn parse_export_command(args: Vec<String>) -> Result<ExportCommand, String> {
     let mut conversation_id = None;
     let mut format = "md".to_string();
     let mut include_public = false;
+    let mut session_token = None;
     let mut gateway = default_gateway_url();
     let mut json = false;
 
@@ -740,6 +790,7 @@ fn parse_export_command(args: Vec<String>) -> Result<ExportCommand, String> {
                     .ok_or_else(|| "missing value for --format".to_string())?
             }
             "--include-public" => include_public = true,
+            "--token" => session_token = iter.next(),
             "--gateway" => {
                 gateway = iter
                     .next()
@@ -760,6 +811,7 @@ fn parse_export_command(args: Vec<String>) -> Result<ExportCommand, String> {
         conversation_id,
         format,
         include_public,
+        session_token,
         gateway,
         json,
     })
@@ -777,6 +829,8 @@ fn validate_send_target_address(target: &str) -> Result<(), String> {
 
 fn parse_query_command(args: Vec<String>) -> Result<QueryCommand, String> {
     let mut target = None;
+    let mut session_token = None;
+    let mut agent_token = None;
     let mut gateway = default_gateway_url();
     let mut json = false;
 
@@ -784,6 +838,8 @@ fn parse_query_command(args: Vec<String>) -> Result<QueryCommand, String> {
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--for" => target = iter.next(),
+            "--token" => session_token = iter.next(),
+            "--agent-token" => agent_token = iter.next(),
             "--gateway" => {
                 gateway = iter
                     .next()
@@ -796,6 +852,8 @@ fn parse_query_command(args: Vec<String>) -> Result<QueryCommand, String> {
 
     Ok(QueryCommand {
         target: target.ok_or_else(|| "missing required flag --for".to_string())?,
+        session_token,
+        agent_token,
         gateway,
         json,
     })
@@ -936,16 +994,37 @@ fn parse_logout_command(args: Vec<String>) -> Result<LogoutCommand, String> {
 
 fn parse_search_command(args: Vec<String>) -> Result<SearchCommand, String> {
     // 位置参数（非 -- 开头）拼接为搜索关键词；--flag 走显式解析。
-    // 同时支持 `search 晚上吃饭 --room r --limit 5` 与 `search --room r 晚上吃饭` 两种顺序。
+    // 同时支持 `search 晚上吃饭 --for user:rsaga --room r` 与 flags 在关键词前的顺序。
     let mut query_parts: Vec<String> = Vec::new();
+    let mut target = None;
     let mut room_id = None;
     let mut limit = None;
+    let mut session_token = None;
+    let mut agent_token = None;
     let mut gateway = default_gateway_url();
     let mut json = false;
 
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
         match arg.as_str() {
+            "--for" => {
+                target = Some(
+                    iter.next()
+                        .ok_or_else(|| "missing value for --for".to_string())?,
+                );
+            }
+            "--token" => {
+                session_token = Some(
+                    iter.next()
+                        .ok_or_else(|| "missing value for --token".to_string())?,
+                );
+            }
+            "--agent-token" => {
+                agent_token = Some(
+                    iter.next()
+                        .ok_or_else(|| "missing value for --agent-token".to_string())?,
+                );
+            }
             "--room" | "--room-id" | "--conversation-id" => {
                 room_id = iter.next();
             }
@@ -966,6 +1045,12 @@ fn parse_search_command(args: Vec<String>) -> Result<SearchCommand, String> {
                     limit = Some(parse_search_limit(rest)?);
                 } else if let Some(rest) = other.strip_prefix("--room=") {
                     room_id = Some(rest.to_string());
+                } else if let Some(rest) = other.strip_prefix("--for=") {
+                    target = Some(rest.to_string());
+                } else if let Some(rest) = other.strip_prefix("--token=") {
+                    session_token = Some(rest.to_string());
+                } else if let Some(rest) = other.strip_prefix("--agent-token=") {
+                    agent_token = Some(rest.to_string());
                 } else if other.starts_with("--") {
                     return Err(format!("unsupported search flag: {other}"));
                 } else {
@@ -978,13 +1063,19 @@ fn parse_search_command(args: Vec<String>) -> Result<SearchCommand, String> {
     let query = query_parts.join(" ").trim().to_string();
     if query.is_empty() {
         return Err(
-            "missing search keyword (usage: search <keyword> [--room <id>] [--limit N])".into(),
+            "missing search keyword (usage: search <keyword> --for <resident> [--room <id>] [--limit N])".into(),
         );
     }
+    let target = target
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| "search requires --for <resident>".to_string())?;
     Ok(SearchCommand {
+        target,
         query,
         room_id,
         limit,
+        session_token,
+        agent_token,
         gateway,
         json,
     })
@@ -995,6 +1086,8 @@ fn parse_read_command(args: Vec<String>) -> Result<ReadCommand, String> {
     // 标记某会话已读，配合 inbox/tail 形成未读闭环。
     let mut target = None;
     let mut conversation_id = None;
+    let mut session_token = None;
+    let mut agent_token = None;
     let mut gateway = default_gateway_url();
     let mut json = false;
 
@@ -1002,6 +1095,8 @@ fn parse_read_command(args: Vec<String>) -> Result<ReadCommand, String> {
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--for" => target = iter.next(),
+            "--token" => session_token = iter.next(),
+            "--agent-token" => agent_token = iter.next(),
             "--conversation-id" | "--conversation" | "--room" | "--room-id" => {
                 conversation_id = iter.next();
             }
@@ -1032,6 +1127,8 @@ fn parse_read_command(args: Vec<String>) -> Result<ReadCommand, String> {
     Ok(ReadCommand {
         target,
         conversation_id,
+        session_token,
+        agent_token,
         gateway,
         json,
     })
@@ -1045,6 +1142,8 @@ fn parse_search_limit(raw: &str) -> Result<u32, String> {
 fn parse_tail_command(args: Vec<String>) -> Result<TailCommand, String> {
     let mut target = None;
     let mut conversation_id = None;
+    let mut session_token = None;
+    let mut agent_token = None;
     let mut gateway = default_gateway_url();
     let mut json = false;
     let mut follow = false;
@@ -1054,6 +1153,8 @@ fn parse_tail_command(args: Vec<String>) -> Result<TailCommand, String> {
         match arg.as_str() {
             "--for" => target = iter.next(),
             "--conversation-id" => conversation_id = iter.next(),
+            "--token" => session_token = iter.next(),
+            "--agent-token" => agent_token = iter.next(),
             "--gateway" => {
                 gateway = iter
                     .next()
@@ -1068,6 +1169,8 @@ fn parse_tail_command(args: Vec<String>) -> Result<TailCommand, String> {
     Ok(TailCommand {
         target: target.ok_or_else(|| "missing required flag --for".to_string())?,
         conversation_id,
+        session_token,
+        agent_token,
         gateway,
         json,
         follow,
@@ -1438,19 +1541,23 @@ fn build_send_request(command: &SendCommand) -> CliSendRequest {
 }
 
 fn build_edit_request(command: &EditCommand) -> Result<ShellMessageEditRequest, String> {
+    let actor_address = command.actor.trim().to_string();
     Ok(ShellMessageEditRequest {
         room_id: command.conversation_id.clone(),
         message_id: command.message_id.clone(),
-        actor: parse_actor_identity(&command.actor)?,
+        actor: parse_actor_identity(&actor_address)?,
+        actor_address: Some(actor_address),
         text: command.text.clone(),
     })
 }
 
 fn build_recall_request(command: &RecallCommand) -> Result<ShellMessageRecallRequest, String> {
+    let actor_address = command.actor.trim().to_string();
     Ok(ShellMessageRecallRequest {
         room_id: command.conversation_id.clone(),
         message_id: command.message_id.clone(),
-        actor: parse_actor_identity(&command.actor)?,
+        actor: parse_actor_identity(&actor_address)?,
+        actor_address: Some(actor_address),
     })
 }
 
@@ -1610,7 +1717,17 @@ where
 fn run_send(command: SendCommand) -> Result<String, String> {
     let request = build_send_request(&command);
     let url = format!("{}/v1/cli/send", command.gateway.trim_end_matches('/'));
-    let payload = post_json::<_, CliSendResponse>(&url, &request, "send")?;
+    let token = if command.from.trim().starts_with("agent:") {
+        resolve_agent_token(command.agent_token.as_deref())
+    } else {
+        auth::resolve_token(command.session_token.as_deref()).ok()
+    };
+    let payload = match token {
+        Some(token) => {
+            auth::post_json_authenticated::<_, CliSendResponse>(&url, &request, &token, "send")?
+        }
+        None => post_json::<_, CliSendResponse>(&url, &request, "send")?,
+    };
 
     if command.json {
         serde_json::to_string(&payload)
@@ -1626,7 +1743,17 @@ fn run_edit(command: EditCommand) -> Result<String, String> {
         "{}/v1/shell/message/edit",
         command.gateway.trim_end_matches('/')
     );
-    let payload = post_json::<_, ShellMessageEditResponse>(&url, &request, "edit")?;
+    let token = if command.actor.trim().starts_with("agent:") {
+        resolve_agent_token(command.agent_token.as_deref())
+    } else {
+        auth::resolve_token(command.session_token.as_deref()).ok()
+    };
+    let payload = match token {
+        Some(token) => auth::post_json_authenticated::<_, ShellMessageEditResponse>(
+            &url, &request, &token, "edit",
+        )?,
+        None => post_json::<_, ShellMessageEditResponse>(&url, &request, "edit")?,
+    };
     if command.json {
         serde_json::to_string(&payload)
             .map_err(|error| format!("serialize edit response failed: {error}"))
@@ -1641,7 +1768,17 @@ fn run_recall(command: RecallCommand) -> Result<String, String> {
         "{}/v1/shell/message/recall",
         command.gateway.trim_end_matches('/')
     );
-    let payload = post_json::<_, ShellMessageRecallResponse>(&url, &request, "recall")?;
+    let token = if command.actor.trim().starts_with("agent:") {
+        resolve_agent_token(command.agent_token.as_deref())
+    } else {
+        auth::resolve_token(command.session_token.as_deref()).ok()
+    };
+    let payload = match token {
+        Some(token) => auth::post_json_authenticated::<_, ShellMessageRecallResponse>(
+            &url, &request, &token, "recall",
+        )?,
+        None => post_json::<_, ShellMessageRecallResponse>(&url, &request, "recall")?,
+    };
     if command.json {
         serde_json::to_string(&payload)
             .map_err(|error| format!("serialize recall response failed: {error}"))
@@ -1663,7 +1800,8 @@ fn run_export(command: ExportCommand) -> Result<String, String> {
         url.push_str("&conversation_id=");
         url.push_str(&query_escape(conversation_id));
     }
-    let payload = run_query::<CliExportResponse>(&url)?;
+    let token = auth::resolve_token(command.session_token.as_deref())?;
+    let payload = auth::get_authenticated::<CliExportResponse>(&url, &token, "export")?;
     if command.json {
         serde_json::to_string(&payload)
             .map_err(|error| format!("serialize export response failed: {error}"))
@@ -1693,13 +1831,61 @@ where
         .map_err(|error| format!("decode query response failed: {error}"))
 }
 
+fn resolve_scoped_cli_token(
+    target: &str,
+    session_token: Option<&str>,
+    agent_token: Option<&str>,
+) -> Result<String, String> {
+    if target.trim().starts_with("agent:") {
+        return resolve_agent_token(agent_token).ok_or_else(|| {
+            "agent-scoped reads require --agent-token or LOBSTER_AGENT_TOKEN".into()
+        });
+    }
+    auth::resolve_token(session_token)
+}
+
+fn resolve_shell_session_token(
+    target: &str,
+    session_token: Option<&str>,
+) -> Result<String, String> {
+    if target.trim().starts_with("agent:") {
+        return Err(
+            "shell read/presence require a user session token; agent sidecar tokens are not supported for resident state"
+                .into(),
+        );
+    }
+    auth::resolve_token(session_token)
+}
+
+fn resolve_admin_read_token(
+    session_token: Option<&str>,
+    agent_token: Option<&str>,
+) -> Result<String, String> {
+    if agent_token
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .is_some()
+    {
+        return Err(
+            "admin reads require a user session token; agent sidecar tokens are not supported"
+                .into(),
+        );
+    }
+    auth::resolve_token(session_token)
+}
+
 fn run_inbox(command: QueryCommand) -> Result<String, String> {
     let url = format!(
         "{}/v1/cli/inbox?for={}",
         command.gateway.trim_end_matches('/'),
         command.target
     );
-    let payload = run_query::<CliInboxResponse>(&url)?;
+    let token = resolve_scoped_cli_token(
+        &command.target,
+        command.session_token.as_deref(),
+        command.agent_token.as_deref(),
+    )?;
+    let payload = auth::get_authenticated::<CliInboxResponse>(&url, &token, "inbox")?;
     if command.json {
         serde_json::to_string(&payload)
             .map_err(|error| format!("serialize inbox response failed: {error}"))
@@ -1714,7 +1900,12 @@ fn run_rooms(command: QueryCommand) -> Result<String, String> {
         command.gateway.trim_end_matches('/'),
         command.target
     );
-    let payload = run_query::<CliRoomsResponse>(&url)?;
+    let token = resolve_scoped_cli_token(
+        &command.target,
+        command.session_token.as_deref(),
+        command.agent_token.as_deref(),
+    )?;
+    let payload = auth::get_authenticated::<CliRoomsResponse>(&url, &token, "rooms")?;
     if command.json {
         serde_json::to_string(&payload)
             .map_err(|error| format!("serialize rooms response failed: {error}"))
@@ -1723,12 +1914,13 @@ fn run_rooms(command: QueryCommand) -> Result<String, String> {
     }
 }
 
-// 调 Gateway GET /v1/shell/messages/search?q=<kw>&room_id=<id>&limit=<n>（http_router.rs:161，
-// 已存在端点，无需改 Gateway）。query/room_id 经 query_escape 编码（含空格/中文/特殊字符）。
+// 调 Gateway scoped GET /v1/cli/search?for=<resident>&q=<kw>&room_id=<id>&limit=<n>。
+// target/query/room_id 经 query_escape 编码（含空格/中文/特殊字符），并携带身份绑定 Bearer。
 fn run_search(command: SearchCommand) -> Result<String, String> {
     let mut url = format!(
-        "{}/v1/shell/messages/search?q={}",
+        "{}/v1/cli/search?for={}&q={}",
         command.gateway.trim_end_matches('/'),
+        query_escape(&command.target),
         query_escape(&command.query)
     );
     if let Some(room_id) = &command.room_id {
@@ -1738,7 +1930,12 @@ fn run_search(command: SearchCommand) -> Result<String, String> {
     if let Some(limit) = command.limit {
         url.push_str(&format!("&limit={limit}"));
     }
-    let payload = run_query::<Vec<CliSearchMessage>>(&url)?;
+    let token = resolve_scoped_cli_token(
+        &command.target,
+        command.session_token.as_deref(),
+        command.agent_token.as_deref(),
+    )?;
+    let payload = auth::get_authenticated::<Vec<CliSearchMessage>>(&url, &token, "search")?;
     if command.json {
         serde_json::to_string(&payload)
             .map_err(|error| format!("serialize search response failed: {error}"))
@@ -1784,21 +1981,21 @@ fn format_help_overview() -> String {
         "lobster-cli — 单城中心化 IM 客户端",
         "",
         "消息:",
-        "  send             发送消息  (--from <id> --to <id> --text <msg>)",
-        "  edit             编辑消息  (--actor <id> --conversation-id <id> --message-id <id> --text <msg>)",
-        "  recall           撤回消息  (--actor <id> --conversation-id <id> --message-id <id>)",
-        "  search           搜索历史  (<keyword> [--room <id>] [--limit N])",
+        "  send             发送消息  (--from <id> --to <id> --text <msg> [--token <session>] [--agent-token <token>])",
+        "  edit             编辑消息  (--actor <id> --conversation-id <id> --message-id <id> --text <msg> [--token <session>] [--agent-token <token>])",
+        "  recall           撤回消息  (--actor <id> --conversation-id <id> --message-id <id> [--token <session>] [--agent-token <token>])",
+        "  search           搜索可见历史  (<keyword> --for <resident> [--room <id>] [--limit N] [--token <session> | --agent-token <token>])",
         "",
         "会话:",
-        "  inbox            未读会话摘要  (--for <resident>)",
-        "  rooms            可见会话列表  (--for <resident>)",
-        "  tail             拉取新消息  (--for <resident> [--conversation-id <id>] [--follow])",
-        "  export           导出聊天记录  (--for <resident> [--conversation-id <id>] [--format md|jsonl|txt])",
+        "  inbox            未读会话摘要  (--for <resident> [--token <session> | --agent-token <token>])",
+        "  rooms            可见会话列表  (--for <resident> [--token <session> | --agent-token <token>])",
+        "  tail             拉取新消息  (--for <resident> [--conversation-id <id>] [--follow] [--token <session> | --agent-token <token>])",
+        "  export           导出聊天记录  (--for <resident> [--conversation-id <id>] [--format md|jsonl|txt] [--token <session>])",
         "",
         "身份与状态:",
         "  who              居民在线名片  (--for <resident>)",
-        "  read             标记会话已读  (--for <resident> --conversation-id <id>)",
-        "  presence         上报在线  (--for <resident>)",
+        "  read             标记会话已读  (--for <resident> --conversation-id <id> --token <session>)",
+        "  presence         上报在线  (--for <resident> --token <session>)",
         "",
         "身份与认证:",
         "  login            邮箱 OTP 登录  (--email <addr>) → 缓存 session",
@@ -1821,10 +2018,10 @@ fn format_help_overview() -> String {
         "  moderate         审核消息  (--message-id <id> --conversation-id <id> --action <approved|blocked|handled>)",
         "  room-member      加入/移除房间成员  (--room <id> --resident <id> --action <add|remove> [--actor <admin>])",
         "  create-resident  注册新居民  (--resident <id> --email <addr>，注册入口，无需 token)",
-        "  config           查看/更新配置  (--get 查看 | --set KEY=VALUE 更新 [--actor <admin>])",
+        "  config           查看/更新配置  (--get 查看 | --set KEY=VALUE 更新 [--actor <admin>] --token <session>)",
         "  admin-nickname   改任意居民昵称  (--resident <id> --name <昵称> | --clear)",
-        "  residents        居民目录（admin 视角）",
-        "  rooms-admin      房间目录（admin 视角）",
+        "  residents        居民目录（admin 视角，--token <session>）",
+        "  rooms-admin      房间目录（admin 视角，--for <resident> --token <session>）",
         "",
         "通用标志: --gateway <url>   --json（机器可读输出）",
         "默认网关: http://127.0.0.1:8787（或环境变量 LOBSTER_WAKU_GATEWAY_URL）",
@@ -2232,7 +2429,9 @@ fn build_mark_read_request(command: &ReadCommand) -> Result<CliMarkReadRequest, 
 fn run_read(command: ReadCommand) -> Result<String, String> {
     let request = build_mark_read_request(&command)?;
     let url = format!("{}/v1/shell/read", command.gateway.trim_end_matches('/'));
-    let payload = post_json::<_, CliReadResponse>(&url, &request, "read")?;
+    let token = resolve_shell_session_token(&command.target, command.session_token.as_deref())?;
+    let payload =
+        auth::post_json_authenticated::<_, CliReadResponse>(&url, &request, &token, "read")?;
     if command.json {
         serde_json::to_string(&payload)
             .map_err(|error| format!("serialize read response failed: {error}"))
@@ -2256,7 +2455,10 @@ fn run_presence(command: QueryCommand) -> Result<String, String> {
         "{}/v1/shell/presence",
         command.gateway.trim_end_matches('/')
     );
-    let payload = post_json::<_, CliPresenceResponse>(&url, &request, "presence")?;
+    let token = resolve_shell_session_token(&command.target, command.session_token.as_deref())?;
+    let payload = auth::post_json_authenticated::<_, CliPresenceResponse>(
+        &url, &request, &token, "presence",
+    )?;
     if command.json {
         serde_json::to_string(&payload)
             .map_err(|error| format!("serialize presence response failed: {error}"))
@@ -2267,7 +2469,7 @@ fn run_presence(command: QueryCommand) -> Result<String, String> {
     }
 }
 
-fn render_tail_once(command: &TailCommand) -> Result<String, String> {
+fn render_tail_once(command: &TailCommand, token: &str) -> Result<String, String> {
     let mut url = format!(
         "{}/v1/cli/tail?for={}",
         command.gateway.trim_end_matches('/'),
@@ -2277,7 +2479,7 @@ fn render_tail_once(command: &TailCommand) -> Result<String, String> {
         url.push_str("&conversation_id=");
         url.push_str(conversation_id);
     }
-    let payload = run_query::<CliTailResponse>(&url)?;
+    let payload = auth::get_authenticated::<CliTailResponse>(&url, token, "tail")?;
     if command.json {
         serde_json::to_string(&payload)
             .map_err(|error| format!("serialize tail response failed: {error}"))
@@ -2287,8 +2489,13 @@ fn render_tail_once(command: &TailCommand) -> Result<String, String> {
 }
 
 fn run_tail(command: TailCommand) -> Result<String, String> {
+    let token = resolve_scoped_cli_token(
+        &command.target,
+        command.session_token.as_deref(),
+        command.agent_token.as_deref(),
+    )?;
     if !command.follow {
-        return render_tail_once(&command);
+        return render_tail_once(&command, &token);
     }
 
     let mut seen = HashSet::new();
@@ -2302,7 +2509,7 @@ fn run_tail(command: TailCommand) -> Result<String, String> {
             url.push_str("&conversation_id=");
             url.push_str(conversation_id);
         }
-        let payload = run_query::<CliTailResponse>(&url)?;
+        let payload = auth::get_authenticated::<CliTailResponse>(&url, &token, "tail")?;
         for message in payload.messages {
             if seen.insert(message.message_id.clone()) {
                 if command.json {
@@ -2596,8 +2803,10 @@ fn run_create_resident(command: CreateResidentCommand) -> Result<String, String>
 fn run_admin_config(command: ConfigCommand) -> Result<String, String> {
     let url = format!("{}/v1/admin/config", command.gateway.trim_end_matches('/'));
     if command.set.is_empty() {
-        // GET /v1/admin/config 在 HEAD 网关无 require_admin_auth（只读），复用无 token 的 run_query。
-        let payload: std::collections::HashMap<String, String> = run_query(&url)?;
+        // GET /v1/admin/config 由 Gateway 的 admin read 门禁保护，必须带用户 session。
+        let token = auth::resolve_token(command.token.as_deref())?;
+        let payload: std::collections::HashMap<String, String> =
+            auth::get_authenticated(&url, &token, "config")?;
         if command.json {
             serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
         } else if payload.is_empty() {
@@ -2673,7 +2882,11 @@ fn run_admin_residents(command: QueryCommand) -> Result<String, String> {
         "{}/v1/admin/residents",
         command.gateway.trim_end_matches('/')
     );
-    let payload = run_query::<Vec<AdminResidentEntry>>(&url)?;
+    let token = resolve_admin_read_token(
+        command.session_token.as_deref(),
+        command.agent_token.as_deref(),
+    )?;
+    let payload = auth::get_authenticated::<Vec<AdminResidentEntry>>(&url, &token, "residents")?;
     if command.json {
         serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
     } else {
@@ -2683,7 +2896,11 @@ fn run_admin_residents(command: QueryCommand) -> Result<String, String> {
 
 fn run_admin_rooms(command: QueryCommand) -> Result<String, String> {
     let url = format!("{}/v1/admin/rooms", command.gateway.trim_end_matches('/'));
-    let payload = run_query::<Vec<AdminRoomEntry>>(&url)?;
+    let token = resolve_admin_read_token(
+        command.session_token.as_deref(),
+        command.agent_token.as_deref(),
+    )?;
+    let payload = auth::get_authenticated::<Vec<AdminRoomEntry>>(&url, &token, "rooms-admin")?;
     if command.json {
         serde_json::to_string(&payload).map_err(|e| format!("serialize response: {e}"))
     } else {
@@ -2763,10 +2980,20 @@ mod tests {
 
     #[test]
     fn parse_search_command_joins_positional_args_into_query() {
-        let command = parse_args(["lobster-cli", "search", "晚上", "吃饭", "--limit", "5"])
-            .expect("search command should parse");
+        let command = parse_args([
+            "lobster-cli",
+            "search",
+            "晚上",
+            "吃饭",
+            "--for",
+            "user:rsaga",
+            "--limit",
+            "5",
+        ])
+        .expect("search command should parse");
         match command {
             Command::Search(s) => {
+                assert_eq!(s.target, "user:rsaga");
                 assert_eq!(s.query, "晚上 吃饭");
                 assert_eq!(s.limit, Some(5));
                 assert_eq!(s.room_id, None);
@@ -2782,9 +3009,24 @@ mod tests {
     }
 
     #[test]
+    fn parse_search_command_requires_scoped_identity() {
+        let err = parse_args(["lobster-cli", "search", "secret"])
+            .expect_err("search without --for should fail");
+        assert!(err.contains("search requires --for"));
+    }
+
+    #[test]
     fn parse_search_command_rejects_non_numeric_limit() {
-        let err =
-            parse_args(["lobster-cli", "search", "foo", "--limit", "abc"]).expect_err("bad limit");
+        let err = parse_args([
+            "lobster-cli",
+            "search",
+            "foo",
+            "--for",
+            "user:rsaga",
+            "--limit",
+            "abc",
+        ])
+        .expect_err("bad limit");
         assert!(err.contains("--limit must be a non-negative number"));
     }
 
@@ -2794,6 +3036,8 @@ mod tests {
             "lobster-cli",
             "search",
             "hello",
+            "--for",
+            "user:rsaga",
             "--room",
             "room:world:lobby",
         ])
@@ -2928,10 +3172,34 @@ mod tests {
     }
 
     #[test]
+    fn shell_state_commands_resolve_user_session_and_reject_agent_sidecar() {
+        assert_eq!(
+            resolve_shell_session_token("user:rsaga", Some("session-rsaga")).unwrap(),
+            "session-rsaga"
+        );
+        let err = resolve_shell_session_token("agent:openclaw", None)
+            .expect_err("agent sidecar must not impersonate resident state");
+        assert!(err.contains("user session token"));
+    }
+
+    #[test]
+    fn admin_reads_resolve_user_session_and_reject_agent_sidecar() {
+        assert_eq!(
+            resolve_admin_read_token(Some("session-admin"), None).unwrap(),
+            "session-admin"
+        );
+        let err = resolve_admin_read_token(None, Some("sidecar-secret"))
+            .expect_err("agent sidecar must not authenticate admin reads");
+        assert!(err.contains("user session token"));
+    }
+
+    #[test]
     fn build_mark_read_request_strips_identity_prefix() {
         let command = ReadCommand {
             target: "user:rsaga".into(),
             conversation_id: "room:world:lobby".into(),
+            session_token: None,
+            agent_token: None,
             gateway: "http://127.0.0.1:8787".into(),
             json: false,
         };
@@ -2950,6 +3218,8 @@ mod tests {
         let command = ReadCommand {
             target: "room:world:lobby".into(),
             conversation_id: "room:world:lobby".into(),
+            session_token: None,
+            agent_token: None,
             gateway: "http://127.0.0.1:8787".into(),
             json: false,
         };
@@ -2982,6 +3252,8 @@ mod tests {
     fn build_presence_request_strips_identity_prefix() {
         let command = QueryCommand {
             target: "user:rsaga".into(),
+            session_token: None,
+            agent_token: None,
             gateway: "http://127.0.0.1:8787".into(),
             json: false,
         };
@@ -2998,6 +3270,8 @@ mod tests {
     fn build_presence_request_rejects_room_actor() {
         let command = QueryCommand {
             target: "room:world:lobby".into(),
+            session_token: None,
+            agent_token: None,
             gateway: "http://127.0.0.1:8787".into(),
             json: false,
         };
@@ -3143,6 +3417,103 @@ mod tests {
     }
 
     #[test]
+    fn send_command_accepts_agent_token_for_sidecar_auth() {
+        let command = parse_args([
+            "lobster-cli",
+            "send",
+            "--from",
+            "agent:openclaw",
+            "--to",
+            "user:rsaga",
+            "--text",
+            "hello",
+            "--agent-token",
+            "sidecar-secret",
+        ])
+        .expect("send command should accept agent token");
+
+        let Command::Send(send) = command else {
+            panic!("expected send command");
+        };
+        assert_eq!(send.agent_token.as_deref(), Some("sidecar-secret"));
+    }
+
+    #[test]
+    fn send_command_accepts_session_token_for_user_auth() {
+        let command = parse_args([
+            "lobster-cli",
+            "send",
+            "--from",
+            "user:rsaga",
+            "--to",
+            "user:zhangsan",
+            "--text",
+            "hello",
+            "--token",
+            "session-secret",
+        ])
+        .expect("send command should accept session token");
+
+        let Command::Send(send) = command else {
+            panic!("expected send command");
+        };
+        assert_eq!(send.session_token.as_deref(), Some("session-secret"));
+    }
+
+    #[test]
+    fn edit_and_recall_commands_accept_sidecar_auth_flags_and_preserve_actor_address() {
+        let edit = parse_args([
+            "lobster-cli",
+            "edit",
+            "--actor",
+            "agent:openclaw",
+            "--conversation-id",
+            "dm:openclaw:rsaga",
+            "--message-id",
+            "msg-1",
+            "--text",
+            "edited",
+            "--agent-token",
+            "sidecar-secret",
+        ])
+        .expect("edit command should accept sidecar token");
+        let Command::Edit(edit) = edit else {
+            panic!("expected edit command");
+        };
+        assert_eq!(edit.agent_token.as_deref(), Some("sidecar-secret"));
+        assert_eq!(
+            build_edit_request(&edit)
+                .expect("edit request")
+                .actor_address,
+            Some("agent:openclaw".into())
+        );
+
+        let recall = parse_args([
+            "lobster-cli",
+            "recall",
+            "--actor",
+            "agent:openclaw",
+            "--conversation-id",
+            "dm:openclaw:rsaga",
+            "--message-id",
+            "msg-1",
+            "--token",
+            "session-secret",
+        ])
+        .expect("recall command should accept session token");
+        let Command::Recall(recall) = recall else {
+            panic!("expected recall command");
+        };
+        assert_eq!(recall.session_token.as_deref(), Some("session-secret"));
+        assert_eq!(
+            build_recall_request(&recall)
+                .expect("recall request")
+                .actor_address,
+            Some("agent:openclaw".into())
+        );
+    }
+
+    #[test]
     fn edit_command_builds_shell_edit_request() {
         let command = parse_args([
             "lobster-cli",
@@ -3171,6 +3542,7 @@ mod tests {
                 room_id: "room:world:lobby".into(),
                 message_id: "msg-1".into(),
                 actor: "rsaga".into(),
+                actor_address: Some("user:rsaga".into()),
                 text: "改过的内容".into(),
             }
         );
@@ -3200,6 +3572,7 @@ mod tests {
                 room_id: "dm:openclaw:rsaga".into(),
                 message_id: "msg-1".into(),
                 actor: "openclaw".into(),
+                actor_address: Some("agent:openclaw".into()),
             }
         );
     }
@@ -3216,17 +3589,21 @@ mod tests {
             "--format",
             "jsonl",
             "--include-public",
+            "--token",
+            "session-secret",
             "--gateway",
             "http://127.0.0.1:8787",
         ])
         .expect("export command should parse");
 
-        let rendered = format!("{command:?}");
-        assert!(rendered.contains("Export"));
-        assert!(rendered.contains("user:rsaga"));
-        assert!(rendered.contains("room:world:lobby"));
-        assert!(rendered.contains("jsonl"));
-        assert!(rendered.contains("include_public: true"));
+        let Command::Export(export) = command else {
+            panic!("expected export command");
+        };
+        assert_eq!(export.target, "user:rsaga");
+        assert_eq!(export.conversation_id.as_deref(), Some("room:world:lobby"));
+        assert_eq!(export.format, "jsonl");
+        assert!(export.include_public);
+        assert_eq!(export.session_token.as_deref(), Some("session-secret"));
     }
 
     #[test]

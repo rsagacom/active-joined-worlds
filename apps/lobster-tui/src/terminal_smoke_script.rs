@@ -2,6 +2,7 @@ use chat_core::ConversationId;
 use chat_storage::FileTimelineStore;
 
 use crate::app_bootstrap::bootstrap_app;
+use crate::terminal_snapshot::{dump_terminal_shell_from_bootstrap, smoke_dump_requested};
 use crate::{LaunchSurface, SubmissionAction, TransportAdapter, handle_terminal_submission};
 
 pub(crate) fn smoke_submission_script_requested() -> bool {
@@ -58,5 +59,11 @@ pub(crate) fn run_smoke_submission_script_once(launch_mode: LaunchSurface) -> Re
         &mut bootstrap.selected_conversation_id,
         &script_lines,
     )?;
+    if smoke_dump_requested() {
+        println!(
+            "{}",
+            dump_terminal_shell_from_bootstrap(launch_mode, &bootstrap)?
+        );
+    }
     Ok(())
 }

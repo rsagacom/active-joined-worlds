@@ -33,6 +33,7 @@ mod scene_panel;
 mod seed_bootstrap;
 mod selection_state;
 mod shell_layout;
+mod shell_state_bootstrap;
 mod surface_meta;
 mod surface_projection;
 mod terminal_app_loop;
