@@ -1,6 +1,772 @@
 # lobster-chat Active Work Queue
 
-Last updated: 2026-07-07
+Last updated: 2026-07-27
+
+> 说明：下方按日期排列的记录保留当时的交接背景；如与本页最新日期区块冲突，以最新区块和 `docs/DEPLOYMENT.md` 为准。
+
+## 2026-07-27 H5 会话摘要表面 DOM 职责下沉
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 前端减债 | 已完成 | 新增 `apps/lobster-web-shell/shell-room-digest-surfaces.js`，承接最近会话标题、上下文摘要、统计徽章和当前管家状态；`app.js` 只保留 renderer 创建、依赖注入与 `renderRoomDigest` 委托 |
+| 遗留代码 | 已清理 | 删除 `app.js` 中会话摘要 DOM helper，`app.js` 由 7,542 行降至 7,460 行；Gateway 状态、pending echo、会话统计和页面文案契约保持不变 |
+| 防回归 | 已通过 | 会话摘要模块 2/2；静态套件 166/166；Web `npm test` 1,399/1,399；layout、frontend realness、fake DOM import 与 `git diff --check` 通过 |
+| 完整门禁 | 已通过 | `RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 退出码 0；Gateway 312、TUI 233，认证、居民主链、双 HTTP、双浏览器和 provider federation 均通过 |
+| 外部验收边界 | 保持 | Atlas 当前仍没有 lobster-chat 生产环境声明；目标 Linux 主机、正式域名/TLS、真实邮件 OTP 与公网双端 IM 仍待，未部署、未提交 Git |
+
+## 2026-07-27 H5 房间列表 DOM/分组表面职责下沉
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 前端减债 | 已完成 | 新增 `apps/lobster-web-shell/shell-room-list-surfaces.js`，承接房间空态、工具栏摘要、头像/未读、标签、房间项与分组；`app.js` 只保留 `renderRooms` 编排代理和依赖注入 |
+| 遗留代码 | 已清理 | 删除 `app.js` 中抽取后的 room list DOM helper，`app.js` 由 7,718 行降至 7,542 行；未改变 room rail 纯模型、Gateway 合同或过滤/分组排序规则 |
+| 防回归 | 已通过 | 房间列表表面静态门禁与完整静态套件 166/166；Web `npm test` 1,397/1,397，layout、frontend realness、fake DOM import 与 `git diff --check` 通过 |
+| 完整门禁 | 已通过 | `RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 退出码 0；Gateway 312、TUI 233、Web 1,397，认证、居民主链、双 HTTP、直接会话、双浏览器和 provider federation 均通过 |
+| 外部验收边界 | 保持 | Atlas 当前仍没有 lobster-chat 生产环境声明；目标 Linux 主机、正式域名/TLS、真实邮件 OTP 与公网双端 IM 仍待，未部署、未提交 Git |
+
+## 2026-07-27 H5 居民目录与紧凑居民列表 DOM/关系动作职责下沉
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 前端减债 | 已完成 | 新增 `apps/lobster-web-shell/shell-resident-surfaces.js`，承接居民目录卡片、住宅页紧凑居民列表、头像/在线状态、私聊入口和好友关系动作；`app.js` 只保留页面编排与 Gateway 依赖注入 |
+| 遗留代码 | 已清理 | 删除 `app.js` 中抽取后的居民 DOM/关系 action helper，`app.js` 由 7,939 行降至 7,718 行；没有改变 Gateway 状态真源、身份边界或关系路由 |
+| 防回归 | 已通过 | 居民表面静态门禁与完整静态套件 166/166；Web `npm test` 1,397/1,397，layout、frontend realness、fake DOM import 与 `git diff --check` 通过 |
+| 完整门禁 | 已通过 | `RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 退出码 0；Gateway 312、TUI 233、Web 1,397，认证、居民主链、双 HTTP、直接会话、双浏览器和 provider federation 均通过 |
+| 外部验收边界 | 保持 | Atlas 当前仍没有 lobster-chat 生产环境声明；目标 Linux 主机、正式域名/TLS、真实邮件 OTP 与公网双端 IM 仍待，未部署、未提交 Git |
+
+## 2026-07-27 H5 治理城市卡片与动作 DOM 渲染职责下沉
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 前端减债 | 已完成 | 新增 `apps/lobster-web-shell/shell-governance-city-surfaces.js`，承接治理城市卡片、公共房间/居民列表、加入/开房/冻结/执事/联邦策略动作和离线空态；`app.js` 只保留 Gateway 投影编排与依赖注入 |
+| 遗留代码 | 已清理 | 删除 `app.js` 中抽取后的治理城市 DOM helper，`app.js` 由 8,259 行降至 7,939 行；未改变 Gateway 合同或状态真源 |
+| 防回归 | 已通过 | 治理静态门禁 166/166；Web `npm test` 1,397/1,397，layout、frontend realness、fake DOM import 与 `git diff --check` 通过 |
+| 完整门禁 | 已通过 | `RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 退出码 0；Gateway 312、TUI 233、Web 1,397，认证、居民主链、双浏览器、直接会话和 provider federation 均通过 |
+| 外部验收边界 | 保持 | Atlas 当前仍没有 lobster-chat 生产环境声明；目标 Linux 主机、正式域名/TLS、真实邮件 OTP 与公网双端 IM 仍待，未提交 Git |
+
+## 2026-07-27 H5 治理/世界公共表面 DOM 渲染职责下沉
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 前端减债 | 已完成 | 新增 `apps/lobster-web-shell/shell-world-surfaces.js`，统一承接世界目录、镜像源、世界广场和世界安全表面的 DOM 工厂；`app.js` 只保留注入依赖和渲染委托，Gateway 投影与页面行为不变 |
+| 遗留代码 | 已清理 | 删除 `app.js` 中抽取后不再调用的世界安全 DOM helper，`app.js` 由 8,470 行降至 8,259 行 |
+| 防回归 | 已通过 | 世界表面静态门禁 166/166；Web `npm test` 1,397/1,397，layout、frontend realness 与 `git diff --check` 通过 |
+| 完整门禁 | 已通过 | `RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 退出码 0；Gateway 312、TUI 233、Web 1,397，双浏览器、认证、居民主链、直接会话和 provider federation 均通过 |
+| 外部验收边界 | 保持 | Atlas 当前仍没有 lobster-chat 生产环境声明；目标 Linux 主机、正式域名/TLS、真实邮件 OTP 与公网双端 IM 仍待，未提交 Git |
+
+## 2026-07-27 H5 场景编辑器 Gateway 读写身份契约收口
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | 编辑器加载只依赖旧 `rooms` 路径，入口未透传当前居民身份，保存缺少身份时回退伪造 `user`；Gateway 实际要求 `resident_id` 与 Bearer 会话绑定，并以 `rooms/scene_render` 提供场景图层 |
+| H5 修复 | 已完成 | scene-editor 入口携带当前居民身份；加载按居民请求并兼容 Gateway `rooms`、`scene_render`、旧合同；无登录居民身份时保存明确阻断并使用真实 actor，不再伪造身份；无图层/未找到房间时清除旧画面与热点状态 |
+| 防回归 | 已通过 | 新增场景编辑器 Gateway 合同/身份静态测试；Web `npm test` 1399/1399，layout、frontend realness、Gateway 场景写入 3/3、`git diff --check` 通过 |
+| 外部验收边界 | 保持 | 目标 Linux 主机、正式域名/TLS、真实邮件 OTP 和公网双端 IM 仍待；Atlas 当前没有 lobster-chat 生产环境声明；未提交 Git |
+
+## 2026-07-27 H5 访客发送与合成 QA 身份边界收口
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | 真实 production-mode Gateway 无 Bearer 时，带 `identity` query 的住宅页仍可能把 query 身份当成居民，输入框可编辑并把发送错误推迟到后端 `401`；query identity 不是认证凭据 |
+| H5 修复 | 已完成 | Gateway 页面无 session 时忽略 query identity、按 `访客` 加载；composer 需要 Bearer session；只有 loopback 且显式 `qa=browser`/`qa=manual` 才允许合成 QA 身份 |
+| 测试夹具 | 已完成 | Gateway 身份夹具补齐测试 session token；消息编辑/撤回和非用户壳 placeholder 断言同步当前 session/待同步合同 |
+| 真实浏览器 | 已通过 | 390×844 `creative.html` + 无开发 bypass/无 token Gateway：访客 scope、OTP 登录提示、输入和发送均 disabled；loopback `qa=browser` 主城仍完成真实发送并收到 committed self bubble |
+| 防回归 | 已通过 | focused 227/227；Web `npm test` 1399/1399，layout、frontend realness、`git diff --check` 通过 |
+| 外部验收边界 | 保持 | 目标 Linux 主机、正式域名/TLS、真实邮件 OTP 和公网双端 IM 仍待；Atlas 当前没有 lobster-chat 生产环境声明；未提交 Git |
+
+## 2026-07-27 admin-ds 场景编辑器热点计数投影收口
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | 真实移动端浏览器中添加/删除热点后，编辑列表已更新但标题仍保留初始 `0 个` |
+| 前端修复 | 已完成 | `admin-ds.js` 保存热点标题节点，并在 `renderHotspotRows()` 每次重绘时从 `existingHotspots.length` 更新计数 |
+| 真实浏览器 | 已通过 | 390×844 admin-ds：添加热点显示 `1 个`，删除后恢复 `0 个` 并显示“暂无热点” |
+| 防回归 | 已通过 | admin-ds 定向测试 81/81；Web `npm test` 1395/1395；layout/realness、`git diff --check` 通过 |
+| 完整门禁 | 已通过 | `RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 退出码 0；Gateway 312、TUI 233、Web 1395、双浏览器、认证、居民主链、Provider federation 与发布门禁通过 |
+| 外部验收边界 | 保持 | 目标 Linux 主机、正式域名/TLS、真实邮件 OTP 和公网双端 IM 仍待；Atlas 当前没有 lobster-chat 生产环境声明；未提交 Git |
+
+## 2026-07-27 admin-ds 告警 badge 真源投影收口
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | 后台日志 badge、待处理统计和顶部告警数在 Gateway 异步读取审计日志后仍可能保留静态 demo 计数（原为 7/3），与真实投影不一致 |
+| 前端修复 | 已完成 | `admin-ds.js` 增加 `updateAlertCounts()`，消息和日志 badge、仪表盘待处理告警及顶部告警数统一从当前 `messages`/`logs` 计算；Gateway 空数组会明确投影为 0 并隐藏 badge |
+| 防回归 | 已通过 | `admin-ds-static.test.mjs` + `admin-ds-runtime.test.mjs`：80/80；Web `npm test`：1394/1394；`git diff --check` 通过 |
+| 完整门禁 | 已通过 | `RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 退出码 0；Gateway 312/312、TUI 233/233、Web 1394/1394、双浏览器、认证、居民主链、Provider federation 与公网 ingress smoke 均通过 |
+| 外部验收边界 | 保持 | 仍需目标 Linux 主机、正式域名/TLS、真实邮件 OTP 和公网双端 IM；Atlas 当前没有 lobster-chat 生产环境声明；未提交 Git |
+
+## 2026-07-27 公网 ingress smoke 契约加固
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 验收脚本 | 已完成 | `scripts/smoke-public-ingress.sh` 默认首页标记同步到当前 `index.html`，并增加 `creative.html`、`admin-ds.html`、无 Bearer 的管理/退出接口 `401` 边界，以及可选 `EXPECT_CORS_ORIGIN` 校验 |
+| 防回归 | 已完成 | `test_smoke_public_ingress_unit.py` 锁定上述合同；脚本语法、quick unit 和 `git diff --check` 通过 |
+| 本地真实入口 | 已通过 | 临时真实 Gateway（开发鉴权关闭）+ 静态 Web 反向代理场景通过主页、H5、后台、GET/HEAD health、provider、401 和 CORS 检查 |
+| 完整门禁 | 已通过 | `RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 退出码 0；Gateway 312/312、TUI 233/233、Web 1393/1393 |
+| 外部验收边界 | 保持 | 仍需目标 Linux 主机、正式域名/TLS、真实邮件 OTP 和公网双端 IM；Atlas 当前没有 lobster-chat 生产环境声明；未提交 Git |
+
+## 2026-07-27 H5 与后台服务端 logout 主链收口
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | Gateway/CLI 已有服务端 revoke，但 H5/admin-ds 只有本地清理或没有可见退出入口，无法从页面证明旧 Bearer 已撤销 |
+| H5 修复 | 已完成 | shared auth controller 增加 `/v1/auth/logout` Bearer POST；主 H5 与 admin-ds HUD 登录按钮在已登录态显示“退出登录” |
+| 失败语义 | 已完成 | 服务端退出失败仍清理本地 token，但明确显示“网关退出待重试”，不伪报服务端已撤销；后台身份变化后重新加载 Gateway 投影 |
+| 防回归 | 已通过 | shell-auth logout 8/8；Web `npm test` 1393/1393；Gateway logout/revoke 既有测试、Rust workspace、fmt、Clippy `-D warnings` 与完整 release gate 通过 |
+| 外部验收边界 | 保持 | 目标 Linux 主机、正式域名/TLS、真实邮件 OTP、公网双端 IM 仍待目标环境声明与线上验收；未提交 Git |
+
+## 2026-07-27 OTP 与 Bearer session token 熵源收口
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | OTP 与 Bearer session token 原先由消息序号、时间和 challenge/居民标识可预测地派生，不能作为生产认证凭据熵源 |
+| Gateway 修复 | 已完成 | OTP、challenge ID 和 session token 改用操作系统 CSPRNG；OTP 拒绝 modulo-bias 尾部；随机源不可用时认证请求失败关闭 |
+| 防回归 | 已通过 | Gateway 312/312、Clippy `-D warnings`、Rust fmt、`git diff --check` 和完整 release gate（含认证、公网双浏览器模拟、provider federation）通过 |
+| 外部验收边界 | 保持 | 目标 Linux 主机、正式域名/TLS、真实邮件 OTP、公网双端 IM 仍待目标环境声明与线上验收；未提交 Git |
+
+## 2026-07-27 H5 消息搜索认证与查看者可见性收口
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | `/v1/shell/messages/search` 原先未要求 Bearer，也直接扫描全局活动会话，未参与者可读取私聊正文；H5 请求也未带当前居民身份/会话令牌 |
+| Gateway 修复 | 已完成 | 搜索要求 `resident_id` 并绑定匹配 Bearer session；结果复用 H5 会话可见性，个人房间正文继续 owner-only；缺失/错配认证返回 400/401 |
+| H5 修复 | 已完成 | `messageSearchRequestModel()` 携带 `resident_id`，控制器动态透传当前居民身份和 `Authorization: Bearer ...`；访客不发起搜索请求 |
+| 防回归 | 已完成 | Gateway 覆盖未认证、参与者可见和非参与者空结果；Web 搜索/静态测试与 Rust fmt、`git diff --check` 通过 |
+| 外部验收边界 | 保持 | 生产 Linux 主机、正式域名/TLS、真实邮件 OTP、公网双端 IM 仍待目标环境声明与线上验收；未提交 Git |
+
+## 2026-07-27 Linux x86_64/aarch64 发布产物矩阵收口
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | 安装脚本和部署文档支持 x86_64/aarch64，但 release workflow 只生成 x86_64 artifact，ARM64 生产部署缺少可复现 CI 来源 |
+| 工作流修复 | 已完成 | `.github/workflows/release.yml` 改为 x86_64 + aarch64 matrix，分别使用 `ubuntu-latest` 与 `ubuntu-24.04-arm`，artifact 名称和 target triple 独立隔离 |
+| 单元护栏 | 已完成 | `scripts/test_release_workflow_unit.py` 锁定两个 runner、两个 target 和动态 artifact 校验；未把任何凭据写入 workflow |
+| 外部验证边界 | 保持 | 本地只能验证 YAML/脚本合同；真实 GitHub Actions runner、Linux artifact 下载和目标主机安装仍需触发 workflow 后验收 |
+
+## 2026-07-27 Linux artifact 实际目标架构校验收口
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | matrix target 只参与 artifact 命名，原构建命令未显式 `--target`，打包器固定读取 `target/release`，存在 runner 与文件名漂移时的误标风险 |
+| 工作流修复 | 已完成 | 按 matrix target 编译，打包器读取对应 `target/<triple>/release` binary，并同时校验 `uname -m` 与 `rustc` host triple |
+| 单元护栏 | 已完成 | release workflow 和 package-release unit 锁定 machine、target、binary path override 与实际 target build 命令 |
+| 外部验证边界 | 保持 | 本地已验证文本合同；真实 GitHub Actions runner、artifact 下载/执行和生产主机安装仍待 workflow 发布后验收 |
+
+## 2026-07-27 生产 readiness 配置值域收口
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | `production-readiness.sh` 原先只拒绝开发开关值为 `1`，未知值以及非 HTTPS CORS origin 可能通过配置门禁 |
+| 脚本修复 | 已完成 | CORS 强制单一 HTTPS origin；`LOBSTER_DEV_AUTH_BYPASS` 与 `LOBSTER_DEV_EMAIL_OTP_INLINE` 只允许 `0` 或未设置 |
+| 防回归 | 已完成 | production-readiness unit 增加有效配置、HTTP CORS 和未知开发开关的实际脚本执行断言；bash syntax 与 release gate unit 通过 |
+| 外部验证边界 | 保持 | 仍需在目标 Linux 主机用真实 env、Nginx、域名/TLS 和邮件 Webhook 执行线上验收 |
+
+## 2026-07-27 H5 owner-only 场景入口认证边界收口
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | 真实 Gateway 页面把默认/持久化身份当成已登录，且住宅 rail 的 `display:flex !important` 会覆盖普通 inline 隐藏，未登录时场景编辑器入口仍可能可见 |
+| H5 修复 | 已完成 | Gateway 页面要求当前居民身份同时持有 session token；无 Gateway 的静态预览继续支持 `identity` 视觉验收；owner-only 隐藏使用可逆的 `display:none !important`，认证 refresh/401/403 后重新投影 |
+| 真实浏览器验证 | 已通过 | 真实 Gateway 页面无 token 实际 `display:none`，带身份与 session token 实际 `display:flex`；登录流程和住宅页 CSS 覆盖均复核 |
+| 回归验证 | 已通过 | Web 1391/1391；`RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 退出码 0，Gateway 310、TUI 233、双浏览器、认证、居民主链、Provider federation 与发布门禁通过 |
+| 外部验收边界 | 保持 | 生产 Linux 主机、正式域名/TLS、真实邮件 OTP、公网双端 IM 仍待目标环境声明与线上验收；未提交 Git |
+
+## 2026-07-27 TUI Gateway shell state/scene render 合同接入
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | TUI 启动原来只调用本地 `bootstrap_conversations` 与 `launch_seed`；即使配置 `LOBSTER_WAKU_GATEWAY_URL`，也没有读取 `/v1/shell/state`，未消费 Gateway 的 `conversation_shell`/`scene_render` 居民可见合同 |
+| TUI 接入 | 已完成 | Gateway 配置下以 `conversation_shell` 为会话来源，合并 `scene_render` 场景字段，导入消息及 edit/recall 元数据；无 Gateway 时才保留离线 seed |
+| 命令兼容 | 已完成 | `/open` 先保持模式内稳定种子会话槽位，再追加 Gateway 动态会话，避免新增服务端会话改变既有快捷序号 |
+| 回归验证 | 已通过 | TUI 233/233；真实 resident smoke 使用 Bearer 验证 Gateway shell state hydration 并断言 `TUI_GATEWAY_BOOTSTRAP_SMOKE`；完整 release gate 通过，Gateway 310/Web 1391 |
+| 外部验收边界 | 保持 | 生产 Linux 主机、正式域名/TLS、真实邮件 OTP、公网双端 IM 仍待目标环境声明与线上验收；未提交 Git |
+
+## 2026-07-27 TUI edit/recall Gateway shell 合同收口
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | TUI `/edit` 与 `/recall` 请求仍发送旧 `sender` 字段，缺少 Gateway 正式要求的 `room_id` 与 `actor`；旧单测固定了错误请求体，因此未暴露运行时问题 |
+| TUI 修复 | 已完成 | 请求构造统一发送 `room_id`、`message_id`、`actor`，调用处使用当前活动会话 ID；不改变本地消息发布路径 |
+| 回归验证 | 已通过 | TUI 233/233；`SKIP_BUILD=1 scripts/smoke-shell-direct-http.sh` 真实 Gateway edit/recall/SSE 链路通过；完整 release gate 通过，Gateway 310/Web 1391 |
+| 外部验收边界 | 保持 | 生产 Linux 主机、正式域名/TLS、真实邮件 OTP、公网双端 IM 仍待目标环境声明与线上验收；未提交 Git |
+
+## 2026-07-27 本地发布产物与安装前门禁准备
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 发布门禁 | 已通过 | `RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 退出码 0；Gateway 310/310、Web 1391/1391、双浏览器、Provider federation、终端 smoke 与生产 panic scan 均通过 |
+| 本地打包 | 已通过 | `scripts/package-release.sh` 成功生成当前 worktree 的 source、H5 与 `aarch64-apple-darwin` Gateway 产物；tar listing 完整且未发现凭据文件名 |
+| Linux 安装前验证 | 已通过 | `bash scripts/smoke-install-layout.sh` 通过；安装器、release workflow、production-readiness、package 与脚本语法单元测试通过 |
+| 生产边界 | 未完成 | macOS 产物不能安装到 Linux；Linux artifact 需通过 `.github/workflows/release.yml` 生成。Atlas 当前没有 lobster-chat 生产环境声明，正式主机、域名/TLS、真实邮件 OTP 和公网双端验收仍待确认/执行 |
+
+## 2026-07-27 admin-ds 居民制裁解除真实操作闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 后台操作 | 已完成 | 居民制裁列表对 `Active` 制裁显示“解除制裁”按钮，调用 `/v1/admin/residents/unsanction`，成功后刷新安全治理投影；无 Gateway、HTTP 失败和网络异常均有明确反馈 |
+| 前端护栏 | 已完成 | 新增 admin-ds 静态端点/函数断言与运行时 POST、身份字段、无 Gateway 提前返回测试 |
+| 当前验证 | 已通过 | Web `npm test`：1391/1391；`RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 退出码 0；Gateway 310/310、双浏览器、Provider federation、终端 smoke 与发布门禁均通过 |
+| 外部验收边界 | 保持 | 本轮只完成本地代码与发布链验证；生产 Linux 主机、正式域名/TLS、真实邮件 OTP、公网双端 IM 和 admin 线上演练仍未执行；未提交 Git |
+
+## 2026-07-27 Gateway 管理房间冻结跨重启持久化
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | `/v1/admin/rooms/freeze` 与 `/unfreeze` 只修改 `public_rooms` 内存状态，未写回 `governance-state.json`；Gateway 重启后 `is_frozen` 会丢失 |
+| Gateway 修复 | 已完成 | 冻结/解冻成功后持久化 governance state；写盘失败时回滚内存变更并返回错误 |
+| 回归测试 | 已完成 | `admin_room_freeze_persists_across_restart` 覆盖 freeze、重启读取、unfreeze、再次重启读取 |
+| 当前验证 | 已通过 | Gateway 305/305；`RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 通过 |
+
+## 2026-07-27 Gateway 管理后台操作持久化错误合同收口
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 覆盖范围 | 已完成 | 邀请码、日志处理、权限组/授权、设备管理、房间成员和消息审核均纳入统一写盘错误处理 |
+| Gateway 修复 | 已完成 | 持久化失败返回错误并回滚内存；房间成员写入不再吞掉 timeline store 错误；设备错误带持久化失败上下文 |
+| HTTP 合同 | 已完成 | admin 写操作不再把持久化失败当作成功响应；保留参数/资源错误的原有 4xx 语义 |
+| 回归测试 | 已完成 | 新增 `admin_ops_persist_across_restart`，覆盖 invite/log/moderation/permission/room-member/device 跨重启读取 |
+| 当前验证 | 已通过 | Gateway 309/309；`RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 通过，Web 1389/1389、双浏览器、认证、CLI/TUI 与 provider federation smoke 均通过 |
+
+## 2026-07-27 Gateway 治理、昵称与设备绑定跨重启持久化
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 治理修复 | 已完成 | 世界解制裁现在写回 `governance-state.json`，写盘失败恢复原制裁状态 |
+| 身份修复 | 已完成 | admin/shell 昵称写盘失败回滚内存，避免返回错误后状态仍被半修改 |
+| 设备修复 | 已完成 | OTP 绑定设备同步写回 `device-state.json`，失败时同时恢复 binding 与设备投影 |
+| 回归测试 | 已完成 | 新增 `governance_profile_and_device_binding_persist_across_restart`，覆盖昵称、制裁、解制裁和设备绑定跨重启读取 |
+| 当前验证 | 已通过 | Gateway 310/310；`RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 通过，Web 1389/1389、双浏览器、认证、CLI/TUI 与 provider federation smoke 均通过 |
+
+## 2026-07-27 Gateway 管理系统配置跨重启持久化
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | `/v1/admin/config` 只更新运行时 `app_config`，Gateway 重启后配置恢复为空 |
+| Gateway 修复 | 已完成 | 新增 `app-config.json` 的 atomic write/load；配置写盘失败时回滚内存并返回错误 |
+| HTTP 合同 | 已完成 | 配置持久化失败返回 HTTP 500，成功路径仍记录 `admin:config` 审计事件 |
+| 回归测试 | 已完成 | `admin_config_persists_across_restart` 与 6 条 admin config 聚焦测试通过 |
+| 当前验证 | 已通过 | Gateway 308/308；config focused 6/6；`RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 通过，Web 1389/1389、双浏览器、认证、CLI/TUI 与 provider federation smoke 均通过 |
+
+## 2026-07-27 Gateway 管理居民/制裁操作跨重启持久化
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | `admin_create_resident()`、`admin_ban_resident()` 和 `admin_unban_resident()` 修改注册/制裁内存后未持久化；重启会丢失后台操作结果 |
+| Gateway 修复 | 已完成 | 新建居民写回 `auth-state.json`；封禁/解封写回 `governance-state.json`；写盘失败回滚内存并返回错误 |
+| HTTP 合同 | 已完成 | 新建居民持久化失败返回 HTTP 500，不再把失败误报为重复居民 409 |
+| 回归测试 | 已完成 | 新增居民和制裁/解封跨重启测试；admin 聚焦 57/57 通过 |
+| 当前验证 | 已通过 | Gateway 309/309；`RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 通过 |
+
+## 2026-07-27 app.js 技术债继续收口: 会话总览 context/status 运行态接线
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| overview context adapter | 已完成 | 新增 `conversationOverviewContextModelForRoom()`；`createConversationOverviewContextNode()` 只负责 DOM 投影，summary/context/status 运行态由 adapter 收集后交给 `conversationOverviewContextModel()` |
+| overview base status adapter | 已完成 | 新增 `conversationOverviewBaseStatusPillsForRoom()`；`gatewaySyncController`、`roomSendErrors`、pending echo、未读和会话摘要均在 adapter 边界注入，DOM appender 不再自行决定 pill 文案与 tone |
+| user status adapter | 已完成 | 新增 `userConversationStatusPillsForRoom()`；user status DOM 与运行态状态模型分离，保留 quick action DOM 控件在 app.js |
+| TDD 护栏 | 已完成 | 更新 `shell-pages-static.test.mjs`，分别锁定 DOM renderer 与运行态 adapter 边界；focused suite 246 passed / 0 failed |
+| Web 全量验证 | 已通过 | `npm test`：1385 passed / 0 failed；layout、frontend realness、`node --check` 与 `git diff --check` 通过 |
+| 完整发布门禁 | 已通过 | `RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 通过；Gateway 304、Rust workspace、CLI/TUI、认证、居民主链、双 HTTP、Web shell、双浏览器、provider federation、安装布局、发布工作流、生产 readiness 和完整验证均通过 |
+| 外部验收边界 | 保持 | 本轮只验证本地代码与发布链；生产 Linux 主机、正式域名/TLS、真实邮件 OTP、公网双端 IM 和账号申诉演练仍未执行；未提交 Git |
+
+### 下一步建议
+
+1. 进入目标 Linux 主机：使用发布 artifact 部署 Gateway/H5，配置 systemd、Nginx、正式 CORS/TLS 与生产邮件 Webhook。
+2. 运行 `scripts/production-readiness.sh` 与 `scripts/smoke-public-ingress.sh`，再按 `docs/DEPLOYMENT.md` 完成真实邮箱 OTP、双端公共/私聊发送编辑撤回、失败重试、重启恢复和 admin 验收。
+
+## 2026-07-27 app.js 技术债继续收口: Gateway shell state 标准化下沉
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| shell state normalization | 已完成 | 新增 `normalizeShellStateForState(payload, fallbackState)` 到 `shell-state-normalize.js`，统一处理 Gateway conversation contract、legacy rooms 与 fallback clone |
+| app.js 接线 | 已完成 | `loadShellState()`、Gateway shell state 应用和 IndexedDB cache 恢复均调用共享纯函数；app.js 删除本地 contract merge 实现，约减少 13 行 |
+| TDD 护栏 | 已完成 | 新增 fallback clone、contract 覆盖 legacy、legacy-only 三类单测，并增加 app.js 静态接线/禁止本地 normalization 回流测试 |
+| 验证 | 已通过 | state-normalize + pages static focused suite 183 passed / 0 failed；当前 Web 全量 `npm test` 1389 passed / 0 failed，layout、frontend realness、相关 JS syntax 与 `git diff --check` 通过 |
+
+## 2026-07-26 app.js 技术债继续收口: 会话总览头部纯规格下沉
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 任务选择 | 已确认 | 按 2026-07-16「继续按模块边界收口剩余前端技术债」与旧队列「conversation overview 非用户状态/动作 specs」建议，先收会话总览头部 |
+| overview header 纯规格 | 已完成 | 新增 `conversationOverviewHeaderModel()`（`shell-room-render.js`），下沉 user/admin/world 摘要回退链、direct accent 徽章、紧凑壳身份徽章隐藏、场景横幅与管家徽章顺序 |
+| app.js 委托接线 | 已完成 | `createConversationOverviewHeaderNode()` 只保留 DOM 创建；新增 `conversationOverviewHeaderModelForRoom()` 收集 `roomThreadHeadline/roomSummaryLine/roomAudienceLabel/caretakerProfile` 等运行态后委托纯模型，未外提这些实时状态函数本体（保持旧队列的参数化边界告诫） |
+| TDD 护栏 | 已完成 | 先红后绿：`shell-room-render.test.mjs` 新增 7 条模型测试；`shell-pages-static.test.mjs` 新增委托护栏（禁止 `后台对象 ·`、summary 回退链和 direct tone 三元回流 app.js），并同步更新旧 header DOM 护栏为委托形状 |
+| app.js 规模 | 已更新 | 8423 → 8417 行 |
+| 验证 | 已通过 | `node --test test/shell-room-render.test.mjs test/shell-pages-static.test.mjs` 227 passed / 0 failed；`npm test` unit 1366 passed / 0 failed（原 1358 + 新增 8），layout 与 frontend realness 通过；`node --check app.js shell-room-render.js`、`git diff --check` 通过 |
+| 未验证边界 | 保持 | 生产主机、域名、真实邮件 OTP 复验仍需外部环境，本轮未触碰；未提交 Git |
+
+### 下一步建议
+
+1. 继续 conversation overview 收口：`createConversationOverviewContextNode()` / `appendConversationOverviewBaseStatusPills()` 系列可按同样模型化模式下沉（注意 `gatewaySyncController`、`roomSendErrors` 等运行态需以参数注入）。
+2. `createUserConversationStatusNode()` 的用户态状态徽章与之共享 pill 语义，可在 context/status 收口后合并为同一模型家族。
+
+## 2026-07-16 app.js 技术债恢复推进: 生命周期、输入附件、消息搜索与回显状态收口
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 拆分恢复授权 | 已确认 | 用户恢复 `app.js` 技术债推进；继续保持 Gateway 合同为真值来源，不混入视觉改版和产品扩展 |
+| Quick Action reader 状态边界 | 已完成 | `shell-quick-action-reader.js` 从模块级可变回调 + `initQuickActionReaders()` 改为 `createQuickActionReaders(deps)` 实例工厂，消除初始化顺序和跨实例状态污染 |
+| 新模块直接测试 | 已完成 | 新增 Quick Action reader 实例隔离测试和 conversation callout renderer DOM 投影测试；本轮六个 WIP 模块均已有直接测试 |
+| 房间画像侧栏 renderer | 已完成 | 画像 canvas 保留、旧节点清理、摘要与状态 chip DOM 投影下沉到 `shell-scene-chrome.js`，`app.js` 只组装模型和依赖 |
+| 消息搜索 chrome | 已完成 | 搜索栏/按钮创建、插入和 toggle 接线下沉到现有 `shell-message-search.js`；安全 DOM 静态契约改为验证模块接线，不再依赖旧内联注释 |
+| Shell 生命周期边界 | 已完成 | 新增 `shell-lifecycle.js`，统一启动顺序与 visibility/focus/pageshow 前台刷新监听；`app.js` 只注入启动阶段和刷新回调 |
+| 输入附件控制器 | 已完成 | 新增 `shell-composer-symbols.js`，颜文字分类 tabs、插入/提及、菜单开关和文档点击关闭统一由实例控制器管理，并提供模块级直接测试 |
+| 消息搜索运行时控制器 | 已完成 | `shell-message-search.js` 统一动态 Gateway/房间读取、300ms 防抖、过期响应抑制、安全结果渲染、消息定位高亮与关闭清理；`app.js` 仅保留实例接线 |
+| Pending echo 实例状态 | 已完成 | `shell-message-state.js` 新增 `createPendingMessageEchoStore()`，统一发送回显的入队、失败标记、删除、按房间/全量清理和快照读取；实例隔离测试锁定不再共享或直接改写 `app.js` 全局对象 |
+| Gateway 实时同步控制器 | 已完成 | 新增 `shell-gateway-realtime.js` 实例控制器，统一持有 `EventSource`、重连 timer、快照版本、错误降级与轮询切换；`app.js` 只注入 Gateway 状态读写和渲染回调，不再持有 SSE 生命周期全局变量 |
+| 消息发送状态控制器 | 已完成 | 新增 `shell-message-send.js`，实例化持有发送中状态并统一本地发送、Gateway POST、强制刷新、pending echo 清理和失败分类；源头抑制并发重复调用，POST 已成功但刷新失败时继续保留“可能已发出”语义 |
+| Gateway 轮询与前台恢复控制器 | 已完成 | 新增 `shell-gateway-polling.js`，实例化持有 fallback interval、前台刷新并发闸门和 1200ms 节流；实时控制器与生命周期控制器只通过注入调用，`app.js` 不再持有轮询 timer 和前台刷新时间戳全局状态 |
+| Gateway 同步状态与刷新控制器 | 已完成 | 新增 `shell-gateway-sync.js`，统一持有刷新中、最近成功时间和错误状态，并编排 world/shell/provider 三路刷新及最终 UI 回调；轮询、SSE、手动刷新和本地发送回显复用同一实例，`app.js` 不再共享三个同步状态全局变量 |
+| shell-state 生产接线 | 已完成 | 修复此前只抽模块和单测、生产 `app.js` 仍保留重复实现的问题；workspace、聊天窗格恢复、草稿、已读标记、快捷状态与快照现已委托 `shell-state.js`。`resolveChatPaneMode` 支持调用方响应式 fallback，保持窄屏 `list/thread` 行为 |
+| 认证状态实例控制器 | 已完成 | `shell-auth.js` 新增 `createAuthController()`；H5 主 shell 与 standalone 登录页分别持有 challenge、session token、DOM refs 和回调，不再共享模块级认证状态。新增双实例隔离测试，并保留旧导出作为兼容单例入口 |
+| 聊天专注实例控制器 | 已完成 | 新增 `shell-chat-focus.js`，实例化持有偏好、当前激活态与 toggle DOM；workspace 切换仅暂停专注而不覆盖用户偏好，`app.js` 只注入存储、当前 workspace、锚点和 badge 回调。4 个直接测试及静态生产接线契约锁定实例隔离与真实接入 |
+| 生产邮件 OTP 适配器 | 已完成 | 新增 HTTPS Webhook mailer；生产模式未配置或投递失败时回滚 challenge 并 fail-closed，Bearer 凭证仅走 header。release 二进制黑盒验证缺配置返回 400，配置本地捕获 Webhook 后 request → delivery → verify 成功 |
+| OTP 外部投递锁隔离 | 已完成 | Gateway 只在运行时锁内完成 OTP 校验、challenge 创建和持久化，HTTPS 邮件投递在锁外执行；慢 mailer 不再阻塞其他 Gateway 请求，投递失败会重新加锁并精确撤销 challenge 与本次限流记录 |
+| 注册账号后台审计 | 已完成 | `/v1/admin/residents` 以注册记录为基础投影，未入城账号也可见；返回脱敏邮箱、注册状态、注册/验证/最近登录时间，admin-ds 已切换到该管理端点并在详情中展示 |
+| 生产接管与申诉手册 | 已完成 | 重写 `docs/DEPLOYMENT.md` 为当前 304/1358 基线，补齐 artifact、systemd 环境文件、TLS、公网/真实邮箱/双端 IM 验收、备份恢复和回滚；新增 `ACCOUNT_APPEAL_RUNBOOK.md`，明确只读调查、普通制裁恢复、世界黑名单升级和审计留痕边界 |
+| app.js 当前规模 | 已更新 | 8942 → 8422 行；已低于旧 `<8700` 参考值，但后续仍只按职责边界和直接测试推进 |
+| 多来源改动外盘快照 | 已完成 | 排除可重建的 `target`、node_modules 和临时输出后，将源码/文档/测试/必要资产完整镜像到 `/Volumes/AJW-Data/Backups/lobster-chat-pre-final-20260716/source`，另保存 binary diff；checksum dry-run 无差异 |
+| Web 全量验证 | 已通过 | `npm test`：1358 tests / 0 failed，layout 与 frontend realness 通过；首次全量出现一次 Hub 消息行时序抖动，目标用例单独连续 10 次及第二轮全量均通过，未放宽断言 |
+| 双浏览器真实链路 | 已通过 | `SKIP_BUILD=1 npm run smoke:dual-browser` 验证双用户发送、编辑、撤回、503 故障注入与失败重试闭环 |
+| 完整发布门禁 | 已通过 | 场景编辑器统一画布与比例规范、room digest 统计投影下沉后执行 `RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh`；Gateway 304、Web 1358、Rust workspace、CLI/TUI、鉴权、居民主链、HTTP、双浏览器、provider 联邦和交付脚本全部通过 |
+| 单城 IM 完成度审计 | 已完成 | P0/P2/P4 代码与自动化门禁已闭环；旧 DS 清单中的 admin 写端点、session/logout、OTP 限流和审计均已实现。当前真实外部缺口是生产主机/域名/邮件适配器环境复验，不在本地代码中伪造完成 |
+| 下一阶段 | 待推进 | 继续按模块边界收口剩余前端技术债；生产验收和账号申诉手册已就绪，真实上线复验仍需目标主机、域名和邮件发送配置 |
+| Linux x86_64 发布工作流 | 已完成 | 新增手动触发的 `.github/workflows/release.yml`；先跑 Rust/Web 全量测试，再上传目标架构 Gateway、H5、源码和 SHA256SUMS，避免在 macOS 上误用 Darwin binary |
+| Nginx Bearer 透传 | 已完成 | 安装脚本生成配置显式透传 `Authorization`，新增安装合同测试和 install-layout smoke，避免生产代理依赖默认 header 行为 |
+| 生产就绪只读检查 | 已完成 | 新增 production-readiness.sh，检查正式 CORS、关闭开发鉴权/inline OTP、HTTPS 邮件 Webhook、Bearer 配置；可选探测公网 health、provider 与 CORS，不读取或输出密钥；已纳入 release gate quick unit |
+
+## 2026-07-16 P1 场景编辑器坐标画布收口
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 统一逻辑画布 | 已完成 | `scene-editor.html` 增加自适应 16:9 `scene-canvas`；背景、热点和缩放共同挂在画布内，拖拽/缩放坐标改用画布 rect，移动端不再以 stage 留白计算热点 |
+| 比例字段规范 | 已完成 | `aspect_ratio_permyriad` 明确为高度/宽度 × 10000，16:9 规范值为 5625；Gateway 默认场景、chat-core、storage fixture、admin-ds、编辑器和主合同 fixture 已统一 |
+| P1 真实验收 | 已通过 | 新增静态画布契约与移动 viewport bounding-box 检查；Web `npm test` 通过 1358/1358，包含 layout 与 frontend realness |
+| 设计与实施记录 | 已完成 | [设计记录](superpowers/specs/2026-07-16-scene-editor-coordinate-canvas-design.md) 与 [实施计划](superpowers/plans/2026-07-16-scene-editor-coordinate-canvas.md) 已写入；未提交 Git commit，保留现有工作区变更 |
+
+## 2026-07-14 发布门禁补强: 非 SKIP_BUILD 路径执行 workspace Rust tests
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| release gate Rust 测试 | 已完成 | 非 `SKIP_BUILD=1` 路径在 fmt 后、clippy/build 前新增 `cargo test --manifest-path "$ROOT_DIR/Cargo.toml" --workspace --quiet` |
+| 门禁契约测试 | 已完成 | `test_smoke_release_gate_unit.py` 锁定执行顺序，避免只 lint/build 不跑 workspace tests |
+| 完整构建门禁 | 已通过 | `RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh` 全流程通过 |
+
+## 2026-07-14 Gateway 写鉴权矩阵补齐: 个人房间与居民关系
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 个人房间写路由 | 已完成 | 新增缺失 Bearer 回归，覆盖 `/v1/personal-room` 与 `/v1/personal-room/access-policy` |
+| 居民关系写路由 | 已完成 | 新增缺失 Bearer 回归，覆盖关系 request/accept 两条写路由 |
+| Shell 昵称写路由 | 已完成 | 将 `/v1/shell/nickname` 纳入 direct/shell 写路由鉴权矩阵 |
+| Gateway 验证 | 已完成 | Gateway 298 passed / 0 failed；fmt、Gateway clippy、`git diff --check` 通过 |
+| 前端冻结边界 | 保持 | 未修改 `apps/lobster-web-shell/app.js` |
+
+## 2026-07-14 发布门禁收口: Web 双浏览器 smoke 诊断与 fake-dom 模块契约
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| Web 双浏览器 smoke | 已完成 | 真实 console/pageerror/requestfailed 现在会使 smoke 失败；消息重试场景故意返回的 503 被明确标记为 expected，不再造成误报 |
+| fake-dom 模块契约 | 已完成 | `APP_LOCAL_IMPORT_PATHS` 补齐 `shell-quick-action-reader.js`，修复 app.js 新模块导入在 Node fake-dom 测试中的临时模块解析失败 |
+| app.js 边界 | 保持冻结 | 本轮未修改 `apps/lobster-web-shell/app.js` |
+
+## 2026-07-14 继续推进: 城市/世界治理写鉴权回归矩阵
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 城市/世界治理写 Bearer 回归矩阵 | 已完成 | 新增 `city_and_governance_write_routes_require_bearer_session_without_dev_bypass`，覆盖城市创建/加入/审批/执事/联邦策略/公共房间及世界公告、安全治理、制裁/解制裁写入；生产模式缺失 Bearer 均断言 401 |
+| Gateway 聚焦验证 | 已完成 | Gateway：297 passed / 0 failed；fmt、clippy、`git diff --check` 通过 |
+| 前端冻结边界 | 保持 | 未修改 `apps/lobster-web-shell/app.js`，未改变 H5 合同 |
+
+## 2026-07-14 继续推进: Gateway 核心管理写鉴权回归矩阵
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 核心 admin 写路由 Bearer 回归矩阵 | 已完成 | 新增 `core_admin_write_routes_require_bearer_auth_without_dev_bypass`，覆盖居民 ban/unban/nickname、房间 freeze/unfreeze、配置、消息审核、邀请码、房间成员和场景写入；生产模式缺失 Bearer 均断言 401 |
+| Gateway 聚焦验证 | 已完成 | `cargo test -p lobster-waku-gateway --quiet`：296 passed / 0 failed；`cargo fmt --all -- --check`、Gateway clippy、`git diff --check` 通过 |
+| 前端冻结边界 | 保持 | 未修改 `apps/lobster-web-shell/app.js`，未改变 H5 合同 |
+
+## 2026-07-13 继续推进: Gateway 审计持久化、管理鉴权与 CI 门禁
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| app.js DS 拆分 | 暂停 | 按用户要求不再继续拆 `app.js`；保留现有模块与测试，不在本轮扩大边界 |
+| Rust CI 质量门禁 | 已完成 | `.github/workflows/ci.yml` 增加 `cargo fmt --all -- --check` 与 `cargo clippy --workspace -- -D warnings` |
+| Gateway 审计事件 ID | 已完成 | `audit-{timestamp_ms}-{sequence}`，同一毫秒及重启后仍保持唯一序列 |
+| 审计日志写入 | 已完成 | `audit-log.json` 改用共享 `atomic_write_file`，避免半写文件 |
+| 管理接口读鉴权 | 已完成 | `/v1/admin/*` 敏感 GET 在关闭 dev bypass 时校验真实 Bearer 会话；能力目录保留公开 |
+| 管理写接口身份/能力鉴权 | 已完成 | 管理写操作校验会话 actor 与 body `actor_id` 一致，并按操作检查能力；省略 actor 的前端请求从会话派生 |
+| 设备与高风险管理写鉴权 | 已完成 | 设备增删/封禁、居民/权限组/制裁写操作均有 Bearer 门禁；设备操作要求 `admin:diagnostics` |
+| Provider/mirror 写接口 Bearer 门禁 | 已完成 | `/v1/provider/connect`、`/v1/provider/disconnect`、`/v1/world-mirror-sources` 统一走管理 Bearer 校验；生产模式拒绝缺失/非法会话，dev fixture bypass 保留 |
+| Export Bearer 身份绑定 | 已完成 | `/v1/export` 将 `resident_id` 绑定到 Bearer 会话；CLI export 必须使用 session token，避免仅凭 query 身份导出私聊历史 |
+| CLI scoped GET Bearer parity | 已完成 | `/v1/cli/inbox`、`/v1/cli/rooms`、`/v1/cli/tail` 按 user session 或 agent sidecar token 校验身份；CLI 读取命令支持 `--token` / `--agent-token`，不再把无 token 请求送到 Gateway |
+| CLI read/presence Bearer parity | 已完成 | CLI `read` 与 `presence` 现在必须透传当前 user session；无 token 在本地先提示 login，agent sidecar 对 resident state 明确拒绝，避免无认证 POST |
+| CLI admin read Bearer parity | 已完成 | `config --get`、`residents`、`rooms-admin` 透传 user session Bearer；无 token 在本地提示 login，agent sidecar 不得冒充管理读取 |
+| CLI scoped search Bearer parity | 已完成 | CLI search 新走 `/v1/cli/search`，按 user/agent identity 过滤可见会话；无 token 本地提示 login；旧 H5 搜索当时暂保持兼容路径，现已由 2026-07-27 最新区块补齐认证与可见性 |
+| TUI scoped search parity | 已完成 | TUI 新增 `/search <关键词>`，按当前会话通过 `/v1/cli/search` 查询并沿用 session/agent Bearer；`app.js` 保持冻结 |
+| TUI scoped search resident smoke | 已完成 | resident mainline smoke 真实执行 TUI `/search`，捕获脚本后的终端投影并断言当前私聊命中；`app.js` 保持冻结 |
+| web-shell smoke 完整测试集 | 已完成 | 移除 `--test-force-exit`，避免 smoke 在退出前静默少跑测试；当前 smoke 与 npm unit 均执行 1310 tests |
+| Gateway 生产启动空时间线 | 已完成 | 默认生产配置不再自动写入 demo 聊天记录；仅测试构建或显式 `LOBSTER_DEV_AUTH_BYPASS=1` fixture seed，`app.js` 保持冻结 |
+| resident-scoped shell state/SSE Bearer 绑定 | 已完成 | `/v1/shell/state` 与 `/v1/shell/events` 带 `resident_id` 时必须匹配 Bearer session；缺失、错配均 401，未触碰 `app.js` |
+| 城市/世界治理写接口身份一致性 | 已完成 | 城市写入统一校验 body actor 与 Bearer 会话身份；世界广场/安全治理写入拒绝缺失会话，保留 dev bypass 仅供本地 fixture |
+| Direct/Shell 写接口身份门禁 | 已完成 | direct/open、消息发送/编辑/撤回、场景、presence/read 均校验 Bearer actor；合成 qa-* smoke fixture 显式开启 dev bypass，生产模式缺失会话回归已覆盖 |
+| CLI sidecar/user 写操作认证 | 已完成 | `/v1/cli/send`、shell edit/recall 对 `agent:<id>` 使用 `LOBSTER_AGENT_TOKENS` 按身份绑定 token；`user:<id>` 复用 resident session；`lobster-cli send/edit/recall` 支持 `--token` / `LOBSTER_SESSION_TOKEN` / `--agent-token` / `LOBSTER_AGENT_TOKEN`，CLI 请求保留并校验 typed `actor_address`，合成 smoke 显式开启 dev bypass |
+| admin-ds 会话透传 | 已完成 | admin-ds GET/POST 自动透传 `lobster-session-token`，与 Gateway 管理鉴权闭环 |
+| admin-ds 次级真实数据空态 | 已完成 | Gateway 已连接时邀请码和审计日志的空/失败响应清空旧 mock，不再把本地演示数据伪装成正式数据；无 Gateway 的本地预览仍保留 mock |
+| admin-ds 主投影真实空态 | 已完成 | Gateway 已连接时居民、房间、消息的有效空数组覆盖旧 mock；HTTP/畸形响应清空主投影并显示“部分同步”，避免 Gateway 页面伪装成本地演示 |
+| admin-ds 权限组真实空态 | 已完成 | Gateway 已连接时权限组列表严格使用 `/v1/admin/permission-groups`；空/失败不再回退四类内置展示 mock，离线本地预览仍保留内置说明 |
+| admin-ds 房间加入规则真实来源 | 已完成 | Gateway 当前未提供房间加入规则合同；移除四条硬编码开放/邀请/白名单状态，改为明确的待接入空态，避免后台伪装正式策略 |
+| admin-ds 世界公告与安全治理真实空态 | 已完成 | 世界公告、安全通告、举报、居民制裁读取失败或畸形响应时清空旧投影并渲染空态，不再继续展示过期治理数据 |
+| admin-ds 系统服务健康真实来源 | 已完成 | Gateway 当前未提供服务健康明细合同；移除公网 Gateway/SMTP/AI/配额/存储/Webhook 硬编码状态，改为明确待接入空态 |
+| admin-ds 仪表盘事件真实来源 | 已完成 | 未连接 Gateway 时移除 resident_demo/IP/AI 等硬编码审计样例，显示无实时事件空态；Gateway 成功时继续由审计投影填充 |
+| smoke 运行时输入契约 | 已完成 | 统一校验 `SKIP_BUILD`、`GATEWAY_BIN`/`CLI_BIN`/`TUI_BIN` 与 provider artifact 的边界；release gate 不再把 provider-only `BIN_PATH` 泄漏到普通 smoke |
+| TUI Gateway Bearer parity | 已完成 | TUI 的 direct/open、编辑、撤回、管理读写和治理查询统一透传 `LOBSTER_SESSION_TOKEN` / `LOBSTER_AGENT_TOKEN`；resident smoke 显式传入 session token |
+| provider federation smoke 鉴权契约 | 已完成 | 合成上下游 Gateway 显式开启 `LOBSTER_DEV_AUTH_BYPASS=1`，避免无 token 的 `smoke-bot` 被生产 Bearer 门禁误判；真实生产鉴权逻辑不变 |
+| provider federation smoke 端口隔离 | 已完成 | 未显式传入端口时自动预留两个不同的本机临时端口；保留 `UPSTREAM_PORT`/`DOWNSTREAM_PORT` 覆盖能力，避免并行 smoke 固定端口冲突 |
+| resident mainline smoke 端口隔离 | 已完成 | 未显式传入 `PORT` 时自动预留本机临时端口；保留显式端口覆盖，两个并行 resident smoke 已实测同时通过 |
+| CLI channel smoke 端口隔离 | 已完成 | 未显式传入 `PORT` 时自动预留本机临时端口；保留显式端口覆盖，两个并行 CLI send/edit/recall smoke 已实测同时通过 |
+| auth registration smoke 端口隔离 | 已完成 | 未显式传入 `PORT` 时自动预留本机临时端口；保留显式端口覆盖，两个并行 OTP/黑名单 smoke 已实测同时通过 |
+| shell dual HTTP smoke 端口隔离 | 已完成 | 未显式传入 `PORT` 时自动预留本机临时端口；保留显式端口覆盖，两个并行 shell state/events smoke 已实测同时通过 |
+| shell direct HTTP smoke 端口隔离 | 已完成 | 未显式传入 `PORT` 时自动预留本机临时端口；保留显式端口覆盖，两个并行 direct open/send/edit/recall smoke 已实测同时通过 |
+| start-terminal 外部 Gateway 契约 | 已完成 | 显式设置 `LOBSTER_WAKU_GATEWAY_URL` 时仅复用该外部 Gateway；目标不可达立即 fail-fast，不再错误地按本地 `HOST:PORT` 启动后等待错误地址 |
+| terminal smoke 本地代理隔离 | 已完成 | `/health` 探针强制补齐 `NO_PROXY/no_proxy=127.0.0.1,localhost`；即使宿主带 `ALL_PROXY`，终端 smoke 仍直接访问本地 Gateway |
+| TUI `/dm` Gateway fail-closed | 已完成 | 已配置 Gateway 但 `/v1/direct/open` 失败时不再静默创建本地直聊；仅未配置 Gateway 时保留离线兼容回退 |
+| TUI `/dm` 空响应 fail-closed | 已完成 | Gateway 返回空白 `conversation_id` 时拒绝创建无效私聊会话，避免响应合同畸形被当作成功 |
+| provider federation smoke 本地代理隔离 | 已完成 | 直接运行 provider smoke 时也强制 `NO_PROXY/no_proxy=127.0.0.1,localhost`，避免本地上下游 Gateway 健康/状态请求被宿主代理接管 |
+| 其余本地 smoke/预览代理隔离 | 已完成 | auth、CLI、resident、shell dual/direct、start-terminal、restart-gateway、start-web-preview 统一追加本地代理 bypass；公网 ingress 不改 |
+| 发布门禁复验 | 已通过 | Gateway 294 tests、CLI 119 unit + 24 integration tests、TUI 230 tests、workspace 全绿、web-shell 1310 tests、fmt/clippy、CLI/auth/resident/shell/web smoke 全部通过；provider federation 已用显式 `BIN_PATH` 一并验证 |
+
+### 本轮下一步
+
+继续做不依赖 `app.js` 的 Gateway/TUI/CLI 与发布鲁棒性收口；任何前端 DS 拆分先暂停，除非用户重新授权。
+
+### 2026-07-13 TUI `/dm` 空响应 fail-closed 闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | 注入式 `/v1/direct/open` 成功回调若携带空白 `conversation_id`，TUI 原先会继续构造并持久化无效私聊会话 |
+| 修复 | 已完成 | `resolve_direct_conversation_id()` 在 Gateway 路径校验 ID 非空；无 Gateway 的离线 canonical fallback 保持不变 |
+| 防回归 | 已完成 | 新增空白 `conversation_id` 测试，锁定明确错误文案；既有 Gateway 失败与离线 `/dm` 测试继续保留 |
+| 验证 | 已通过 | TDD 红灯后绿灯：`cargo test -p lobster-tui dm_gateway_ --quiet`、`cargo test -p lobster-tui`（228 passed）、workspace、fmt/clippy 与含 provider federation 的 release gate 均通过 |
+
+### 2026-07-13 provider federation smoke 本地代理隔离闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | provider federation smoke 直接执行时未设置本地代理 bypass；宿主配置 `ALL_PROXY/HTTP_PROXY` 时，`/health`、`/v1/provider` 和状态轮询可能被送往代理 |
+| 修复 | 已完成 | `smoke-provider-federation.sh` 启动前补齐大小写两套 `NO_PROXY/no_proxy`，保留调用方既有值并追加 `127.0.0.1,localhost` |
+| 防回归 | 已完成 | provider smoke unit 锁定两套变量；在无 bypass + 无效本地代理环境下实际运行 provider smoke 仍通过 |
+| 验证 | 已通过 | provider smoke、quick coverage、release gate unit、含 provider federation 的完整 release gate 全部通过 |
+
+### 2026-07-13 其余本地 smoke/预览代理隔离闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | 多个直接启动本地 Gateway 或 Python 预览的脚本只依赖继承环境；单独执行时，宿主 `ALL_PROXY/HTTP_PROXY` 可能接管本地 curl 探针 |
+| 修复 | 已完成 | auth、CLI、resident、shell dual/direct、start-terminal、restart-gateway、start-web-preview 在入口统一追加大小写两套 `NO_PROXY/no_proxy`；公网 ingress 保留外部代理语义 |
+| 防回归 | 已完成 | 对应脚本单测锁定两套变量；所有五类 Gateway smoke 与 web preview 在无 bypass + 无效代理环境中实测通过 |
+| 验证 | 已通过 | 8 个脚本单测、bash 语法检查、相关 smoke、quick coverage 与含 provider federation 的完整 release gate 均通过 |
+
+### 2026-07-13 provider/mirror 写接口 Bearer 门禁闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | 生产模式关闭 dev bypass 时，provider connect/disconnect 与 world mirror source 写请求可在缺失 Bearer 下继续执行到业务层 |
+| 修复 | 已完成 | `http_router.rs` 新增统一 `dispatch_admin_write`，三条高风险配置写路由先执行 `require_admin_auth`；开发/测试 fixture 的 `LOBSTER_DEV_AUTH_BYPASS=1` 行为保持不变 |
+| 防回归 | 已完成 | 新增 Gateway 测试覆盖三条路由缺失 Bearer 必须返回 401；现有 provider federation roundtrip 继续覆盖 dev fixture 路径 |
+| 验证 | 已通过 | TDD 红灯→绿灯、Gateway 290、workspace、fmt/clippy，以及无效本地代理环境下含 provider federation 的完整 release gate 全部通过 |
+
+### 2026-07-13 Export Bearer 身份绑定闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | 生产模式关闭 dev bypass 时，仅携带 `resident_id` query 的 `/v1/export` 请求仍可返回 200，未验证调用者身份 |
+| 修复 | 已完成 | Gateway 在导出前要求 Bearer 会话且校验 `resident_id` 与会话身份一致；CLI export 增加 `--token` / session cache 认证 GET |
+| 防回归 | 已完成 | Gateway 覆盖缺失、伪造、不匹配和匹配会话四条路径；CLI parser 与无 token login 提示测试锁定使用方式 |
+| 验证 | 已通过 | TDD 红灯→绿灯、Gateway 291、CLI 116 unit + 22 integration、workspace、fmt/clippy 与完整 release gate 均通过 |
+
+### 2026-07-13 CLI 写操作认证闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现并收口 | 生产模式下 `lobster-cli send` 已有 sidecar token，但后续 `edit/recall` 仍无认证，无法完成 agent 的发送→编辑→撤回闭环 |
+| 合同 | 已锁定 | CLI edit/recall 透传 `actor_address=user:<id>` / `agent:<id>`；Gateway 校验 typed address 与 legacy `actor` 一致，并按 user session 或 agent sidecar token 鉴权；旧浏览器请求省略该字段时保持原 session 路径 |
+| 防回归 | 已完成 | 新增 CLI 参数/请求模型测试、Gateway 无 token 401 与有效 agent token 200 测试；`smoke-cli-channel.sh` 继续覆盖 edit/recall 状态投影 |
+| 真实验证 | 已通过 | 生产配置 `LOBSTER_DEV_AUTH_BYPASS=0` + `LOBSTER_AGENT_TOKENS=agent:openclaw=...` 下，CLI send/edit/recall 全部成功；workspace、release gate、fmt/clippy 全绿 |
+
+### 2026-07-13 CLI scoped GET Bearer parity 闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | 关闭 dev bypass 时，`/v1/cli/inbox`、`/v1/cli/rooms`、`/v1/cli/tail` 缺失 Bearer 仍可返回 200，scoped read 未与写接口保持同一身份边界 |
+| 修复 | 已完成 | Gateway 三条 scoped GET 统一调用 `require_cli_sender_auth`；CLI `inbox/rooms/tail` 支持 user session `--token` 与 agent sidecar `--agent-token`，请求使用带 Bearer 的 GET |
+| 防回归 | 已完成 | Gateway 覆盖缺失/有效 sidecar token；CLI integration 覆盖无 token 时给出 login 提示；CLI channel、resident mainline、terminal smoke 均取得真实 session 后执行所有 scoped reads |
+| 验证 | 已通过 | TDD 红灯→绿灯；Gateway 292、CLI 117 unit + 23 integration、workspace、web-shell 1310、fmt/clippy 与含 provider federation 的 release gate 均通过 |
+
+### 2026-07-13 CLI read/presence Bearer parity 闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | CLI `read` / `presence` 原先直接调用未认证 `post_json`；无 token 时会把请求送到 Gateway，错误只在网络/服务端阶段暴露 |
+| 修复 | 已完成 | `run_read` / `run_presence` 统一解析 user session 并调用 `auth::post_json_authenticated`；agent sidecar token 对 resident state 返回明确不支持错误；Gateway 原有 `require_authenticated_actor` 保持不变 |
+| 防回归 | 已完成 | CLI integration 覆盖 read/presence 无 token login 提示；CLI channel smoke 使用真实 session 覆盖 presence + mark-read 成功响应；新增 helper 单测锁定 agent 拒绝语义 |
+| 验证 | 已通过 | TDD 红灯→绿灯；Gateway 292、CLI 117 unit + 23 integration、CLI smoke、workspace、fmt/clippy 与含 provider federation 的 release gate 均通过 |
+
+### 2026-07-13 CLI admin read Bearer parity 闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | Gateway 已对 /v1/admin/config、/v1/admin/residents、/v1/admin/rooms 要求 admin Bearer，但 CLI 仍用未认证 run_query，无 token 时会直接尝试网络请求 |
+| 修复 | 已完成 | CLI admin 只读统一解析 user session，使用 auth::get_authenticated；agent sidecar token 明确拒绝；--token/登录缓存合同已同步帮助与使用手册 |
+| 防回归 | 已完成 | CLI integration 覆盖三条命令无 token 的 login 提示；CLI channel smoke 以真实 session 覆盖 config/residents/rooms-admin JSON 读取；helper 单测锁定 agent 拒绝语义 |
+| 验证 | 已通过 | TDD 红灯→绿灯；CLI 聚焦测试、CLI smoke、workspace、fmt/clippy 与 release gate 继续保持全绿 |
+
+### 2026-07-13 CLI scoped search Bearer parity 闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | CLI scoped read auth 回归先将 `/v1/cli/search` 纳入缺失 Bearer 测试；路由尚未存在时返回 404，不能提供统一 401 门禁 |
+| 修复 | 已完成 | 新增受保护的 `/v1/cli/search`；Gateway 按 user/agent identity 过滤可见 direct/public conversations，显式不可见 `room_id` 拒绝；CLI search 要求 `--for` 并透传 session/sidecar Bearer |
+| 兼容边界 | 已锁定 | 当时旧 H5 `/v1/shell/messages/search` 保持不变以避免触碰冻结的 `apps/lobster-web-shell/app.js`；CLI 不再调用该全局端点；后续认证收口见 2026-07-27 最新区块 |
+| 防回归 | 已完成 | Gateway 覆盖缺失/有效 Bearer 与私聊越权搜索；CLI integration 覆盖无 token login 提示；CLI channel smoke 覆盖文本/JSON 搜索结果 |
+| 验证 | 已通过 | Gateway 293、CLI 119 unit + 24 integration、workspace、CLI smoke、web-shell 1310、release gate（含 provider federation）、fmt/clippy 与 diff 检查全部通过 |
+
+### 2026-07-13 场景编辑器清除语义闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现并收口 | admin-ds 选择默认场景或删除全部热点时发送 `null`，Gateway 原先把 `null` 与“字段未提供”混为一谈，旧自定义层无法清除 |
+| 合同 | 已锁定 | `image_layer` / `hotspot_layer` 使用三态 patch：省略=保持、`null`=清除、对象=替换；同时覆盖 shell owner 更新与 admin 更新 |
+| 防回归 | 已完成 | 新增 HTTP 场景自定义→`null` 清除测试，并锁定 admin-ds 透传清除 payload；保留旧字段省略兼容性 |
+| 验证 | 已通过 | 聚焦 Gateway/admin-ds 测试、全量 workspace/release gate、fmt/clippy 均通过 |
+
+### 2026-07-13 admin-ds HTTP 失败反馈闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现并收口 | 设备添加、权限组创建只判断网络 `error`；Gateway 返回 HTTP 失败时 `{ok:false}` 会落入成功分支，造成假成功提示 |
+| 修复 | 已完成 | 两处 await 写操作统一改为 `error` → `ok` → HTTP 状态的三段判定，失败不清空表单、不刷新成功数据 |
+| 防回归 | 已完成 | 新增 admin-ds 静态测试锁定 `/v1/admin/devices/add` 与 `/v1/admin/permission-groups` 必须显式检查 `ok` |
+| 验证 | 已通过 | Web-shell 1299 tests、layout、realness、workspace/release gate 全绿 |
+
+### 2026-07-13 admin-ds 次级数据真实空态闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | Gateway 连接后邀请码读取失败、审计接口返回空数组或失败时，旧状态仍保留 `admin-ds-data.js` 的本地 mock |
+| 修复 | 已完成 | Gateway 正式路径对邀请码/审计日志统一执行空态清理；成功空数组保留空数组，失败响应显示错误提示；仅无 Gateway 本地预览继续使用 mock |
+| 防回归 | 已完成 | 新增 2 个 admin-ds runtime 测试，覆盖 Gateway 空响应和 5xx 失败，锁定不回退旧邀请码/日志 |
+| 验证 | 已通过 | Web-shell 1305 tests、layout、realness 全绿 |
+
+### 2026-07-13 admin-ds 主投影真实空态闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | `loadGatewayAdminData()` 只在 normalized 数组非空时覆盖居民、房间、消息；Gateway 返回空数组或 HTTP `null` 时旧本地 mock 继续展示 |
+| 修复 | 已完成 | 主投影按响应合同逐项覆盖：有效空数组写入空态，失败/畸形响应清空对应数组；部分失败仪表盘明确显示“部分同步”，不再标记成本地预览 |
+| 防回归 | 已完成 | 新增 2 个 admin-ds runtime 测试，覆盖空投影、503 失败、空态数组和部分同步提示 |
+| 验证 | 已通过 | Web-shell 1305 tests、layout、realness 全绿 |
+
+### 2026-07-13 admin-ds 权限组真实空态闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | Gateway 连接后 `/v1/admin/permission-groups` 返回空数组或失败时，渲染器仍回退四类本地内置权限组，造成未持久化角色的假投影 |
+| 修复 | 已完成 | Gateway 路径严格显示正式权限组；空数组显示 Gateway 空态，失败清空旧组并提示；无 Gateway 本地预览继续保留内置说明 |
+| 防回归 | 已完成 | 新增运行时测试覆盖 Gateway 空组和离线内置组两条路径 |
+| 验证 | 已通过 | Web-shell 1305 tests、layout、realness 全绿 |
+
+### 2026-07-13 admin-ds 房间加入规则真实来源闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | 权限与邀请卡片硬编码四个房间的开放/邀请/白名单状态，但当前 Gateway 没有对应加入规则字段或读取端点 |
+| 修复 | 已完成 | 删除静态策略投影，显示“Gateway 合同未提供房间加入规则”的明确待接入空态；后续合同落地后再接正式数据 |
+| 防回归 | 已完成 | 静态测试锁定不可用标记、根因文案，并禁止四个硬编码房间规则重新出现 |
+| 验证 | 已通过 | Web-shell 1306 tests、layout、realness、workspace、fmt/clippy 与 release gate 全绿；provider federation 本轮显式跳过 |
+
+### 2026-07-13 admin-ds 世界公告与安全治理真实空态闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | 世界公告和安全治理读取成功后再遇到 5xx/畸形响应时，旧公告、通告、举报和制裁列表仍保留 |
+| 修复 | 已完成 | Gateway 失败/畸形响应统一清空四类投影并渲染空态；无 Gateway 时也不保留伪造治理数据 |
+| 防回归 | 已完成 | 新增运行时测试覆盖公告失败和安全三列表失败清空；有效空数组仍保留正式空态 |
+| 验证 | 已通过 | Web-shell 1308 tests、layout、realness、workspace、fmt/clippy 与 release gate 全绿；provider federation 本轮显式跳过 |
+
+### 2026-07-13 admin-ds 系统服务健康真实来源闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | 系统配置页硬编码 Gateway、SMTP、AI、配额、存储和 Webhook 状态，但 Gateway 没有对应服务健康明细合同 |
+| 修复 | 已完成 | 删除静态服务健康样例，改为明确“Gateway 合同未提供服务健康明细”的待接入空态；Gateway 实时配置编辑器保持不变 |
+| 防回归 | 已完成 | 静态测试锁定不可用标记、根因文案，并禁止公网端点/模型/配额等样例重新出现 |
+| 验证 | 已通过 | Web-shell 1309 tests、layout、realness、release gate、node --check 与 diff check 全绿；workspace 基线仍全绿 |
+
+### 2026-07-13 admin-ds 仪表盘事件真实来源闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | 未连接 Gateway 时仪表盘直接显示 resident_demo、公网 IP、AI 通道等硬编码审计事件；这些数据不在 mock 工厂或 Gateway 合同中 |
+| 修复 | 已完成 | 静态事件改为空态；Gateway 成功同步后仍由 `renderDashboardEvents(auditPayload)` 使用正式审计投影 |
+| 防回归 | 已完成 | 静态测试锁定不可用标记和“Gateway 未连接”根因文案，并禁止旧身份/IP/模型样例重新出现 |
+| 验证 | 已通过 | Web-shell 1310 tests、layout、realness、release gate、node --check 与 diff check 全绿；workspace 基线仍全绿 |
+
+### 2026-07-13 smoke 运行时输入契约闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | release gate 会把环境中的 provider-only `BIN_PATH` 当作普通 Gateway 默认路径，可能在 `SKIP_BUILD=1` 下误用 release artifact 或错误二进制 |
+| 修复 | 已完成 | 普通 smoke 固定使用 `GATEWAY_BIN`/`CLI_BIN`/`TUI_BIN` 覆盖或 debug 默认；provider smoke 独立使用 `GATEWAY_ARTIFACT`/`BIN_PATH`，release gate 不再导出 `BIN_PATH` |
+| 防回归 | 已完成 | 新增 `test_smoke_runtime_contract_unit.py`，覆盖 shell smoke、web dual-browser、provider artifact 与 release gate 的构建/二进制/产物顺序，并纳入 quick coverage 与 release gate |
+| 验证 | 已通过 | runtime contract unit、脚本单测、`bash -n`、完整 release gate 全绿；`SKIP_BUILD=1` 下 provider federation 按配置跳过 |
+
+### 2026-07-13 TUI Gateway Bearer parity 闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | TUI `gateway_post`、`gateway_get` 和 `/v1/direct/open` 原先不带 Bearer；关闭 dev bypass 后编辑、撤回、管理命令和私聊打开会被 Gateway 拒绝 |
+| 修复 | 已完成 | 统一读取 `LOBSTER_SESSION_TOKEN`（优先）或 `LOBSTER_AGENT_TOKEN`，为 TUI Gateway 控制请求设置 `Authorization: Bearer ...`；无 token 时保留本地 dev/只读兼容路径 |
+| 防回归 | 已完成 | 新增 TUI Bearer header 归一化测试；resident mainline smoke 在两条 TUI 启动路径显式透传已验证 session token |
+
+### 2026-07-13 TUI scoped search parity 闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | CLI/Gateway 已有受保护的 scoped search，但 TUI 没有对应命令；直接复用冻结的 H5 全局搜索会绕过当前会话范围 |
+| 修复 | 已完成 | TUI 增加 `/search <关键词>`，以当前 active conversation 的 `room_id`、当前 launch identity 调用 `/v1/cli/search`，沿用 session/agent Bearer；结果投影为终端通知 |
+| 兼容边界 | 已锁定 | 当时 `/search` 不修改 `apps/lobster-web-shell/app.js`，旧 H5 搜索保持原合同；后续 H5 认证收口已同步修改搜索控制器接线，见 2026-07-27 最新区块 |
+| 防回归 | 已完成 | 新增 URL 编码/身份与房间范围测试、Gateway 命中结果投影测试，并覆盖 `/help` 文案 |
+| 验证 | 已通过 | TUI 230 tests、workspace、fmt/clippy、resident mainline smoke 与含 provider federation 的完整 release gate 全部通过；web-shell 1310 tests 及 layout/realness 也保持通过 |
+
+### 2026-07-13 TUI scoped search resident smoke 闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | resident mainline smoke 虽然覆盖 TUI `/dm`，但没有真实执行 `/search`；原有脚本模式执行后也不会输出脚本期间的终端通知，无法验证搜索分支 |
+| 修复 | 已完成 | TUI smoke script 在脚本结束后支持 `LOBSTER_TUI_SMOKE_DUMP=plain/json` 投影；resident smoke 追加 `/search $DM_TEXT` 并捕获输出，断言当前私聊报告命中 |
+| 兼容边界 | 已锁定 | 只增强测试/烟测执行路径，不改变 H5 合同，不修改 `apps/lobster-web-shell/app.js` |
+| 防回归 | 已完成 | resident smoke unit 锁定命令、输出捕获和命中断言；保留既有 session token、动态端口和清理合同 |
+| 验证 | 已通过 | 脚本单测、`bash -n`、TUI 230 tests、clippy、resident mainline smoke 与含 provider federation 的完整 release gate 全部通过 |
+
+### 2026-07-13 web-shell smoke 完整测试集闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | `scripts/smoke-web-shell.sh` 使用 Node `--test-force-exit` 时虽返回 0，但只报告 1280 tests，低于 npm unit 的 1310，发布门禁存在静默漏测 |
+| 修复 | 已完成 | 移除 `--test-force-exit`，让 Node test runner 自然等待所有异步测试完成；不改变页面代码或测试内容 |
+| 防回归 | 已完成 | smoke unit 锁定无 force-exit；直接执行 smoke 报告 1310 passed，`npm test` 的 1310 unit、layout、realness 继续通过 |
+| 验证 | 已通过 | `scripts/smoke-web-shell.sh` 报告 1310 passed；`npm test` 的 1310 unit、layout、realness 通过；含 provider federation 的完整 release gate 通过 |
+
+### 2026-07-13 Gateway 生产启动空时间线闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已确认 | `GatewayRuntime::open()` 在任何全新 state dir 都会写入 `system` / `builder` / `dm:builder:rsaga` 三条 demo 消息；生产默认配置也会把它们暴露给 H5/导出读取 |
+| 修复 | 已完成 | demo seed 现在只在测试构建或显式 `LOBSTER_DEV_AUTH_BYPASS=1` 的本地 fixture 中启用；生产默认 `LOBSTER_DEV_AUTH_BYPASS=0` 从空 timeline 启动，既有真实写入路径不变 |
+| 防回归 | 已完成 | 新增 `demo_messages_seed_only_for_tests_or_explicit_dev_bypass`，覆盖生产 false、显式 dev bypass 和测试构建三种决策；实际 release binary 分别用 bypass=0/1 启动验证空/有 seed |
+| 兼容边界 | 已锁定 | 不改 H5、TUI、CLI 或 `apps/lobster-web-shell/app.js`；现有 smoke fixture 显式设置 bypass，测试构建继续保留既有 seed 依赖 |
+| 验证 | 已通过 | Gateway 294 tests、Gateway clippy、fmt；生产 binary bypass=0 返回 0 条消息，bypass=1 返回 demo lobby 消息；移动端 realness 与双浏览器 smoke 继续通过 |
+
+### 2026-07-13 resident-scoped shell state/SSE Bearer 绑定闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | 生产模式关闭 dev bypass 时，`/v1/shell/state?resident_id=alice` 与 `/v1/shell/events?resident_id=alice` 原先不校验 Bearer，调用者可伪造 query identity；admin-ds 的 resident-scoped 读取没有服务端身份绑定 |
+| 修复 | 已完成 | read route 在解析 `resident_id` 后统一复用 `require_authenticated_actor`；Bearer 缺失、无效或与 query 身份不一致均返回 401；无 `resident_id` 的匿名公共 shell projection 合同保持不变 |
+| 防回归 | 已完成 | 新增 HTTP 回归覆盖 state/SSE 缺失 token、匹配 token、错配 token 三类路径，并断言匹配 SSE 仍返回 shell-state 事件 |
+| 兼容边界 | 已锁定 | admin-ds 已通过 `fetchGatewayJson` 透传 session token；未改 `apps/lobster-web-shell/app.js`，未改变无 resident scope 的公共 H5 初始化路径 |
+| 验证 | 已通过 | TDD 红灯→绿灯；Gateway focused test 通过，fmt 通过；后续完整 workspace/release gate 复验中 |
+
+### 2026-07-13 provider federation smoke 鉴权契约闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | provider federation smoke 使用合成 `smoke-bot` 通过下游发送消息，但双 Gateway 默认关闭 dev bypass，消息请求被真实 Bearer 门禁返回 401 |
+| 修复 | 已完成 | 仅在上下游 smoke fixture 启动命令前显式设置 `LOBSTER_DEV_AUTH_BYPASS=1`；不改变 Gateway 默认生产鉴权行为 |
+| 防回归 | 已完成 | `test_smoke_provider_federation_unit.py` 锁定两个 Gateway 启动都必须显式带 bypass；保留 artifact、上下游桥接和清理契约 |
+| 验证 | 已通过 | provider federation smoke 通过；`RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 SKIP_BUILD=1` 完整 release gate 通过，provider interlink smoke included |
+
+### 2026-07-13 provider federation smoke 端口隔离闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | smoke 默认固定使用 `18787/18788`，已有 Gateway 或并行运行会导致上下游启动/健康检查互相冲突 |
+| 修复 | 已完成 | 默认端口改为空值并由 `python3` 预留两个不同的本机临时端口；显式传入端口仍按调用方配置执行，并拒绝上下游相同端口 |
+| 防回归 | 已完成 | provider smoke unit 锁定自动预留逻辑、两个端口分支、`python3` 依赖与原有 artifact/清理合同 |
+| 验证 | 已通过 | provider federation smoke 自动端口运行通过；含 provider 的完整 release gate 通过（本次实际使用动态端口） |
+
+### 2026-07-13 resident mainline smoke 端口隔离闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | resident mainline smoke 默认固定使用 `8800`，两个 smoke 并行运行时会争用 Gateway 端口 |
+| 修复 | 已完成 | 默认 `PORT` 改为空值并由 `python3` 预留本机临时端口；显式 `PORT` 仍可复现/固定指定端口 |
+| 防回归 | 已完成 | resident smoke unit 锁定动态端口函数与空值分支；保留现有 Gateway/CLI/TUI binary、session token 和清理合同 |
+| 验证 | 已通过 | 单次 resident smoke 通过；两个未指定端口的 resident smoke 并行运行均通过，自动分配不同端口 |
+
+### 2026-07-13 CLI channel smoke 端口隔离闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | CLI channel smoke 默认固定使用 `8796`，并行运行会争用 Gateway，导致 send/edit/recall 主链路互相干扰 |
+| 修复 | 已完成 | 默认 `PORT` 改为空值并由 `python3` 预留本机临时端口；显式 `PORT` 仍可固定指定端口 |
+| 防回归 | 已完成 | CLI smoke unit 锁定动态端口函数与空值分支；保留 sidecar token、send/edit/recall、tail follow 和重启恢复合同 |
+| 验证 | 已通过 | 单次 CLI channel smoke 通过；两个未指定端口的 CLI smoke 并行运行均通过，自动分配不同端口 |
+
+### 2026-07-13 auth registration smoke 端口隔离闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | auth registration smoke 默认固定使用 `8799`，并行 OTP/黑名单流程会争用 Gateway 端口 |
+| 修复 | 已完成 | 默认 `PORT` 改为空值并由 `python3` 预留本机临时端口；显式 `PORT` 仍可固定指定端口 |
+| 防回归 | 已完成 | auth smoke unit 锁定动态端口函数与空值分支；保留 OTP 注册、持久化状态和黑名单拒绝合同 |
+| 验证 | 已通过 | 单次 auth smoke 通过；两个未指定端口的 auth smoke 并行运行均通过，自动分配不同端口 |
+
+### 2026-07-13 shell dual HTTP smoke 端口隔离闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | shell dual HTTP smoke 默认固定使用 `8807`，并行运行会争用 Gateway 端口 |
+| 修复 | 已完成 | 默认 `PORT` 改为空值并由 `python3` 预留本机临时端口；显式 `PORT` 仍可固定指定端口 |
+| 防回归 | 已完成 | shell dual HTTP smoke unit 锁定动态端口函数与空值分支；保留 shell state/events、SSE 和 delivered message 合同 |
+| 验证 | 已通过 | 单次 shell dual HTTP smoke 通过；两个未指定端口的 shell dual smoke 并行运行均通过，自动分配不同端口 |
+
+### 2026-07-13 shell direct HTTP smoke 端口隔离闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | shell direct HTTP smoke 默认固定使用 `8808`，并行运行会争用 Gateway 端口 |
+| 修复 | 已完成 | 默认 `PORT` 改为空值并由 `python3` 预留本机临时端口；显式 `PORT` 仍可固定指定端口 |
+| 防回归 | 已完成 | shell direct HTTP smoke unit 锁定动态端口函数与空值分支；保留 direct open、成员读权限、send/edit/recall、SSE 和 outsider 禁止访问合同 |
+| 验证 | 已通过 | 单次 shell direct HTTP smoke 通过；两个未指定端口的 shell direct smoke 并行运行均通过，自动分配不同端口 |
+
+### 2026-07-13 start-terminal 外部 Gateway 契约闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | 设置 `LOBSTER_WAKU_GATEWAY_URL` 指向不可达地址时，旧脚本进入本地 Gateway 启动分支，却仍等待覆盖后的外部 URL，最终超时且误启动本地进程 |
+| 修复 | 已完成 | 增加 `GATEWAY_URL_OVERRIDE`；显式 URL 只走外部复用路径，不可达立即返回明确错误；未设置覆盖时保持默认本地 `HOST:PORT` 自动启动 |
+| 防回归 | 已完成 | start-terminal shell unit 锁定覆盖变量、fail-fast 分支和本地 `nohup` 顺序；保留 TTY、state/log、TUI mode 与 Gateway URL 透传合同 |
+| 验证 | 已通过 | 外部 URL 不可达行为测试立即退出并输出“配置 Gateway 不可达”；`test_start_terminal.py` 在本地代理绕过后通过，相关 unit 与 `bash -n` 通过 |
+
+### 2026-07-13 terminal smoke 本地代理隔离闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | 宿主设置 `ALL_PROXY` 且未设置本地 bypass 时，`test_start_terminal.py` 的 curl 健康探针走代理，Gateway 实际已监听仍被判定为超时 |
+| 修复 | 已完成 | `local_probe_env()` 为 curl 子进程合并保留原代理配置，同时强制追加 `127.0.0.1,localhost` 到大小写两套 bypass 变量 |
+| 防回归 | 已完成 | `test_start_terminal_unit.py` 新增环境透传断言，锁定两套变量均包含本地地址 |
+| 验证 | 已通过 | 单元测试 4 项通过；不额外设置 `NO_PROXY` 直接运行 terminal smoke 通过；含 provider federation 的完整 release gate 复验通过 |
+
+### 2026-07-13 TUI `/dm` Gateway fail-closed 闭环
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 红灯 | 已复现 | TUI 设置 `LOBSTER_WAKU_GATEWAY_URL` 后，`/v1/direct/open` 401/网络失败会静默回退本地 canonical direct ID，造成未确权私聊和假成功状态 |
+| 修复 | 已完成 | 抽出 `resolve_direct_conversation_id()`：无 Gateway 时返回离线 fallback；有 Gateway 时严格透传 URL/响应错误，不创建本地直聊 |
+| 防回归 | 已完成 | 新增注入式 Gateway 失败测试，锁定 `/v1/direct/open` URL 和错误透传；既有无 Gateway `/dm` 离线兼容测试保留 |
+| 验证 | 已通过 | `cargo fmt --all -- --check`、`cargo test -p lobster-tui`：227 passed / 0 failed |
 
 ## 2026-07-07 进度收口: 6-26~28 WIP 提交 + 继续减债
 
@@ -1559,7 +2325,7 @@ git diff --check
 | fake-dom import 映射 | 完成 | 全量测试红灯暴露 `app.js` 新增 `shell-room-stage.js` import 后 fake-dom 临时模块重写漏映射；已补 `APP_LOCAL_IMPORT_PATHS`，相关 import rewrite / shell init 测试转绿 |
 | scene-editor token 回归 | 完成 | realness 暴露 hub 页 query-only gateway 策略导致 editor href 不带 token；新增 `sceneEditorGatewayUrl()`，只让编辑器入口 fallback 到 remembered gateway，不改变 hub 消息网关策略 |
 | message search DOM 纯规格 | 完成 | `messageSearchBarDomSpec()` / `searchResultItemDomSpec()` / `searchEmptyStateDomSpec()` 下沉搜索栏与搜索结果节点规格；`app.js` 搜索 UI 改为 `createElement` / `textContent` / `replaceChildren()`，移除搜索路径 `innerHTML` sink |
-| message search request 纯模型 | 完成 | `messageSearchRequestModel()` 下沉空查询/缺网关/缺房间 guard、query trim、room/query/limit 编码与 `/v1/shell/messages/search` URL 组合；`app.js` 只保留 `fetch(request.url)` 和结果渲染 |
+| message search request 纯模型 | 完成 | `messageSearchRequestModel()` 下沉空查询/缺网关/缺房间/缺居民身份 guard、query trim、room/resident/query/limit 编码与 `/v1/shell/messages/search` URL 组合；控制器以请求 options 透传 Bearer |
 | message search target 匹配纯函数 | 完成 | `messageSearchRowMatchesId()` 下沉搜索结果跳转的 `message_id` 精确匹配；`searchResultItemDomSpec()` 保留可字符串化 message_id（如 `0`）；`app.js` 改为扫描 `[data-message-id]` 候选后比较 `dataset.messageId`，不再把 gateway/search 返回的 messageId 拼进 CSS selector |
 
 ### 当前指标
@@ -1684,6 +2450,26 @@ npm test
 4. 每轮改动后固定跑快速脚本单测、语法检查、`git diff --check`，不要生成或提交 `dist/` 和 `apps/lobster-web-shell/generated/*.json`。
 
 ## 2026-06-11 Codex 技术债补充: install-server 依赖顺序收口
+
+## 2026-07-16 app.js 会话摘要投影继续收口
+
+### 本轮完成
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| room digest 统计投影 | 完成 | 新增 `roomDigestMetricsSpec`，将未读、草稿、私信/频道/系统数量、待跟进和管家提醒统计从 `app.js` 下沉到 `shell-room-rail.js` |
+| 主入口边界 | 完成 | `roomDigestMetrics()` 仅保留当前 active room 的运行时绑定，统计规则由纯模块统一提供 |
+| TDD 护栏 | 完成 | 新增纯函数聚合测试和 app.js 静态委托测试，先红后绿 |
+
+### 验证
+
+```bash
+cd /Volumes/AJW-Data/Projects/lobster-chat/apps/lobster-web-shell
+node --test test/shell-room-rail.test.mjs test/shell-pages-static.test.mjs
+# 306 passed / 0 failed
+```
+
+本轮不改变会话摘要文案或 DOM 结构；生产域名、TLS、真实邮件 OTP 和双端外部验收仍是上线前唯一未在当前本地环境闭环的事项。
 
 ### 本轮完成
 

@@ -21,6 +21,10 @@
 5. 完成 OTP 登录后，页面应保存返回的 `resident_id`，重新请求 `GET /v1/shell/state?resident_id=<resident_id>`，并只显示该居民可见的私聊/公共会话。
 6. `user.html` 不再独立承载旧住宅 UI；打开后应保留 query 参数并跳转到 `creative.html`。
 
+双端浏览器 smoke 若需要用合成身份隔离同源窗口，必须显式追加
+`&qa=browser`（或人工验收用 `&qa=manual`），且 Gateway 只能是
+`127.0.0.1`/`localhost` loopback；这只是本地测试开关，不替代 Bearer session，正式或公网 URL 上的 `identity` 参数不会解锁发送。
+
 最小脚本化 smoke：
 
 ```bash

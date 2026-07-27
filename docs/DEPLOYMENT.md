@@ -1,47 +1,228 @@
-# lobster-chat 部署指南
+# lobster-chat 部署与生产验收
 
-## 环境
-Rust 1.80+ / Node.js 22+ / macOS, Linux, WSL
+本文是当前单城集中式 IM 的生产部署真值。跨城 Waku relay、MLS 和链上锚定仍按 `PRODUCT_CHARTER.md` 后置，不阻塞单城上线。
 
-## 本地启动
+## 1. 当前发布基线
+
+- Gateway：312 tests / 0 failed / clippy 0 warning
+- Web Shell：1397 tests / 0 failed，layout 与 frontend realness 通过
+- TUI：233 tests / 0 failed；Gateway 配置下启动读取 `conversation_shell`/`scene_render`
+- 完整门禁：`RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh`
+- H5 主入口：`index.html`（主城群聊）、`creative.html`（住宅/私聊）、`admin-ds.html`（管理后台）
+
+## 2. 支持环境
+
+生产安装脚本面向带 systemd 和 Nginx 的 Linux：
+
+- Ubuntu 22.04+、Debian 12+ 或同类发行版
+- x86_64 或 aarch64
+- 从源码构建需要 Cargo/Rust 1.85+
+- 使用目标架构预编译 artifact 时，目标机不需要 Rust/Node.js
+- 最低建议 1 GiB 内存、2 GiB 可用磁盘；状态和备份空间另计
+
+先在目标机执行：
+
+```bash
+bash scripts/preflight.sh
 ```
-## 终端1
-cargo run -p lobster-waku-gateway -- --host 127.0.0.1 --port 8787
 
-## 终端2
-cd apps/lobster-web-shell && python3 -m http.server 8080
+## 3. 构建与打包
 
-## 浏览器
-open http://127.0.0.1:8080/creative.html?gateway=http://127.0.0.1:8787
+发布前在仓库根目录执行完整门禁：
+
+```bash
+RUN_PREFLIGHT=0 INCLUDE_PROVIDER_FEDERATION=1 scripts/smoke-release-gate.sh
 ```
 
-## 页面
-creative.html(住宅私聊) | index.html(主城) | admin-ds.html(城主后台)
-unified.html(世界入口) | world-square.html(世界广场) | user.html(兼容跳转)
+构建目标架构 artifact：
 
-## API 端点 (80+)
-| 模块 | 端点示例 |
-|------|------|
-| Shell/IM | /v1/shell/state, /v1/shell/events, /v1/shell/message, /v1/shell/message/recall, /v1/shell/message/edit, /v1/shell/nickname |
-| Admin | /v1/admin/summary, /v1/admin/config, /v1/admin/residents, /v1/admin/residents/ban, /v1/admin/residents/nickname, /v1/admin/messages/moderate, /v1/admin/invites, /v1/admin/rooms/members, /v1/admin/permission-groups, /v1/admin/scene, /v1/admin/audit-log |
-| Auth | /v1/auth/preflight, /v1/auth/email-otp/request, /v1/auth/email-otp/verify, /v1/shell/session |
-| World | /v1/world, /v1/cities, /v1/world-square, /v1/world-square/notices, /v1/world-safety, /v1/world-safety/advisories, /v1/world-safety/reports, /v1/world-directory |
+```bash
+scripts/package-release.sh
+```
 
-## 测试
-cargo test -p lobster-waku-gateway  ## Gateway 227 tests
-cargo test -p lobster-tui           ## TUI 212 tests
-cargo test -p lobster-cli           ## CLI 28 tests
-cd apps/lobster-web-shell && npm test  ## Web Shell 659 tests
+标准产物：
 
-## 烟测
-scripts/smoke-release-gate.sh       ## 全量发布烟测
-scripts/smoke-web-shell.sh          ## H5 静态入口
-scripts/smoke-shell-dual-http.sh    ## 双端真实 IM
+```text
+dist/lobster-chat-source.tar.gz
+dist/lobster-web-shell.tar.gz
+dist/lobster-waku-gateway-<target-triple>.tar.gz
+```
 
-## 打包部署
-scripts/package-release.sh          ## 打包
-scripts/install-server.sh           ## 安装到目标机
+在 macOS 开发机无法直接生成 Linux Gateway 时，可手动触发 GitHub Actions 的
+`lobster-chat-release` 工作流。工作流先运行 Rust workspace 与 Web 全量测试，再由 x86_64 与 ARM64 Linux runner 按各自 target triple 显式编译并校验 runner 架构，分别上传源码、H5、目标架构 Gateway 和 `SHA256SUMS`。
 
-## 生产建议
-Gateway: --host 0.0.0.0 + nginx 反代 + HTTPS
-数据: JSON 文件持久化 (presence/unread/auth/invites)
+当前 Linux artifact 目标为：
+
+- `x86_64-unknown-linux-gnu`
+- `aarch64-unknown-linux-gnu`
+
+ARM64 job 使用 GitHub 官方 `ubuntu-24.04-arm` runner；该 runner 为 Public Preview，若仓库组织策略禁用该 runner，必须改用已注册的等价 ARM64 runner，并保持 artifact target triple 不变。
+
+macOS 构建出的 Darwin binary 不能安装到 Linux。安装器会校验 artifact 文件名中的 target triple，但跨架构产物仍应由对应 CI runner 或交叉编译环境生成。
+
+## 4. Linux 安装
+
+推荐使用 Gateway + H5 两个预编译产物：
+
+```bash
+sudo \
+  GATEWAY_ARTIFACT=./dist/lobster-waku-gateway-x86_64-unknown-linux-gnu.tar.gz \
+  WEB_ARTIFACT=./dist/lobster-web-shell.tar.gz \
+  ./scripts/install-server.sh
+```
+
+默认路径：
+
+| 内容 | 路径 |
+| --- | --- |
+| 安装根目录 | `/opt/lobster-chat` |
+| Gateway | `/opt/lobster-chat/bin/lobster-waku-gateway` |
+| H5 | `/opt/lobster-chat/web` |
+| 持久化状态 | `/var/lib/lobster-chat` |
+| systemd unit | `/etc/systemd/system/lobster-waku-gateway.service` |
+| Nginx site | Debian: `/etc/nginx/sites-available/lobster-chat`; RHEL 系: `/etc/nginx/conf.d/lobster-chat.conf` |
+
+Gateway 默认只监听 `127.0.0.1:8787`，公网流量由 Nginx 接入。不要把 Gateway 裸端口直接暴露到公网。
+
+## 5. 生产环境变量
+
+安装脚本不会把密钥写入仓库或 artifact。使用 systemd drop-in 持久化生产配置：
+
+```bash
+sudo install -d -m 0750 /etc/lobster-chat
+sudo install -m 0600 /dev/null /etc/lobster-chat/gateway.env
+sudoedit /etc/lobster-chat/gateway.env
+```
+
+`/etc/lobster-chat/gateway.env`：
+
+```dotenv
+LOBSTER_CORS_ORIGIN=https://chat.example.com
+LOBSTER_DEV_AUTH_BYPASS=0
+LOBSTER_DEV_EMAIL_OTP_INLINE=0
+LOBSTER_EMAIL_OTP_MAILER_URL=https://mailer.example.com/lobster/email-otp
+LOBSTER_EMAIL_OTP_MAILER_BEARER_TOKEN=replace-with-secret
+LOBSTER_EMAIL_OTP_FROM=Lobster Chat <no-reply@example.com>
+```
+
+部署前可执行 scripts/production-readiness.sh 做只读配置检查。设置 CHECK_PUBLIC=1 并提供 BASE_URL=https://chat.example.com 后，还会探测公网 health、provider 和 CORS；脚本不会输出 Bearer 密钥。
+
+添加 drop-in：
+
+```bash
+sudo install -d -m 0755 /etc/systemd/system/lobster-waku-gateway.service.d
+sudo tee /etc/systemd/system/lobster-waku-gateway.service.d/10-production.conf >/dev/null <<'EOF'
+[Service]
+EnvironmentFile=/etc/lobster-chat/gateway.env
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart lobster-waku-gateway
+```
+
+要求：
+
+- `LOBSTER_CORS_ORIGIN` 必须是单一正式 `https://` H5 origin，不能是 `*`
+- 两个 `LOBSTER_DEV_*` 必须为 `0` 或不设置；`scripts/production-readiness.sh` 会拒绝未知值
+- 邮件 Webhook 必须使用 HTTPS；只有 loopback 集成测试允许 HTTP
+- Bearer 密钥只进入环境文件和请求 header，不进入仓库、URL、日志或状态目录
+- Nginx 必须透传 `Authorization` header（默认行为；自定义代理规则不得清除）
+- 安装脚本生成的 Nginx 配置会显式设置 `proxy_set_header Authorization $http_authorization`，避免依赖代理默认行为
+- H5 Gateway 页面不能把 URL 的 `identity` 参数当作认证凭据；无 Bearer session 时按 `访客` 加载，正式输入与发送必须禁用
+- `identity` + `qa=browser`/`qa=manual` 只允许 loopback Gateway 的显式合成 QA 验收，不能用于正式域名或公网身份冒充
+- H5 消息搜索 `/v1/shell/messages/search` 必须携带 `resident_id` 和匹配的 Bearer session；无会话返回 `401`，非参与者不得得到私聊正文
+- H5 与 admin-ds 已登录态的退出入口调用 `POST /v1/auth/logout`；服务端成功后旧 Bearer 必须立即失效，网络失败只能显示待重试，不能伪报已撤销
+- OTP、challenge ID 和 Bearer session token 必须使用操作系统 CSPRNG；随机源不可用时认证请求必须失败关闭
+
+## 6. TLS 与公网入口
+
+`install-server.sh` 只生成 HTTP Nginx 站点。正式域名必须在它前面配置可信 TLS，可使用云负载均衡、CDN、Certbot 或已有反向代理。
+
+从外部网络执行：
+
+```bash
+BASE_URL=https://chat.example.com scripts/smoke-public-ingress.sh
+```
+
+该脚本检查首页、H5 住宅页 `creative.html`、管理后台 `admin-ds.html`、GET/HEAD `/health`、`/v1/provider`、无 Bearer 访问管理摘要与 logout 的 `401` 边界；设置 `EXPECT_CORS_ORIGIN` 时还会校验 health 的 CORS 响应。它不能替代 DNS、证书链、真实邮箱和登录后的浏览器验收。
+
+## 7. 必须完成的生产验收
+
+### 服务与安全边界
+
+```bash
+systemctl is-active lobster-waku-gateway
+nginx -t
+curl -fsS http://127.0.0.1:8787/health
+curl -fsS https://chat.example.com/health
+curl -fsS https://chat.example.com/v1/provider
+```
+
+- 无 Bearer token 读取受保护的 `/v1/admin/summary` 应返回 `401`
+- OTP request 响应不得包含 `dev_code`
+- 浏览器请求的 `Access-Control-Allow-Origin` 必须是正式 H5 origin，不是 `*`
+- `journalctl -u lobster-waku-gateway` 不得输出邮件 Bearer 密钥或 OTP 正文
+
+### 真实邮箱注册链路
+
+1. 使用未注册真实邮箱调用/操作 OTP request。
+2. 确认邮件实际到达，不以 Webhook `2xx` 代替收件验收。
+3. 使用邮件中的验证码完成 verify。
+4. 确认 session token 可读取居民 shell state。
+5. logout 后确认旧 token 立即失效。
+6. 在 admin-ds 居民详情确认脱敏邮箱、注册/验证/最近登录时间正确。
+
+### H5 双端 IM
+
+- 两个居民分别登录主城/住宅入口
+- 公共房间和私聊各完成发送、接收、编辑、撤回
+- 登录居民在当前可见公共房间/私聊搜索消息；退出登录或切换为非参与者后，搜索不得返回受限会话正文
+- 人为制造一次网络失败，确认失败气泡可重发且最终没有重复 committed copy
+- 刷新页面和重启 Gateway 后确认消息、注册、已读和会话仍可恢复
+
+### 运维能力
+
+- admin-ds 能读取居民、房间、审计日志和配置
+- 禁用/恢复居民、冻结/解冻房间、消息审核操作有成功或失败反馈
+- `audit-log.json` 能追踪高风险动作
+- 按 [账号申诉操作手册](ACCOUNT_APPEAL_RUNBOOK.md) 演练一次只读调查和一次恢复动作
+
+## 8. 备份、恢复与回滚
+
+状态目录是单城节点的核心资产。备份前停止 Gateway，保证多个 JSON 文件处于一致时间点：
+
+```bash
+sudo systemctl stop lobster-waku-gateway
+sudo tar -C /var/lib -czf /srv/backups/lobster-chat-state-$(date +%Y%m%d-%H%M%S).tar.gz lobster-chat
+sudo systemctl start lobster-waku-gateway
+```
+
+恢复前先保留当前坏状态副本，再解压已验证备份，确保目录权限与原安装一致。恢复后必须重新执行 `/health`、真实登录和双端消息验收。
+
+版本回滚：
+
+1. 部署前保存当前 Gateway/H5 artifact 和状态备份。
+2. 重新运行 `install-server.sh` 安装上一版匹配目标架构的 artifact。
+3. systemd drop-in 和 `/etc/lobster-chat/gateway.env` 不随 artifact 覆盖。
+4. 只有新版本确实写入不兼容状态时才恢复旧状态备份；不要默认回滚用户数据。
+5. 回滚后执行公网 smoke、真实 OTP 和双端 IM 验收。
+
+## 9. 故障定位顺序
+
+1. `systemctl status` / `journalctl`：Gateway 是否真实运行。
+2. `curl 127.0.0.1:8787/health`：应用本体。
+3. `nginx -t` 和本机 Nginx URL：反向代理。
+4. 公网 `/health`：DNS、TLS、CDN、防火墙。
+5. 邮件 Webhook 日志和真实收件箱：投递服务。
+
+出站公网 IP 不证明入站流量会到达此主机。相关案例与区域网络注意事项见 [DEPLOYMENT_PITFALLS_AND_HARDENING.md](DEPLOYMENT_PITFALLS_AND_HARDENING.md)。
+
+## 10. 明确后置范围
+
+- 原生 Waku relay 跨城互联
+- 真实 MLS 群组加密
+- 链上锚定
+- SMS OTP
+- PWA/IndexedDB 离线同步
+- 穿戴设备专用 transport bridge
+
+这些项目不属于当前单城集中式 IM 的上线阻塞项。

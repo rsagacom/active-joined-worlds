@@ -65,12 +65,32 @@ Gateway:
 - blocks blacklisted handles
 - creates a short-lived OTP challenge
 - persists the challenge in `auth-state.json`
+- releases the shared Gateway runtime lock before any external mailer network call, so a slow mail service cannot block unrelated IM requests
+- production mode posts the OTP to `LOBSTER_EMAIL_OTP_MAILER_URL` with `Authorization: Bearer <LOBSTER_EMAIL_OTP_MAILER_BEARER_TOKEN>`
+- returns `delivery_mode: mailer-webhook` only after the mailer accepts the request; missing configuration or delivery failure rolls back the challenge and fails closed
 
 Development mode can optionally expose the OTP inline through:
 
 - `LOBSTER_DEV_EMAIL_OTP_INLINE=1`
 
 This is for local testing only.
+
+Production mailer webhook payload:
+
+```json
+{
+  "kind": "lobster-email-otp",
+  "to": "reader@example.com",
+  "from": "Lobster Chat <no-reply@example.com>",
+  "subject": "Lobster Chat 登录验证码",
+  "text": "你的 Lobster Chat 验证码是 483921。验证码 10 分钟内有效，请勿转发。",
+  "code": "483921",
+  "challenge_id": "otp:...",
+  "expires_at_ms": 1800000000000
+}
+```
+
+Webhook must return any `2xx` response. Remote endpoints must use HTTPS; HTTP is accepted only for loopback integration tests.
 
 ### 3. Verify email OTP
 
@@ -118,6 +138,6 @@ That means a malicious resident can be forced to:
 
 ## What is still missing
 
-- real email delivery adapter (SMTP / Mailgun / Resend / SES)
-- registration-required join flow
-- registration review support for audits and appeal handling
+- provider-specific mail delivery deployment behind the generic HTTPS webhook (for example SMTP / Mailgun / Resend / SES credentials, DKIM and bounce handling)
+- production acceptance on the target host/domain with a real mailbox provider
+- an automated appeal ticket system; the current manual policy and operator procedure is documented in [`ACCOUNT_APPEAL_RUNBOOK.md`](ACCOUNT_APPEAL_RUNBOOK.md), backed by the admin registration projection and audit log

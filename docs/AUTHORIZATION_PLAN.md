@@ -1,47 +1,52 @@
 # 鉴权与权限规划
 
+> 当前状态（2026-07-27）：本文保留最初的威胁边界和实施顺序；下方历史缺口已按当前实现重写。session bearer、30 天过期、logout/revoke、OTP 请求/验证限流、能力校验、管理审计、生产 CORS 配置及关闭 dev bypass 的写路由门禁均已落地并进入 Gateway/release gate 回归。H5 与 admin-ds 的可见退出入口现在都会调用 `/v1/auth/logout`；公网生产主机、域名/TLS、真实邮件和双端验收仍未执行。
+
 ## 结论
 
-当前系统已经有低成本认证骨架：邮箱 OTP、访客态限制、居民身份、城主/ steward 概念、私聊参与者可见性、部分 city-lord 治理接口约束。但这还不是完整生产鉴权体系。
+当前本地系统已经闭合“认证、会话、授权、审计”四层：邮箱 OTP、Bearer session、访客态限制、居民身份、私聊参与者可见性、角色/capability 校验和高风险审计均由 Gateway 真源提供，H5/TUI/CLI/admin-ds 只消费这些合同。
 
-后续 admin 后台和 gateway 必须按“认证、会话、授权、审计”四层补齐，不能只靠前端 disabled 按钮或 query identity。
+这仍不等于公网生产验收；外部环境的真实邮件投递、TLS/代理、目标主机和双端行为需要另行执行。
 
 ## 当前已有能力
 
 | 层级 | 已有能力 | 状态 |
 | --- | --- | --- |
 | 访客态 | `访客` 不能发送正式消息，不能打开私聊 | 已有测试覆盖 |
-| 居民登录 | email OTP request / verify，登录后生成 resident | 骨架可用 |
+| 居民登录 | email OTP request / verify，登录后生成 resident 和 Bearer session | Gateway/release gate 已覆盖 |
+| 会话生命周期 | 30 天过期、`GET /v1/auth/session`、`POST /v1/auth/logout` 服务端撤销 | 已完成；refresh token/轮换仍后置 |
 | 私聊可见性 | direct thread 只对参与者可见；非参与者不能写入 | 已有测试覆盖 |
 | 消息归属 | edit / recall 只能由发送者执行 | 已有测试覆盖 |
 | 城市角色 | city lord / steward / membership / room freeze 等模型 | 部分可用 |
 | 黑名单 | 邮箱/手机号/设备哈希黑名单 preflight | 已有骨架 |
-| 前端状态 | H5 禁用访客发送、admin 未接功能 disabled | UI 层保护，不可当安全边界 |
+| 前端状态 | H5 禁用访客发送；H5/admin-ds 显示登录与退出入口 | UI 仅作 UX，安全边界在 Gateway |
 
-## 明确缺口
+## 历史规划项与当前状态
 
-1. **没有正式 session token**
-   - 当前 H5 主要用 `resident_id` / query / localStorage 表示身份。
-   - 这只能用于本地开发，不能作为生产认证。
+1. **正式 session token：已完成本地实现**
+   - OTP verify 返回 Bearer session，Gateway 绑定 resident/device/issued/expires 并校验 actor。
+   - H5/admin-ds 退出时调用 `/v1/auth/logout`；旧 token 在 Gateway 上立即失效，网络失败会清理本地状态并显示待重试。
+   - refresh token、token rotation 和设备会话列表仍是后续增强项。
 
-2. **admin 没有独立登录态**
-   - `admin.html` 当前只是城主投影页面，不等于已鉴权后台。
-   - 城主/管理员动作必须由 gateway 验证 token + role，不能信前端页面入口。
+2. **admin 独立主体：当前采用共享 Gateway session + capability**
+   - admin-ds 复用居民 OTP/Bearer session，管理读写由 Gateway 验证 token、role/capability 和目标范围。
+   - 独立的管理员主体、设备列表和更细的后台会话策略仍未单独产品化。
 
-3. **权限模型还不够显式**
-   - 需要把 `resident / city_lord / steward / world_safety / system_admin` 做成统一能力表。
-   - 每个接口必须声明需要什么 capability。
+3. **权限模型：已完成主要本地闭环**
+   - `resident / city_lord / steward / world_safety / system_admin` 已进入统一 capability 校验和管理端点门禁。
+   - 仍可继续细化 capability 文档与跨城市策略，但不再依赖前端 disabled 或 query identity。
 
-4. **高风险动作缺少二次确认和审计**
-   - 制裁、封禁、冻结房间、隔离城市、信任状态变更必须写审计日志。
-   - 需要 actor、target、reason、before/after、request_id、timestamp。
+4. **高风险动作：已完成本地审计闭环**
+   - 制裁、封禁、冻结房间、治理配置、设备和消息管理动作由 Gateway 写审计并持久化。
+   - admin-ds 提供受控操作与明确失败反馈；公网演练仍待执行。
 
-5. **token 生命周期与撤销缺失**
-   - 需要 access token / refresh token 或本地 session token。
-   - 需要 logout、revoke session、设备列表、失效时间。
+5. **token 生命周期：本地 session 已完成，增强项后置**
+   - access/session token、失效时间、logout、revoke 已完成并有回归测试。
+   - refresh token、轮换、设备列表和跨设备撤销仍未实现。
 
-6. **生产安全边界未完成**
-   - 限流、CSRF/CORS 策略、暴力 OTP 防护、设备指纹策略、IP 风险等还未成型。
+6. **生产安全边界：代码门禁已完成，外部验收未完成**
+   - 本地已覆盖 OTP 限流、防暴力、HTTPS CORS、Bearer 代理透传和关闭 dev bypass 的 readiness 检查。
+   - 目标 Linux 主机、正式域名/TLS、真实邮件 Webhook、公网双端及账号申诉演练仍需执行。
 
 ## 目标权限模型
 
@@ -91,7 +96,7 @@
 
 ## 实施顺序
 
-### Phase A：本地安全 MVP
+### Phase A：本地安全 MVP（已完成）
 
 - 为 OTP verify 返回 `session_token`。
 - gateway 增加 `Authorization: Bearer <token>` 解析。
@@ -99,26 +104,23 @@
 - `/v1/shell/message` 不再信任裸 sender；要求 token actor 与 sender 一致。
 - 保留 dev fallback，但必须由 `LOBSTER_DEV_AUTH_BYPASS=1` 显式开启。
 
-### Phase B：admin 权限
+### Phase B：admin 权限（已完成主要范围）
 
 - 给 resident 增加 role/capability projection。
 - admin.html 启动后请求 `GET /v1/auth/session` 或 shell state 中的 capability 摘要。
 - 公告、安全、房间、世界工具按 capability 显示。
 - 后端为公告/安全/房间操作补 capability check。
 
-### Phase C：审计与高风险动作
+### Phase C：审计与高风险动作（已完成主要范围）
 
 - 新增 `audit-log.jsonl` 或 runtime audit store。
 - 记录 high-risk action：actor、capability、target、before、after、reason、request_id。
 - admin 读取审计摘要，但不泄露私聊明文。
 
-### Phase D：生产化
+### Phase D：生产化（本地门禁完成，外部验收待执行）
 
-- refresh token / session revoke / logout。
-- OTP 限流和防暴力。
-- CORS 从开发通配改为允许列表。
-- CSRF 策略或 bearer-only API 策略。
-- 密钥轮换与部署密钥配置文档。
+- 已完成：session revoke / logout、OTP 限流和防暴力、CORS 允许列表、Bearer-only 写 API 策略、部署密钥配置文档。
+- 待完成：refresh token/rotation、设备会话列表、目标 Linux 主机部署、正式域名/TLS、真实邮件和公网双端验收。
 
 ## 测试要求
 

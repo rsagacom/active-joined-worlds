@@ -298,8 +298,8 @@ cargo test -p lobster-tui
 ## 验收目标 URL（前端修改后必须验证）
 
 ```
-http://127.0.0.1:18081/index.html?gateway=http://127.0.0.1:8787&identity=qa-a
-http://127.0.0.1:18081/creative.html?gateway=http://127.0.0.1:8787&identity=qa-b
+http://127.0.0.1:18081/index.html?gateway=http://127.0.0.1:8787&identity=qa-a&qa=browser
+http://127.0.0.1:18081/creative.html?gateway=http://127.0.0.1:8787&identity=qa-b&qa=browser
 http://127.0.0.1:18081/admin-ds.html?gateway=http://127.0.0.1:8787&qa=manual
 http://127.0.0.1:18081/unified.html?gateway=http://127.0.0.1:8787&qa=manual
 http://127.0.0.1:18081/world-square.html

@@ -6,6 +6,16 @@ Use the local gateway bridge smoke script before shipping a new gateway build or
 ./scripts/smoke-provider-federation.sh
 ```
 
+For a deployed reverse proxy or HTTPS public origin, run the public ingress smoke from outside the target network:
+
+```bash
+BASE_URL=https://chat.example.com \
+EXPECT_CORS_ORIGIN=https://chat.example.com \
+  ./scripts/smoke-public-ingress.sh
+```
+
+It checks the current homepage marker, `creative.html`, `admin-ds.html`, GET/HEAD `/health`, `/v1/provider`, missing-Bearer `401` responses for `/v1/admin/summary` and `POST /v1/auth/logout`, plus the configured CORS origin when `EXPECT_CORS_ORIGIN` is supplied. It does not replace real email delivery, authenticated browser acceptance, or two-resident IM send/edit/recall testing.
+
 To smoke a packaged gateway artifact instead of the local `target/release` binary:
 
 ```bash

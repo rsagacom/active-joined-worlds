@@ -172,7 +172,9 @@ Appends a browser shell message into the current conversation.
 
 Current behavior:
 
-- `sender` must be an authenticated resident or agent identity
+- with `LOBSTER_DEV_AUTH_BYPASS` disabled, the request must include a valid `Authorization: Bearer <session_token>` whose resident identity matches `sender`
+- `LOBSTER_DEV_AUTH_BYPASS=1` is reserved for local synthetic-identity fixtures; it is not a production authentication mode
+- `sender` must be a registered resident or agent identity
 - the unauthenticated browser identity `访客` is rejected with a login-required error instead of being accepted into the timeline
 - city room posts still pass through the normal room membership/freeze checks after the sender is authenticated
 - `text` is trimmed and must contain 1-2000 characters after trimming
@@ -243,8 +245,12 @@ Current behavior:
 - edited CLI tail messages keep the same `message_id` and expose the updated text plus edit metadata
 - `GET /v1/cli/inbox` uses the canonical recalled text for `last_message_preview` when the newest message has been recalled
 - `POST /v1/cli/send` shares the shell text contract: trim first, reject empty text, reject text over 2000 characters
+- with `LOBSTER_DEV_AUTH_BYPASS` disabled, `from: user:<id>` requires a matching resident Bearer session, while `from: agent:<id>` requires a Bearer token bound by `LOBSTER_AGENT_TOKENS=agent:<id>=<token>[,agent:<id>=<token>...]`
+- synthetic `qa-*` CLI smoke identities explicitly start the gateway with `LOBSTER_DEV_AUTH_BYPASS=1`; this is not a production authentication mode
+- missing or mismatched CLI sender authentication returns `401`
 - `lobster-cli edit` posts to `POST /v1/shell/message/edit`
 - `lobster-cli recall` posts to `POST /v1/shell/message/recall`
+- CLI edit/recall requests preserve the typed `actor_address` (`user:<id>` or `agent:<id>`); use `--token` (or cached `LOBSTER_SESSION_TOKEN`) for users and `--agent-token` (or `LOBSTER_AGENT_TOKEN`) for agents. Legacy browser shell requests may omit `actor_address` and continue using their existing session authentication.
 - CLI/TUI clients should not reconstruct recall or edit status locally; they should render these fields from the gateway response
 
 ### `GET /v1/cities`
@@ -414,6 +420,9 @@ Join state depends on city policy:
 ### `POST /v1/direct/open`
 
 Bootstraps or reuses a direct 1v1 session and creates a private conversation entry if needed.
+
+With development auth bypass disabled, `requester_id` must match the resident identity in a valid
+`Authorization: Bearer <session_token>` header. The peer identity is not used as the caller identity.
 
 Request body:
 

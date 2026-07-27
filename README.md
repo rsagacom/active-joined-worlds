@@ -112,21 +112,22 @@ BASE_URL=https://<node>.<tailnet>.ts.net ./scripts/smoke-public-ingress.sh
 - 保持会话上下文可见：输入区下方会提示同步状态、共建记忆和访客提醒；网关慢时会先显示本地待同步消息。
 
 
-## 📊 当前开发进度 (2026-07-07)
+## 📊 当前开发进度 (2026-07-27)
 
 | 模块 | 测试数 | Clippy | 状态 |
 |------|--------|--------|------|
-| Gateway (Rust) | 274 | ✅ | 私宅访问确权+好友关系流, 设备管理, 场景权限, 审核持久化, 38+ HTTP 端点 |
-| TUI (Rust/ratatui) | 225 | ✅ | 用户端/城主端/世界广场/私聊终端 |
+| Gateway (Rust) | 312 | ✅ | 私宅访问确权+好友关系流, 设备管理, 场景权限, 审核持久化, 38+ HTTP 端点 |
+| TUI (Rust/ratatui) | 233 | ✅ | 用户端/城主端/世界广场/私聊终端 |
 | CLI (Rust) | 50 | ✅ | login/nickname/directory/snapshot/moderate/admin 命令 |
-| H5 Web Shell (JS) | 1185 | — | 7 页面, 场景交互, admin-ds 写操作护栏, 角色卡/导引纯模型下沉 |
+| H5 Web Shell (JS) | 1399 | — | 7 页面, 场景交互, admin-ds 写操作护栏, Gateway 真源投影, app.js 表面职责下沉至 7,460 行 |
 | crypto-mls | 20 | ✅ | AES-256-GCM + HKDF 前向安全 |
 | ai-sidecar | 7 | ✅ | HTTP AI 助手 + 流式 |
 | chat-core | 20 | ✅ | 合同定义, SceneImageLayer day/night |
 | chat-storage | 17 | ✅ | 文件存储, 原子写 |
-| **总计** | **~1,828** | **零警告** | 全模块通过 |
+| **总计** | **~2,058** | **零警告** | 全模块通过；完整 release gate 已包含 provider federation |
 
-最近更新（6-26 ~ 7-07）：
+最近更新（7-27）：
+- 🧩 H5 世界/治理/居民/房间/会话摘要表面职责下沉；Web 1399、Gateway 312、TUI 233 与完整 release gate 全绿
 - 🏠 私宅主客访问确权：registered_all/friends_only 策略 + 房主确权端点 + 防消息泄漏
 - 🤝 好友关系流：request/accept 两步流 + 居民目录按 viewer 投影 relationship_state
 - 🔐 注册登录共享接线：shell-auth-standalone.js 统一 world-square/admin-ds OTP 流程
@@ -309,8 +310,12 @@ cargo run -p lobster-waku-gateway -- --host 127.0.0.1 --port 8787 --state-dir ./
 Then point the TUI at it:
 
 ```bash
-LOBSTER_WAKU_GATEWAY_URL=http://127.0.0.1:8787 cargo run -p lobster-tui
+LOBSTER_WAKU_GATEWAY_URL=http://127.0.0.1:8787 \
+LOBSTER_SESSION_TOKEN=<session-token> \
+cargo run -p lobster-tui
 ```
+
+在关闭 `LOBSTER_DEV_AUTH_BYPASS` 的真实 Gateway 上，TUI 的 `/edit`、`/recall`、`/dm`、管理读写和治理查询会透传 `Authorization: Bearer ...`。优先设置 `LOBSTER_SESSION_TOKEN`；sidecar 场景也可使用 `LOBSTER_AGENT_TOKEN`。未设置 token 仅适用于本地 dev bypass 或不需要鉴权的只读路径。
 
 ### 命令行聊天通道（`lobster-cli`）
 
@@ -674,6 +679,8 @@ Package release artifacts:
 ./scripts/package-release.sh
 ```
 
+若当前开发机不是 Linux，推荐在 GitHub Actions 手动运行 `.github/workflows/release.yml` 的 `lobster-chat-release`，它会先跑完整 Rust/Web 验证，再由 Linux x86_64 与 aarch64 runner 分别生成目标架构 Gateway、H5、源码和 `SHA256SUMS` artifact。
+
 用两个 gateway 本地烟测 provider 互联：
 
 ```bash
@@ -724,6 +731,9 @@ Gateway 通过环境变量控制安全敏感行为，无需改代码或配置文
 | `LOBSTER_CORS_ORIGIN` | `*` | CORS `Access-Control-Allow-Origin`。生产部署应设置为前端域名（如 `https://chat.example.com`），留空或 `*` 为通配。 |
 | `LOBSTER_DEV_AUTH_BYPASS` | (空) | 设为 `1` 后跳过所有 capability 校验。**仅限本地开发**，生产必须关闭。 |
 | `LOBSTER_DEV_EMAIL_OTP_INLINE` | (空) | 设为 `1` 后 OTP 验证码直接返回在 API 响应里（`dev_code` 字段），跳过邮件发送。**仅限本地开发**。 |
+| `LOBSTER_EMAIL_OTP_MAILER_URL` | (空) | 生产邮件 Webhook 地址，必须为 HTTPS；仅 localhost/127.0.0.1 测试端点允许 HTTP。未配置时生产 OTP 请求失败关闭，不会生成无法送达的挑战。 |
+| `LOBSTER_EMAIL_OTP_MAILER_BEARER_TOKEN` | (空) | 调用邮件 Webhook 的 Bearer 凭证，必填。凭证只进入 Authorization header，不写入请求体或 auth-state。 |
+| `LOBSTER_EMAIL_OTP_FROM` | (空) | 可选发件人，例如 `Lobster Chat <no-reply@example.com>`；实际发件域名与 DKIM/SPF 由邮件 Webhook 服务负责。 |
 | `LOBSTER_WAKU_PROVIDER_URL` | (空) | 上游 gateway / Waku provider URL。设置后 gateway 启动时自动连接上游。 |
 | `LOBSTER_WAKU_UPSTREAM_URL` | (空) | `LOBSTER_WAKU_PROVIDER_URL` 的旧名，仍受支持。 |
 
@@ -731,11 +741,16 @@ Gateway 通过环境变量控制安全敏感行为，无需改代码或配置文
 
 - [ ] `LOBSTER_CORS_ORIGIN` 设为实际前端域名，非 `*`
 - [ ] `LOBSTER_DEV_AUTH_BYPASS` 未设置（或显式设为 `0`）
-- [ ] `LOBSTER_DEV_EMAIL_OTP_INLINE` 未设置（生产邮件发送必须走 mailer adapter）
+- [ ] `LOBSTER_DEV_EMAIL_OTP_INLINE` 未设置（或显式设为 `0`）
+- [ ] `LOBSTER_EMAIL_OTP_MAILER_URL` 指向正式 HTTPS 邮件 Webhook
+- [ ] `LOBSTER_EMAIL_OTP_MAILER_BEARER_TOKEN` 使用部署密钥注入，未写入仓库或日志
+- [ ] 邮件 Webhook 接收 `lobster-email-otp` JSON 并已用真实邮箱完成 request → delivery → verify 验收
 - [ ] OTP 限流已生效：每邮箱 1次/分钟请求，每 challenge 5次/分钟验证
 - [ ] Session token 30 天过期，logout 立即撤销
 - [ ] 审计日志写入 `audit-log.json`，高风险操作全部可追溯
 - [ ] 若部署在反向代理后，代理须透传 `Authorization` header
+
+本地代码已为 H5 与 admin-ds 提供可见“退出登录”入口，并调用 Gateway `POST /v1/auth/logout` 完成服务端撤销；上方项目仍保持未勾选，因为真实生产主机、邮件、TLS 和公网旧 token 失效验收尚未执行。
 
 ## 开发命令速查
 

@@ -79,6 +79,8 @@
 - 表单：邮箱地址（即注册ID）+ 用户昵称 → 获取邮箱验证码 → 完成登录
 - **手机验证暂不开通**，字段保留 hidden，标记"规划中"
 - **注册弹窗必须出现在所有页面**（user.html 跳转页除外）
+- 生产邮件验证码由 Gateway 调用通用 HTTPS Webhook 投递；challenge 在运行时锁内创建并持久化，外部邮件调用在锁外执行，未配置或投递失败时重新加锁精确回滚 challenge 并 fail-closed
+- 后台居民管理使用 `/v1/admin/residents` 注册投影，可审计未入城账号的脱敏邮箱、状态、注册/验证/最近登录时间
 
 ### 设备管控（不是用户注册）
 - 城主设备 MAC 白名单：平台管理员通过 `/v1/admin/devices/*` 管理
@@ -97,6 +99,7 @@
 - ✅ 已实现在 admin-ds → 房间详情 → 场景配置
 - 支持添加/编辑/删除热点（ID、标签、交互提示、X/Y/W/H 坐标）
 - 调用 `POST /v1/admin/scene`（带权限校验）
+- 场景层更新采用三态语义：字段省略表示保持不变，字段为 `null` 表示清除该层，传对象表示替换；因此选择“默认（无自定义）”或删除全部热点可以真正回到 Gateway 默认投影。
 
 ### 预设
 - creative-room, main-city, contract-private-room, contract-square-night
@@ -145,6 +148,7 @@
 | P0 ✅ | world-square + admin-ds 注册弹窗 JS 接线（已接入 `shell-auth-standalone.js`） |
 | P0 ✅ | 前端消息发送确认（`?gateway=` 双浏览器 smoke 已验证发送/编辑/撤回/失败重发） |
 | P1 ✅ | admin-ds 场景编辑器加 day/night URL 输入（复用 Gateway `SceneImageLayer` 成对校验） |
+| P1 ✅ | 场景编辑器统一 16:9 逻辑画布：背景、热点、拖拽/缩放共用同一坐标系；`aspect_ratio_permyriad` 明确为高度/宽度 × 10000，16:9 规范值 5625 |
 | P2 ✅ | 城主后台设备管理 UI（已接入 admin-ds 主内容区，复用 `/v1/admin/devices/*`） |
 | P2 ✅ | 私宅关系按钮移动端真实验收 + 未授权空态视觉 polish（住宅页状态节点 + 34px 移动按钮 realness） |
 | 阻塞 | 多城邦联邦、MLS 加密（PRODUCT_CHARTER 延后） |
@@ -190,20 +194,21 @@
 
 ### 验证基线（全绿零警告）
 
-- Gateway: **274 tests / 0 fail / 0 warning**
-- Web Shell: **1215 tests / 0 fail**（unit + layout + realness）
+- Gateway: **310 tests / 0 fail / 0 warning**
+- Web Shell: **1391 tests / 0 fail**（unit + layout + realness）
+- TUI: **233 tests / 0 fail**；启动已接入 Gateway `conversation_shell`/`scene_render` hydration，edit/recall 请求符合 `room_id`/`actor` 合同
 - 端到端 smoke: `SKIP_BUILD=1 node scripts/smoke-web-dual-browser.mjs` 通过（真实 gateway + 双浏览器消息发送/编辑/撤回/失败重发闭环，503 注入重发测试）
-- app.js: **9342 → 9222 行**（-120，新增 3 个纯模型模块 + 30 单测）
+- app.js: **9342 → 8422 行**；继续按职责和实例边界拆分，不以机械行数为目标
 
-### 真实进度（2026-07-07）
+### 真实进度（2026-07-16）
 
 | 模块 | 估算 | 说明 |
 |------|------:|------|
-| P0 单城 IM 闭环 | 99% | 私宅确权+好友流已提交+smoke 验证；剩余仅上线环境复验 |
-| P1 空间交互 | 82% | 场景编辑器 UX、移动端 polish 仍有空间 |
-| P2 后台运维 | 93% | admin-ds 写操作护栏完成，Gateway 端点齐全（invites/members/logs/devices） |
-| P3 技术债 | ~75% | app.js 三轮减债 9342→9222；`<8700` 目标在 6-26~28 新增私宅/好友功能后需重新评估合理性 |
-| P4 TUI/CLI parity | 95% | 后续以 release smoke 复验为主 |
+| P0 单城 IM 闭环 | 99% | 私宅确权、好友流、认证、消息与双浏览器 smoke 已验证；剩余仅生产主机/域名/邮件链路复验 |
+| P1 空间交互 | 90% | 统一 16:9 坐标画布已完成，场景编辑器 UX、移动端 polish 仍有空间 |
+| P2 后台运维 | 95% | admin-ds 写操作护栏和注册账号审计投影完成，Gateway 端点齐全（residents/invites/members/logs/devices）；生产接管和账号申诉操作手册已补齐 |
+| P3 技术债 | ~94% | app.js 已降至 8422 行；本轮继续把 room digest 统计投影下沉到 `shell-room-rail.js`，Quick Action reader、页面生命周期、输入附件、消息搜索、pending echo、Gateway 实时同步、fallback 轮询/前台恢复、同步状态/刷新编排、持久化 shell-state、聊天专注、消息发送与认证状态均形成真实生产边界和直接测试，继续以职责拆分而非机械行数为准 |
+| P4 TUI/CLI parity | 98% | CLI/TUI、居民主链、terminal 与 provider federation 已纳入完整 release gate；剩余为生产环境复验 |
 | P5 跨城/加密 | 15% | 后置（PRODUCT_CHARTER 延后） |
 
 ### 关键发现：6-26~28 WIP 曾未提交
@@ -212,9 +217,10 @@
 
 ### 下一步候选（按优先级）
 
-1. **app.js 候选 2**：Quick-action 读取器（~130 行，最大减债杠杆）—— 循环依赖复杂（`resolveRoomQuickPreview` ↔ `latestStructuredQuickActionPreview`）、是 IM 交互核心，风险中-高，需谨慎逐步推进并一并迁移 `pendingEchoes` 系列避免循环引用
-2. **P1 空间交互 polish**：场景编辑器 UX、移动端触控、空态视觉
-3. **P5 跨城/MLS 加密**：后置
+1. **剩余 app.js 职责边界**：优先选择可独立实例化、可直接测试的 UI 控制器；不为达到旧 `<8700` 参考值做机械搬运
+2. **生产环境复验**：目标 Linux 主机、正式域名、反向代理和邮件适配器到位后，按 release/deploy 清单验证真实 OTP 与公网入口；Linux x86_64 artifact 可通过手动触发 `.github/workflows/release.yml` 生成，不依赖 macOS 交叉链接器
+3. **P1 空间交互 polish**：场景编辑器 UX、移动端触控、空态视觉
+4. **P5 跨城/MLS 加密**：继续后置，不阻塞单城集中式 IM 完成
 
 剩余 app.js 候选 3/4/5（消息 payload 已做；房间状态/连接/同步文案、shellMode 视图状态文案）收益小（各 15-28 行）且多耦合运行时状态或 DOM，边际递减。
 
