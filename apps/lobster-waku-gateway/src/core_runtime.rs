@@ -1431,9 +1431,7 @@ impl GatewayRuntime {
                         entry.active_cities.push(city_slug.clone());
                     }
                 }
-                MembershipState::PendingApproval
-                    if !entry.pending_cities.contains(&city_slug) =>
-                {
+                MembershipState::PendingApproval if !entry.pending_cities.contains(&city_slug) => {
                     entry.pending_cities.push(city_slug.clone());
                 }
                 _ => {}
