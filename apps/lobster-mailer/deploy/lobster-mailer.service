@@ -1,0 +1,19 @@
+[Unit]
+Description=Lobster Chat email OTP mailer (Resend adapter)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=lobster
+Group=lobster
+WorkingDirectory=/opt/lobster-chat/mailer
+EnvironmentFile=/etc/lobster-chat/mailer.env
+ExecStart=/usr/bin/env node src/mailer.mjs
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
