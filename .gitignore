@@ -62,3 +62,10 @@ Icon
 /.claude/
 /docs/CC_*
 /docs/DS_*
+
+# 本地工具与临时产物
+.codebuddy/
+.tmp/
+/apps/lobster-web-shell/.tmp/
+/apps/lobster-web-shell/output/
+*.css.tmp
