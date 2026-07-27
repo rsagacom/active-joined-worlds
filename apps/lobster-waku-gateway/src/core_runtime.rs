@@ -1318,7 +1318,7 @@ impl GatewayRuntime {
             })
             .collect();
 
-        results.sort_by(|a, b| b.timestamp_ms.cmp(&a.timestamp_ms));
+        results.sort_by_key(|message| std::cmp::Reverse(message.timestamp_ms));
         results.truncate(limit);
         results
     }
@@ -1431,10 +1431,10 @@ impl GatewayRuntime {
                         entry.active_cities.push(city_slug.clone());
                     }
                 }
-                MembershipState::PendingApproval => {
-                    if !entry.pending_cities.contains(&city_slug) {
-                        entry.pending_cities.push(city_slug.clone());
-                    }
+                MembershipState::PendingApproval
+                    if !entry.pending_cities.contains(&city_slug) =>
+                {
+                    entry.pending_cities.push(city_slug.clone());
                 }
                 _ => {}
             }

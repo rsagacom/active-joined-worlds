@@ -10,7 +10,7 @@ impl GatewayRuntime {
         let mut seen = HashSet::new();
         let mut merged = Vec::new();
 
-        for frame in primary.into_iter().chain(secondary.into_iter()) {
+        for frame in primary.into_iter().chain(secondary) {
             let key = format!("{}:{}", frame.content_topic, hex::encode(&frame.payload));
             if seen.insert(key) {
                 merged.push(frame);

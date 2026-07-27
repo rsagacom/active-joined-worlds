@@ -207,7 +207,7 @@ impl GatewayRuntime {
                 }
             })
             .collect::<Vec<_>>();
-        conversations.sort_by(|a, b| b.last_active_at_ms.cmp(&a.last_active_at_ms));
+        conversations.sort_by_key(|conversation| std::cmp::Reverse(conversation.last_active_at_ms));
         Ok(conversations)
     }
 
@@ -416,7 +416,7 @@ impl GatewayRuntime {
                     .filter(|message| message.text.to_lowercase().contains(&query))
             })
             .collect::<Vec<_>>();
-        results.sort_by(|a, b| b.timestamp_ms.cmp(&a.timestamp_ms));
+        results.sort_by_key(|message| std::cmp::Reverse(message.timestamp_ms));
         results.truncate(limit);
         Ok(results)
     }
