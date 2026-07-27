@@ -6,7 +6,7 @@ use std::{
 };
 
 use host_adapter::default_mobile_web_bootstrap;
-use tiny_http::{Response, StatusCode};
+use tiny_http::{Request, Response, StatusCode};
 use transport_waku::WakuGatewayResponse;
 
 use crate::{
@@ -16,6 +16,7 @@ use crate::{
         ResponseHeaderExt, cli_missing_for_body, json_header, no_cache_header, parse_bool,
         parse_cli_address, parse_export_format, sse_header,
     },
+    http_write_routes::{require_authenticated_actor, require_cli_sender_auth},
 };
 
 pub(crate) type HttpResponse = Response<Cursor<Vec<u8>>>;
@@ -61,8 +62,18 @@ pub(crate) fn handle_get_shell_bootstrap(listen_addr: &str) -> HttpResponse {
 
 pub(crate) fn handle_get_shell_state(
     runtime: &Arc<Mutex<GatewayRuntime>>,
+    request: &Request,
     query_params: &HashMap<String, String>,
 ) -> HttpResponse {
+    if let Some(raw_resident_id) = query_params
+        .get("resident_id")
+        .map(String::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        && let Some(response) = require_authenticated_actor(runtime, request, raw_resident_id)
+    {
+        return response;
+    }
     let resident_id = query_params
         .get("resident_id")
         .map(|value| value.trim())
@@ -82,8 +93,18 @@ pub(crate) fn handle_get_shell_state(
 pub(crate) fn handle_get_shell_events(
     runtime: &Arc<Mutex<GatewayRuntime>>,
     notifier: &Arc<GatewayStateNotifier>,
+    request: &Request,
     query_params: &HashMap<String, String>,
 ) -> HttpResponse {
+    if let Some(raw_resident_id) = query_params
+        .get("resident_id")
+        .map(String::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        && let Some(response) = require_authenticated_actor(runtime, request, raw_resident_id)
+    {
+        return response;
+    }
     let resident_id = query_params
         .get("resident_id")
         .map(|value| value.trim())
@@ -335,6 +356,7 @@ pub(crate) fn handle_get_world_mirror_sources(
 
 pub(crate) fn handle_get_export(
     runtime: &Arc<Mutex<GatewayRuntime>>,
+    request: &Request,
     query_params: &HashMap<String, String>,
 ) -> HttpResponse {
     let resident_id = match query_params
@@ -354,6 +376,10 @@ pub(crate) fn handle_get_export(
             .with_optional_header(json_header());
         }
     };
+
+    if let Some(response) = require_authenticated_actor(runtime, request, &resident_id) {
+        return response;
+    }
 
     let conversation_id = query_params.get("conversation_id").map(String::as_str);
     let format = parse_export_format(query_params.get("format").map(String::as_str));
@@ -512,8 +538,29 @@ pub(crate) fn handle_get_admin_messages_moderation(
 
 pub(crate) fn handle_get_message_search(
     runtime: &Arc<Mutex<GatewayRuntime>>,
+    request: &Request,
     query_params: &HashMap<String, String>,
 ) -> HttpResponse {
+    let resident_id = match query_params
+        .get("resident_id")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+    {
+        Some(resident_id) => resident_id.to_string(),
+        None => {
+            return Response::from_string(
+                serde_json::to_string(&WakuGatewayResponse::Error {
+                    message: "resident_id query parameter required".into(),
+                })
+                .unwrap_or_else(|_| "{\"error\":true}".into()),
+            )
+            .with_status_code(StatusCode(400))
+            .with_optional_header(json_header());
+        }
+    };
+    if let Some(response) = require_authenticated_actor(runtime, request, &resident_id) {
+        return response;
+    }
     let q = match query_params.get("q") {
         Some(q) if !q.trim().is_empty() => q.trim().to_string(),
         _ => {
@@ -537,7 +584,7 @@ pub(crate) fn handle_get_message_search(
         .unwrap_or(50)
         .min(200);
     let results = match with_runtime(runtime, |runtime| {
-        runtime.search_messages(&q, room_id, limit)
+        runtime.search_messages_for_viewer(&IdentityId(resident_id), &q, room_id, limit)
     }) {
         Ok(results) => results,
         Err(response) => return response,
@@ -594,9 +641,13 @@ pub(crate) fn handle_get_audit_log(
 
 pub(crate) fn handle_get_cli_inbox(
     runtime: &Arc<Mutex<GatewayRuntime>>,
+    request: &Request,
     query_params: &HashMap<String, String>,
 ) -> HttpResponse {
     if let Some(raw_for) = query_params.get("for") {
+        if let Some(response) = require_cli_sender_auth(runtime, request, raw_for) {
+            return response;
+        }
         match parse_cli_address(raw_for) {
             Ok(viewer) => {
                 let result = match with_runtime(runtime, |runtime| runtime.cli_inbox_for(&viewer)) {
@@ -634,9 +685,13 @@ pub(crate) fn handle_get_cli_inbox(
 
 pub(crate) fn handle_get_cli_rooms(
     runtime: &Arc<Mutex<GatewayRuntime>>,
+    request: &Request,
     query_params: &HashMap<String, String>,
 ) -> HttpResponse {
     if let Some(raw_for) = query_params.get("for") {
+        if let Some(response) = require_cli_sender_auth(runtime, request, raw_for) {
+            return response;
+        }
         match parse_cli_address(raw_for) {
             Ok(viewer) => {
                 let result = match with_runtime(runtime, |runtime| runtime.cli_rooms_for(&viewer)) {
@@ -674,9 +729,13 @@ pub(crate) fn handle_get_cli_rooms(
 
 pub(crate) fn handle_get_cli_tail(
     runtime: &Arc<Mutex<GatewayRuntime>>,
+    request: &Request,
     query_params: &HashMap<String, String>,
 ) -> HttpResponse {
     if let Some(raw_for) = query_params.get("for") {
+        if let Some(response) = require_cli_sender_auth(runtime, request, raw_for) {
+            return response;
+        }
         match parse_cli_address(raw_for) {
             Ok(viewer) => {
                 let conversation_id = query_params
@@ -714,5 +773,72 @@ pub(crate) fn handle_get_cli_tail(
         Response::from_string(cli_missing_for_body())
             .with_status_code(StatusCode(400))
             .with_optional_header(json_header())
+    }
+}
+
+pub(crate) fn handle_get_cli_search(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    request: &Request,
+    query_params: &HashMap<String, String>,
+) -> HttpResponse {
+    let Some(raw_for) = query_params.get("for") else {
+        return Response::from_string(cli_missing_for_body())
+            .with_status_code(StatusCode(400))
+            .with_optional_header(json_header());
+    };
+    if let Some(response) = require_cli_sender_auth(runtime, request, raw_for) {
+        return response;
+    }
+    let q = match query_params.get("q") {
+        Some(q) if !q.trim().is_empty() => q.trim().to_string(),
+        _ => {
+            return Response::from_string(
+                serde_json::to_string(&WakuGatewayResponse::Error {
+                    message: "q query parameter required".into(),
+                })
+                .unwrap_or_else(|_| "{\"error\":true}".into()),
+            )
+            .with_status_code(StatusCode(400))
+            .with_optional_header(json_header());
+        }
+    };
+    let room_id = query_params
+        .get("room_id")
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(|value| ConversationId(value.to_string()));
+    let limit = query_params
+        .get("limit")
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .unwrap_or(50)
+        .min(200);
+    match parse_cli_address(raw_for) {
+        Ok(viewer) => {
+            let result = match with_runtime(runtime, |runtime| {
+                runtime.cli_search_for(&viewer, &q, room_id.as_ref(), limit)
+            }) {
+                Ok(result) => result,
+                Err(response) => return response,
+            };
+            match result {
+                Ok(response) => Response::from_string(
+                    serde_json::to_string(&response).unwrap_or_else(|_| "[]".into()),
+                )
+                .with_status_code(StatusCode(200))
+                .with_optional_header(json_header()),
+                Err(message) => Response::from_string(
+                    serde_json::to_string(&WakuGatewayResponse::Error { message })
+                        .unwrap_or_else(|_| "{\"error\":true}".into()),
+                )
+                .with_status_code(StatusCode(400))
+                .with_optional_header(json_header()),
+            }
+        }
+        Err(message) => Response::from_string(
+            serde_json::to_string(&WakuGatewayResponse::Error { message })
+                .unwrap_or_else(|_| "{\"error\":true}".into()),
+        )
+        .with_status_code(StatusCode(400))
+        .with_optional_header(json_header()),
     }
 }

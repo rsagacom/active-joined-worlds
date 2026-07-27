@@ -8,7 +8,9 @@ use transport_waku::WakuGatewayResponse;
 
 use crate::{
     AuthPreflightRequest, GatewayRuntime, GatewayStateNotifier, RequestEmailOtpRequest,
-    RequestMobileOtpRequest, VerifyEmailOtpRequest, VerifyMobileOtpRequest,
+    RequestEmailOtpResponse, RequestMobileOtpRequest, VerifyEmailOtpRequest,
+    VerifyMobileOtpRequest,
+    email_otp_mailer::{EmailOtpDelivery, deliver_email_otp_from_env},
     http_support::{ResponseHeaderExt, authorization_bearer_token, json_header},
 };
 
@@ -48,6 +50,39 @@ fn with_runtime<T>(
         Ok(mut runtime) => Ok(action(&mut runtime)),
         Err(_) => Err(runtime_unavailable()),
     }
+}
+
+pub(crate) fn request_email_otp_with_delivery(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    payload: RequestEmailOtpRequest,
+    inline_delivery: bool,
+    deliver: impl FnOnce(&EmailOtpDelivery) -> Result<(), String>,
+) -> Result<Result<RequestEmailOtpResponse, String>, HttpResponse> {
+    let prepared = match with_runtime(runtime, |runtime| {
+        runtime.prepare_email_otp_request(payload, inline_delivery)
+    })? {
+        Ok(prepared) => prepared,
+        Err(error) => return Ok(Err(error)),
+    };
+
+    if let Some(delivery) = prepared.delivery.as_ref()
+        && let Err(delivery_error) = deliver(delivery)
+    {
+        let rollback = with_runtime(runtime, |runtime| {
+            runtime.rollback_email_otp_request(
+                &prepared.response.challenge_id,
+                &prepared.normalized_email,
+            )
+        })?;
+        if let Err(rollback_error) = rollback {
+            return Ok(Err(format!(
+                "{delivery_error}; otp rollback failed: {rollback_error}"
+            )));
+        }
+        return Ok(Err(delivery_error));
+    }
+
+    Ok(Ok(prepared.response))
 }
 
 pub(crate) fn handle_get_auth_session(
@@ -126,7 +161,12 @@ pub(crate) fn handle_post_request_email_otp(
 
     match serde_json::from_slice::<RequestEmailOtpRequest>(&body) {
         Ok(payload) => {
-            let result = match with_runtime(runtime, |runtime| runtime.request_email_otp(payload)) {
+            let result = match request_email_otp_with_delivery(
+                runtime,
+                payload,
+                GatewayRuntime::dev_email_otp_inline_enabled(),
+                deliver_email_otp_from_env,
+            ) {
                 Ok(result) => result,
                 Err(response) => return response,
             };

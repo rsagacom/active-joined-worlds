@@ -1,7 +1,7 @@
 use super::*;
 use std::{
-    io::Read,
-    net::TcpStream,
+    io::{Read, Write},
+    net::{TcpListener, TcpStream},
     sync::{
         Arc, Mutex,
         atomic::{AtomicBool, Ordering},
@@ -11,8 +11,8 @@ use std::{
 };
 
 use crate::gateway_test_support::{
-    http_json, http_json_with_headers, http_raw, register_resident, sample_frame,
-    sample_frame_with, start_local_gateway_http_server, start_mock_upstream_gateway,
+    http_json, http_json_with_headers, http_raw, http_raw_with_headers, register_resident,
+    sample_frame, sample_frame_with, start_local_gateway_http_server, start_mock_upstream_gateway,
 };
 use crate::http_auth_routes::handle_get_auth_session;
 use crate::http_city_write_routes::handle_post_create_city;
@@ -24,6 +24,8 @@ use crate::http_read_routes::{
 use crate::http_write_routes::handle_post_provider_disconnect;
 use tempfile::tempdir;
 use tiny_http::{Header, StatusCode, TestRequest};
+
+use crate::email_otp_mailer::{EmailOtpDelivery, EmailOtpMailerConfig, deliver_email_otp};
 
 fn poison_runtime_mutex(runtime: &Arc<Mutex<GatewayRuntime>>) {
     let poisoned_runtime = Arc::clone(runtime);
@@ -412,6 +414,66 @@ fn http_boundary_routes_return_health_cors_and_not_found_contract() {
     assert!(missing_headers.contains("Content-Type: text/plain; charset=utf-8"));
     assert!(missing_headers.contains("Access-Control-Allow-Origin: *"));
     assert_eq!(missing_body, "not found");
+}
+
+#[test]
+fn resident_scoped_shell_state_requires_matching_bearer_session() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    register_resident(&mut runtime, "alice");
+    register_resident(&mut runtime, "bob");
+    let alice = IdentityId("alice".into());
+    let (alice_token, _) = runtime.issue_auth_session(
+        &alice,
+        "test-scoped-shell-state-alice",
+        GatewayRuntime::now_ms(),
+    );
+    let server = start_local_gateway_http_server(runtime);
+    let auth_header = format!("Bearer {alice_token}");
+
+    let (missing_status, _) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/shell/state?resident_id=alice",
+        None,
+    );
+    assert_eq!(missing_status, 401);
+
+    let (matching_status, _) = http_json_with_headers(
+        "GET",
+        &server.base_url,
+        "/v1/shell/state?resident_id=alice",
+        &[("Authorization", auth_header.as_str())],
+        None,
+    );
+    assert_eq!(matching_status, 200);
+
+    let (mismatched_status, _) = http_json_with_headers(
+        "GET",
+        &server.base_url,
+        "/v1/shell/state?resident_id=bob",
+        &[("Authorization", auth_header.as_str())],
+        None,
+    );
+    assert_eq!(mismatched_status, 401);
+
+    let (missing_events_status, _, _) = http_raw(
+        "GET",
+        &server.base_url,
+        "/v1/shell/events?resident_id=alice&wait_ms=0",
+        None,
+    );
+    assert_eq!(missing_events_status, 401);
+    let (matching_events_status, _, matching_events_body) = http_raw_with_headers(
+        "GET",
+        &server.base_url,
+        "/v1/shell/events?resident_id=alice&wait_ms=0",
+        &[("Authorization", auth_header.as_str())],
+        None,
+    );
+    assert_eq!(matching_events_status, 200);
+    assert!(matching_events_body.contains("event: shell-state"));
 }
 
 #[test]
@@ -2247,6 +2309,47 @@ fn governance_state_persists_across_restart() {
 }
 
 #[test]
+fn admin_room_freeze_persists_across_restart() {
+    let temp = tempdir().expect("temp dir");
+    let root = temp.path().join("gateway");
+    let room_id = "room:city:core-harbor:lobby";
+
+    {
+        let mut runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+        assert!(runtime.admin_freeze_room(room_id).expect("freeze room"));
+    }
+
+    {
+        let runtime = GatewayRuntime::open(&root, 64, None).expect("reopened runtime");
+        let room = runtime
+            .admin_rooms_detail()
+            .into_iter()
+            .find(|room| room.id == room_id)
+            .expect("frozen room");
+        assert!(
+            room.is_frozen,
+            "admin freeze must survive a gateway restart"
+        );
+    }
+
+    {
+        let mut runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+        assert!(runtime.admin_unfreeze_room(room_id).expect("unfreeze room"));
+    }
+
+    let runtime = GatewayRuntime::open(&root, 64, None).expect("reopened runtime");
+    let room = runtime
+        .admin_rooms_detail()
+        .into_iter()
+        .find(|room| room.id == room_id)
+        .expect("unfrozen room");
+    assert!(
+        !room.is_frozen,
+        "admin unfreeze must survive a gateway restart"
+    );
+}
+
+#[test]
 fn city_public_room_create_wakes_shell_events_without_waiting_for_timeout() {
     let temp = tempdir().expect("temp dir");
     let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
@@ -2630,6 +2733,201 @@ fn shell_message_response_and_projection_expose_stable_message_contract() {
         })
         .expect_err("blank shell message should be rejected");
     assert!(blank.contains("text"));
+}
+
+#[test]
+fn email_otp_mailer_posts_authenticated_delivery_without_leaking_token_into_body() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind mailer capture");
+    let address = listener.local_addr().expect("mailer capture address");
+    let (captured_tx, captured_rx) = std::sync::mpsc::channel();
+    let capture = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept mailer request");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("mailer read timeout");
+        let mut bytes = Vec::new();
+        let mut chunk = [0_u8; 2048];
+        loop {
+            let read = stream.read(&mut chunk).expect("read mailer request");
+            if read == 0 {
+                break;
+            }
+            bytes.extend_from_slice(&chunk[..read]);
+            let Some(header_end) = bytes.windows(4).position(|window| window == b"\r\n\r\n") else {
+                continue;
+            };
+            let headers = String::from_utf8_lossy(&bytes[..header_end]);
+            let content_length = headers
+                .lines()
+                .find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().ok())
+                        .flatten()
+                })
+                .unwrap_or(0);
+            if bytes.len() >= header_end + 4 + content_length {
+                break;
+            }
+        }
+        captured_tx.send(bytes).expect("capture mailer request");
+        stream
+            .write_all(
+                b"HTTP/1.1 202 Accepted\r\nContent-Type: application/json\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"ok\":true}",
+            )
+            .expect("respond to mailer request");
+    });
+
+    let config = EmailOtpMailerConfig::new(
+        format!("http://{address}/deliver"),
+        "mailer-secret".into(),
+        Some("Lobster Chat <no-reply@example.com>".into()),
+    )
+    .expect("localhost mailer config");
+    deliver_email_otp(
+        &config,
+        &EmailOtpDelivery {
+            to: "reader@example.com".into(),
+            code: "483921".into(),
+            challenge_id: "otp:test".into(),
+            expires_at_ms: 1_800_000_000_000,
+        },
+    )
+    .expect("deliver otp");
+
+    capture.join().expect("join mailer capture");
+    let request = String::from_utf8(captured_rx.recv().expect("captured request"))
+        .expect("utf8 mailer request");
+    assert!(request.starts_with("POST /deliver HTTP/1.1"));
+    assert!(request.contains("Authorization: Bearer mailer-secret"));
+    assert!(request.contains("\"to\":\"reader@example.com\""));
+    assert!(request.contains("\"code\":\"483921\""));
+    assert!(request.contains("\"challenge_id\":\"otp:test\""));
+    assert!(!request.contains("\"token\":\"mailer-secret\""));
+}
+
+#[test]
+fn email_otp_mailer_requires_https_except_for_local_test_endpoints() {
+    assert!(
+        EmailOtpMailerConfig::new(
+            "http://mailer.example.com/send".into(),
+            "secret".into(),
+            None,
+        )
+        .is_err()
+    );
+    assert!(
+        EmailOtpMailerConfig::new("https://mailer.example.com/send".into(), "".into(), None,)
+            .is_err()
+    );
+}
+
+#[test]
+fn email_otp_delivery_does_not_hold_gateway_runtime_lock() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = Arc::new(Mutex::new(
+        GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime"),
+    ));
+    let worker_runtime = Arc::clone(&runtime);
+    let (delivery_started_tx, delivery_started_rx) = std::sync::mpsc::channel();
+    let (release_delivery_tx, release_delivery_rx) = std::sync::mpsc::channel();
+
+    let worker = thread::spawn(move || {
+        crate::http_auth_routes::request_email_otp_with_delivery(
+            &worker_runtime,
+            RequestEmailOtpRequest {
+                email: "slow-mailer@example.com".into(),
+                mobile: None,
+                device_physical_address: None,
+                resident_id: Some("slow-mailer".into()),
+                nickname: None,
+            },
+            false,
+            |_delivery| {
+                delivery_started_tx.send(()).expect("signal delivery start");
+                release_delivery_rx
+                    .recv_timeout(Duration::from_secs(2))
+                    .expect("release delivery");
+                Ok(())
+            },
+        )
+    });
+
+    delivery_started_rx
+        .recv_timeout(Duration::from_secs(2))
+        .expect("delivery should start");
+    assert!(
+        runtime.try_lock().is_ok(),
+        "slow external mail delivery must not block unrelated gateway requests"
+    );
+    release_delivery_tx.send(()).expect("release delivery");
+    let response = worker
+        .join()
+        .expect("join delivery worker")
+        .unwrap_or_else(|_| panic!("runtime should be available"))
+        .expect("otp request should succeed");
+    assert_eq!(response.delivery_mode, "mailer-webhook");
+    assert!(response.dev_code.is_none());
+}
+
+#[test]
+fn email_otp_delivery_failure_rolls_back_challenge_and_rate_limit() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = Arc::new(Mutex::new(
+        GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime"),
+    ));
+    let request = RequestEmailOtpRequest {
+        email: "mailer-failure@example.com".into(),
+        mobile: None,
+        device_physical_address: None,
+        resident_id: Some("mailer-failure".into()),
+        nickname: None,
+    };
+
+    let result = crate::http_auth_routes::request_email_otp_with_delivery(
+        &runtime,
+        request.clone(),
+        false,
+        |_delivery| Err("mailer unavailable".into()),
+    )
+    .unwrap_or_else(|_| panic!("runtime should be available"));
+    assert_eq!(
+        result.expect_err("delivery should fail"),
+        "mailer unavailable"
+    );
+
+    let retry = runtime
+        .lock()
+        .expect("lock runtime")
+        .request_email_otp(request)
+        .expect("failed delivery must not consume the request rate limit");
+    assert_eq!(retry.delivery_mode, "inline-dev");
+}
+
+#[test]
+fn auth_credentials_use_fresh_os_random_values() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+
+    let first_code = runtime
+        .generate_email_otp_code()
+        .expect("secure otp generation");
+    let second_code = runtime
+        .generate_email_otp_code()
+        .expect("secure otp generation");
+    assert_eq!(first_code.len(), 6);
+    assert_eq!(second_code.len(), 6);
+    assert!(first_code.bytes().all(|byte| byte.is_ascii_digit()));
+    assert!(second_code.bytes().all(|byte| byte.is_ascii_digit()));
+
+    let resident = IdentityId("random-auth-user".into());
+    let (first_token, _) =
+        runtime.issue_auth_session(&resident, "same-challenge", GatewayRuntime::now_ms());
+    let (second_token, _) =
+        runtime.issue_auth_session(&resident, "same-challenge", GatewayRuntime::now_ms());
+    assert_eq!(first_token.len(), 69);
+    assert_eq!(second_token.len(), 69);
+    assert_ne!(first_token, second_token);
 }
 
 #[test]
@@ -5556,6 +5854,12 @@ fn direct_session_reuses_existing_session_when_participants_are_reversed() {
 }
 
 #[test]
+fn default_scene_image_layer_uses_canonical_16_9_ratio() {
+    let layer = GatewayRuntime::scene_image_layer("private-room-loft", true);
+    assert_eq!(layer.aspect_ratio_permyriad, 5_625);
+}
+
+#[test]
 fn shell_scene_update_persists_gateway_owned_room_layers() {
     let temp = tempdir().expect("temp dir");
     let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
@@ -5572,16 +5876,16 @@ fn shell_scene_update_persists_gateway_owned_room_layers() {
         .update_shell_scene(UpdateShellSceneRequest {
             room_id: "dm:builder:rsaga".into(),
             actor: "rsaga".into(),
-            image_layer: Some(SceneImageLayer {
+            image_layer: Some(Some(SceneImageLayer {
                 layer_id: "image-layer".into(),
                 preset: "resident-custom-loft".into(),
                 asset_hint: "resident-custom-loft-v1".into(),
-                aspect_ratio_permyriad: 16_000,
+                aspect_ratio_permyriad: 5_625,
                 owner_editable: true,
                 day_image_url: None,
                 night_image_url: None,
-            }),
-            hotspot_layer: Some(SceneHotspotLayer {
+            })),
+            hotspot_layer: Some(Some(SceneHotspotLayer {
                 layer_id: "resident-hotspots".into(),
                 coordinate_system: "scene-permyriad".into(),
                 owner_editable: true,
@@ -5595,7 +5899,7 @@ fn shell_scene_update_persists_gateway_owned_room_layers() {
                     width_permyriad: 900,
                     height_permyriad: 800,
                 }],
-            }),
+            })),
         })
         .expect("participant should update editable scene");
 
@@ -5639,15 +5943,15 @@ fn shell_scene_update_rejects_non_participant_actor() {
     let result = runtime.update_shell_scene(UpdateShellSceneRequest {
         room_id: "dm:builder:rsaga".into(),
         actor: "stranger".into(),
-        image_layer: Some(SceneImageLayer {
+        image_layer: Some(Some(SceneImageLayer {
             layer_id: "image-layer".into(),
             preset: "stranger-room".into(),
             asset_hint: "stranger-room".into(),
-            aspect_ratio_permyriad: 16_000,
+            aspect_ratio_permyriad: 5_625,
             owner_editable: true,
             day_image_url: None,
             night_image_url: None,
-        }),
+        })),
         hotspot_layer: None,
     });
 
@@ -5682,7 +5986,7 @@ fn shell_scene_update_http_route_returns_updated_scene_contract() {
                 "layer_id": "image-layer",
                 "preset": "builder-study",
                 "asset_hint": "builder-study-v1",
-                "aspect_ratio_permyriad": 16000,
+            "aspect_ratio_permyriad": 5625,
                 "owner_editable": true
             },
             "hotspot_layer": {
@@ -5904,6 +6208,200 @@ fn cli_http_routes_roundtrip_send_inbox_rooms_and_tail_contract() {
             .iter()
             .any(|item| item["sender"] == "openclaw" && item["text"] == "今晚一起吃饭吗")
     );
+}
+
+#[test]
+fn cli_search_filters_results_to_visible_conversations() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    let server = start_local_gateway_http_server(runtime);
+
+    for (recipient, text) in [
+        ("user:rsaga", "private-rsaga-needle"),
+        ("user:alice", "private-alice-needle"),
+    ] {
+        let (status, body) = http_json(
+            "POST",
+            &server.base_url,
+            "/v1/cli/send",
+            Some(&serde_json::json!({
+                "from": "agent:openclaw",
+                "to": recipient,
+                "text": text,
+                "client_tag": "search-test"
+            })),
+        );
+        assert_eq!(status, 200, "seed send failed: {body}");
+    }
+
+    let (rsaga_status, rsaga_results) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/cli/search?for=user%3Arsaga&q=private-rsaga-needle",
+        None,
+    );
+    assert_eq!(rsaga_status, 200);
+    assert_eq!(rsaga_results.as_array().unwrap().len(), 1);
+    assert_eq!(rsaga_results[0]["text"], "private-rsaga-needle");
+
+    let (alice_status, alice_results) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/cli/search?for=user%3Aalice&q=private-rsaga-needle",
+        None,
+    );
+    assert_eq!(alice_status, 200);
+    assert!(alice_results.as_array().unwrap().is_empty());
+
+    let (invisible_status, invisible_body) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/cli/search?for=user%3Aalice&q=needle&room_id=dm%3Aopenclaw%3Arsaga",
+        None,
+    );
+    assert_eq!(invisible_status, 400);
+    assert!(
+        invisible_body["Error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("not visible")
+    );
+}
+
+#[test]
+fn cli_send_http_requires_bound_agent_token_when_dev_bypass_disabled() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    runtime.set_agent_token_for_tests("agent:openclaw", "sidecar-secret");
+    let server = start_local_gateway_http_server(runtime);
+    let body = serde_json::json!({
+        "from": "agent:openclaw",
+        "to": "user:rsaga",
+        "text": "authenticated sidecar send",
+        "client_tag": "openclaw"
+    });
+
+    let (missing_status, _) = http_json("POST", &server.base_url, "/v1/cli/send", Some(&body));
+    assert_eq!(missing_status, 401);
+
+    let (invalid_status, _) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/cli/send",
+        &[("Authorization", "Bearer wrong-secret")],
+        Some(&body),
+    );
+    assert_eq!(invalid_status, 401);
+
+    let (accepted_status, accepted) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/cli/send",
+        &[("Authorization", "Bearer sidecar-secret")],
+        Some(&body),
+    );
+    assert_eq!(accepted_status, 200);
+    assert_eq!(accepted["ok"], true);
+}
+
+#[test]
+fn cli_scoped_read_routes_require_bound_bearer_without_dev_bypass() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    runtime.set_agent_token_for_tests("agent:openclaw", "sidecar-secret");
+    let server = start_local_gateway_http_server(runtime);
+
+    for path in [
+        "/v1/cli/inbox?for=agent%3Aopenclaw",
+        "/v1/cli/rooms?for=agent%3Aopenclaw",
+        "/v1/cli/tail?for=agent%3Aopenclaw",
+        "/v1/cli/search?for=agent%3Aopenclaw&q=secret",
+    ] {
+        let (missing_status, _, missing_body) = http_raw("GET", &server.base_url, path, None);
+        assert_eq!(
+            missing_status, 401,
+            "scoped CLI read {path} must reject missing Bearer auth: {missing_body}"
+        );
+
+        let (valid_status, _, valid_body) = http_raw_with_headers(
+            "GET",
+            &server.base_url,
+            path,
+            &[("Authorization", "Bearer sidecar-secret")],
+            None,
+        );
+        assert_eq!(
+            valid_status, 200,
+            "bound sidecar token should read {path}: {valid_body}"
+        );
+    }
+}
+
+#[test]
+fn cli_agent_edit_and_recall_require_and_accept_bound_sidecar_token() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    runtime.set_agent_token_for_tests("agent:openclaw", "sidecar-secret");
+    let server = start_local_gateway_http_server(runtime);
+    let send_body = serde_json::json!({
+        "from": "agent:openclaw",
+        "to": "user:rsaga",
+        "text": "sidecar edit seed",
+        "client_tag": "openclaw"
+    });
+    let (send_status, sent) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/cli/send",
+        &[("Authorization", "Bearer sidecar-secret")],
+        Some(&send_body),
+    );
+    assert_eq!(send_status, 200);
+    let message_id = sent["message_id"].as_str().expect("message id");
+    let edit_body = serde_json::json!({
+        "room_id": "dm:openclaw:rsaga",
+        "message_id": message_id,
+        "actor": "openclaw",
+        "actor_address": "agent:openclaw",
+        "text": "sidecar edit committed"
+    });
+
+    let (missing_edit_status, _) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/shell/message/edit",
+        Some(&edit_body),
+    );
+    assert_eq!(missing_edit_status, 401);
+
+    let (edit_status, edited) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/shell/message/edit",
+        &[("Authorization", "Bearer sidecar-secret")],
+        Some(&edit_body),
+    );
+    assert_eq!(edit_status, 200);
+    assert_eq!(edited["edit_status"], "edited");
+
+    let recall_body = serde_json::json!({
+        "room_id": "dm:openclaw:rsaga",
+        "message_id": message_id,
+        "actor": "openclaw",
+        "actor_address": "agent:openclaw"
+    });
+    let (recall_status, recalled) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/shell/message/recall",
+        &[("Authorization", "Bearer sidecar-secret")],
+        Some(&recall_body),
+    );
+    assert_eq!(recall_status, 200);
+    assert_eq!(recalled["recall_status"], "recalled");
 }
 
 #[test]
@@ -7375,6 +7873,107 @@ fn sanctioned_resident_cannot_send_messages() {
 }
 
 #[test]
+fn admin_resident_sanction_and_unban_persist_across_restart() {
+    let temp = tempdir().expect("temp dir");
+    let root = temp.path().join("gateway");
+
+    {
+        let mut runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+        runtime
+            .admin_ban_resident("persisted-resident", "test sanction")
+            .expect("ban resident");
+    }
+
+    {
+        let runtime = GatewayRuntime::open(&root, 64, None).expect("reopened runtime");
+        assert!(runtime.resident_portability_revoked(&IdentityId("persisted-resident".into())));
+    }
+
+    {
+        let mut runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+        assert_eq!(
+            runtime
+                .admin_unban_resident("persisted-resident")
+                .expect("unban resident"),
+            1
+        );
+    }
+
+    let runtime = GatewayRuntime::open(&root, 64, None).expect("reopened runtime");
+    assert!(!runtime.resident_portability_revoked(&IdentityId("persisted-resident".into())));
+}
+
+#[test]
+fn governance_profile_and_device_binding_persist_across_restart() {
+    let temp = tempdir().expect("temp dir");
+    let root = temp.path().join("gateway");
+    let sanction_id;
+
+    {
+        let mut runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+        runtime
+            .admin_create_resident("profile-resident", "profile@example.com")
+            .expect("create resident");
+        runtime
+            .admin_set_nickname("profile-resident", Some("Profile Resident"))
+            .expect("persist nickname");
+        runtime
+            .admin_ban_resident("profile-resident", "profile test sanction")
+            .expect("ban resident");
+        sanction_id = runtime
+            .resident_sanctions
+            .last()
+            .expect("sanction")
+            .sanction_id
+            .clone();
+        runtime
+            .admin_add_device(
+                "11:22:33:44:55:66".into(),
+                "Profile device".into(),
+                "admin-1".into(),
+            )
+            .expect("add device");
+        runtime
+            .bind_device_to_resident("112233445566", "profile-resident")
+            .expect("persist device binding");
+    }
+
+    {
+        let runtime = GatewayRuntime::open(&root, 64, None).expect("reopened runtime");
+        let registration = runtime
+            .registrations
+            .iter()
+            .find(|registration| registration.resident_id.0 == "profile-resident")
+            .expect("reopened resident");
+        assert_eq!(registration.nickname.as_deref(), Some("Profile Resident"));
+        let device = runtime
+            .admin_list_devices()
+            .into_iter()
+            .find(|device| device.address == "112233445566")
+            .expect("reopened device");
+        assert_eq!(
+            device.bound_resident_id.as_deref(),
+            Some("profile-resident")
+        );
+    }
+
+    {
+        let mut runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+        runtime
+            .revoke_sanction(&sanction_id)
+            .expect("persist revoked sanction");
+    }
+
+    let runtime = GatewayRuntime::open(&root, 64, None).expect("reopened runtime");
+    let sanction = runtime
+        .resident_sanctions
+        .iter()
+        .find(|sanction| sanction.sanction_id == sanction_id)
+        .expect("reopened sanction");
+    assert_eq!(sanction.status, WorldResidentSanctionStatus::Lifted);
+}
+
+#[test]
 fn email_otp_registration_roundtrip_creates_persisted_resident() {
     let temp = tempdir().expect("temp dir");
     let root = temp.path().join("gateway");
@@ -8525,6 +9124,55 @@ fn admin_residents_endpoint_returns_resident_list() {
 }
 
 #[test]
+fn admin_residents_endpoint_includes_registered_resident_without_city_membership() {
+    let temp = tempdir().expect("temp dir");
+    let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
+    let server = start_local_gateway_http_server(runtime);
+    let body = serde_json::json!({
+        "resident_id": "registered-only",
+        "email": "registered-only@example.com"
+    });
+    let (create_status, _) =
+        http_json("POST", &server.base_url, "/v1/admin/residents", Some(&body));
+    assert_eq!(create_status, 200);
+
+    let (status, payload) = http_json("GET", &server.base_url, "/v1/admin/residents", None);
+    assert_eq!(status, 200);
+    let resident = payload
+        .as_array()
+        .expect("should be array")
+        .iter()
+        .find(|item| item.get("resident_id").and_then(|v| v.as_str()) == Some("registered-only"))
+        .expect("registered resident must be visible before joining a city");
+    assert_eq!(
+        resident.get("email_masked").and_then(|v| v.as_str()),
+        Some("r***@example.com")
+    );
+    assert_eq!(
+        resident.get("registration_state").and_then(|v| v.as_str()),
+        Some("active")
+    );
+    assert!(
+        resident
+            .get("created_at_ms")
+            .and_then(|v| v.as_i64())
+            .is_some()
+    );
+    assert_eq!(
+        resident.get("verified_at_ms").and_then(|v| v.as_i64()),
+        Some(0)
+    );
+    assert_eq!(
+        resident.get("last_login_at_ms").and_then(|v| v.as_i64()),
+        Some(0)
+    );
+    assert_eq!(
+        resident.get("active_cities").and_then(|v| v.as_array()),
+        Some(&Vec::new())
+    );
+}
+
+#[test]
 fn admin_ban_and_unban_resident_endpoints_roundtrip() {
     let temp = tempdir().expect("temp dir");
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
@@ -8786,6 +9434,30 @@ fn admin_config_endpoints_get_and_set_roundtrip() {
         get_payload2
             .get("maintenance_mode")
             .and_then(|v| v.as_str()),
+        Some("false")
+    );
+}
+
+#[test]
+fn admin_config_persists_across_restart() {
+    let temp = tempdir().expect("temp dir");
+    let root = temp.path().join("gateway");
+
+    {
+        let mut runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+        runtime
+            .admin_set_config(HashMap::from([
+                ("max_users".to_string(), "1000".to_string()),
+                ("maintenance_mode".to_string(), "false".to_string()),
+            ]))
+            .expect("persist config");
+    }
+
+    let runtime = GatewayRuntime::open(&root, 64, None).expect("reopened runtime");
+    let config = runtime.admin_get_config();
+    assert_eq!(config.get("max_users").map(String::as_str), Some("1000"));
+    assert_eq!(
+        config.get("maintenance_mode").map(String::as_str),
         Some("false")
     );
 }
@@ -9242,6 +9914,7 @@ fn recall_rejects_non_sender() {
         room_id: "room:world:lobby".into(),
         message_id: response.message_id,
         actor: "intruder".into(),
+        actor_address: None,
     });
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("only the original sender"));
@@ -9257,6 +9930,7 @@ fn edit_rejects_invalid_message_id() {
         message_id: "nonexistent-msg-id".into(),
         actor: "rsaga".into(),
         text: "trying to edit".into(),
+        actor_address: None,
     });
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("not found"));
@@ -9271,6 +9945,7 @@ fn recall_rejects_invalid_message_id() {
         room_id: "room:world:lobby".into(),
         message_id: "nonexistent-msg-id".into(),
         actor: "rsaga".into(),
+        actor_address: None,
     });
     assert!(result.is_err());
     assert!(result.unwrap_err().contains("not found"));
@@ -9302,6 +9977,7 @@ fn edit_and_recall_state_persists_across_restart() {
                 message_id: message_id.clone(),
                 actor: "rsaga".into(),
                 text: "edited text".into(),
+                actor_address: None,
             })
             .expect("edit message");
     }
@@ -9419,6 +10095,7 @@ fn shell_message_edit_does_not_increment_unread() {
             message_id,
             actor: "alice".into(),
             text: "edited".into(),
+            actor_address: None,
         })
         .expect("edit");
 
@@ -9685,6 +10362,29 @@ fn admin_create_resident_duplicate_returns_409() {
 }
 
 #[test]
+fn admin_created_resident_persists_across_restart() {
+    let temp = tempdir().expect("temp dir");
+    let root = temp.path().join("gateway");
+
+    {
+        let mut runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+        assert!(
+            runtime
+                .admin_create_resident("persisted-resident", "persisted@example.com")
+                .expect("create resident")
+        );
+    }
+
+    let runtime = GatewayRuntime::open(&root, 64, None).expect("reopened runtime");
+    assert!(
+        runtime
+            .registrations
+            .iter()
+            .any(|registration| registration.resident_id.0 == "persisted-resident")
+    );
+}
+
+#[test]
 fn world_directory_returns_ok() {
     let temp = tempdir().expect("temp dir");
     let runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
@@ -9848,8 +10548,12 @@ fn concurrent_presence_heartbeats_via_http() {
 fn admin_logs_endpoint_returns_entries() {
     let temp = tempdir().expect("temp dir");
     let mut runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
-    runtime.admin_handle_log("audit-001");
-    runtime.admin_handle_log("audit-002");
+    runtime
+        .admin_handle_log("audit-001")
+        .expect("persist handled log");
+    runtime
+        .admin_handle_log("audit-002")
+        .expect("persist handled log");
     let server = start_local_gateway_http_server(runtime);
     let (status, body) = http_json("GET", &server.base_url, "/v1/admin/logs", None);
     assert_eq!(status, 200);
@@ -9861,7 +10565,9 @@ fn admin_logs_endpoint_returns_entries() {
 fn admin_invites_list_endpoint_returns_created_invites() {
     let temp = tempdir().expect("temp dir");
     let mut runtime = GatewayRuntime::open(temp.path(), 64, None).expect("open gateway");
-    runtime.admin_create_invite("qa-a", 0);
+    runtime
+        .admin_create_invite("qa-a", 0)
+        .expect("persist invite");
     let server = start_local_gateway_http_server(runtime);
     let (status, body) = http_json("GET", &server.base_url, "/v1/admin/invites", None);
     assert_eq!(status, 200);
@@ -9926,12 +10632,14 @@ fn assign_permission_group_via_http() {
     let temp = tempdir().expect("temp dir");
     let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
     register_resident(&mut runtime, "alice");
-    let resp = runtime.admin_create_permission_group(
-        "admin-1",
-        "协管",
-        "steward-like",
-        vec!["freeze:room".into(), "moderate:message".into()],
-    );
+    let resp = runtime
+        .admin_create_permission_group(
+            "admin-1",
+            "协管",
+            "steward-like",
+            vec!["freeze:room".into(), "moderate:message".into()],
+        )
+        .expect("persist permission group");
     let pg_id = resp.group.id;
     let server = start_local_gateway_http_server(runtime);
 
@@ -9958,12 +10666,14 @@ fn permission_groups_persist_across_restart() {
     {
         let mut runtime =
             GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
-        let resp = runtime.admin_create_permission_group(
-            "admin-1",
-            "持久化组",
-            "survive restart",
-            vec!["admin:config".into()],
-        );
+        let resp = runtime
+            .admin_create_permission_group(
+                "admin-1",
+                "持久化组",
+                "survive restart",
+                vec!["admin:config".into()],
+            )
+            .expect("persist permission group");
         pg_id = resp.group.id;
     }
     {
@@ -9974,6 +10684,113 @@ fn permission_groups_persist_across_restart() {
         assert_eq!(groups[0].name, "持久化组");
         assert_eq!(groups[0].capabilities, vec!["admin:config"]);
     }
+}
+
+#[test]
+fn admin_ops_persist_across_restart() {
+    let temp = tempdir().expect("temp dir");
+    let root = temp.path().join("gateway");
+    let invite_code;
+    let permission_group_id;
+    let moderated_message_id;
+    {
+        let mut runtime = GatewayRuntime::open(&root, 64, None).expect("runtime");
+        invite_code = runtime
+            .admin_create_invite("admin-1", 3)
+            .expect("persist invite")
+            .code;
+        runtime
+            .admin_revoke_invite(&invite_code)
+            .expect("persist revoked invite");
+        runtime
+            .admin_handle_log("audit-persisted")
+            .expect("persist handled log");
+        let message = runtime
+            .append_shell_message(ShellMessageRequest {
+                room_id: "room:world:lobby".into(),
+                sender: "rsaga".into(),
+                text: "moderation persistence".into(),
+                reply_to_message_id: None,
+                device_id: Some("browser".into()),
+                language_tag: Some("en".into()),
+            })
+            .expect("append moderation target");
+        moderated_message_id = message.message_id.clone();
+        runtime
+            .admin_moderate_message(&message.message_id, "room:world:lobby", "blocked")
+            .expect("persist moderation decision");
+        let permission_group = runtime
+            .admin_create_permission_group(
+                "admin-1",
+                "持久化协管",
+                "survive restart",
+                vec!["freeze:room".into()],
+            )
+            .expect("persist permission group");
+        permission_group_id = permission_group.group.id;
+        runtime
+            .admin_assign_permission_group("alice", &permission_group_id)
+            .expect("persist permission assignment");
+        let room = runtime
+            .create_public_room(CreatePublicRoomRequest {
+                city: "core-harbor".into(),
+                creator_id: "rsaga".into(),
+                slug: Some("persisted-member-room".into()),
+                title: "Persisted member room".into(),
+                description: "room membership persistence".into(),
+            })
+            .expect("create room");
+        assert!(
+            runtime
+                .admin_manage_room_member(&room.room_id.0, "alice", "add")
+                .expect("persist room member")
+        );
+        runtime
+            .admin_add_device(
+                "AA:BB:CC:DD:EE:FF".into(),
+                "测试设备".into(),
+                "admin-1".into(),
+            )
+            .expect("persist device");
+        runtime
+            .admin_block_device("AA:BB:CC:DD:EE:FF")
+            .expect("persist blocked device");
+    }
+
+    let runtime = GatewayRuntime::open(&root, 64, None).expect("reopened runtime");
+    let invites = runtime.admin_list_invites();
+    let invite = invites
+        .iter()
+        .find(|invite| invite.code == invite_code)
+        .expect("reopened invite");
+    assert!(invite.revoked);
+    assert_eq!(runtime.admin_logs()[0].status, "handled");
+    assert_eq!(
+        runtime.admin_message_moderation_status(&moderated_message_id),
+        Some("blocked")
+    );
+    assert_eq!(
+        runtime.admin_list_permission_groups()[0].id,
+        permission_group_id
+    );
+    assert!(runtime.resident_has_capability("alice", "freeze:room"));
+    let room = runtime
+        .timeline_store
+        .active_conversations()
+        .into_iter()
+        .find(|conversation| {
+            conversation.conversation_id.0 == "room:city:core-harbor:persisted-member-room"
+        })
+        .expect("reopened room");
+    assert!(
+        room.participants
+            .iter()
+            .any(|resident| resident.0 == "alice")
+    );
+    let devices = runtime.admin_list_devices();
+    assert_eq!(devices.len(), 1);
+    assert!(devices[0].blocked);
+    assert_eq!(devices[0].label, "测试设备");
 }
 
 #[test]
@@ -10024,20 +10841,614 @@ fn create_permission_group_rejects_empty_capabilities() {
 }
 
 #[test]
+fn admin_read_endpoints_require_bearer_auth_without_dev_bypass() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    let (valid_token, _) = runtime.issue_auth_session(
+        &IdentityId("admin_rsaga".into()),
+        "test-admin-read",
+        GatewayRuntime::now_ms(),
+    );
+    let server = start_local_gateway_http_server(runtime);
+
+    for path in [
+        "/v1/admin/summary",
+        "/v1/admin/conversations",
+        "/v1/admin/messages?conversation_id=room:test",
+        "/v1/admin/residents",
+        "/v1/admin/rooms",
+        "/v1/admin/config",
+        "/v1/admin/logs",
+        "/v1/admin/messages/moderation?message_id=missing",
+        "/v1/admin/invites",
+        "/v1/admin/permission-groups",
+        "/v1/admin/audit-log",
+        "/v1/admin/devices",
+    ] {
+        let (status, _, body) = http_raw("GET", &server.base_url, path, None);
+        assert_eq!(status, 401, "admin read {path} must require auth: {body}");
+    }
+
+    let (forged_status, _, forged_body) = http_raw_with_headers(
+        "GET",
+        &server.base_url,
+        "/v1/admin/summary",
+        &[("Authorization", "Bearer forged-admin-token")],
+        None,
+    );
+    assert_eq!(
+        forged_status, 401,
+        "admin read must reject an unknown bearer token: {forged_body}"
+    );
+
+    let valid_auth = format!("Bearer {valid_token}");
+    let (valid_status, _, valid_body) = http_raw_with_headers(
+        "GET",
+        &server.base_url,
+        "/v1/admin/summary",
+        &[("Authorization", valid_auth.as_str())],
+        None,
+    );
+    assert_eq!(
+        valid_status, 200,
+        "valid admin session should be accepted: {valid_body}"
+    );
+
+    let (status, _, _) = http_raw("GET", &server.base_url, "/v1/admin/capabilities", None);
+    assert_eq!(status, 200, "capability catalog remains public metadata");
+}
+
+#[test]
+fn admin_log_mutations_require_bearer_auth_without_dev_bypass() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    let server = start_local_gateway_http_server(runtime);
+
+    let (handle_status, _, _) = http_raw(
+        "POST",
+        &server.base_url,
+        "/v1/admin/logs/handle",
+        Some(&serde_json::json!({"log_id": "audit-001", "actor_id": "admin_rsaga"})),
+    );
+    assert_eq!(handle_status, 401);
+
+    let (clear_status, _, _) = http_raw(
+        "POST",
+        &server.base_url,
+        "/v1/admin/logs/clear",
+        Some(&serde_json::json!({})),
+    );
+    assert_eq!(clear_status, 401);
+}
+
+#[test]
+fn admin_device_mutations_require_valid_bearer_auth_without_dev_bypass() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    let server = start_local_gateway_http_server(runtime);
+
+    for (path, body) in [
+        (
+            "/v1/admin/devices/add",
+            serde_json::json!({"address":"aa:bb:cc:dd:ee:ff","label":"test"}),
+        ),
+        (
+            "/v1/admin/devices/remove",
+            serde_json::json!({"address":"aa:bb:cc:dd:ee:ff"}),
+        ),
+        (
+            "/v1/admin/devices/block",
+            serde_json::json!({"address":"aa:bb:cc:dd:ee:ff"}),
+        ),
+        (
+            "/v1/admin/devices/unblock",
+            serde_json::json!({"address":"aa:bb:cc:dd:ee:ff"}),
+        ),
+    ] {
+        let (status, _, response) = http_raw("POST", &server.base_url, path, Some(&body));
+        assert_eq!(
+            status, 401,
+            "device mutation {path} must require auth: {response}"
+        );
+    }
+}
+
+#[test]
+fn high_risk_admin_mutations_require_valid_bearer_auth_without_dev_bypass() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    let server = start_local_gateway_http_server(runtime);
+
+    for path in [
+        "/v1/admin/residents",
+        "/v1/admin/permission-groups",
+        "/v1/admin/permission-groups/assign",
+        "/v1/admin/residents/unsanction",
+        "/v1/world-safety/residents/sanction",
+    ] {
+        let (status, _, response) =
+            http_raw("POST", &server.base_url, path, Some(&serde_json::json!({})));
+        assert_eq!(
+            status, 401,
+            "high-risk mutation {path} must require auth: {response}"
+        );
+    }
+}
+
+#[test]
+fn core_admin_write_routes_require_bearer_auth_without_dev_bypass() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    let server = start_local_gateway_http_server(runtime);
+
+    for path in [
+        "/v1/admin/residents/ban",
+        "/v1/admin/residents/unban",
+        "/v1/admin/residents/nickname",
+        "/v1/admin/rooms/freeze",
+        "/v1/admin/rooms/unfreeze",
+        "/v1/admin/config",
+        "/v1/admin/messages/moderate",
+        "/v1/admin/invites",
+        "/v1/admin/invites/revoke",
+        "/v1/admin/rooms/members",
+        "/v1/admin/logs/handle",
+        "/v1/admin/logs/clear",
+        "/v1/admin/scene",
+    ] {
+        let (status, _, response) =
+            http_raw("POST", &server.base_url, path, Some(&serde_json::json!({})));
+        assert_eq!(
+            status, 401,
+            "core admin write {path} must reject missing Bearer auth: {response}"
+        );
+    }
+}
+
+#[test]
+fn provider_and_mirror_write_routes_require_bearer_auth_without_dev_bypass() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    let server = start_local_gateway_http_server(runtime);
+
+    for (path, body) in [
+        (
+            "/v1/provider/connect",
+            serde_json::json!({"provider_url":"http://127.0.0.1:9"}),
+        ),
+        ("/v1/provider/disconnect", serde_json::json!({})),
+        (
+            "/v1/world-mirror-sources",
+            serde_json::json!({"base_url":"http://mirror.example.invalid","enabled":false}),
+        ),
+    ] {
+        let (status, _, response) = http_raw("POST", &server.base_url, path, Some(&body));
+        assert_eq!(
+            status, 401,
+            "provider/mirror write {path} must reject missing Bearer auth: {response}"
+        );
+    }
+}
+
+#[test]
+fn export_requires_matching_bearer_session_without_dev_bypass() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    let (valid_token, _) = runtime.issue_auth_session(
+        &IdentityId("export-user".into()),
+        "export-auth-boundary",
+        GatewayRuntime::now_ms(),
+    );
+    let (mismatched_token, _) = runtime.issue_auth_session(
+        &IdentityId("other-user".into()),
+        "export-auth-mismatch",
+        GatewayRuntime::now_ms(),
+    );
+    let server = start_local_gateway_http_server(runtime);
+
+    let (missing_status, _, missing_body) = http_raw(
+        "GET",
+        &server.base_url,
+        "/v1/export?resident_id=export-user&format=md",
+        None,
+    );
+    assert_eq!(
+        missing_status, 401,
+        "export must reject missing Bearer auth: {missing_body}"
+    );
+
+    let (forged_status, _, forged_body) = http_raw_with_headers(
+        "GET",
+        &server.base_url,
+        "/v1/export?resident_id=export-user&format=md",
+        &[("Authorization", "Bearer forged-export-token")],
+        None,
+    );
+    assert_eq!(
+        forged_status, 401,
+        "export must reject unknown Bearer auth: {forged_body}"
+    );
+
+    let mismatched_auth = format!("Bearer {mismatched_token}");
+    let (mismatched_status, _, mismatched_body) = http_raw_with_headers(
+        "GET",
+        &server.base_url,
+        "/v1/export?resident_id=export-user&format=md",
+        &[("Authorization", mismatched_auth.as_str())],
+        None,
+    );
+    assert_eq!(
+        mismatched_status, 401,
+        "export must bind resident_id to the session identity: {mismatched_body}"
+    );
+
+    let valid_auth = format!("Bearer {valid_token}");
+    let (valid_status, _, valid_body) = http_raw_with_headers(
+        "GET",
+        &server.base_url,
+        "/v1/export?resident_id=export-user&format=md",
+        &[("Authorization", valid_auth.as_str())],
+        None,
+    );
+    assert_eq!(
+        valid_status, 200,
+        "matching export session should be accepted: {valid_body}"
+    );
+}
+
+#[test]
+fn city_write_rejects_body_actor_not_matching_bearer_session() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    register_resident(&mut runtime, "bob");
+    let (token, _) = runtime.issue_auth_session(
+        &IdentityId("bob".into()),
+        "city-actor-match",
+        GatewayRuntime::now_ms(),
+    );
+    let server = start_local_gateway_http_server(runtime);
+    let auth_header = format!("Bearer {token}");
+
+    let (status, response) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/cities/rooms",
+        &[("Authorization", auth_header.as_str())],
+        Some(&serde_json::json!({
+            "city": "core-harbor",
+            "creator_id": "rsaga",
+            "slug": "session-actor-match-room",
+            "title": "Session actor match room",
+            "description": "auth boundary test"
+        })),
+    );
+    assert_eq!(status, 401, "unexpected response: {response}");
+    assert!(
+        response["Error"]["message"]
+            .as_str()
+            .expect("error message")
+            .contains("does not match authenticated session")
+    );
+}
+
+#[test]
+fn world_governance_write_requires_bearer_session() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    let server = start_local_gateway_http_server(runtime);
+
+    let (status, response) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/world-square/notices",
+        Some(&serde_json::json!({
+            "actor_id": "rsaga",
+            "title": "Unauthenticated notice",
+            "body": "must be rejected",
+            "severity": "info"
+        })),
+    );
+    assert_eq!(status, 401, "unexpected response: {response}");
+}
+
+#[test]
+fn direct_and_shell_write_routes_require_bearer_session_without_dev_bypass() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    let server = start_local_gateway_http_server(runtime);
+
+    let cases = [
+        (
+            "/v1/direct/open",
+            serde_json::json!({
+                "requester_id": "qa-a",
+                "requester_device_id": "browser-a",
+                "peer_id": "qa-b",
+                "peer_device_id": "browser-b"
+            }),
+        ),
+        (
+            "/v1/shell/message",
+            serde_json::json!({
+                "room_id": "room:world:lobby",
+                "sender": "qa-a",
+                "text": "unauthenticated shell write"
+            }),
+        ),
+        (
+            "/v1/shell/scene",
+            serde_json::json!({
+                "room_id": "room:world:lobby",
+                "actor": "qa-a",
+                "image_layer": null,
+                "hotspot_layer": null
+            }),
+        ),
+        (
+            "/v1/shell/message/edit",
+            serde_json::json!({
+                "room_id": "room:world:lobby",
+                "message_id": "missing-message",
+                "actor": "qa-a",
+                "text": "unauthenticated edit"
+            }),
+        ),
+        (
+            "/v1/shell/message/recall",
+            serde_json::json!({
+                "room_id": "room:world:lobby",
+                "message_id": "missing-message",
+                "actor": "qa-a"
+            }),
+        ),
+        (
+            "/v1/shell/presence",
+            serde_json::json!({"resident_id": "qa-a"}),
+        ),
+        (
+            "/v1/shell/read",
+            serde_json::json!({
+                "resident_id": "qa-a",
+                "conversation_id": "room:world:lobby"
+            }),
+        ),
+        (
+            "/v1/shell/nickname",
+            serde_json::json!({"nickname": "unauthenticated"}),
+        ),
+    ];
+
+    for (path, body) in cases {
+        let (status, response) = http_json("POST", &server.base_url, path, Some(&body));
+        assert_eq!(
+            status, 401,
+            "write route {path} must reject missing Bearer auth: {response}"
+        );
+    }
+}
+
+#[test]
+fn personal_room_and_relationship_writes_require_bearer_session_without_dev_bypass() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    let server = start_local_gateway_http_server(runtime);
+
+    let cases = [
+        (
+            "/v1/personal-room",
+            serde_json::json!({"resident_id": "qa-a"}),
+        ),
+        (
+            "/v1/personal-room/access-policy",
+            serde_json::json!({"resident_id": "qa-a", "policy": "friends_only"}),
+        ),
+        (
+            "/v1/resident-relationships/request",
+            serde_json::json!({"actor_id": "qa-a", "peer_id": "qa-b"}),
+        ),
+        (
+            "/v1/resident-relationships/accept",
+            serde_json::json!({"actor_id": "qa-a", "peer_id": "qa-b"}),
+        ),
+    ];
+
+    for (path, body) in cases {
+        let (status, response) = http_json("POST", &server.base_url, path, Some(&body));
+        assert_eq!(
+            status, 401,
+            "personal/relationship write {path} must reject missing Bearer auth: {response}"
+        );
+    }
+}
+
+#[test]
+fn city_and_governance_write_routes_require_bearer_session_without_dev_bypass() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    let server = start_local_gateway_http_server(runtime);
+
+    for path in [
+        "/v1/cities",
+        "/v1/cities/join",
+        "/v1/cities/approve",
+        "/v1/cities/stewards",
+        "/v1/cities/federation-policy",
+        "/v1/cities/rooms",
+        "/v1/cities/rooms/freeze",
+        "/v1/world-square/notices",
+        "/v1/world-safety/cities/trust",
+        "/v1/world-safety/reports",
+        "/v1/world-safety/reports/review",
+        "/v1/world-safety/advisories",
+        "/v1/world-safety/residents/sanction",
+        "/v1/admin/residents/unsanction",
+    ] {
+        let (status, _, response) =
+            http_raw("POST", &server.base_url, path, Some(&serde_json::json!({})));
+        assert_eq!(
+            status, 401,
+            "city/governance write {path} must reject missing Bearer auth: {response}"
+        );
+    }
+}
+
+#[test]
+fn admin_actor_must_match_authenticated_session() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    register_resident(&mut runtime, "bob");
+    let (token, _) = runtime.issue_auth_session(
+        &IdentityId("bob".into()),
+        "admin-actor-match",
+        GatewayRuntime::now_ms(),
+    );
+    let room = runtime
+        .create_public_room(CreatePublicRoomRequest {
+            city: "core-harbor".into(),
+            creator_id: "rsaga".into(),
+            slug: Some("actor-match-room".into()),
+            title: "Actor match room".into(),
+            description: "auth boundary test".into(),
+        })
+        .expect("create room");
+    let server = start_local_gateway_http_server(runtime);
+    let auth_header = format!("Bearer {token}");
+
+    let body = serde_json::json!({
+        "actor_id": "admin_rsaga",
+        "room_id": room.room_id.0,
+    });
+    let (status, response) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/admin/rooms/freeze",
+        &[("Authorization", auth_header.as_str())],
+        Some(&body),
+    );
+    assert_eq!(status, 401, "unexpected response: {response}");
+    assert!(
+        response["Error"]["message"]
+            .as_str()
+            .expect("error message")
+            .contains("does not match authenticated session")
+    );
+}
+
+#[test]
+fn matching_authenticated_actor_with_capability_can_mutate_admin_room() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    register_resident(&mut runtime, "bob");
+    let permission_group = runtime
+        .admin_create_permission_group(
+            "admin_rsaga",
+            "RoomOps",
+            "room operations",
+            vec![crate::CAP_FREEZE_ROOM.into()],
+        )
+        .expect("persist permission group");
+    runtime
+        .admin_assign_permission_group("bob", &permission_group.group.id)
+        .expect("persist permission assignment");
+    let (token, _) = runtime.issue_auth_session(
+        &IdentityId("bob".into()),
+        "admin-actor-capability",
+        GatewayRuntime::now_ms(),
+    );
+    let room = runtime
+        .create_public_room(CreatePublicRoomRequest {
+            city: "core-harbor".into(),
+            creator_id: "rsaga".into(),
+            slug: Some("matching-actor-room".into()),
+            title: "Matching actor room".into(),
+            description: "auth boundary test".into(),
+        })
+        .expect("create room");
+    let server = start_local_gateway_http_server(runtime);
+    let auth_header = format!("Bearer {token}");
+
+    let (status, response) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/admin/rooms/freeze",
+        &[("Authorization", auth_header.as_str())],
+        Some(&serde_json::json!({
+            "actor_id": "bob",
+            "room_id": room.room_id.0,
+        })),
+    );
+    assert_eq!(
+        status, 200,
+        "matching session should be accepted: {response}"
+    );
+    assert_eq!(response["ok"], true);
+}
+
+#[test]
+fn authenticated_admin_mutation_still_requires_capability() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    register_resident(&mut runtime, "bob");
+    let (token, _) = runtime.issue_auth_session(
+        &IdentityId("bob".into()),
+        "admin-capability-boundary",
+        GatewayRuntime::now_ms(),
+    );
+    let server = start_local_gateway_http_server(runtime);
+    let auth_header = format!("Bearer {token}");
+
+    let (status, response) = http_json_with_headers(
+        "POST",
+        &server.base_url,
+        "/v1/admin/logs/clear",
+        &[("Authorization", auth_header.as_str())],
+        Some(&serde_json::json!({})),
+    );
+    assert_eq!(status, 401);
+    assert!(
+        response["Error"]["message"]
+            .as_str()
+            .expect("error message")
+            .contains("lacks capability")
+    );
+}
+
+#[test]
 fn resident_without_capability_is_denied_admin_action() {
     let temp = tempdir().expect("temp dir");
     let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
     runtime.set_dev_auth_bypass_for_tests(false);
     register_resident(&mut runtime, "bob");
+    let (token, _) = runtime.issue_auth_session(
+        &IdentityId("bob".into()),
+        "test-admin-capability",
+        GatewayRuntime::now_ms(),
+    );
     // Bob has no permission group assigned - should be denied
     let server = start_local_gateway_http_server(runtime);
+    let auth_header = format!("Bearer {token}");
 
     let body = serde_json::json!({"actor_id": "bob", "room_id": "room-1"});
     let (status, resp) = http_json_with_headers(
         "POST",
         &server.base_url,
         "/v1/admin/rooms/freeze",
-        &[("Authorization", "Bearer test-admin")],
+        &[("Authorization", auth_header.as_str())],
         Some(&body),
     );
     assert_eq!(status, 401);
@@ -10063,13 +11474,17 @@ fn resident_with_capability_can_perform_admin_action() {
             description: "capability test".into(),
         })
         .expect("create room");
-    let pg = runtime.admin_create_permission_group(
-        "admin-1",
-        "RoomOps",
-        "room operations",
-        vec!["freeze:room".into()],
-    );
-    runtime.admin_assign_permission_group("alice", &pg.group.id);
+    let pg = runtime
+        .admin_create_permission_group(
+            "admin-1",
+            "RoomOps",
+            "room operations",
+            vec!["freeze:room".into()],
+        )
+        .expect("persist permission group");
+    runtime
+        .admin_assign_permission_group("alice", &pg.group.id)
+        .expect("persist permission assignment");
 
     let server = start_local_gateway_http_server(runtime);
 
@@ -10107,13 +11522,17 @@ fn unknown_resident_has_no_capabilities() {
 fn capability_check_only_matches_exact_key() {
     let temp = tempdir().expect("temp dir");
     let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
-    let pg = runtime.admin_create_permission_group(
-        "admin-1",
-        "Limited",
-        "only freeze",
-        vec!["freeze:room".into()],
-    );
-    runtime.admin_assign_permission_group("bob", &pg.group.id);
+    let pg = runtime
+        .admin_create_permission_group(
+            "admin-1",
+            "Limited",
+            "only freeze",
+            vec!["freeze:room".into()],
+        )
+        .expect("persist permission group");
+    runtime
+        .admin_assign_permission_group("bob", &pg.group.id)
+        .expect("persist permission assignment");
 
     assert!(runtime.resident_has_capability("bob", "freeze:room"));
     assert!(!runtime.resident_has_capability("bob", "ban:resident"));
@@ -10214,6 +11633,55 @@ fn audit_event_has_required_fields() {
     assert_eq!(event.target, "room:test:3");
     assert_eq!(event.reason, Some("inappropriate".to_string()));
     assert!(event.timestamp_ms > 0);
+}
+
+#[test]
+fn audit_event_ids_include_a_unique_sequence_suffix() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+
+    for index in 0..3 {
+        runtime.log_audit_event("admin-1", "admin:config", &format!("item-{index}"), None);
+    }
+
+    let response = runtime.admin_list_audit_events(10);
+    let mut sequence_numbers = response
+        .events
+        .iter()
+        .rev()
+        .map(|event| {
+            let mut parts = event.event_id.split('-');
+            assert_eq!(parts.next(), Some("audit"));
+            assert!(parts.next().is_some(), "event id should include timestamp");
+            parts
+                .next()
+                .expect("event id should include sequence")
+                .parse::<u64>()
+                .expect("event id sequence should be numeric")
+        })
+        .collect::<Vec<_>>();
+    sequence_numbers.sort_unstable();
+    assert_eq!(sequence_numbers, vec![0, 1, 2]);
+}
+
+#[test]
+fn audit_event_sequence_continues_after_restart() {
+    let temp = tempdir().expect("temp dir");
+    let storage = temp.path().join("gateway");
+
+    {
+        let mut runtime = GatewayRuntime::open(&storage, 64, None).expect("runtime");
+        runtime.log_audit_event("admin-1", "admin:config", "first", None);
+        runtime.log_audit_event("admin-1", "admin:config", "second", None);
+    }
+
+    let mut runtime = GatewayRuntime::open(&storage, 64, None).expect("restored runtime");
+    runtime.log_audit_event("admin-1", "admin:config", "third", None);
+    let response = runtime.admin_list_audit_events(1);
+    assert_eq!(
+        response.events[0].event_id.split('-').next_back(),
+        Some("2")
+    );
 }
 
 #[test]
@@ -10379,7 +11847,7 @@ fn admin_scene_endpoint_updates_any_room_regardless_of_participant() {
         room_id: "dm:alice:bob".into(),
         actor_id: Some("admin".into()),
         image_layer: None,
-        hotspot_layer: Some(SceneHotspotLayer {
+        hotspot_layer: Some(Some(SceneHotspotLayer {
             layer_id: "admin-hotspots".into(),
             coordinate_system: "scene-permyriad".into(),
             owner_editable: true,
@@ -10393,7 +11861,7 @@ fn admin_scene_endpoint_updates_any_room_regardless_of_participant() {
                 width_permyriad: 800,
                 height_permyriad: 600,
             }],
-        }),
+        })),
     });
     assert!(result.is_ok(), "admin should bypass participant check");
     let response = result.unwrap();
@@ -10454,6 +11922,75 @@ fn admin_scene_endpoint_http_route_works_without_participant_check() {
     assert_eq!(
         payload["hotspot_layer"]["hotspots"][0]["label"],
         "HTTP管理台"
+    );
+}
+
+#[test]
+fn admin_scene_http_null_layers_clear_existing_custom_layers() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime
+        .open_direct_session(OpenDirectSessionRequest {
+            requester_id: "alice".into(),
+            requester_device_id: Some("desktop".into()),
+            peer_id: "bob".into(),
+            peer_device_id: Some("browser".into()),
+        })
+        .expect("direct session should open");
+    let server = start_local_gateway_http_server(runtime);
+
+    let (custom_status, custom) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/scene",
+        Some(&serde_json::json!({
+            "room_id": "dm:alice:bob",
+            "image_layer": {
+                "layer_id": "custom-image",
+                "preset": "custom-clear-test",
+                "asset_hint": "custom-clear-test",
+                "aspect_ratio_permyriad": 5625,
+                "owner_editable": true
+            },
+            "hotspot_layer": {
+                "layer_id": "custom-hotspots",
+                "coordinate_system": "scene-permyriad",
+                "owner_editable": true,
+                "hotspots": [{
+                    "hotspot_id": "custom-only",
+                    "label": "仅自定义热点",
+                    "sprite_hint": "default",
+                    "interaction_hint": "clear me",
+                    "x_permyriad": 2000,
+                    "y_permyriad": 2000,
+                    "width_permyriad": 800,
+                    "height_permyriad": 600
+                }]
+            }
+        })),
+    );
+    assert_eq!(custom_status, 200);
+    assert_eq!(custom["image_layer"]["preset"], "custom-clear-test");
+    assert_eq!(
+        custom["hotspot_layer"]["hotspots"][0]["hotspot_id"],
+        "custom-only"
+    );
+
+    let (clear_status, cleared) = http_json(
+        "POST",
+        &server.base_url,
+        "/v1/admin/scene",
+        Some(&serde_json::json!({
+            "room_id": "dm:alice:bob",
+            "image_layer": null,
+            "hotspot_layer": null
+        })),
+    );
+    assert_eq!(clear_status, 200);
+    assert_ne!(cleared["image_layer"]["preset"], "custom-clear-test");
+    assert_ne!(
+        cleared["hotspot_layer"]["hotspots"][0]["hotspot_id"],
+        "custom-only"
     );
 }
 
@@ -10875,6 +12412,13 @@ fn shell_state_read_consistent_during_concurrent_writes() {
 }
 
 #[test]
+fn demo_messages_seed_only_for_tests_or_explicit_dev_bypass() {
+    assert!(!GatewayRuntime::should_seed_demo_messages(false, false));
+    assert!(GatewayRuntime::should_seed_demo_messages(true, false));
+    assert!(GatewayRuntime::should_seed_demo_messages(false, true));
+}
+
+#[test]
 fn message_search_finds_text_in_conversation() {
     let temp = tempdir().expect("temp dir");
     let runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
@@ -10927,7 +12471,7 @@ fn message_search_finds_text_in_conversation() {
     let (search_status, search_results) = http_json(
         "GET",
         &server.base_url,
-        "/v1/shell/messages/search?q=keyword_xyz",
+        "/v1/shell/messages/search?q=keyword_xyz&resident_id=qa-a",
         None,
     );
     assert_eq!(search_status, 200);
@@ -10945,7 +12489,7 @@ fn message_search_finds_text_in_conversation() {
     let (notfound_status, notfound_results) = http_json(
         "GET",
         &server.base_url,
-        "/v1/shell/messages/search?q=nonexistent",
+        "/v1/shell/messages/search?q=nonexistent&resident_id=qa-a",
         None,
     );
     assert_eq!(notfound_status, 200);
@@ -10962,7 +12506,7 @@ fn message_search_finds_text_in_conversation() {
     let (room_filtered_status, room_filtered_results) = http_json(
         "GET",
         &server.base_url,
-        "/v1/shell/messages/search?q=keyword_xyz&room_id=room:world:lobby",
+        "/v1/shell/messages/search?q=keyword_xyz&room_id=room:world:lobby&resident_id=qa-a",
         None,
     );
     assert_eq!(room_filtered_status, 200);
@@ -10972,16 +12516,97 @@ fn message_search_finds_text_in_conversation() {
     assert_eq!(filtered.len(), 2, "room filter should also find 2 matches");
 
     // Search with missing q — should return 400
-    let (no_q_status, _no_q_body) =
-        http_json("GET", &server.base_url, "/v1/shell/messages/search", None);
+    let (no_q_status, _no_q_body) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/shell/messages/search?resident_id=qa-a",
+        None,
+    );
     assert_eq!(no_q_status, 400);
 
     // Search with empty q — should return 400
     let (empty_q_status, _empty_q_body) = http_json(
         "GET",
         &server.base_url,
-        "/v1/shell/messages/search?q=",
+        "/v1/shell/messages/search?q=&resident_id=qa-a",
         None,
     );
     assert_eq!(empty_q_status, 400);
+}
+
+#[test]
+fn message_search_requires_auth_and_only_returns_viewer_visible_messages() {
+    let temp = tempdir().expect("temp dir");
+    let mut runtime = GatewayRuntime::open(temp.path().join("gateway"), 64, None).expect("runtime");
+    runtime.set_dev_auth_bypass_for_tests(false);
+    register_resident(&mut runtime, "alice");
+    register_resident(&mut runtime, "bob");
+    register_resident(&mut runtime, "carol");
+    let alice = IdentityId("alice".into());
+    let bob = IdentityId("bob".into());
+    let (alice_token, _) =
+        runtime.issue_auth_session(&alice, "message-search-alice", GatewayRuntime::now_ms());
+    let (bob_token, _) =
+        runtime.issue_auth_session(&bob, "message-search-bob", GatewayRuntime::now_ms());
+    let carol = IdentityId("carol".into());
+    let (carol_token, _) =
+        runtime.issue_auth_session(&carol, "message-search-carol", GatewayRuntime::now_ms());
+    runtime
+        .ensure_direct_conversation(
+            &GatewayRuntime::direct_conversation_id(&alice, &bob),
+            &[alice.clone(), bob.clone()],
+        )
+        .expect("create private conversation");
+    runtime
+        .append_shell_message(ShellMessageRequest {
+            room_id: GatewayRuntime::direct_conversation_id(&alice, &bob).0,
+            sender: "bob".into(),
+            text: "private-search-secret".into(),
+            reply_to_message_id: None,
+            device_id: Some("browser".into()),
+            language_tag: Some("en".into()),
+        })
+        .expect("append private message");
+    let server = start_local_gateway_http_server(runtime);
+    let alice_auth = format!("Bearer {alice_token}");
+    let bob_auth = format!("Bearer {bob_token}");
+    let carol_auth = format!("Bearer {carol_token}");
+
+    let (missing_status, _) = http_json(
+        "GET",
+        &server.base_url,
+        "/v1/shell/messages/search?q=private-search-secret&resident_id=alice",
+        None,
+    );
+    assert_eq!(missing_status, 401);
+
+    let (alice_status, alice_results) = http_json_with_headers(
+        "GET",
+        &server.base_url,
+        "/v1/shell/messages/search?q=private-search-secret&resident_id=alice",
+        &[("Authorization", alice_auth.as_str())],
+        None,
+    );
+    assert_eq!(alice_status, 200);
+    assert_eq!(alice_results.as_array().expect("alice results").len(), 1);
+
+    let (bob_status, bob_results) = http_json_with_headers(
+        "GET",
+        &server.base_url,
+        "/v1/shell/messages/search?q=private-search-secret&resident_id=bob",
+        &[("Authorization", bob_auth.as_str())],
+        None,
+    );
+    assert_eq!(bob_status, 200);
+    assert_eq!(bob_results.as_array().expect("bob results").len(), 1);
+
+    let (carol_status, carol_results) = http_json_with_headers(
+        "GET",
+        &server.base_url,
+        "/v1/shell/messages/search?q=private-search-secret&resident_id=carol",
+        &[("Authorization", carol_auth.as_str())],
+        None,
+    );
+    assert_eq!(carol_status, 200);
+    assert!(carol_results.as_array().expect("carol results").is_empty());
 }

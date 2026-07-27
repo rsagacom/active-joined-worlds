@@ -1,6 +1,16 @@
 use super::*;
+use crate::email_otp_mailer::EmailOtpDelivery;
+#[cfg(test)]
+use crate::email_otp_mailer::deliver_email_otp_from_env;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
+
+#[derive(Debug)]
+pub(crate) struct PreparedEmailOtpRequest {
+    pub(crate) response: RequestEmailOtpResponse,
+    pub(crate) delivery: Option<EmailOtpDelivery>,
+    pub(crate) normalized_email: String,
+}
 
 impl GatewayRuntime {
     pub(crate) fn normalize_email(value: &str) -> Option<String> {
@@ -148,33 +158,43 @@ impl GatewayRuntime {
         });
     }
 
-    pub(crate) fn generate_email_otp_code(&mut self) -> String {
-        let seed = format!("{}:{}", self.next_message_id(), Self::now_ms());
-        let digest = Sha256::digest(seed.as_bytes());
-        let number = u32::from_be_bytes([digest[0], digest[1], digest[2], digest[3]]) % 1_000_000;
-        format!("{number:06}")
+    fn secure_random_bytes<const N: usize>() -> Result<[u8; N], String> {
+        let mut bytes = [0u8; N];
+        getrandom::getrandom(&mut bytes)
+            .map_err(|error| format!("secure random source unavailable: {error}"))?;
+        Ok(bytes)
+    }
+
+    fn secure_random_hex<const N: usize>() -> Result<String, String> {
+        Ok(hex::encode(Self::secure_random_bytes::<N>()?))
+    }
+
+    pub(crate) fn generate_email_otp_code(&mut self) -> Result<String, String> {
+        // Reject the small modulo-bias tail so every six-digit code has equal weight.
+        const OTP_SPACE: u32 = 1_000_000;
+        let limit = u32::MAX - (u32::MAX % OTP_SPACE);
+        loop {
+            let bytes = Self::secure_random_bytes::<4>()?;
+            let number = u32::from_be_bytes(bytes);
+            if number < limit {
+                return Ok(format!("{:06}", number % OTP_SPACE));
+            }
+        }
     }
 
     pub(crate) fn hash_session_token(token: &str) -> String {
         Self::hash_registration_handle("session-token", token)
     }
 
-    pub(crate) fn issue_auth_session(
+    fn try_issue_auth_session(
         &mut self,
         resident_id: &IdentityId,
-        challenge_id: &str,
+        _challenge_id: &str,
         now_ms: i64,
-    ) -> (String, AuthSessionView) {
+    ) -> Result<(String, AuthSessionView), String> {
         self.auth_sessions
             .retain(|session| session.revoked_at_ms.is_none() && session.expires_at_ms >= now_ms);
-        let entropy = format!(
-            "{}:{}:{}:{}",
-            challenge_id,
-            resident_id.0,
-            now_ms,
-            self.next_message_id()
-        );
-        let token_body = hex::encode(Sha256::digest(entropy.as_bytes()));
+        let token_body = Self::secure_random_hex::<32>()?;
         let session_token = format!("lbst_{token_body}");
         let session_id = format!("session:{}", self.next_message_id());
         let expires_at_ms = now_ms + 30 * 24 * 60 * 60 * 1000;
@@ -187,7 +207,7 @@ impl GatewayRuntime {
             revoked_at_ms: None,
         };
         self.auth_sessions.push(session);
-        (
+        Ok((
             session_token,
             AuthSessionView {
                 session_id,
@@ -195,7 +215,18 @@ impl GatewayRuntime {
                 issued_at_ms: now_ms,
                 expires_at_ms,
             },
-        )
+        ))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn issue_auth_session(
+        &mut self,
+        resident_id: &IdentityId,
+        challenge_id: &str,
+        now_ms: i64,
+    ) -> (String, AuthSessionView) {
+        self.try_issue_auth_session(resident_id, challenge_id, now_ms)
+            .expect("secure random source unavailable in auth session test helper")
     }
 
     pub(crate) fn validate_bearer_session_actor(
@@ -352,10 +383,30 @@ impl GatewayRuntime {
         IdentityId(format!("{base}-{suffix}"))
     }
 
+    #[cfg(test)]
     pub(crate) fn request_email_otp(
         &mut self,
         request: RequestEmailOtpRequest,
     ) -> Result<RequestEmailOtpResponse, String> {
+        let inline_delivery = Self::dev_email_otp_inline_enabled();
+        let prepared = self.prepare_email_otp_request(request, inline_delivery)?;
+        if let Some(delivery) = prepared.delivery.as_ref()
+            && let Err(error) = deliver_email_otp_from_env(delivery)
+        {
+            self.rollback_email_otp_request(
+                &prepared.response.challenge_id,
+                &prepared.normalized_email,
+            )?;
+            return Err(error);
+        }
+        Ok(prepared.response)
+    }
+
+    pub(crate) fn prepare_email_otp_request(
+        &mut self,
+        request: RequestEmailOtpRequest,
+        inline_delivery: bool,
+    ) -> Result<PreparedEmailOtpRequest, String> {
         let preflight = self.auth_preflight(AuthPreflightRequest {
             email: request.email,
             mobile: request.mobile.clone(),
@@ -375,7 +426,7 @@ impl GatewayRuntime {
             normalized_device_physical_address.as_deref(),
             request.resident_id.as_deref(),
         ) {
-            self.bind_device_to_resident(device, resident_id);
+            self.bind_device_to_resident(device, resident_id)?;
         }
         let desired_resident_id = request
             .resident_id
@@ -408,9 +459,9 @@ impl GatewayRuntime {
             challenge.email != normalized_email || challenge.consumed_at_ms.is_some()
         });
 
-        let code = self.generate_email_otp_code();
+        let code = self.generate_email_otp_code()?;
         let challenge = EmailOtpChallenge {
-            challenge_id: format!("otp:{}", self.next_message_id()),
+            challenge_id: format!("otp:{}", Self::secure_random_hex::<16>()?),
             email: normalized_email.clone(),
             mobile_hash_sha256: normalized_mobile
                 .as_deref()
@@ -425,20 +476,50 @@ impl GatewayRuntime {
             expires_at_ms: Self::now_ms() + 10 * 60 * 1000,
             consumed_at_ms: None,
         };
-        let response = RequestEmailOtpResponse {
-            challenge_id: challenge.challenge_id.clone(),
-            masked_email: Self::mask_email(&challenge.email),
-            expires_at_ms: challenge.expires_at_ms,
-            delivery_mode: if Self::dev_email_otp_inline_enabled() {
-                "inline-dev".into()
-            } else {
-                "mailer-adapter-pending".into()
-            },
-            dev_code: Self::dev_email_otp_inline_enabled().then_some(code),
-        };
+        let challenge_id = challenge.challenge_id.clone();
+        let expires_at_ms = challenge.expires_at_ms;
+        let masked_email = Self::mask_email(&challenge.email);
         self.email_otp_challenges.push(challenge);
         self.persist_auth_state()?;
-        Ok(response)
+        let delivery = (!inline_delivery).then_some(EmailOtpDelivery {
+            to: normalized_email.clone(),
+            code: code.clone(),
+            challenge_id: challenge_id.clone(),
+            expires_at_ms,
+        });
+        Ok(PreparedEmailOtpRequest {
+            response: RequestEmailOtpResponse {
+                challenge_id,
+                masked_email,
+                expires_at_ms,
+                delivery_mode: if inline_delivery {
+                    "inline-dev".into()
+                } else {
+                    "mailer-webhook".into()
+                },
+                dev_code: inline_delivery.then_some(code),
+            },
+            delivery,
+            normalized_email,
+        })
+    }
+
+    pub(crate) fn rollback_email_otp_request(
+        &mut self,
+        challenge_id: &str,
+        normalized_email: &str,
+    ) -> Result<bool, String> {
+        let challenge_count = self.email_otp_challenges.len();
+        self.email_otp_challenges
+            .retain(|item| item.challenge_id != challenge_id);
+        if self.email_otp_challenges.len() == challenge_count {
+            return Ok(false);
+        }
+
+        self.rate_limits
+            .remove(&format!("otp-req:{normalized_email}"));
+        self.persist_auth_state()?;
+        Ok(true)
     }
 
     pub(crate) fn verify_email_otp(
@@ -586,8 +667,11 @@ impl GatewayRuntime {
 
         self.ensure_verified_resident_guide_conversation(&registration.resident_id)?;
         self.email_otp_challenges[challenge_index].consumed_at_ms = Some(now_ms);
-        let (session_token, session) =
-            self.issue_auth_session(&registration.resident_id, &challenge.challenge_id, now_ms);
+        let (session_token, session) = self.try_issue_auth_session(
+            &registration.resident_id,
+            &challenge.challenge_id,
+            now_ms,
+        )?;
         self.persist_auth_state()?;
 
         Ok(VerifyEmailOtpResponse {
@@ -663,7 +747,7 @@ impl GatewayRuntime {
             .map(IdentityId);
 
         self.purge_expired_email_otp_challenges();
-        let code = self.generate_email_otp_code();
+        let code = self.generate_email_otp_code()?;
         // Encode mobile into challenge email so verify can recover it for display
         let email_for_challenge = if let Some(email) = normalized_email.as_ref() {
             format!("m:{normalized_mobile}:{email}")
@@ -671,7 +755,7 @@ impl GatewayRuntime {
             format!("m:{normalized_mobile}@device.local")
         };
         let challenge = EmailOtpChallenge {
-            challenge_id: format!("mobile-otp:{}", self.next_message_id()),
+            challenge_id: format!("mobile-otp:{}", Self::secure_random_hex::<16>()?),
             email: email_for_challenge,
             mobile_hash_sha256: Some(Self::hash_registration_handle("mobile", &normalized_mobile)),
             device_hash_sha256: normalized_device
@@ -819,8 +903,11 @@ impl GatewayRuntime {
 
         self.ensure_verified_resident_guide_conversation(&registration.resident_id)?;
         self.email_otp_challenges[challenge_index].consumed_at_ms = Some(now_ms);
-        let (session_token, session) =
-            self.issue_auth_session(&registration.resident_id, &challenge.challenge_id, now_ms);
+        let (session_token, session) = self.try_issue_auth_session(
+            &registration.resident_id,
+            &challenge.challenge_id,
+            now_ms,
+        )?;
         self.persist_auth_state()?;
 
         let mobile_for_display = challenge

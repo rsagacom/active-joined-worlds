@@ -37,6 +37,7 @@ impl GatewayRuntime {
             secure_sessions_path: storage_root.join("secure-sessions.json"),
             provider_config_path: storage_root.join("provider-config.json"),
             auth_state_path: storage_root.join("auth-state.json"),
+            app_config_path: storage_root.join("app-config.json"),
             invites_path: storage_root.join("invites.json"),
             permission_groups_path: storage_root.join("permission-groups.json"),
             personal_room_access_policies_path: storage_root
@@ -74,6 +75,8 @@ impl GatewayRuntime {
             personal_room_access_policies: HashMap::new(),
             resident_relationships: HashMap::new(),
             audit_events: Vec::new(),
+            audit_counter: 0,
+            agent_token_hashes: Self::agent_token_hashes_default(),
             dev_auth_bypass: Self::dev_auth_bypass_default(),
             started_at_ms: Self::now_ms(),
             app_config: HashMap::new(),
@@ -82,6 +85,7 @@ impl GatewayRuntime {
         runtime.load_secure_sessions()?;
         runtime.load_provider_config()?;
         runtime.load_auth_state()?;
+        runtime.load_app_config()?;
         runtime.load_invites()?;
         runtime.load_presence_state()?;
         runtime.load_unread_state()?;
@@ -104,10 +108,18 @@ impl GatewayRuntime {
             .active_conversations()
             .into_iter()
             .any(|conversation| conversation.conversation_id.0 == "room:world:lobby");
-        if !has_world_lobby {
+        if !has_world_lobby && Self::should_seed_demo_messages(runtime.dev_auth_bypass, cfg!(test))
+        {
             runtime.seed_demo_messages()?;
         }
         Ok(runtime)
+    }
+
+    /// Demo history is useful for tests and explicit local fixtures only. A
+    /// production gateway must start with an empty timeline instead of
+    /// presenting synthetic chat records as real user messages.
+    pub(crate) fn should_seed_demo_messages(dev_auth_bypass: bool, test_build: bool) -> bool {
+        test_build || dev_auth_bypass
     }
 
     pub(crate) fn federation_read_plan(&self) -> GatewayFederationReadPlan {
@@ -168,7 +180,7 @@ impl GatewayRuntime {
         &mut self,
         actor_id: &str,
         max_uses: u32,
-    ) -> AdminCreateInviteResponse {
+    ) -> Result<AdminCreateInviteResponse, String> {
         let code = format!("AJW-{:06}", (Self::now_ms() % 1_000_000) as u32);
         let now = Self::now_ms();
         self.invites.insert(
@@ -182,22 +194,31 @@ impl GatewayRuntime {
                 created_by: actor_id.to_string(),
             },
         );
-        let _ = self.persist_invites();
-        AdminCreateInviteResponse {
+        if let Err(error) = self.persist_invites() {
+            self.invites.remove(&code);
+            return Err(error);
+        }
+        Ok(AdminCreateInviteResponse {
             ok: true,
             code,
             created_at_ms: now,
             max_uses,
-        }
+        })
     }
 
-    pub(crate) fn admin_revoke_invite(&mut self, code: &str) -> bool {
+    pub(crate) fn admin_revoke_invite(&mut self, code: &str) -> Result<bool, String> {
         if let Some(invite) = self.invites.get_mut(code) {
+            let previous = invite.revoked;
             invite.revoked = true;
-            let _ = self.persist_invites();
-            true
+            if let Err(error) = self.persist_invites() {
+                if let Some(invite) = self.invites.get_mut(code) {
+                    invite.revoked = previous;
+                }
+                return Err(error);
+            }
+            Ok(true)
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -227,7 +248,7 @@ impl GatewayRuntime {
         room_id: &str,
         resident_id: &str,
         action: &str,
-    ) -> bool {
+    ) -> Result<bool, String> {
         let conversation_id = ConversationId(room_id.to_string());
         let mut conversations = self.timeline_store.active_conversations();
         if let Some(conv) = conversations
@@ -244,18 +265,24 @@ impl GatewayRuntime {
                 "remove" => {
                     conv.participants.retain(|p| p.0 != resident_id);
                 }
-                _ => return false,
+                _ => return Ok(false),
             }
-            let _ = self.timeline_store.upsert_conversation(conv.clone());
-            return true;
+            self.timeline_store
+                .upsert_conversation(conv.clone())
+                .map_err(|error| format!("persist room member change failed: {error}"))?;
+            return Ok(true);
         }
-        false
+        Ok(false)
     }
 
-    pub(crate) fn admin_create_resident(&mut self, resident_id: &str, email: &str) -> bool {
+    pub(crate) fn admin_create_resident(
+        &mut self,
+        resident_id: &str,
+        email: &str,
+    ) -> Result<bool, String> {
         let rid = IdentityId(resident_id.to_string());
         if self.registrations.iter().any(|r| r.resident_id == rid) {
-            return false;
+            return Ok(false);
         }
         self.registrations.push(ResidentRegistration {
             resident_id: rid,
@@ -269,7 +296,11 @@ impl GatewayRuntime {
             last_login_at_ms: 0,
             nickname: None,
         });
-        true
+        if let Err(error) = self.persist_auth_state() {
+            self.registrations.pop();
+            return Err(error);
+        }
+        Ok(true)
     }
 
     pub(crate) fn resident_has_authenticated_profile(&self, resident: &IdentityId) -> bool {
@@ -282,9 +313,7 @@ impl GatewayRuntime {
                 .any(|steward| steward == resident)
     }
 
-    pub(crate) fn personal_room_owner<'a>(
-        conversation: &'a Conversation,
-    ) -> Option<&'a IdentityId> {
+    pub(crate) fn personal_room_owner(conversation: &Conversation) -> Option<&IdentityId> {
         if conversation.kind != ConversationKind::Direct || conversation.participants.len() != 1 {
             return None;
         }
@@ -493,21 +522,37 @@ impl GatewayRuntime {
         Ok(())
     }
 
-    pub(crate) fn admin_clear_processed_logs(&mut self) -> usize {
+    pub(crate) fn admin_clear_processed_logs(&mut self) -> Result<usize, String> {
+        let previous = self.message_moderation.clone();
         let before = self.message_moderation.len();
         self.message_moderation.retain(|_k, v| v != "handled");
         let cleared = before - self.message_moderation.len();
-        if cleared > 0 {
-            let _ = self.persist_moderation_state();
+        if cleared > 0
+            && let Err(error) = self.persist_moderation_state()
+        {
+            self.message_moderation = previous;
+            return Err(error);
         }
-        cleared
+        Ok(cleared)
     }
 
-    pub(crate) fn admin_handle_log(&mut self, log_id: &str) -> bool {
+    pub(crate) fn admin_handle_log(&mut self, log_id: &str) -> Result<(), String> {
         let key = format!("log:{}", log_id);
+        let previous = self.message_moderation.get(&key).cloned();
         self.message_moderation.insert(key, "handled".to_string());
-        let _ = self.persist_moderation_state();
-        true
+        if let Err(error) = self.persist_moderation_state() {
+            let key = format!("log:{}", log_id);
+            match previous {
+                Some(status) => {
+                    self.message_moderation.insert(key, status);
+                }
+                None => {
+                    self.message_moderation.remove(&key);
+                }
+            }
+            return Err(error);
+        }
+        Ok(())
     }
 
     pub(crate) fn admin_logs(&self) -> Vec<AdminLogEntry> {
@@ -579,7 +624,7 @@ impl GatewayRuntime {
         name: &str,
         description: &str,
         capabilities: Vec<String>,
-    ) -> CreatePermissionGroupResponse {
+    ) -> Result<CreatePermissionGroupResponse, String> {
         let id = format!("pg-{}", Self::now_ms());
         let group = PermissionGroup {
             id: id.clone(),
@@ -589,9 +634,12 @@ impl GatewayRuntime {
             created_at_ms: Self::now_ms(),
             created_by: actor_id.to_string(),
         };
-        self.permission_groups.insert(id, group.clone());
-        let _ = self.persist_permission_groups();
-        CreatePermissionGroupResponse { ok: true, group }
+        self.permission_groups.insert(id.clone(), group.clone());
+        if let Err(error) = self.persist_permission_groups() {
+            self.permission_groups.remove(&id);
+            return Err(error);
+        }
+        Ok(CreatePermissionGroupResponse { ok: true, group })
     }
 
     pub(crate) fn admin_list_permission_groups(&self) -> Vec<PermissionGroup> {
@@ -602,15 +650,28 @@ impl GatewayRuntime {
         &mut self,
         resident_id: &str,
         permission_group_id: &str,
-    ) -> AssignPermissionGroupResponse {
-        self.resident_permission_groups
-            .insert(resident_id.to_string(), permission_group_id.to_string());
-        let _ = self.persist_permission_groups();
-        AssignPermissionGroupResponse {
-            ok: true,
-            resident_id: resident_id.to_string(),
-            permission_group_id: permission_group_id.to_string(),
+    ) -> Result<AssignPermissionGroupResponse, String> {
+        let resident_id = resident_id.to_string();
+        let previous = self
+            .resident_permission_groups
+            .insert(resident_id.clone(), permission_group_id.to_string());
+        if let Err(error) = self.persist_permission_groups() {
+            match previous {
+                Some(group_id) => {
+                    self.resident_permission_groups
+                        .insert(resident_id.clone(), group_id);
+                }
+                None => {
+                    self.resident_permission_groups.remove(&resident_id);
+                }
+            }
+            return Err(error);
         }
+        Ok(AssignPermissionGroupResponse {
+            ok: true,
+            resident_id,
+            permission_group_id: permission_group_id.to_string(),
+        })
     }
 
     pub(crate) fn super_admins() -> Vec<String> {
@@ -649,9 +710,58 @@ impl GatewayRuntime {
         self.dev_auth_bypass
     }
 
+    /// Resolve sidecar credentials from `LOBSTER_AGENT_TOKENS`.
+    ///
+    /// The value is a comma-separated list of `agent:<id>=<token>` pairs. Only
+    /// hashes are retained in memory, so the configured secrets are not exposed
+    /// by debug output or accidental state persistence.
+    fn agent_token_hashes_default() -> HashMap<String, String> {
+        std::env::var("LOBSTER_AGENT_TOKENS")
+            .ok()
+            .into_iter()
+            .flat_map(|raw| raw.split(',').map(str::to_owned).collect::<Vec<_>>())
+            .filter_map(|entry| {
+                let (agent_id, token) = entry.split_once('=')?;
+                let agent_id = agent_id.trim();
+                let token = token.trim();
+                if !agent_id.starts_with("agent:") || agent_id.len() <= "agent:".len() {
+                    return None;
+                }
+                if token.is_empty() {
+                    return None;
+                }
+                Some((
+                    agent_id.to_owned(),
+                    Self::hash_registration_handle("agent-token", token),
+                ))
+            })
+            .collect()
+    }
+
+    pub(crate) fn validate_agent_token(&self, agent_id: &str, token: &str) -> bool {
+        let agent_id = agent_id.trim();
+        let token = token.trim();
+        if agent_id.is_empty() || token.is_empty() {
+            return false;
+        }
+        self.agent_token_hashes
+            .get(agent_id)
+            .is_some_and(|expected| {
+                Self::hash_registration_handle("agent-token", token) == *expected
+            })
+    }
+
     #[cfg(test)]
     pub(crate) fn set_dev_auth_bypass_for_tests(&mut self, enabled: bool) {
         self.dev_auth_bypass = enabled;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_agent_token_for_tests(&mut self, agent_id: &str, token: &str) {
+        self.agent_token_hashes.insert(
+            agent_id.trim().to_owned(),
+            Self::hash_registration_handle("agent-token", token.trim()),
+        );
     }
 
     // ── Audit Log ──
@@ -663,8 +773,10 @@ impl GatewayRuntime {
         target: &str,
         reason: Option<&str>,
     ) {
+        let sequence = self.audit_counter;
+        self.audit_counter = self.audit_counter.saturating_add(1);
         let event = AuditEvent {
-            event_id: format!("audit-{}", Self::now_ms()),
+            event_id: format!("audit-{}-{sequence}", Self::now_ms()),
             actor_id: actor_id.to_string(),
             action: action.to_string(),
             target: target.to_string(),
@@ -694,7 +806,8 @@ impl GatewayRuntime {
             .map(|e| serde_json::to_string(e).unwrap_or_default())
             .collect();
         let bytes = lines.join("\n") + if lines.is_empty() { "" } else { "\n" };
-        std::fs::write(&self.audit_log_path, &bytes).map_err(|e| format!("write audit log: {e}"))
+        atomic_write_file(&self.audit_log_path, bytes.as_bytes())
+            .map_err(|e| format!("write audit log: {e}"))
     }
 
     fn load_audit_log(&mut self) -> Result<(), String> {
@@ -708,6 +821,7 @@ impl GatewayRuntime {
             .filter(|line| !line.trim().is_empty())
             .filter_map(|line| serde_json::from_str::<AuditEvent>(line).ok())
             .collect();
+        self.audit_counter = self.audit_events.len() as u64;
         Ok(())
     }
 
@@ -845,37 +959,79 @@ impl GatewayRuntime {
             blocked: false,
             bound_resident_id: self.device_bindings.get(&normalized).cloned(),
         };
-        self.allowed_devices.insert(normalized, record.clone());
-        let _ = self.persist_device_state();
+        let previous = self
+            .allowed_devices
+            .insert(normalized.clone(), record.clone());
+        if let Err(error) = self.persist_device_state() {
+            match previous {
+                Some(previous) => {
+                    self.allowed_devices.insert(normalized, previous);
+                }
+                None => {
+                    self.allowed_devices.remove(&normalized);
+                }
+            }
+            return Err(format!("persist device state failed: {error}"));
+        }
         Ok(record)
     }
 
     pub(crate) fn admin_remove_device(&mut self, address: &str) -> Result<(), String> {
         let normalized = Self::normalize_device_physical_address(address)
             .ok_or_else(|| "invalid device address format".to_string())?;
-        self.allowed_devices.remove(&normalized);
-        self.device_bindings.remove(&normalized);
-        let _ = self.persist_device_state();
+        let previous_device = self.allowed_devices.remove(&normalized);
+        let previous_binding = self.device_bindings.remove(&normalized);
+        if let Err(error) = self.persist_device_state() {
+            if let Some(previous) = previous_device {
+                self.allowed_devices.insert(normalized.clone(), previous);
+            }
+            if let Some(previous) = previous_binding {
+                self.device_bindings.insert(normalized, previous);
+            }
+            return Err(format!("persist device state failed: {error}"));
+        }
         Ok(())
     }
 
     pub(crate) fn admin_block_device(&mut self, address: &str) -> Result<(), String> {
         let normalized = Self::normalize_device_physical_address(address)
             .ok_or_else(|| "invalid device address format".to_string())?;
+        let previous = self.allowed_devices.get(&normalized).cloned();
         if let Some(record) = self.allowed_devices.get_mut(&normalized) {
             record.blocked = true;
         }
-        let _ = self.persist_device_state();
+        if let Err(error) = self.persist_device_state() {
+            match previous {
+                Some(previous) => {
+                    self.allowed_devices.insert(normalized, previous);
+                }
+                None => {
+                    self.allowed_devices.remove(&normalized);
+                }
+            }
+            return Err(format!("persist device state failed: {error}"));
+        }
         Ok(())
     }
 
     pub(crate) fn admin_unblock_device(&mut self, address: &str) -> Result<(), String> {
         let normalized = Self::normalize_device_physical_address(address)
             .ok_or_else(|| "invalid device address format".to_string())?;
+        let previous = self.allowed_devices.get(&normalized).cloned();
         if let Some(record) = self.allowed_devices.get_mut(&normalized) {
             record.blocked = false;
         }
-        let _ = self.persist_device_state();
+        if let Err(error) = self.persist_device_state() {
+            match previous {
+                Some(previous) => {
+                    self.allowed_devices.insert(normalized, previous);
+                }
+                None => {
+                    self.allowed_devices.remove(&normalized);
+                }
+            }
+            return Err(format!("persist device state failed: {error}"));
+        }
         Ok(())
     }
 
@@ -883,12 +1039,40 @@ impl GatewayRuntime {
         self.allowed_devices.values().cloned().collect()
     }
 
-    pub(crate) fn bind_device_to_resident(&mut self, device_address: &str, resident_id: &str) {
-        self.device_bindings
+    pub(crate) fn bind_device_to_resident(
+        &mut self,
+        device_address: &str,
+        resident_id: &str,
+    ) -> Result<(), String> {
+        let previous_binding = self
+            .device_bindings
             .insert(device_address.to_string(), resident_id.to_string());
+        let previous_record = self.allowed_devices.get(device_address).cloned();
         if let Some(record) = self.allowed_devices.get_mut(device_address) {
             record.bound_resident_id = Some(resident_id.to_string());
         }
+        if let Err(error) = self.persist_device_state() {
+            match previous_binding {
+                Some(previous) => {
+                    self.device_bindings
+                        .insert(device_address.to_string(), previous);
+                }
+                None => {
+                    self.device_bindings.remove(device_address);
+                }
+            }
+            match previous_record {
+                Some(previous) => {
+                    self.allowed_devices
+                        .insert(device_address.to_string(), previous);
+                }
+                None => {
+                    self.allowed_devices.remove(device_address);
+                }
+            }
+            return Err(format!("persist device state failed: {error}"));
+        }
+        Ok(())
     }
 
     pub(crate) fn load_moderation_state(&mut self) -> Result<(), String> {
@@ -1067,19 +1251,23 @@ impl GatewayRuntime {
         })
     }
 
-    pub(crate) fn search_messages(
+    pub(crate) fn search_messages_for_viewer(
         &self,
+        viewer: &IdentityId,
         query: &str,
         room_id: Option<&str>,
         limit: usize,
     ) -> Vec<ShellRoomMessage> {
         let now_ms = Self::now_ms();
         let query_lower = query.to_lowercase();
-        let conversations = self.timeline_store.active_conversations();
+        let conversations = self.shell_visible_conversations_for_viewer(Some(viewer));
 
         let mut results: Vec<ShellRoomMessage> = conversations
             .into_iter()
-            .filter(|conv| room_id.is_none_or(|id| conv.conversation_id.0 == id))
+            .filter(|conv| {
+                room_id.is_none_or(|id| conv.conversation_id.0 == id)
+                    && self.personal_room_messages_visible_to_viewer(conv, Some(viewer))
+            })
             .flat_map(|conv| {
                 let messages = self
                     .timeline_store
@@ -1151,6 +1339,48 @@ impl GatewayRuntime {
             .iter()
             .map(|c| (c.profile.city_id.0.clone(), c.profile.slug.clone()))
             .collect();
+
+        // Registrations are the admin truth for account review. Seed them before
+        // memberships so a verified account is visible even before joining a city.
+        for registration in &self.registrations {
+            let rid = registration.resident_id.0.clone();
+            let resident_sanctions: Vec<AdminSanctionSummary> = sanctions
+                .iter()
+                .filter(|s| s.resident_id.0 == rid)
+                .map(|s| AdminSanctionSummary {
+                    sanction_id: s.sanction_id.clone(),
+                    reason: s.reason.clone(),
+                    status: format!("{:?}", s.status).to_lowercase(),
+                    issued_at_ms: s.issued_at_ms,
+                    lifted_at_ms: s.lifted_at_ms,
+                })
+                .collect();
+            let is_banned = registration.state == ResidentRegistrationState::Suspended
+                || resident_sanctions
+                    .iter()
+                    .any(|s| s.status == "active" && s.lifted_at_ms.is_none());
+            by_resident.insert(
+                rid.clone(),
+                AdminResidentDetail {
+                    resident_id: rid.clone(),
+                    nickname: registration.nickname.clone(),
+                    email_masked: Some(Self::mask_email(&registration.email)),
+                    registration_state: Some(format!("{:?}", registration.state).to_lowercase()),
+                    created_at_ms: Some(registration.created_at_ms),
+                    verified_at_ms: Some(registration.verified_at_ms),
+                    last_login_at_ms: Some(registration.last_login_at_ms),
+                    roles: Vec::new(),
+                    active_cities: Vec::new(),
+                    pending_cities: Vec::new(),
+                    sanctions: resident_sanctions,
+                    is_banned,
+                    online: is_online(&rid),
+                    last_seen_at_ms: self.presence.get(&rid).copied(),
+                    avatar_id: None,
+                },
+            );
+        }
+
         for member in &self.memberships {
             let rid = &member.resident_id.0;
             let city_slug = city_slugs
@@ -1180,6 +1410,11 @@ impl GatewayRuntime {
                 AdminResidentDetail {
                     resident_id: rid.clone(),
                     nickname,
+                    email_masked: None,
+                    registration_state: None,
+                    created_at_ms: None,
+                    verified_at_ms: None,
+                    last_login_at_ms: None,
                     roles: Vec::new(),
                     active_cities: Vec::new(),
                     pending_cities: Vec::new(),
@@ -1236,20 +1471,29 @@ impl GatewayRuntime {
             lifted_at_ms: None,
         };
         self.resident_sanctions.push(sanction);
+        if let Err(error) = self.persist_governance_state() {
+            self.resident_sanctions.pop();
+            return Err(error);
+        }
         Ok(())
     }
 
     pub(crate) fn revoke_sanction(&mut self, sanction_id: &str) -> Result<(), String> {
-        let sanction = self
+        let index = self
             .resident_sanctions
-            .iter_mut()
-            .find(|s| s.sanction_id == sanction_id)
+            .iter()
+            .position(|sanction| sanction.sanction_id == sanction_id)
             .ok_or_else(|| format!("sanction not found: {sanction_id}"))?;
-        if sanction.status == WorldResidentSanctionStatus::Lifted {
+        if self.resident_sanctions[index].status == WorldResidentSanctionStatus::Lifted {
             return Err("sanction already lifted".into());
         }
-        sanction.status = WorldResidentSanctionStatus::Lifted;
-        sanction.lifted_at_ms = Some(Self::now_ms());
+        let previous = self.resident_sanctions[index].clone();
+        self.resident_sanctions[index].status = WorldResidentSanctionStatus::Lifted;
+        self.resident_sanctions[index].lifted_at_ms = Some(Self::now_ms());
+        if let Err(error) = self.persist_governance_state() {
+            self.resident_sanctions[index] = previous;
+            return Err(error);
+        }
         Ok(())
     }
 
@@ -1258,14 +1502,18 @@ impl GatewayRuntime {
         resident_id: &str,
         nickname: Option<&str>,
     ) -> Result<bool, String> {
-        let registration = self
+        let index = self
             .registrations
-            .iter_mut()
-            .find(|r| r.resident_id.0 == resident_id);
-        match registration {
-            Some(reg) => {
-                reg.nickname = nickname.map(|n| n.to_string());
-                self.persist_auth_state()?;
+            .iter()
+            .position(|registration| registration.resident_id.0 == resident_id);
+        match index {
+            Some(index) => {
+                let previous = self.registrations[index].nickname.clone();
+                self.registrations[index].nickname = nickname.map(|n| n.to_string());
+                if let Err(error) = self.persist_auth_state() {
+                    self.registrations[index].nickname = previous;
+                    return Err(error);
+                }
                 Ok(true)
             }
             None => Ok(false),
@@ -1283,9 +1531,13 @@ impl GatewayRuntime {
             .position(|r| r.resident_id.0 == resident_id);
         match idx {
             Some(i) => {
+                let previous = self.registrations[i].nickname.clone();
                 self.registrations[i].nickname = nickname.map(|n| n.to_string());
                 let result = self.registrations[i].nickname.clone();
-                self.persist_auth_state()?;
+                if let Err(error) = self.persist_auth_state() {
+                    self.registrations[i].nickname = previous;
+                    return Err(error);
+                }
                 Ok((true, result))
             }
             None => Ok((false, None)),
@@ -1295,6 +1547,7 @@ impl GatewayRuntime {
     pub(crate) fn admin_unban_resident(&mut self, resident_id: &str) -> Result<usize, String> {
         let now_ms = Self::now_ms();
         let mut count = 0;
+        let previous_sanctions = self.resident_sanctions.clone();
         for sanction in &mut self.resident_sanctions {
             if sanction.resident_id.0 == resident_id
                 && sanction.status == WorldResidentSanctionStatus::Active
@@ -1303,6 +1556,12 @@ impl GatewayRuntime {
                 sanction.lifted_at_ms = Some(now_ms);
                 count += 1;
             }
+        }
+        if count > 0
+            && let Err(error) = self.persist_governance_state()
+        {
+            self.resident_sanctions = previous_sanctions;
+            return Err(error);
         }
         Ok(count)
     }
@@ -1338,39 +1597,83 @@ impl GatewayRuntime {
     }
 
     pub(crate) fn admin_freeze_room(&mut self, room_id: &str) -> Result<bool, String> {
-        for room in &mut self.public_rooms {
-            if room.room_id.0 == room_id {
-                if room.frozen {
-                    return Err("room already frozen".into());
-                }
-                room.frozen = true;
-                return Ok(true);
-            }
+        let Some(index) = self
+            .public_rooms
+            .iter()
+            .position(|room| room.room_id.0 == room_id)
+        else {
+            return Err(format!("room not found: {room_id}"));
+        };
+        if self.public_rooms[index].frozen {
+            return Err("room already frozen".into());
         }
-        Err(format!("room not found: {room_id}"))
+
+        self.public_rooms[index].frozen = true;
+        if let Err(error) = self.persist_governance_state() {
+            self.public_rooms[index].frozen = false;
+            return Err(error);
+        }
+        Ok(true)
     }
 
     pub(crate) fn admin_unfreeze_room(&mut self, room_id: &str) -> Result<bool, String> {
-        for room in &mut self.public_rooms {
-            if room.room_id.0 == room_id {
-                if !room.frozen {
-                    return Err("room not frozen".into());
-                }
-                room.frozen = false;
-                return Ok(true);
-            }
+        let Some(index) = self
+            .public_rooms
+            .iter()
+            .position(|room| room.room_id.0 == room_id)
+        else {
+            return Err(format!("room not found: {room_id}"));
+        };
+        if !self.public_rooms[index].frozen {
+            return Err("room not frozen".into());
         }
-        Err(format!("room not found: {room_id}"))
+
+        self.public_rooms[index].frozen = false;
+        if let Err(error) = self.persist_governance_state() {
+            self.public_rooms[index].frozen = true;
+            return Err(error);
+        }
+        Ok(true)
     }
 
     pub(crate) fn admin_get_config(&self) -> HashMap<String, String> {
         self.app_config.clone()
     }
 
-    pub(crate) fn admin_set_config(&mut self, updates: HashMap<String, String>) {
+    pub(crate) fn persist_app_config(&self) -> Result<(), String> {
+        let bytes = serde_json::to_vec_pretty(&self.app_config)
+            .map_err(|error| format!("encode app config failed: {error}"))?;
+        atomic_write_file(&self.app_config_path, &bytes)
+            .map_err(|error| format!("write app config failed: {error}"))
+    }
+
+    pub(crate) fn load_app_config(&mut self) -> Result<(), String> {
+        if !self.app_config_path.exists() {
+            return Ok(());
+        }
+        let bytes = std::fs::read(&self.app_config_path)
+            .map_err(|error| format!("read app config failed: {error}"))?;
+        if bytes.is_empty() {
+            return Ok(());
+        }
+        self.app_config = serde_json::from_slice(&bytes)
+            .map_err(|error| format!("decode app config failed: {error}"))?;
+        Ok(())
+    }
+
+    pub(crate) fn admin_set_config(
+        &mut self,
+        updates: HashMap<String, String>,
+    ) -> Result<(), String> {
+        let previous_config = self.app_config.clone();
         for (key, value) in updates {
             self.app_config.insert(key, value);
         }
+        if let Err(error) = self.persist_app_config() {
+            self.app_config = previous_config;
+            return Err(error);
+        }
+        Ok(())
     }
 
     pub(crate) fn admin_moderate_message(
@@ -1391,9 +1694,21 @@ impl GatewayRuntime {
         if !found {
             return Err("message not found".into());
         }
-        self.message_moderation
+        let previous = self
+            .message_moderation
             .insert(message_id.to_string(), action.to_string());
-        let _ = self.persist_moderation_state();
+        if let Err(error) = self.persist_moderation_state() {
+            match previous {
+                Some(status) => {
+                    self.message_moderation
+                        .insert(message_id.to_string(), status);
+                }
+                None => {
+                    self.message_moderation.remove(message_id);
+                }
+            }
+            return Err(format!("persist moderation state failed: {error}"));
+        }
         Ok(())
     }
 
@@ -1707,7 +2022,8 @@ impl GatewayRuntime {
             layer_id: "image-layer".into(),
             asset_hint: preset.clone(),
             preset,
-            aspect_ratio_permyriad: 16_000,
+            // scene canvas uses height / width * 10000; 16:9 = 5625.
+            aspect_ratio_permyriad: 5_625,
             owner_editable,
             day_image_url: None,
             night_image_url: None,

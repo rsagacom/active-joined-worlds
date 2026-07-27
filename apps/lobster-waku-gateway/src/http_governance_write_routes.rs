@@ -11,6 +11,7 @@ use crate::{
     PublishWorldNoticeRequest, ReviewSafetyReportRequest, SanctionResidentRequest,
     SubmitSafetyReportRequest, UnsanctionResidentRequest, UpdateCityTrustRequest,
     http_support::{ResponseHeaderExt, authorization_bearer_token, json_header, read_request_body},
+    http_write_routes::require_admin_auth,
 };
 
 pub(crate) type HttpResponse = Response<Cursor<Vec<u8>>>;
@@ -50,6 +51,9 @@ pub(crate) fn handle_post_publish_world_notice(
     notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let auth_token = authorization_bearer_token(request);
     let mut body = Vec::new();
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
@@ -105,6 +109,9 @@ pub(crate) fn handle_post_update_city_trust(
     notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let auth_token = authorization_bearer_token(request);
     let mut body = Vec::new();
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
@@ -160,6 +167,9 @@ pub(crate) fn handle_post_submit_safety_report(
     notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let auth_token = authorization_bearer_token(request);
     let mut body = Vec::new();
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
@@ -215,6 +225,9 @@ pub(crate) fn handle_post_review_safety_report(
     notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let auth_token = authorization_bearer_token(request);
     let mut body = Vec::new();
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
@@ -270,6 +283,9 @@ pub(crate) fn handle_post_publish_safety_advisory(
     notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let auth_token = authorization_bearer_token(request);
     let mut body = Vec::new();
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
@@ -325,6 +341,9 @@ pub(crate) fn handle_post_sanction_resident(
     notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let auth_token = authorization_bearer_token(request);
     let mut body = Vec::new();
     if let Err(error) = request.as_reader().read_to_end(&mut body) {
@@ -380,6 +399,9 @@ pub(crate) fn handle_post_unsanction_resident(
     notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let auth_token = authorization_bearer_token(request);
     let body = match read_request_body(request) {
         Ok(body) => body,

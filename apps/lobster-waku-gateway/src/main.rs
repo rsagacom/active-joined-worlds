@@ -29,6 +29,7 @@ mod city_runtime;
 mod cli_runtime;
 mod conversation_runtime;
 mod core_runtime;
+mod email_otp_mailer;
 mod export_runtime;
 mod federation_read;
 mod gateway_models;

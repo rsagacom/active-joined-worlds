@@ -32,12 +32,12 @@ use crate::{
         handle_get_admin_logs, handle_get_admin_messages, handle_get_admin_messages_moderation,
         handle_get_admin_residents, handle_get_admin_rooms, handle_get_admin_summary,
         handle_get_audit_log, handle_get_capability_catalog, handle_get_cities,
-        handle_get_cli_inbox, handle_get_cli_rooms, handle_get_cli_tail, handle_get_export,
-        handle_get_message_search, handle_get_permission_groups, handle_get_provider,
-        handle_get_residents, handle_get_shell_bootstrap, handle_get_shell_events,
-        handle_get_shell_state, handle_get_world, handle_get_world_directory,
-        handle_get_world_entry, handle_get_world_mirror_sources, handle_get_world_mirrors,
-        handle_get_world_safety, handle_get_world_safety_reports,
+        handle_get_cli_inbox, handle_get_cli_rooms, handle_get_cli_search, handle_get_cli_tail,
+        handle_get_export, handle_get_message_search, handle_get_permission_groups,
+        handle_get_provider, handle_get_residents, handle_get_shell_bootstrap,
+        handle_get_shell_events, handle_get_shell_state, handle_get_world,
+        handle_get_world_directory, handle_get_world_entry, handle_get_world_mirror_sources,
+        handle_get_world_mirrors, handle_get_world_safety, handle_get_world_safety_reports,
         handle_get_world_safety_residents, handle_get_world_snapshot, handle_get_world_square,
     },
     http_support::{ResponseHeaderExt, split_path_and_query, text_header},
@@ -56,10 +56,33 @@ use crate::{
         handle_post_shell_mark_read, handle_post_shell_message, handle_post_shell_message_edit,
         handle_post_shell_message_recall, handle_post_shell_presence, handle_post_shell_scene,
         handle_post_shell_set_nickname, handle_post_waku, handle_post_world_mirror_sources,
+        require_admin_auth,
     },
 };
 
 pub(crate) type HttpResponse = Response<Cursor<Vec<u8>>>;
+
+fn dispatch_admin_read(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    request: &Request,
+    handler: impl FnOnce() -> HttpResponse,
+) -> HttpResponse {
+    if let Some(response) = require_admin_auth(runtime, request) {
+        return response;
+    }
+    handler()
+}
+
+fn dispatch_admin_write(
+    runtime: &Arc<Mutex<GatewayRuntime>>,
+    request: &mut Request,
+    handler: impl FnOnce(&mut Request) -> HttpResponse,
+) -> HttpResponse {
+    if let Some(response) = require_admin_auth(runtime, request) {
+        return response;
+    }
+    handler(request)
+}
 
 pub(crate) fn dispatch_http_request(
     runtime: &Arc<Mutex<GatewayRuntime>>,
@@ -78,20 +101,42 @@ pub(crate) fn dispatch_http_request(
         (Method::Get, "/health") | (Method::Head, "/health") => Response::from_string("ok")
             .with_status_code(StatusCode(200))
             .with_optional_header(text_header()),
-        (Method::Get, "/v1/admin/summary") => handle_get_admin_summary(runtime),
-        (Method::Get, "/v1/admin/conversations") => handle_get_admin_conversations(runtime),
-        (Method::Get, "/v1/admin/messages") => handle_get_admin_messages(runtime, &query_params),
-        (Method::Get, "/v1/admin/residents") => handle_get_admin_residents(runtime),
-        (Method::Get, "/v1/admin/rooms") => handle_get_admin_rooms(runtime),
-        (Method::Get, "/v1/admin/config") => handle_get_admin_config(runtime),
-        (Method::Get, "/v1/admin/logs") => handle_get_admin_logs(runtime),
-        (Method::Get, "/v1/admin/messages/moderation") => {
-            handle_get_admin_messages_moderation(runtime, &query_params)
+        (Method::Get, "/v1/admin/summary") => {
+            dispatch_admin_read(runtime, request, || handle_get_admin_summary(runtime))
         }
-        (Method::Get, "/v1/admin/invites") => handle_get_admin_invites(runtime),
-        (Method::Get, "/v1/admin/permission-groups") => handle_get_permission_groups(runtime),
+        (Method::Get, "/v1/admin/conversations") => {
+            dispatch_admin_read(runtime, request, || handle_get_admin_conversations(runtime))
+        }
+        (Method::Get, "/v1/admin/messages") => dispatch_admin_read(runtime, request, || {
+            handle_get_admin_messages(runtime, &query_params)
+        }),
+        (Method::Get, "/v1/admin/residents") => {
+            dispatch_admin_read(runtime, request, || handle_get_admin_residents(runtime))
+        }
+        (Method::Get, "/v1/admin/rooms") => {
+            dispatch_admin_read(runtime, request, || handle_get_admin_rooms(runtime))
+        }
+        (Method::Get, "/v1/admin/config") => {
+            dispatch_admin_read(runtime, request, || handle_get_admin_config(runtime))
+        }
+        (Method::Get, "/v1/admin/logs") => {
+            dispatch_admin_read(runtime, request, || handle_get_admin_logs(runtime))
+        }
+        (Method::Get, "/v1/admin/messages/moderation") => {
+            dispatch_admin_read(runtime, request, || {
+                handle_get_admin_messages_moderation(runtime, &query_params)
+            })
+        }
+        (Method::Get, "/v1/admin/invites") => {
+            dispatch_admin_read(runtime, request, || handle_get_admin_invites(runtime))
+        }
+        (Method::Get, "/v1/admin/permission-groups") => {
+            dispatch_admin_read(runtime, request, || handle_get_permission_groups(runtime))
+        }
         (Method::Get, "/v1/admin/capabilities") => handle_get_capability_catalog(),
-        (Method::Get, "/v1/admin/audit-log") => handle_get_audit_log(runtime, &query_params),
+        (Method::Get, "/v1/admin/audit-log") => dispatch_admin_read(runtime, request, || {
+            handle_get_audit_log(runtime, &query_params)
+        }),
         (Method::Post, "/v1/admin/residents/ban") => {
             handle_post_admin_ban_resident(runtime, notifier, request)
         }
@@ -129,7 +174,9 @@ pub(crate) fn dispatch_http_request(
         (Method::Post, "/v1/admin/logs/clear") => {
             handle_post_admin_clear_processed_logs(runtime, notifier, request)
         }
-        (Method::Get, "/v1/admin/devices") => handle_get_admin_devices(runtime),
+        (Method::Get, "/v1/admin/devices") => {
+            dispatch_admin_read(runtime, request, || handle_get_admin_devices(runtime))
+        }
         (Method::Post, "/v1/admin/devices/add") => {
             handle_post_admin_add_device(runtime, notifier, request)
         }
@@ -153,15 +200,21 @@ pub(crate) fn dispatch_http_request(
             handle_post_scene_validate(runtime, notifier, request)
         }
         (Method::Get, "/v1/provider") => handle_get_provider(runtime),
-        (Method::Post, "/v1/provider/connect") => handle_post_provider_connect(runtime, request),
-        (Method::Post, "/v1/provider/disconnect") => handle_post_provider_disconnect(runtime),
+        (Method::Post, "/v1/provider/connect") => {
+            dispatch_admin_write(runtime, request, |request| {
+                handle_post_provider_connect(runtime, request)
+            })
+        }
+        (Method::Post, "/v1/provider/disconnect") => dispatch_admin_write(runtime, request, |_| {
+            handle_post_provider_disconnect(runtime)
+        }),
         (Method::Get, "/v1/shell/bootstrap") => handle_get_shell_bootstrap(listen_addr),
         (Method::Get, "/v1/shell/events") => {
-            handle_get_shell_events(runtime, notifier, &query_params)
+            handle_get_shell_events(runtime, notifier, request, &query_params)
         }
-        (Method::Get, "/v1/shell/state") => handle_get_shell_state(runtime, &query_params),
+        (Method::Get, "/v1/shell/state") => handle_get_shell_state(runtime, request, &query_params),
         (Method::Get, "/v1/shell/messages/search") => {
-            handle_get_message_search(runtime, &query_params)
+            handle_get_message_search(runtime, request, &query_params)
         }
         (Method::Get, "/v1/world") => handle_get_world(runtime),
         (Method::Get, "/v1/cities") => handle_get_cities(runtime),
@@ -181,7 +234,7 @@ pub(crate) fn dispatch_http_request(
             handle_post_verify_mobile_otp(runtime, notifier, request)
         }
         (Method::Post, "/v1/auth/logout") => handle_post_auth_logout(runtime, request),
-        (Method::Get, "/v1/export") => handle_get_export(runtime, &query_params),
+        (Method::Get, "/v1/export") => handle_get_export(runtime, request, &query_params),
         (Method::Get, "/v1/world-square") => handle_get_world_square(runtime),
         (Method::Get, "/v1/world-safety") => handle_get_world_safety(runtime),
         (Method::Get, "/v1/world-safety/reports") => handle_get_world_safety_reports(runtime),
@@ -192,7 +245,9 @@ pub(crate) fn dispatch_http_request(
         (Method::Get, "/v1/world-mirrors") => handle_get_world_mirrors(runtime),
         (Method::Get, "/v1/world-mirror-sources") => handle_get_world_mirror_sources(runtime),
         (Method::Post, "/v1/world-mirror-sources") => {
-            handle_post_world_mirror_sources(runtime, request)
+            dispatch_admin_write(runtime, request, |request| {
+                handle_post_world_mirror_sources(runtime, request)
+            })
         }
         (Method::Post, "/v1/shell/message") => {
             handle_post_shell_message(runtime, notifier, request)
@@ -205,9 +260,10 @@ pub(crate) fn dispatch_http_request(
             handle_post_shell_message_edit(runtime, notifier, request)
         }
         (Method::Post, "/v1/cli/send") => handle_post_cli_send(runtime, notifier, request),
-        (Method::Get, "/v1/cli/inbox") => handle_get_cli_inbox(runtime, &query_params),
-        (Method::Get, "/v1/cli/rooms") => handle_get_cli_rooms(runtime, &query_params),
-        (Method::Get, "/v1/cli/tail") => handle_get_cli_tail(runtime, &query_params),
+        (Method::Get, "/v1/cli/inbox") => handle_get_cli_inbox(runtime, request, &query_params),
+        (Method::Get, "/v1/cli/rooms") => handle_get_cli_rooms(runtime, request, &query_params),
+        (Method::Get, "/v1/cli/search") => handle_get_cli_search(runtime, request, &query_params),
+        (Method::Get, "/v1/cli/tail") => handle_get_cli_tail(runtime, request, &query_params),
         (Method::Post, "/v1/direct/open") => handle_post_direct_open(runtime, notifier, request),
         (Method::Post, "/v1/personal-room") => {
             handle_post_personal_room(runtime, notifier, request)

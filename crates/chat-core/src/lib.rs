@@ -221,6 +221,7 @@ pub struct SceneImageLayer {
     pub layer_id: String,
     pub preset: String,
     pub asset_hint: String,
+    /// Scene canvas height / width * 10000 (16:9 is 5625).
     pub aspect_ratio_permyriad: u16,
     pub owner_editable: bool,
     /// 自定义白天背景图（与 night 必须同时提供或同时为空）
@@ -899,11 +900,12 @@ mod tests {
             layer_id: "l1".into(),
             preset: "p1".into(),
             asset_hint: "a1".into(),
-            aspect_ratio_permyriad: 16000,
+            aspect_ratio_permyriad: 5625,
             owner_editable: true,
             day_image_url: None,
             night_image_url: None,
         };
+        assert_eq!(layer.aspect_ratio_permyriad, 5625);
         assert_eq!(layer.preset, "p1");
         assert!(layer.day_image_url.is_none());
     }

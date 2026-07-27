@@ -380,6 +380,47 @@ impl GatewayRuntime {
         Ok(CliRoomsResponse { identity, entries })
     }
 
+    pub(crate) fn cli_search_for(
+        &self,
+        viewer: &CliAddress,
+        query: &str,
+        room_id: Option<&ConversationId>,
+        limit: usize,
+    ) -> Result<Vec<ShellRoomMessage>, String> {
+        let identity = viewer.identity_label()?;
+        let query = query.trim().to_lowercase();
+        if query.is_empty() {
+            return Err("q query parameter required".into());
+        }
+        let visible_conversations = self.cli_visible_conversations_for(viewer)?;
+        if let Some(room_id) = room_id
+            && !visible_conversations
+                .iter()
+                .any(|conversation| conversation.conversation_id == *room_id)
+        {
+            return Err(format!(
+                "conversation {} is not visible to {}",
+                room_id.0, identity
+            ));
+        }
+
+        let per_conversation_limit = limit.max(1);
+        let mut results = visible_conversations
+            .into_iter()
+            .filter(|conversation| {
+                room_id.is_none_or(|room_id| conversation.conversation_id == *room_id)
+            })
+            .flat_map(|conversation| {
+                self.shell_recent_messages(&conversation.conversation_id, per_conversation_limit)
+                    .into_iter()
+                    .filter(|message| message.text.to_lowercase().contains(&query))
+            })
+            .collect::<Vec<_>>();
+        results.sort_by(|a, b| b.timestamp_ms.cmp(&a.timestamp_ms));
+        results.truncate(limit);
+        Ok(results)
+    }
+
     pub(crate) fn cli_tail_for(
         &self,
         viewer: &CliAddress,

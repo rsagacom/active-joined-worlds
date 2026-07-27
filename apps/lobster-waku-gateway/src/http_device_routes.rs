@@ -6,6 +6,10 @@ use tiny_http::{Request, Response, StatusCode};
 use crate::{
     AdminDeviceRequest, GatewayRuntime, GatewayStateNotifier,
     http_support::{ResponseHeaderExt, json_header},
+    http_write_routes::{
+        admin_session_actor, require_admin_actor_capability, require_admin_auth,
+        require_admin_capability,
+    },
 };
 
 type HttpResponse = Response<std::io::Cursor<Vec<u8>>>;
@@ -42,6 +46,9 @@ pub(crate) fn handle_post_admin_add_device(
     _notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string(r#"{"error":"read body failed"}"#)
@@ -50,7 +57,28 @@ pub(crate) fn handle_post_admin_add_device(
     }
     match serde_json::from_str::<AdminDeviceRequest>(&body) {
         Ok(req) => {
-            let actor = req.actor_id.unwrap_or_else(|| "admin".into());
+            let actor = if let Some(actor_id) = req.actor_id.as_deref() {
+                if let Some(resp) = require_admin_actor_capability(
+                    runtime,
+                    request,
+                    Some(actor_id),
+                    crate::CAP_ADMIN_DIAGNOSTICS,
+                ) {
+                    return resp;
+                }
+                actor_id.to_string()
+            } else {
+                if let Some(resp) =
+                    require_admin_capability(runtime, request, crate::CAP_ADMIN_DIAGNOSTICS)
+                {
+                    return resp;
+                }
+                match admin_session_actor(runtime, request) {
+                    Ok(Some(actor)) => actor,
+                    Ok(None) => "admin".into(),
+                    Err(response) => return response,
+                }
+            };
             let result = match with_runtime(runtime, |runtime| {
                 runtime.admin_add_device(req.address, req.label.unwrap_or_default(), actor)
             }) {
@@ -79,6 +107,9 @@ pub(crate) fn handle_post_admin_remove_device(
     _notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string(r#"{"error":"read body failed"}"#)
@@ -91,6 +122,11 @@ pub(crate) fn handle_post_admin_remove_device(
     }
     match serde_json::from_str::<RemoveReq>(&body) {
         Ok(req) => {
+            if let Some(resp) =
+                require_admin_capability(runtime, request, crate::CAP_ADMIN_DIAGNOSTICS)
+            {
+                return resp;
+            }
             let result =
                 match with_runtime(runtime, |runtime| runtime.admin_remove_device(&req.address)) {
                     Ok(result) => result,
@@ -116,6 +152,9 @@ pub(crate) fn handle_post_admin_block_device(
     _notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string(r#"{"error":"read body failed"}"#)
@@ -128,6 +167,11 @@ pub(crate) fn handle_post_admin_block_device(
     }
     match serde_json::from_str::<BlockReq>(&body) {
         Ok(req) => {
+            if let Some(resp) =
+                require_admin_capability(runtime, request, crate::CAP_ADMIN_DIAGNOSTICS)
+            {
+                return resp;
+            }
             let result =
                 match with_runtime(runtime, |runtime| runtime.admin_block_device(&req.address)) {
                     Ok(result) => result,
@@ -153,6 +197,9 @@ pub(crate) fn handle_post_admin_unblock_device(
     _notifier: &Arc<GatewayStateNotifier>,
     request: &mut Request,
 ) -> HttpResponse {
+    if let Some(resp) = require_admin_auth(runtime, request) {
+        return resp;
+    }
     let mut body = String::new();
     if request.as_reader().read_to_string(&mut body).is_err() {
         return Response::from_string(r#"{"error":"read body failed"}"#)
@@ -165,6 +212,11 @@ pub(crate) fn handle_post_admin_unblock_device(
     }
     match serde_json::from_str::<UnblockReq>(&body) {
         Ok(req) => {
+            if let Some(resp) =
+                require_admin_capability(runtime, request, crate::CAP_ADMIN_DIAGNOSTICS)
+            {
+                return resp;
+            }
             let result = match with_runtime(runtime, |runtime| {
                 runtime.admin_unblock_device(&req.address)
             }) {

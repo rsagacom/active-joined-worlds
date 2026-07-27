@@ -239,7 +239,7 @@ impl GatewayRuntime {
         resident: &IdentityId,
     ) -> Result<ConversationId, String> {
         let conversation_id = ConversationId(format!("home:{}", resident.0));
-        self.ensure_direct_conversation(&conversation_id, &[resident.clone()])?;
+        self.ensure_direct_conversation(&conversation_id, std::slice::from_ref(resident))?;
         Ok(conversation_id)
     }
 
@@ -299,19 +299,27 @@ impl GatewayRuntime {
         }
 
         if let Some(image_layer) = request.image_layer {
-            Self::validate_scene_image_layer(&image_layer)?;
-            if !image_layer.owner_editable {
-                return Err("image layer must remain owner editable".into());
+            if let Some(image_layer) = image_layer {
+                Self::validate_scene_image_layer(&image_layer)?;
+                if !image_layer.owner_editable {
+                    return Err("image layer must remain owner editable".into());
+                }
+                scene.image_layer = Some(image_layer);
+            } else {
+                scene.image_layer = None;
             }
-            scene.image_layer = Some(image_layer);
         }
 
         if let Some(hotspot_layer) = request.hotspot_layer {
-            Self::validate_scene_hotspot_layer(&hotspot_layer)?;
-            if !hotspot_layer.owner_editable {
-                return Err("hotspot layer must remain owner editable".into());
+            if let Some(hotspot_layer) = hotspot_layer {
+                Self::validate_scene_hotspot_layer(&hotspot_layer)?;
+                if !hotspot_layer.owner_editable {
+                    return Err("hotspot layer must remain owner editable".into());
+                }
+                scene.hotspot_layer = Some(hotspot_layer);
+            } else {
+                scene.hotspot_layer = None;
             }
-            scene.hotspot_layer = Some(hotspot_layer);
         }
 
         let updated_at_ms = Self::now_ms();
@@ -399,13 +407,21 @@ impl GatewayRuntime {
         }
 
         if let Some(image_layer) = request.image_layer {
-            Self::validate_scene_image_layer(&image_layer)?;
-            scene.image_layer = Some(image_layer);
+            if let Some(image_layer) = image_layer {
+                Self::validate_scene_image_layer(&image_layer)?;
+                scene.image_layer = Some(image_layer);
+            } else {
+                scene.image_layer = None;
+            }
         }
 
         if let Some(hotspot_layer) = request.hotspot_layer {
-            Self::validate_scene_hotspot_layer(&hotspot_layer)?;
-            scene.hotspot_layer = Some(hotspot_layer);
+            if let Some(hotspot_layer) = hotspot_layer {
+                Self::validate_scene_hotspot_layer(&hotspot_layer)?;
+                scene.hotspot_layer = Some(hotspot_layer);
+            } else {
+                scene.hotspot_layer = None;
+            }
         }
 
         let updated_at_ms = Self::now_ms();

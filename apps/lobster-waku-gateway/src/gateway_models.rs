@@ -1,5 +1,16 @@
 use super::*;
 
+/// Preserve the distinction between an omitted optional patch and an explicit
+/// JSON `null`: missing => `None` (leave unchanged), null => `Some(None)`
+/// (clear), and an object => `Some(Some(value))` (replace).
+fn deserialize_optional_patch<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
+{
+    Ok(Some(Option::<T>::deserialize(deserializer)?))
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct ShellRoomMessage {
     pub(crate) message_id: String,
@@ -385,8 +396,12 @@ pub(crate) struct ShellMessageRequest {
 pub(crate) struct UpdateShellSceneRequest {
     pub(crate) room_id: String,
     pub(crate) actor: String,
-    pub(crate) image_layer: Option<SceneImageLayer>,
-    pub(crate) hotspot_layer: Option<SceneHotspotLayer>,
+    /// `None` means leave unchanged; `Some(None)` explicitly clears the layer.
+    #[serde(default, deserialize_with = "deserialize_optional_patch")]
+    pub(crate) image_layer: Option<Option<SceneImageLayer>>,
+    /// `None` means leave unchanged; `Some(None)` explicitly clears the layer.
+    #[serde(default, deserialize_with = "deserialize_optional_patch")]
+    pub(crate) hotspot_layer: Option<Option<SceneHotspotLayer>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -418,6 +433,9 @@ pub(crate) struct RecallShellMessageRequest {
     pub(crate) room_id: String,
     pub(crate) message_id: String,
     pub(crate) actor: String,
+    /// Optional typed identity supplied by CLI/sidecars; legacy web clients omit it.
+    #[serde(default)]
+    pub(crate) actor_address: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -436,6 +454,9 @@ pub(crate) struct EditShellMessageRequest {
     pub(crate) message_id: String,
     pub(crate) actor: String,
     pub(crate) text: String,
+    /// Optional typed identity supplied by CLI/sidecars; legacy web clients omit it.
+    #[serde(default)]
+    pub(crate) actor_address: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1044,6 +1065,16 @@ pub(crate) struct AdminResidentDetail {
     pub(crate) resident_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) nickname: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) email_masked: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) registration_state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) created_at_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) verified_at_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) last_login_at_ms: Option<i64>,
     pub(crate) roles: Vec<String>,
     pub(crate) active_cities: Vec<String>,
     pub(crate) pending_cities: Vec<String>,
@@ -1113,6 +1144,8 @@ pub(crate) struct AdminSetNicknameRequest {
     pub(crate) resident_id: String,
     #[serde(default)]
     pub(crate) nickname: Option<String>,
+    #[serde(default)]
+    pub(crate) actor_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1223,17 +1256,12 @@ pub(crate) struct PersonalRoomResponse {
     pub(crate) room_id: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PersonalRoomAccessPolicy {
     RegisteredAll,
+    #[default]
     FriendsOnly,
-}
-
-impl Default for PersonalRoomAccessPolicy {
-    fn default() -> Self {
-        Self::FriendsOnly
-    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1592,6 +1620,7 @@ pub(crate) struct GatewayRuntime {
     pub(crate) secure_sessions_path: PathBuf,
     pub(crate) provider_config_path: PathBuf,
     pub(crate) auth_state_path: PathBuf,
+    pub(crate) app_config_path: PathBuf,
     pub(crate) invites_path: PathBuf,
     pub(crate) permission_groups_path: PathBuf,
     pub(crate) personal_room_access_policies_path: PathBuf,
@@ -1630,6 +1659,10 @@ pub(crate) struct GatewayRuntime {
     pub(crate) personal_room_access_policies: HashMap<String, PersonalRoomAccessPolicy>,
     pub(crate) resident_relationships: HashMap<String, ResidentRelationshipRecord>,
     pub(crate) audit_events: Vec<AuditEvent>,
+    pub(crate) audit_counter: u64,
+    /// Hashes for explicitly provisioned `agent:<id>` sidecar credentials.
+    /// Raw tokens never enter runtime state or logs.
+    pub(crate) agent_token_hashes: HashMap<String, String>,
     pub(crate) dev_auth_bypass: bool,
 }
 
@@ -1926,8 +1959,10 @@ pub(crate) struct AdminUpdateSceneRequest {
     pub(crate) room_id: String,
     #[serde(default)]
     pub(crate) actor_id: Option<String>,
-    #[serde(default)]
-    pub(crate) image_layer: Option<SceneImageLayer>,
-    #[serde(default)]
-    pub(crate) hotspot_layer: Option<SceneHotspotLayer>,
+    /// `None` means leave unchanged; `Some(None)` explicitly clears the layer.
+    #[serde(default, deserialize_with = "deserialize_optional_patch")]
+    pub(crate) image_layer: Option<Option<SceneImageLayer>>,
+    /// `None` means leave unchanged; `Some(None)` explicitly clears the layer.
+    #[serde(default, deserialize_with = "deserialize_optional_patch")]
+    pub(crate) hotspot_layer: Option<Option<SceneHotspotLayer>>,
 }

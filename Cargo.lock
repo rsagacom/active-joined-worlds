@@ -736,6 +736,7 @@ dependencies = [
  "chat-core",
  "chat-storage",
  "crypto-mls",
+ "getrandom 0.2.17",
  "hex",
  "host-adapter",
  "serde",

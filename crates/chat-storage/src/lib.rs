@@ -3,6 +3,7 @@ use std::{
     fs::{self, File},
     io::Write,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -14,11 +15,24 @@ use serde::{Deserialize, Serialize};
 
 pub type StorageResult<T> = Result<T, String>;
 
+static ATOMIC_WRITE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
 fn atomic_write(path: &Path, bytes: &[u8]) -> StorageResult<()> {
-    let temp_path = match path.extension().and_then(|value| value.to_str()) {
-        Some(extension) if !extension.is_empty() => path.with_extension(format!("{extension}.tmp")),
-        _ => path.with_extension("tmp"),
-    };
+    let sequence = ATOMIC_WRITE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("snapshot");
+    let temp_path = path.with_file_name(format!(
+        ".{file_name}.{}.{}.{}.tmp",
+        std::process::id(),
+        timestamp,
+        sequence,
+    ));
 
     let write_result = (|| -> StorageResult<()> {
         let mut file = File::create(&temp_path)
@@ -679,7 +693,7 @@ mod tests {
                 layer_id: "image-layer".into(),
                 preset: "private-room-loft".into(),
                 asset_hint: "private-room-loft".into(),
-                aspect_ratio_permyriad: 16_000,
+                aspect_ratio_permyriad: 5_625,
                 owner_editable: true,
                 day_image_url: None,
                 night_image_url: None,
@@ -1016,6 +1030,34 @@ mod tests {
             !path.with_extension("postcard.tmp").exists(),
             "temp artifact should be removed after atomic replace"
         );
+    }
+
+    #[test]
+    fn atomic_write_supports_concurrent_replacements() {
+        let temp = tempdir().expect("temp dir");
+        let path = std::sync::Arc::new(temp.path().join("snapshot.postcard"));
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+        let workers = (0..8)
+            .map(|worker| {
+                let path = std::sync::Arc::clone(&path);
+                let barrier = std::sync::Arc::clone(&barrier);
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    for round in 0..32 {
+                        let payload = format!("worker-{worker}-round-{round}");
+                        atomic_write(&path, payload.as_bytes()).expect("concurrent atomic write");
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for worker in workers {
+            worker.join().expect("concurrent writer should finish");
+        }
+
+        let payload = fs::read_to_string(&*path).expect("read concurrent snapshot");
+        assert!(payload.starts_with("worker-") && payload.contains("-round-"));
+        assert!(!path.with_extension("postcard.tmp").exists());
     }
 
     #[test]

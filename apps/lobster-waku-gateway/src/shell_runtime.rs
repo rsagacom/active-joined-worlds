@@ -146,7 +146,7 @@ impl GatewayRuntime {
         }
     }
 
-    fn personal_room_messages_visible_to_viewer(
+    pub(crate) fn personal_room_messages_visible_to_viewer(
         &self,
         conversation: &Conversation,
         viewer: Option<&IdentityId>,
@@ -1055,7 +1055,7 @@ impl GatewayRuntime {
         }
     }
 
-    fn shell_visible_conversations_for_viewer(
+    pub(crate) fn shell_visible_conversations_for_viewer(
         &self,
         viewer: Option<&IdentityId>,
     ) -> Vec<Conversation> {

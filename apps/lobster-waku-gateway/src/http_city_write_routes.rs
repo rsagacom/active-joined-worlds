@@ -11,7 +11,7 @@ use crate::{
     GatewayRuntime, GatewayStateNotifier, JoinCityRequest, UpdateFederationPolicyRequest,
     UpdateStewardRequest,
     http_support::{ResponseHeaderExt, json_header},
-    http_write_routes::require_admin_auth,
+    http_write_routes::{require_admin_auth, require_authenticated_actor},
 };
 
 pub(crate) type HttpResponse = Response<Cursor<Vec<u8>>>;
@@ -54,6 +54,9 @@ pub(crate) fn handle_post_create_city(
 
     match serde_json::from_slice::<CreateCityRequest>(&body) {
         Ok(payload) => {
+            if let Some(resp) = require_authenticated_actor(runtime, request, &payload.lord_id) {
+                return resp;
+            }
             let result = match with_runtime(runtime, |runtime| runtime.create_city(payload)) {
                 Ok(result) => result,
                 Err(response) => return response,
@@ -103,6 +106,10 @@ pub(crate) fn handle_post_join_city(
 
     match serde_json::from_slice::<JoinCityRequest>(&body) {
         Ok(payload) => {
+            if let Some(resp) = require_authenticated_actor(runtime, request, &payload.resident_id)
+            {
+                return resp;
+            }
             let result = match with_runtime(runtime, |runtime| runtime.join_city(payload)) {
                 Ok(result) => result,
                 Err(response) => return response,
@@ -152,6 +159,9 @@ pub(crate) fn handle_post_approve_city_join(
 
     match serde_json::from_slice::<ApproveCityJoinRequest>(&body) {
         Ok(payload) => {
+            if let Some(resp) = require_authenticated_actor(runtime, request, &payload.actor_id) {
+                return resp;
+            }
             let result = match with_runtime(runtime, |runtime| runtime.approve_city_join(payload)) {
                 Ok(result) => result,
                 Err(response) => return response,
@@ -201,6 +211,9 @@ pub(crate) fn handle_post_update_steward(
 
     match serde_json::from_slice::<UpdateStewardRequest>(&body) {
         Ok(payload) => {
+            if let Some(resp) = require_authenticated_actor(runtime, request, &payload.actor_id) {
+                return resp;
+            }
             let result = match with_runtime(runtime, |runtime| runtime.update_steward(payload)) {
                 Ok(result) => result,
                 Err(response) => return response,
@@ -250,6 +263,9 @@ pub(crate) fn handle_post_update_federation_policy(
 
     match serde_json::from_slice::<UpdateFederationPolicyRequest>(&body) {
         Ok(payload) => {
+            if let Some(resp) = require_authenticated_actor(runtime, request, &payload.actor_id) {
+                return resp;
+            }
             let result =
                 match with_runtime(runtime, |runtime| runtime.update_federation_policy(payload)) {
                     Ok(result) => result,
@@ -300,6 +316,9 @@ pub(crate) fn handle_post_create_public_room(
 
     match serde_json::from_slice::<CreatePublicRoomRequest>(&body) {
         Ok(payload) => {
+            if let Some(resp) = require_authenticated_actor(runtime, request, &payload.creator_id) {
+                return resp;
+            }
             let result = match with_runtime(runtime, |runtime| runtime.create_public_room(payload))
             {
                 Ok(result) => result,
@@ -350,6 +369,9 @@ pub(crate) fn handle_post_freeze_public_room(
 
     match serde_json::from_slice::<FreezePublicRoomRequest>(&body) {
         Ok(payload) => {
+            if let Some(resp) = require_authenticated_actor(runtime, request, &payload.actor_id) {
+                return resp;
+            }
             let result = match with_runtime(runtime, |runtime| runtime.freeze_public_room(payload))
             {
                 Ok(result) => result,
