@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 HOST_TARGET_OVERRIDE="${HOST_TARGET_OVERRIDE:-}"
+GATEWAY_BINARY_PATH="${GATEWAY_BINARY_PATH:-$ROOT_DIR/target/release/lobster-waku-gateway}"
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -24,7 +25,7 @@ else
   host_target="$HOST_TARGET_OVERRIDE"
 fi
 bin_name="lobster-waku-gateway-${host_target}"
-binary_path="$ROOT_DIR/target/release/lobster-waku-gateway"
+binary_path="$GATEWAY_BINARY_PATH"
 
 if [[ "$SKIP_BUILD" != "1" ]]; then
   need_cmd cargo

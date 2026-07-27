@@ -17,8 +17,9 @@ def main() -> int:
     assert 'MODE="${1:-user}"' in text
     assert 'HOST="${HOST:-127.0.0.1}"' in text
     assert 'PORT="${PORT:-8787}"' in text
+    assert 'GATEWAY_URL_OVERRIDE="${LOBSTER_WAKU_GATEWAY_URL:-}"' in text
     assert 'STATE_DIR="${STATE_DIR:-$ROOT_DIR/.lobster-chat-dev/gateway}"' in text
-    assert 'GATEWAY_URL="${LOBSTER_WAKU_GATEWAY_URL:-http://$HOST:$PORT}"' in text
+    assert 'GATEWAY_URL="${GATEWAY_URL_OVERRIDE:-http://$HOST:$PORT}"' in text
     assert 'SKIP_BUILD="${SKIP_BUILD:-0}"' in text
     assert 'GATEWAY_BIN="${GATEWAY_BIN:-$ROOT_DIR/target/debug/lobster-waku-gateway}"' in text
     assert 'TUI_BIN="${TUI_BIN:-$ROOT_DIR/target/debug/lobster-tui}"' in text
@@ -26,6 +27,8 @@ def main() -> int:
     assert 'LOG_FILE="$LOG_DIR/gateway-terminal.log"' in text
     assert "wait_for_health()" in text
     assert 'curl -fsS "$url"' in text
+    assert 'export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"' in text
+    assert 'export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"' in text
     assert text.index('if [[ "$SKIP_BUILD" != "1" ]]; then') < text.index("need_cmd cargo")
     assert 'need_cmd curl' in text
     assert 'if [[ ! -t 0 || ! -t 1 ]]; then' in text
@@ -34,6 +37,9 @@ def main() -> int:
     assert "无法进入交互式终端模式" in text
     assert 'mkdir -p "$LOG_DIR" "$(dirname "$STATE_DIR")"' in text
     assert 'if curl -fsS "$GATEWAY_URL/health" >/dev/null 2>&1; then' in text
+    assert 'if [[ -n "$GATEWAY_URL_OVERRIDE" ]]; then' in text
+    assert "configured Gateway 不可达" in text
+    assert text.index('if [[ -n "$GATEWAY_URL_OVERRIDE" ]]; then') < text.index('nohup "$GATEWAY_BIN" \\')
     assert 'cargo build -p lobster-waku-gateway' in text
     assert 'if [[ ! -x "$GATEWAY_BIN" ]]; then' in text
     assert 'echo "gateway binary not found: $GATEWAY_BIN" >&2' in text

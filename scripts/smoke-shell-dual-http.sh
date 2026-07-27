@@ -3,12 +3,16 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOST="${HOST:-127.0.0.1}"
-PORT="${PORT:-8807}"
+PORT="${PORT:-}"
 KEEP_STATE="${KEEP_STATE:-0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 GATEWAY_BIN="${GATEWAY_BIN:-$ROOT_DIR/target/debug/lobster-waku-gateway}"
 GATEWAY_PID=""
 EVENTS_BODY=""
+
+# This smoke starts a local Gateway; keep health and API probes off user proxies.
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"
+export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -96,6 +100,16 @@ PY
 need_cmd curl
 need_cmd python3
 
+reserve_port() {
+  python3 - <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+}
+
 if [[ "$SKIP_BUILD" != "1" ]]; then
   need_cmd cargo
   echo "== building lobster-waku-gateway =="
@@ -105,6 +119,10 @@ fi
 if [[ ! -x "$GATEWAY_BIN" ]]; then
   echo "gateway binary not found: $GATEWAY_BIN" >&2
   exit 1
+fi
+
+if [[ -z "$PORT" ]]; then
+  PORT="$(reserve_port)"
 fi
 
 STATE_ROOT="$(mktemp_dir)"
@@ -132,7 +150,8 @@ cleanup() {
 trap cleanup EXIT
 
 echo "== starting gateway on :$PORT =="
-"$GATEWAY_BIN" \
+# This fixture uses synthetic qa-* identities; keep the development bypass explicit.
+LOBSTER_DEV_AUTH_BYPASS=1 "$GATEWAY_BIN" \
   --host "$HOST" \
   --port "$PORT" \
   --state-dir "$STATE_ROOT/gateway" \

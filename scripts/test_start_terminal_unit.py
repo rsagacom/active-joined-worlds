@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import importlib.util
+import io
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -42,6 +44,63 @@ class SmokeDumpTests(unittest.TestCase):
         _, kwargs = run_mock.call_args
         self.assertEqual(kwargs["env"]["LOBSTER_TUI_SMOKE_DUMP"], "json")
         self.assertEqual(kwargs["env"]["LOBSTER_TUI_STATE_DIR"], "/tmp/lobster-state")
+
+
+class HealthProbeTests(unittest.TestCase):
+    def test_wait_for_health_bypasses_local_http_proxy(self):
+        target = load_target_module()
+        completed = mock.Mock(returncode=0)
+
+        with mock.patch.object(target.subprocess, "run", return_value=completed) as run_mock:
+            target.wait_for_health("http://127.0.0.1:8798")
+
+        _, kwargs = run_mock.call_args
+        self.assertIn("127.0.0.1", kwargs["env"]["NO_PROXY"])
+        self.assertIn("localhost", kwargs["env"]["NO_PROXY"])
+        self.assertIn("127.0.0.1", kwargs["env"]["no_proxy"])
+        self.assertIn("localhost", kwargs["env"]["no_proxy"])
+
+
+class CliScopedReadAuthTests(unittest.TestCase):
+    def test_cli_scoped_reads_forward_resident_session_token(self):
+        target = load_target_module()
+        target.SESSION_TOKENS = {"rsaga": "session-rsaga"}
+        completed = mock.Mock(stdout='{"messages":[]}')
+
+        with mock.patch.object(target.subprocess, "run", return_value=completed) as run_mock:
+            target.rooms_json("user:rsaga")
+            target.tail_json("user:rsaga", "room:world:lobby")
+
+        rooms_args = run_mock.call_args_list[0].args[0]
+        tail_args = run_mock.call_args_list[1].args[0]
+        self.assertIn("--token", rooms_args)
+        self.assertIn("session-rsaga", rooms_args)
+        self.assertIn("--token", tail_args)
+        self.assertIn("session-rsaga", tail_args)
+
+
+class SessionBootstrapTests(unittest.TestCase):
+    def test_issue_session_token_uses_local_no_proxy_opener(self):
+        target = load_target_module()
+        target.GATEWAY_URL = "http://127.0.0.1:8798"
+        target.LOCAL_HTTP_OPENER = mock.Mock()
+
+        def response(payload):
+            context = mock.MagicMock()
+            context.__enter__.return_value = io.BytesIO(
+                json.dumps(payload).encode("utf-8")
+            )
+            return context
+
+        target.LOCAL_HTTP_OPENER.open.side_effect = [
+            response({"challenge_id": "otp:test", "dev_code": "123456"}),
+            response({"session_token": "session-rsaga"}),
+        ]
+
+        token = target.issue_session_token("rsaga")
+
+        self.assertEqual(token, "session-rsaga")
+        self.assertEqual(target.LOCAL_HTTP_OPENER.open.call_count, 2)
 
 
 if __name__ == "__main__":

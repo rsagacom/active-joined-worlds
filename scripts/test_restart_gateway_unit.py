@@ -21,6 +21,8 @@ def main() -> int:
     assert 'if [[ ! -x "$BINARY" ]]' in text
     assert 'echo "gateway binary not found: $BINARY" >&2' in text
     assert text.index('if [[ ! -x "$BINARY" ]]') > text.index('fi\n\nif [[ ! -x "$BINARY" ]]')
+    assert 'export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"' in text
+    assert 'export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"' in text
     assert 'OLD_PID=$(lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true)' in text
     assert 'kill "$OLD_PID" 2>/dev/null || true' in text
     assert 'nohup "$BINARY" > "$LOG_FILE" 2>&1 &' in text

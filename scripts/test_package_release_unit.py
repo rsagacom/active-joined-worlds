@@ -14,6 +14,7 @@ def main() -> int:
     assert 'DIST_DIR="${DIST_DIR:-$ROOT_DIR/dist}"' in text
     assert 'SKIP_BUILD="${SKIP_BUILD:-0}"' in text
     assert 'HOST_TARGET_OVERRIDE="${HOST_TARGET_OVERRIDE:-}"' in text
+    assert 'GATEWAY_BINARY_PATH="${GATEWAY_BINARY_PATH:-$ROOT_DIR/target/release/lobster-waku-gateway}"' in text
     assert "need_cmd tar" in text
     assert 'if [[ -z "$HOST_TARGET_OVERRIDE" ]]; then' in text
     assert text.index('if [[ -z "$HOST_TARGET_OVERRIDE" ]]; then') < text.index("need_cmd rustc")
@@ -24,7 +25,7 @@ def main() -> int:
     assert 'mkdir -p "$DIST_DIR"' in text
     assert "host_target=\"$(rustc -vV | awk '/host:/ { print $2 }')\"" in text
     assert 'bin_name="lobster-waku-gateway-${host_target}"' in text
-    assert 'binary_path="$ROOT_DIR/target/release/lobster-waku-gateway"' in text
+    assert 'binary_path="$GATEWAY_BINARY_PATH"' in text
     assert 'cargo build --manifest-path "$ROOT_DIR/Cargo.toml" --release -p lobster-waku-gateway' in text
     assert '--exclude="$(basename "$ROOT_DIR")/.git"' in text
     assert '--exclude="$(basename "$ROOT_DIR")/.playwright-cli"' in text

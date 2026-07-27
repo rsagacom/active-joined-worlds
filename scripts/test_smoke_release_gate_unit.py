@@ -5,11 +5,14 @@ import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "scripts" / "smoke-release-gate.sh"
+CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 
 
 def main() -> int:
     assert SCRIPT.exists(), f"missing release gate script: {SCRIPT}"
     text = SCRIPT.read_text(encoding="utf-8")
+    assert CI_WORKFLOW.exists(), f"missing CI workflow: {CI_WORKFLOW}"
+    ci_text = CI_WORKFLOW.read_text(encoding="utf-8")
 
     assert "smoke-auth-registration.sh" in text
     assert "smoke-resident-mainline.sh" in text
@@ -45,15 +48,23 @@ def main() -> int:
     assert "run_shell_step()" in text
     assert 'run_step "preflight unit" python3 "$ROOT_DIR/scripts/test_preflight_unit.py"' in text
     assert 'run_step "scripts quick unit coverage" python3 "$ROOT_DIR/scripts/test_scripts_quick_unit_coverage.py"' in text
+    assert 'run_step "smoke runtime contract unit" python3 "$ROOT_DIR/scripts/test_smoke_runtime_contract_unit.py"' in text
     assert text.index('run_step "scripts quick unit coverage"') < text.index('run_step "preflight unit"')
+    assert text.index('run_step "smoke runtime contract unit"') < text.index('run_step "preflight unit"')
     assert text.index('run_step "preflight unit"') < text.index('run_shell_step "preflight"')
     assert 'run_shell_step "preflight" "$ROOT_DIR/scripts/preflight.sh"' in text
     assert "need_cmd bash\nneed_cmd python3" in text
     assert text.index('if [[ "$SKIP_BUILD" != "1" ]]; then') < text.index("need_cmd cargo")
-    assert 'run_step \\\n    "rust fmt" \\\n    cargo fmt --manifest-path "$ROOT_DIR/Cargo.toml" --check' in text
+    assert 'run_step \\\n    "rust fmt" \\\n    cargo fmt --manifest-path "$ROOT_DIR/Cargo.toml" --all --check' in text
+    assert "cargo fmt --all -- --check" in ci_text
+    assert "cargo clippy --workspace -- -D warnings" in ci_text
+    assert 'export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"' in text
+    assert 'export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"' in text
     assert text.index("need_cmd cargo") < text.index('"rust fmt"')
+    assert '"rust workspace tests"' in text
     assert 'run_step \\\n    "rust lint" \\\n    cargo clippy --manifest-path "$ROOT_DIR/Cargo.toml" --workspace -- -D warnings' in text
-    assert text.index('"rust fmt"') < text.index('"rust lint"')
+    assert text.index('"rust workspace tests"') < text.index('"rust lint"')
+    assert text.index('"rust fmt"') < text.index('"rust workspace tests"')
     assert text.index('"rust lint"') < text.index('cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p lobster-waku-gateway -p lobster-cli -p lobster-tui')
     assert 'run_step "makefile smoke unit" python3 "$ROOT_DIR/scripts/test_makefile_unit.py"' in text
     assert 'run_shell_step "cli channel smoke" "$ROOT_DIR/scripts/smoke-cli-channel.sh"' in text
@@ -75,6 +86,9 @@ def main() -> int:
     assert 'run_shell_step "web shell smoke" "$ROOT_DIR/scripts/smoke-web-shell.sh"' in text
     assert 'run_step "web dual browser smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_web_dual_browser_unit.py"' in text
     assert text.index('run_step "web dual browser smoke unit"') < text.index('run_step "terminal smoke unit"')
+    assert 'run_step "web dual browser smoke" node "$ROOT_DIR/scripts/smoke-web-dual-browser.mjs"' in text
+    assert text.index('run_step "web dual browser smoke unit"') < text.index('run_step "web dual browser smoke"')
+    assert text.index('run_step "web dual browser smoke"') < text.index('run_step "terminal smoke unit"')
     assert 'run_step "terminal smoke unit" python3 "$ROOT_DIR/scripts/test_start_terminal_unit.py"' in text
     assert text.index('run_step "terminal smoke unit"') < text.index('run_step "terminal smoke"')
     assert 'run_step "start terminal shell unit" python3 "$ROOT_DIR/scripts/test_start_terminal_shell_unit.py"' in text
@@ -109,6 +123,12 @@ def main() -> int:
     assert 'export GATEWAY_BIN="' in text
     assert 'export CLI_BIN="' in text
     assert 'export TUI_BIN="' in text
+    assert 'gateway_bin_default="$ROOT_DIR/target/debug/lobster-waku-gateway"' in text
+    assert '${BIN_PATH:-' not in text, "release gate must not inherit provider-only BIN_PATH"
+    assert 'export BIN_PATH=' not in text, "release gate must not leak provider-only BIN_PATH"
+    assert text.index('export SKIP_BUILD=1') < text.index('run_step "makefile smoke unit"')
+    assert "cargo build --quiet -p lobster-waku-gateway" in ci_text
+    assert "node scripts/smoke-web-dual-browser.mjs" in ci_text
     return 0
 
 

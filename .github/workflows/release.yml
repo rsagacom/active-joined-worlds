@@ -1,0 +1,89 @@
+name: lobster-chat-release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/lobster-web-shell
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/lobster-web-shell/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Rust format check
+        working-directory: .
+        run: cargo fmt --all -- --check
+
+      - name: Rust workspace tests
+        working-directory: .
+        run: cargo test --workspace --quiet
+
+      - name: Web shell tests
+        run: npm test
+
+  package-linux:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            machine: x86_64
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            machine: aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build release gateway
+        run: cargo build --release --target "${{ matrix.target }}" -p lobster-waku-gateway
+
+      - name: Package target-matched release artifacts
+        env:
+          DIST_DIR: ${{ runner.temp }}/lobster-dist
+          HOST_TARGET_OVERRIDE: ${{ matrix.target }}
+          GATEWAY_BINARY_PATH: ${{ github.workspace }}/target/${{ matrix.target }}/release/lobster-waku-gateway
+          SKIP_BUILD: "1"
+        run: scripts/package-release.sh
+
+      - name: Verify artifact names and checksums
+        run: |
+          test "$(uname -m)" = "${{ matrix.machine }}"
+          test "$(rustc -vV | awk '/host:/ { print $2 }')" = "${{ matrix.target }}"
+          test -f "$RUNNER_TEMP/lobster-dist/lobster-chat-source.tar.gz"
+          test -f "$RUNNER_TEMP/lobster-dist/lobster-web-shell.tar.gz"
+          test -f "$RUNNER_TEMP/lobster-dist/lobster-waku-gateway-${{ matrix.target }}.tar.gz"
+          tar -tzf "$RUNNER_TEMP/lobster-dist/lobster-waku-gateway-${{ matrix.target }}.tar.gz" | grep -qx lobster-waku-gateway
+          sha256sum "$RUNNER_TEMP"/lobster-dist/*.tar.gz | tee "$RUNNER_TEMP/lobster-dist/SHA256SUMS"
+
+      - name: Upload Linux release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: lobster-chat-release-${{ github.sha }}-${{ matrix.target }}
+          path: ${{ runner.temp }}/lobster-dist
+          if-no-files-found: error

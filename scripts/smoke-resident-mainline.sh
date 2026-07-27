@@ -3,13 +3,17 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOST="${HOST:-127.0.0.1}"
-PORT="${PORT:-8800}"
+PORT="${PORT:-}"
 KEEP_STATE="${KEEP_STATE:-0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 GATEWAY_BIN="${GATEWAY_BIN:-$ROOT_DIR/target/debug/lobster-waku-gateway}"
 CLI_BIN="${CLI_BIN:-$ROOT_DIR/target/debug/lobster-cli}"
 TUI_BIN="${TUI_BIN:-$ROOT_DIR/target/debug/lobster-tui}"
 GATEWAY_PID=""
+
+# This smoke starts a local Gateway; keep health and API probes off user proxies.
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"
+export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -41,6 +45,16 @@ wait_for_health() {
 need_cmd curl
 need_cmd python3
 
+reserve_port() {
+  python3 - <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+}
+
 if [[ "$SKIP_BUILD" != "1" ]]; then
   need_cmd cargo
   cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p lobster-waku-gateway -p lobster-cli -p lobster-tui >/dev/null
@@ -59,6 +73,10 @@ fi
 if [[ ! -x "$TUI_BIN" ]]; then
   echo "tui binary not found: $TUI_BIN" >&2
   exit 1
+fi
+
+if [[ -z "$PORT" ]]; then
+  PORT="$(reserve_port)"
 fi
 
 STATE_ROOT="$(mktemp_dir)"
@@ -84,7 +102,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-LOBSTER_DEV_EMAIL_OTP_INLINE=1 "$GATEWAY_BIN"   --host "$HOST"   --port "$PORT"   --state-dir "$STATE_ROOT/gateway"   >"$GATEWAY_LOG" 2>&1 &
+# This fixture probes an unregistered synthetic identity; keep the dev bypass explicit.
+LOBSTER_DEV_EMAIL_OTP_INLINE=1 LOBSTER_DEV_AUTH_BYPASS=1 "$GATEWAY_BIN"   --host "$HOST"   --port "$PORT"   --state-dir "$STATE_ROOT/gateway"   >"$GATEWAY_LOG" 2>&1 &
 GATEWAY_PID="$!"
 wait_for_health "$GATEWAY_URL/health"
 
@@ -122,7 +141,7 @@ PY2
 )"
 
 join_unregistered_body="$STATE_ROOT/join-unregistered.json"
-join_unregistered_status="$(curl -sS -o "$join_unregistered_body" -w '%{http_code}' -X POST "$GATEWAY_URL/v1/cities/join" -H 'content-type: application/json' -H "authorization: Bearer $session_token" -d '{"city":"core-harbor","resident_id":"guest-01"}')"
+join_unregistered_status="$(curl -sS -o "$join_unregistered_body" -w '%{http_code}' -X POST "$GATEWAY_URL/v1/cities/join" -H 'content-type: application/json' -d '{"city":"core-harbor","resident_id":"guest-01"}')"
 [[ "$join_unregistered_status" == "400" ]] || {
   echo "expected unregistered join to fail with 400" >&2
   cat "$join_unregistered_body" >&2 || true
@@ -142,6 +161,14 @@ assert payload['resident_id'] == 'novel-reader'
 assert payload['state'] == 'Active'
 PY2
 
+bootstrap_message="TUI_GATEWAY_BOOTSTRAP_SMOKE_来自正式 shell state"
+curl -fsS \
+  -X POST "$GATEWAY_URL/v1/shell/message" \
+  -H 'content-type: application/json' \
+  -H "authorization: Bearer $session_token" \
+  -d "{\"room_id\":\"$RESIDENCE_CONVERSATION_ID\",\"sender\":\"$RESIDENT_ID\",\"text\":\"$bootstrap_message\"}" \
+  >"$STATE_ROOT/bootstrap-message.json"
+
 residents_json="$(curl -fsS "$GATEWAY_URL/v1/residents")"
 JSON_PAYLOAD="$residents_json" python3 - <<'PY2'
 import json, os
@@ -150,7 +177,7 @@ record = next(item for item in payload if item['resident_id'] == 'novel-reader')
 assert 'core-harbor' in record['active_cities']
 PY2
 
-rooms_json="$($CLI_BIN rooms --for "user:$RESIDENT_ID" --gateway "$GATEWAY_URL" --json)"
+rooms_json="$($CLI_BIN rooms --for "user:$RESIDENT_ID" --token "$session_token" --gateway "$GATEWAY_URL" --json)"
 JSON_PAYLOAD="$rooms_json" python3 - <<'PY2'
 import json, os
 payload = json.loads(os.environ['JSON_PAYLOAD'])
@@ -160,6 +187,7 @@ assert 'dm:guide:novel-reader' in conversation_ids
 PY2
 
 direct_snapshot="$(
+  LOBSTER_SESSION_TOKEN="$session_token" \
   LOBSTER_WAKU_GATEWAY_URL="$GATEWAY_URL" \
   LOBSTER_TUI_STATE_DIR="$STATE_ROOT/tui-direct" \
   LOBSTER_TUI_RESIDENT_ID="$RESIDENT_ID" \
@@ -171,24 +199,34 @@ import json, os
 payload = json.loads(os.environ['JSON_PAYLOAD'])
 assert payload['surface_kind'] == 'ResidenceDirect'
 assert payload['active_conversation_id'] == 'dm:guide:novel-reader'
+assert payload['message_count'] >= 1
+assert 'TUI_GATEWAY_BOOTSTRAP_SMOKE' in payload['latest_message_hint']
 assert 'actions' in payload['visible_panels']
 PY2
 
-LOBSTER_WAKU_GATEWAY_URL="$GATEWAY_URL" \
-LOBSTER_TUI_STATE_DIR="$STATE_ROOT/tui-state" \
-LOBSTER_TUI_RESIDENT_ID="$RESIDENT_ID" \
-LOBSTER_TUI_SMOKE_DUMP=plain \
-LOBSTER_TUI_SMOKE_SCRIPT="$(printf '%s\n%s\n%s\n' "$JOIN_TEXT" "/dm $DM_PEER_ID" "$DM_TEXT")" \
-"$TUI_BIN" --mode user >/dev/null
+tui_script_output="$(
+  LOBSTER_SESSION_TOKEN="$session_token" \
+  LOBSTER_WAKU_GATEWAY_URL="$GATEWAY_URL" \
+  LOBSTER_TUI_STATE_DIR="$STATE_ROOT/tui-state" \
+  LOBSTER_TUI_RESIDENT_ID="$RESIDENT_ID" \
+  LOBSTER_TUI_SMOKE_DUMP=plain \
+  LOBSTER_TUI_SMOKE_SCRIPT="$(printf '%s\n%s\n%s\n%s\n' "$JOIN_TEXT" "/dm $DM_PEER_ID" "$DM_TEXT" "/search $DM_TEXT")" \
+  "$TUI_BIN" --mode user
+)"
+grep -F "搜索「${DM_TEXT}」命中" <<<"$tui_script_output" >/dev/null || {
+  echo "TUI scoped search smoke did not report a hit" >&2
+  printf '%s\n' "$tui_script_output" >&2
+  exit 1
+}
 
-tail_json="$($CLI_BIN tail --for "user:$RESIDENT_ID" --conversation-id room:city:core-harbor:lobby --gateway "$GATEWAY_URL" --json)"
+tail_json="$($CLI_BIN tail --for "user:$RESIDENT_ID" --conversation-id room:city:core-harbor:lobby --token "$session_token" --gateway "$GATEWAY_URL" --json)"
 JSON_PAYLOAD="$tail_json" python3 - <<'PY2'
 import json, os
 payload = json.loads(os.environ['JSON_PAYLOAD'])
 assert any(item['text'] == 'USER_RESIDENT_MAINLINE_SMOKE_首条消息' for item in payload['messages'])
 PY2
 
-dm_tail_json="$($CLI_BIN tail --for "user:$RESIDENT_ID" --conversation-id "$DM_CONVERSATION_ID" --gateway "$GATEWAY_URL" --json)"
+dm_tail_json="$($CLI_BIN tail --for "user:$RESIDENT_ID" --conversation-id "$DM_CONVERSATION_ID" --token "$session_token" --gateway "$GATEWAY_URL" --json)"
 JSON_PAYLOAD="$dm_tail_json" python3 - <<'PY2'
 import json, os
 payload = json.loads(os.environ['JSON_PAYLOAD'])

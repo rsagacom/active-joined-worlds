@@ -5,8 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN_PATH="${BIN_PATH:-$ROOT_DIR/target/release/lobster-waku-gateway}"
 GATEWAY_ARTIFACT="${GATEWAY_ARTIFACT:-}"
 HOST="${HOST:-127.0.0.1}"
-UPSTREAM_PORT="${UPSTREAM_PORT:-18787}"
-DOWNSTREAM_PORT="${DOWNSTREAM_PORT:-18788}"
+UPSTREAM_PORT="${UPSTREAM_PORT:-}"
+DOWNSTREAM_PORT="${DOWNSTREAM_PORT:-}"
 KEEP_STATE="${KEEP_STATE:-0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 
@@ -42,6 +42,22 @@ need_cmd curl
 need_cmd grep
 need_cmd mktemp
 need_cmd tar
+need_cmd python3
+
+# Both gateways are local processes; never route their health/state probes through
+# a user-configured HTTP proxy when this smoke is run directly.
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"
+export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"
+
+reserve_port() {
+  python3 - <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+}
 
 if [[ -n "$GATEWAY_ARTIFACT" ]]; then
   if [[ ! -f "$GATEWAY_ARTIFACT" ]]; then
@@ -72,6 +88,20 @@ if [[ ! -x "$BIN_PATH" ]]; then
   exit 1
 fi
 
+if [[ -z "$UPSTREAM_PORT" ]]; then
+  UPSTREAM_PORT="$(reserve_port)"
+fi
+if [[ -z "$DOWNSTREAM_PORT" ]]; then
+  while :; do
+    DOWNSTREAM_PORT="$(reserve_port)"
+    [[ "$DOWNSTREAM_PORT" != "$UPSTREAM_PORT" ]] && break
+  done
+fi
+if [[ "$UPSTREAM_PORT" == "$DOWNSTREAM_PORT" ]]; then
+  echo "upstream and downstream ports must differ: $UPSTREAM_PORT" >&2
+  exit 1
+fi
+
 STATE_ROOT="$(mktemp_dir)"
 UPSTREAM_LOG="$STATE_ROOT/upstream.log"
 DOWNSTREAM_LOG="$STATE_ROOT/downstream.log"
@@ -99,7 +129,8 @@ cleanup() {
 trap cleanup EXIT
 
 echo "== starting upstream gateway on :$UPSTREAM_PORT =="
-"$BIN_PATH" \
+# This fixture uses synthetic smoke-bot identities; keep the dev bypass explicit.
+LOBSTER_DEV_AUTH_BYPASS=1 "$BIN_PATH" \
   --host "$HOST" \
   --port "$UPSTREAM_PORT" \
   --state-dir "$STATE_ROOT/upstream" \
@@ -107,7 +138,7 @@ echo "== starting upstream gateway on :$UPSTREAM_PORT =="
 UPSTREAM_PID="$!"
 
 echo "== starting downstream gateway on :$DOWNSTREAM_PORT bridged to upstream =="
-"$BIN_PATH" \
+LOBSTER_DEV_AUTH_BYPASS=1 "$BIN_PATH" \
   --host "$HOST" \
   --port "$DOWNSTREAM_PORT" \
   --state-dir "$STATE_ROOT/downstream" \

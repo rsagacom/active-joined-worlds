@@ -12,6 +12,7 @@ SCRIPT_UNIT_MAP = {
     "install-server.sh": "test_install_server_unit.py",
     "lobster-device-id.sh": "test_lobster_device_id_unit.py",
     "package-release.sh": "test_package_release_unit.py",
+    "production-readiness.sh": "test_production_readiness_unit.py",
     "preflight.sh": "test_preflight_unit.py",
     "preview-server.mjs": "test_preview_server_unit.py",
     "restart-gateway.sh": "test_restart_gateway_unit.py",
@@ -47,6 +48,7 @@ def main() -> int:
     release_gate_text = RELEASE_GATE.read_text(encoding="utf-8")
     release_gate_units = {
         "test_scripts_quick_unit_coverage.py",
+        "test_smoke_runtime_contract_unit.py",
         "test_preflight_unit.py",
         "test_makefile_unit.py",
         "test_smoke_cli_channel_unit.py",
@@ -63,6 +65,8 @@ def main() -> int:
         "test_smoke_install_layout_unit.py",
         "test_smoke_public_ingress_unit.py",
         "test_package_release_unit.py",
+        "test_production_readiness_unit.py",
+        "test_release_workflow_unit.py",
         "test_restart_gateway_unit.py",
         "test_rust_production_panic_scan_unit.py",
         "test_start_web_preview_unit.py",

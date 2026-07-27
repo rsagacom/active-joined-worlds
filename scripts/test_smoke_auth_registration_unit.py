@@ -12,7 +12,7 @@ def main() -> int:
     text = SCRIPT.read_text(encoding="utf-8")
 
     assert "set -euo pipefail" in text
-    assert 'PORT="${PORT:-8799}"' in text
+    assert 'PORT="${PORT:-}"' in text
     assert 'KEEP_STATE="${KEEP_STATE:-0}"' in text
     assert 'SKIP_BUILD="${SKIP_BUILD:-0}"' in text
     assert 'GATEWAY_BIN="${GATEWAY_BIN:-$ROOT_DIR/target/debug/lobster-waku-gateway}"' in text
@@ -34,10 +34,14 @@ def main() -> int:
     assert 'payload["allowed"] is False' in text
     assert 'len(payload["blocked_reasons"]) == 3' in text
     assert "need_cmd curl\nneed_cmd python3" in text
+    assert 'export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"' in text
+    assert 'export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"' in text
+    assert "reserve_port()" in text
+    assert 'if [[ -z "$PORT" ]]; then' in text
     assert text.index('if [[ "$SKIP_BUILD" != "1" ]]; then') < text.index("need_cmd cargo")
     assert text.index("need_cmd cargo") < text.index('cargo build --manifest-path "$ROOT_DIR/Cargo.toml" -p lobster-waku-gateway')
     assert text.index('if [[ ! -x "$GATEWAY_BIN" ]]') > text.index('fi\n\nif [[ ! -x "$GATEWAY_BIN" ]]')
-    assert 'LOBSTER_DEV_EMAIL_OTP_INLINE=1 "$GATEWAY_BIN"' in text
+    assert 'LOBSTER_DEV_EMAIL_OTP_INLINE=1 LOBSTER_DEV_AUTH_BYPASS=1 "$GATEWAY_BIN"' in text
     assert '"$GATEWAY_URL/v1/auth/preflight"' in text
     assert '"$GATEWAY_URL/v1/auth/email-otp/request"' in text
     assert '"$GATEWAY_URL/v1/auth/email-otp/verify"' in text

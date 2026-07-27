@@ -8,6 +8,10 @@ ROOT="${PREVIEW_ROOT:-$ROOT_DIR/apps/lobster-web-shell}"
 PIDFILE="${PREVIEW_PIDFILE:-${TMPDIR:-/tmp}/lobster-web-preview-${PORT}.pid}"
 LOGFILE="${PREVIEW_LOGFILE:-${TMPDIR:-/tmp}/lobster-web-preview-${PORT}.log}"
 
+# The preview server is local; keep readiness probes off user-configured proxies.
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"
+export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"
+
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
     echo "missing command: $1" >&2

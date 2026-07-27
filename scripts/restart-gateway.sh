@@ -8,6 +8,10 @@ LOG_FILE="${GATEWAY_LOG:-/tmp/lobster-gateway-${PORT}.log}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 BINARY="${GATEWAY_BIN:-$PROJECT_DIR/target/debug/lobster-waku-gateway}"
 
+# The restarted Gateway is local; keep health/state probes off user proxies.
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"
+export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"
+
 need_cmd() {
     command -v "$1" >/dev/null 2>&1 || {
         echo "missing command: $1" >&2

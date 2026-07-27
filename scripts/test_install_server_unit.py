@@ -73,6 +73,7 @@ def main() -> int:
     assert 'cat > "$NGINX_SITE_PATH" <<EOF' in text
     assert 'listen $PUBLIC_PORT default_server;' in text
     assert 'proxy_pass http://$LISTEN_HOST:$LISTEN_PORT;' in text
+    assert 'proxy_set_header Authorization \\$http_authorization;' in text
     assert 'location = /health' in text
     assert 'proxy_method GET;' in text
     assert 'try_files \\$uri \\$uri/ /index.html;' in text

@@ -32,8 +32,14 @@ run_shell_step() {
 
 need_cmd bash
 need_cmd python3
+need_cmd node
+
+# Local smoke gateways must bypass any user-configured HTTP proxy.
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"
+export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"
 
 run_step "scripts quick unit coverage" python3 "$ROOT_DIR/scripts/test_scripts_quick_unit_coverage.py"
+run_step "smoke runtime contract unit" python3 "$ROOT_DIR/scripts/test_smoke_runtime_contract_unit.py"
 run_step "preflight unit" python3 "$ROOT_DIR/scripts/test_preflight_unit.py"
 
 if [[ "$RUN_PREFLIGHT" == "1" ]]; then
@@ -44,7 +50,10 @@ if [[ "$SKIP_BUILD" != "1" ]]; then
   need_cmd cargo
   run_step \
     "rust fmt" \
-    cargo fmt --manifest-path "$ROOT_DIR/Cargo.toml" --check
+    cargo fmt --manifest-path "$ROOT_DIR/Cargo.toml" --all --check
+  run_step \
+    "rust workspace tests" \
+    cargo test --manifest-path "$ROOT_DIR/Cargo.toml" --workspace --quiet
   run_step \
     "rust lint" \
     cargo clippy --manifest-path "$ROOT_DIR/Cargo.toml" --workspace -- -D warnings
@@ -56,9 +65,8 @@ fi
 export KEEP_STATE
 export SKIP_BUILD=1
 export LOBSTER_CHAT_ROOT="${LOBSTER_CHAT_ROOT:-$ROOT_DIR}"
-gateway_bin_default="${BIN_PATH:-$ROOT_DIR/target/debug/lobster-waku-gateway}"
+gateway_bin_default="$ROOT_DIR/target/debug/lobster-waku-gateway"
 export GATEWAY_BIN="${GATEWAY_BIN:-$gateway_bin_default}"
-export BIN_PATH="$GATEWAY_BIN"
 export CLI_BIN="${CLI_BIN:-$(dirname "$GATEWAY_BIN")/lobster-cli}"
 export TUI_BIN="${TUI_BIN:-$(dirname "$GATEWAY_BIN")/lobster-tui}"
 
@@ -76,6 +84,7 @@ run_shell_step "shell direct HTTP smoke" "$ROOT_DIR/scripts/smoke-shell-direct-h
 run_step "web shell smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_web_shell_unit.py"
 run_shell_step "web shell smoke" "$ROOT_DIR/scripts/smoke-web-shell.sh"
 run_step "web dual browser smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_web_dual_browser_unit.py"
+run_step "web dual browser smoke" node "$ROOT_DIR/scripts/smoke-web-dual-browser.mjs"
 run_step "terminal smoke unit" python3 "$ROOT_DIR/scripts/test_start_terminal_unit.py"
 run_step "start terminal shell unit" python3 "$ROOT_DIR/scripts/test_start_terminal_shell_unit.py"
 run_step "terminal smoke" python3 "$ROOT_DIR/scripts/test_start_terminal.py"
@@ -89,6 +98,8 @@ run_step "install server unit" python3 "$ROOT_DIR/scripts/test_install_server_un
 run_step "install layout smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_install_layout_unit.py"
 run_step "public ingress smoke unit" python3 "$ROOT_DIR/scripts/test_smoke_public_ingress_unit.py"
 run_step "package release unit" python3 "$ROOT_DIR/scripts/test_package_release_unit.py"
+run_step "release workflow unit" python3 "$ROOT_DIR/scripts/test_release_workflow_unit.py"
+run_step "production readiness unit" python3 "$ROOT_DIR/scripts/test_production_readiness_unit.py"
 run_step "restart gateway unit" python3 "$ROOT_DIR/scripts/test_restart_gateway_unit.py"
 run_step "rust production panic scan unit" python3 "$ROOT_DIR/scripts/test_rust_production_panic_scan_unit.py"
 run_step "rust production panic scan" python3 "$ROOT_DIR/scripts/rust-production-panic-scan.py"

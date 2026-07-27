@@ -58,8 +58,17 @@ jobs:
           bash -n scripts/smoke-public-ingress.sh
           bash -n scripts/audit-web-assets.sh
 
+      - name: Verify release workflow contract
+        run: python3 scripts/test_release_workflow_unit.py
+
       - name: Cargo check
         run: cargo check --workspace --quiet
+
+      - name: Rust format check
+        run: cargo fmt --all -- --check
+
+      - name: Rust clippy
+        run: cargo clippy --workspace -- -D warnings
 
       - name: Workspace tests
         run: cargo test --workspace --quiet
@@ -81,6 +90,14 @@ jobs:
 
       - name: Web shell smoke
         run: scripts/smoke-web-shell.sh
+
+      - name: Build gateway for web dual browser smoke
+        run: cargo build --quiet -p lobster-waku-gateway
+
+      - name: Web dual browser smoke
+        env:
+          SKIP_BUILD: "1"
+        run: node scripts/smoke-web-dual-browser.mjs
 
       - name: Terminal smoke
         run: python3 scripts/test_start_terminal.py

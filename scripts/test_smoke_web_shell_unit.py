@@ -15,7 +15,8 @@ def main() -> int:
     assert "set -euo pipefail" in text
     assert 'ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"' in text
     assert 'cd "$ROOT"' in text
-    assert "node --test --test-force-exit apps/lobster-web-shell/test/*.test.mjs" in text
+    assert "node --test apps/lobster-web-shell/test/*.test.mjs" in text
+    assert "--test-force-exit" not in text
     assert "npm test" not in text
     assert "apps/lobster-web-shell/generated" not in text
     return 0

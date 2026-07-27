@@ -29,6 +29,8 @@ def main() -> int:
     assert 'lsof -tiTCP:"$PORT" -sTCP:LISTEN' in text
     assert "wait_for_server()" in text
     assert 'curl -fsS "$url"' in text
+    assert 'export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"' in text
+    assert 'export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"' in text
     assert "reconcile_existing_preview()" in text
     assert 'echo "reusing preview pid=$pid port=$PORT url=http://$HOST:$PORT/"' in text
     assert 'echo "$listener" >"$PIDFILE"' in text

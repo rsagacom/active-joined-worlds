@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import threading
+import urllib.request
 
 
 def resolve_root() -> str:
@@ -47,6 +48,19 @@ USER_DM_COMMAND_TEXT = "USER_DM_COMMAND_探针消息"
 ADMIN_WORLD_COMMAND_TEXT = "ADMIN_WORLD_COMMAND_探针消息"
 ADMIN_GOVERNANCE_COMMAND_TEXT = "ADMIN_GOVERNANCE_COMMAND_探针消息"
 USE_DEFAULT_GATEWAY = object()
+SESSION_TOKENS: dict[str, str] = {}
+LOCAL_HTTP_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def local_probe_env() -> dict[str, str]:
+    env = os.environ.copy()
+    for key in ("NO_PROXY", "no_proxy"):
+        values = [value for value in env.get(key, "").split(",") if value]
+        for host in ("127.0.0.1", "localhost"):
+            if host not in values:
+                values.append(host)
+        env[key] = ",".join(values)
+    return env
 
 
 def fail(label: str, payload: str) -> None:
@@ -74,6 +88,7 @@ def wait_for_health(url: str) -> None:
             ["curl", "-fsS", f"{url}/health"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            env=local_probe_env(),
         )
         if probe.returncode == 0:
             return
@@ -183,6 +198,46 @@ def seed_direct_message() -> None:
     )
 
 
+def issue_session_token(resident_id: str) -> str:
+    payload = json.dumps(
+        {"email": f"terminal.{resident_id}@example.com", "resident_id": resident_id}
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        f"{GATEWAY_URL}/v1/auth/email-otp/request",
+        data=payload,
+        headers={"content-type": "application/json"},
+        method="POST",
+    )
+    with LOCAL_HTTP_OPENER.open(request, timeout=5.0) as response:
+        challenge = json.loads(response.read().decode("utf-8"))
+    verify_payload = json.dumps(
+        {
+            "challenge_id": challenge["challenge_id"],
+            "code": challenge["dev_code"],
+            "resident_id": resident_id,
+        }
+    ).encode("utf-8")
+    verify_request = urllib.request.Request(
+        f"{GATEWAY_URL}/v1/auth/email-otp/verify",
+        data=verify_payload,
+        headers={"content-type": "application/json"},
+        method="POST",
+    )
+    with LOCAL_HTTP_OPENER.open(verify_request, timeout=5.0) as response:
+        verified = json.loads(response.read().decode("utf-8"))
+    return verified["session_token"]
+
+
+def session_token_for_identity(identity: str) -> str:
+    prefix, _, resident_id = identity.partition(":")
+    if prefix != "user" or not resident_id:
+        raise ValueError(f"scoped CLI reads require a user identity: {identity}")
+    try:
+        return SESSION_TOKENS[resident_id]
+    except KeyError as exc:
+        raise RuntimeError(f"missing terminal smoke session for {identity}") from exc
+
+
 def rooms_json(identity: str) -> str:
     proc = subprocess.run(
         [
@@ -190,6 +245,8 @@ def rooms_json(identity: str) -> str:
             "rooms",
             "--for",
             identity,
+            "--token",
+            session_token_for_identity(identity),
             "--gateway",
             GATEWAY_URL,
             "--json",
@@ -212,6 +269,8 @@ def tail_json(identity: str, conversation_id: str) -> dict:
             identity,
             "--conversation-id",
             conversation_id,
+            "--token",
+            session_token_for_identity(identity),
             "--gateway",
             GATEWAY_URL,
             "--json",
@@ -383,6 +442,10 @@ class LiveTuiSession:
 
 
 def start_gateway(state_root: str) -> subprocess.Popen[str]:
+    env = os.environ.copy()
+    # This smoke uses synthetic agent/user identities; keep the dev bypass and inline OTP explicit.
+    env["LOBSTER_DEV_AUTH_BYPASS"] = "1"
+    env["LOBSTER_DEV_EMAIL_OTP_INLINE"] = "1"
     gateway_proc = subprocess.Popen(
         [
             GATEWAY_BIN,
@@ -394,6 +457,7 @@ def start_gateway(state_root: str) -> subprocess.Popen[str]:
             os.path.join(state_root, "gateway"),
         ],
         cwd=ROOT,
+        env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -429,6 +493,10 @@ def main() -> int:
     ensure_binaries()
     state_root = tempfile.mkdtemp(prefix="lobster-tui-smoke.")
     gateway_proc = start_gateway(state_root)
+    global SESSION_TOKENS
+    SESSION_TOKENS = {
+        resident_id: issue_session_token(resident_id) for resident_id in ("rsaga", "tiyan")
+    }
     try:
         world_state_dir = os.path.join(state_root, "tui-world")
         world_baseline = run_smoke_json("world", world_state_dir)

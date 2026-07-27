@@ -5,13 +5,18 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODE="${1:-user}"
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8787}"
+GATEWAY_URL_OVERRIDE="${LOBSTER_WAKU_GATEWAY_URL:-}"
 STATE_DIR="${STATE_DIR:-$ROOT_DIR/.lobster-chat-dev/gateway}"
-GATEWAY_URL="${LOBSTER_WAKU_GATEWAY_URL:-http://$HOST:$PORT}"
+GATEWAY_URL="${GATEWAY_URL_OVERRIDE:-http://$HOST:$PORT}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 GATEWAY_BIN="${GATEWAY_BIN:-$ROOT_DIR/target/debug/lobster-waku-gateway}"
 TUI_BIN="${TUI_BIN:-$ROOT_DIR/target/debug/lobster-tui}"
 LOG_DIR="${LOG_DIR:-$ROOT_DIR/.lobster-chat-dev/logs}"
 LOG_FILE="$LOG_DIR/gateway-terminal.log"
+
+# The default Gateway is local; keep health probes off user-configured proxies.
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"
+export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -53,7 +58,11 @@ mkdir -p "$LOG_DIR" "$(dirname "$STATE_DIR")"
 if curl -fsS "$GATEWAY_URL/health" >/dev/null 2>&1; then
   echo "== reusing gateway: $GATEWAY_URL =="
 else
-  echo "== starting gateway: $GATEWAY_URL =="
+  if [[ -n "$GATEWAY_URL_OVERRIDE" ]]; then
+    echo "configured Gateway 不可达: $GATEWAY_URL" >&2
+    exit 1
+  fi
+  echo "== starting gateway: http://$HOST:$PORT =="
   if [[ "$SKIP_BUILD" != "1" ]]; then
     cargo build -p lobster-waku-gateway
   fi

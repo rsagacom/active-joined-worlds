@@ -278,7 +278,7 @@ async function main() {
       String(gatewayPort),
       "--state-dir",
       path.join(stateRoot, "gateway"),
-    ]);
+    ], { env: { LOBSTER_DEV_AUTH_BYPASS: "1" } });
     await waitForHttp(`${gatewayUrl}/health`);
 
     web = spawnChecked("python3", [
@@ -296,17 +296,30 @@ async function main() {
     const context = await browser.newContext();
     const indexPage = await context.newPage();
     const creativePage = await context.newPage();
+    const browserDiagnostics = [];
+    let expectedBrowser503s = 0;
     for (const [label, page] of [["index", indexPage], ["creative", creativePage]]) {
       page.on("console", (message) => {
         if (message.type() === "error" || message.type() === "warning") {
-          console.error(`[${label} ${message.type()}] ${message.text()}`);
+          if (message.type() === "error" && message.text().includes("503") && expectedBrowser503s > 0) {
+            expectedBrowser503s -= 1;
+            console.error(`[${label} expected error] ${message.text()}`);
+            return;
+          }
+          const diagnostic = `[${label} ${message.type()}] ${message.text()}`;
+          browserDiagnostics.push(diagnostic);
+          console.error(diagnostic);
         }
       });
       page.on("pageerror", (error) => {
-        console.error(`[${label} pageerror] ${error.message}`);
+        const diagnostic = `[${label} pageerror] ${error.message}`;
+        browserDiagnostics.push(diagnostic);
+        console.error(diagnostic);
       });
       page.on("requestfailed", (request) => {
-        console.error(`[${label} requestfailed] ${request.url()} ${request.failure()?.errorText || ""}`);
+        const diagnostic = `[${label} requestfailed] ${request.url()} ${request.failure()?.errorText || ""}`;
+        browserDiagnostics.push(diagnostic);
+        console.error(diagnostic);
       });
       page.on("dialog", async (dialog) => {
         await dialog.accept();
@@ -318,8 +331,8 @@ async function main() {
     const textB = `BROWSER_DUAL_B_${stamp}`;
     const retryText = `BROWSER_DUAL_RETRY_${stamp}`;
 
-    await indexPage.goto(`${webUrl}/index.html?gateway=${encodeURIComponent(gatewayUrl)}&identity=qa-a`);
-    await creativePage.goto(`${webUrl}/creative.html?gateway=${encodeURIComponent(gatewayUrl)}&identity=qa-b`);
+    await indexPage.goto(`${webUrl}/index.html?gateway=${encodeURIComponent(gatewayUrl)}&identity=qa-a&qa=browser`);
+    await creativePage.goto(`${webUrl}/creative.html?gateway=${encodeURIComponent(gatewayUrl)}&identity=qa-b&qa=browser`);
     await selectPublicRoom(indexPage);
     await selectPublicRoom(creativePage);
 
@@ -338,12 +351,17 @@ async function main() {
     await expectMessageSide(creativePage, textB, "self");
     await expectMessageSide(indexPage, textB, "peer");
 
+    expectedBrowser503s = 1;
     await failNextMessagePost(indexPage);
     await submitComposer(indexPage, retryText);
     await expectFailedPendingMessage(indexPage, retryText);
     await clickPendingRetry(indexPage, retryText);
     await expectMessageSide(indexPage, retryText, "self");
     await expectMessageSide(creativePage, retryText, "peer");
+
+    if (browserDiagnostics.length > 0) {
+      throw new Error(`browser diagnostics: ${browserDiagnostics.join(" | ")}`);
+    }
 
     console.log("== web dual browser smoke passed ==");
     console.log(`gateway: ${gatewayUrl}`);

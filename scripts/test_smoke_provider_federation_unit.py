@@ -13,7 +13,14 @@ def main() -> int:
 
     assert 'GATEWAY_ARTIFACT="${GATEWAY_ARTIFACT:-}"' in text
     assert 'SKIP_BUILD="${SKIP_BUILD:-0}"' in text
-    assert 'need_cmd curl\nneed_cmd grep\nneed_cmd mktemp\nneed_cmd tar' in text
+    assert 'UPSTREAM_PORT="${UPSTREAM_PORT:-}"' in text
+    assert 'DOWNSTREAM_PORT="${DOWNSTREAM_PORT:-}"' in text
+    assert 'reserve_port() {' in text
+    assert 'need_cmd curl\nneed_cmd grep\nneed_cmd mktemp\nneed_cmd tar\nneed_cmd python3' in text
+    assert 'export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"' in text
+    assert 'export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"' in text
+    assert 'if [[ -z "$UPSTREAM_PORT" ]]; then' in text
+    assert 'if [[ -z "$DOWNSTREAM_PORT" ]]; then' in text
     assert text.index('if [[ "$SKIP_BUILD" != "1" && -z "$GATEWAY_ARTIFACT" ]]; then') < text.index("need_cmd cargo")
     assert text.index("need_cmd cargo") < text.index('cargo build --manifest-path "$ROOT_DIR/Cargo.toml" --release -p lobster-waku-gateway')
     assert 'tar -xzf "$GATEWAY_ARTIFACT" -C "$EXTRACT_DIR"' in text
@@ -21,6 +28,9 @@ def main() -> int:
     assert text.index('if [[ ! -x "$BIN_PATH" ]]') < text.index('STATE_ROOT="$(mktemp_dir)"')
     assert 'cargo build --manifest-path "$ROOT_DIR/Cargo.toml" --release -p lobster-waku-gateway' in text
     assert '"$BIN_PATH" \\' in text
+    assert text.count('LOBSTER_DEV_AUTH_BYPASS=1 "$BIN_PATH"') == 2, (
+        "provider federation fixture must explicitly enable dev auth bypass for both synthetic gateways"
+    )
     assert '--upstream-gateway-url "http://$HOST:$UPSTREAM_PORT"' in text
     assert 'wait_for_health "upstream" "http://$HOST:$UPSTREAM_PORT/health"' in text
     assert 'wait_for_health "downstream" "http://$HOST:$DOWNSTREAM_PORT/health"' in text

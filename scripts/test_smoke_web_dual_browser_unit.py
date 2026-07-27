@@ -48,10 +48,19 @@ def main() -> int:
     assert text.index("await assertExecutable(GATEWAY_BIN, \"gateway\");") < text.index('const stateRoot = await mkdtemp(path.join(os.tmpdir(), "lobster-web-dual-browser."));')
     assert 'const stateRoot = await mkdtemp(path.join(os.tmpdir(), "lobster-web-dual-browser."));' in text
     assert 'gateway = spawnChecked(GATEWAY_BIN, [' in text
+    assert 'env: { LOBSTER_DEV_AUTH_BYPASS: "1" }' in text
     assert 'web = spawnChecked("python3", [' in text
     assert 'browser = await chromium.launch({ headless: true });' in text
-    assert 'await indexPage.goto(`${webUrl}/index.html?gateway=${encodeURIComponent(gatewayUrl)}&identity=qa-a`);' in text
-    assert 'await creativePage.goto(`${webUrl}/creative.html?gateway=${encodeURIComponent(gatewayUrl)}&identity=qa-b`);' in text
+    assert 'const browserDiagnostics = [];' in text
+    assert 'let expectedBrowser503s = 0;' in text
+    assert 'expectedBrowser503s > 0' in text
+    assert 'expectedBrowser503s -= 1;' in text
+    assert 'expectedBrowser503s = 1;' in text
+    assert 'browserDiagnostics.push' in text
+    assert 'if (browserDiagnostics.length > 0)' in text
+    assert 'throw new Error(`browser diagnostics: ${browserDiagnostics.join(" | ")}`);' in text
+    assert 'await indexPage.goto(`${webUrl}/index.html?gateway=${encodeURIComponent(gatewayUrl)}&identity=qa-a&qa=browser`);' in text
+    assert 'await creativePage.goto(`${webUrl}/creative.html?gateway=${encodeURIComponent(gatewayUrl)}&identity=qa-b&qa=browser`);' in text
     assert 'await clickMessageAction(indexPage, textA, "self", "edit");' in text
     assert 'await clickMessageAction(indexPage, editedTextA, "self", "recall");' in text
     assert "await failNextMessagePost(indexPage);" in text

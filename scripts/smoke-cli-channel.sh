@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HOST="${HOST:-127.0.0.1}"
-PORT="${PORT:-8796}"
+PORT="${PORT:-}"
 KEEP_STATE="${KEEP_STATE:-0}"
 SKIP_BUILD="${SKIP_BUILD:-0}"
 MESSAGE_TEXT="${MESSAGE_TEXT:-晚上一起吃饭吗}"
@@ -12,6 +12,10 @@ FOLLOW_RESTART_TEXT="${FOLLOW_RESTART_TEXT:-FOLLOW_RESTART_SMOKE_探针消息}"
 GATEWAY_BIN="${GATEWAY_BIN:-$ROOT_DIR/target/debug/lobster-waku-gateway}"
 CLI_BIN="${CLI_BIN:-$ROOT_DIR/target/debug/lobster-cli}"
 FOLLOW_PID=""
+
+# This smoke starts a local Gateway; keep health and API probes off user proxies.
+export NO_PROXY="${NO_PROXY:+$NO_PROXY,}127.0.0.1,localhost"
+export no_proxy="${no_proxy:+$no_proxy,}127.0.0.1,localhost"
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -48,6 +52,15 @@ elif mode == "tail":
     assert payload["identity"] == expected
     assert payload["conversation_id"] == "dm:openclaw:zhangsan"
     assert payload["messages"]
+elif mode == "search":
+    assert isinstance(payload, list)
+    assert any(item["text"] == expected for item in payload)
+elif mode in {"read", "presence"}:
+    assert payload["ok"] is True
+elif mode == "config":
+    assert isinstance(payload, dict)
+elif mode in {"admin-residents", "admin-rooms"}:
+    assert isinstance(payload, list)
 elif mode == "edit":
     assert payload["edit_status"] == "edited"
     assert payload["message_id"] == expected
@@ -83,7 +96,8 @@ wait_for_health() {
 
 start_gateway() {
   echo "== starting gateway on :$PORT =="
-  "$GATEWAY_BIN" \
+  # This fixture uses synthetic agent identities; keep the development bypass and inline OTP explicit.
+  LOBSTER_DEV_EMAIL_OTP_INLINE=1 LOBSTER_DEV_AUTH_BYPASS=1 "$GATEWAY_BIN" \
     --host "$HOST" \
     --port "$PORT" \
     --state-dir "$STATE_ROOT/gateway" \
@@ -144,6 +158,16 @@ need_cmd grep
 need_cmd mktemp
 need_cmd python3
 
+reserve_port() {
+  python3 - <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+}
+
 if [[ "$SKIP_BUILD" != "1" ]]; then
   need_cmd cargo
   echo "== building lobster-waku-gateway + lobster-cli =="
@@ -158,6 +182,10 @@ fi
 if [[ ! -x "$CLI_BIN" ]]; then
   echo "cli binary not found: $CLI_BIN" >&2
   exit 1
+fi
+
+if [[ -z "$PORT" ]]; then
+  PORT="$(reserve_port)"
 fi
 
 STATE_ROOT="$(mktemp_dir)"
@@ -184,6 +212,46 @@ trap cleanup EXIT
 start_gateway
 GATEWAY_URL="http://$HOST:$PORT"
 
+echo "== issuing CLI smoke session =="
+cli_otp_request="$(
+  curl -fsS \
+    -X POST "$GATEWAY_URL/v1/auth/email-otp/request" \
+    -H 'content-type: application/json' \
+    -d '{"email":"cli.smoke@example.com","resident_id":"zhangsan"}'
+)"
+cli_challenge_id="$(JSON_PAYLOAD="$cli_otp_request" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["JSON_PAYLOAD"])
+assert payload["delivery_mode"] == "inline-dev"
+print(payload["challenge_id"])
+PY
+)"
+cli_dev_code="$(JSON_PAYLOAD="$cli_otp_request" python3 - <<'PY'
+import json
+import os
+
+print(json.loads(os.environ["JSON_PAYLOAD"])["dev_code"])
+PY
+)"
+cli_otp_verify="$(
+  curl -fsS \
+    -X POST "$GATEWAY_URL/v1/auth/email-otp/verify" \
+    -H 'content-type: application/json' \
+    -d "{\"challenge_id\":\"$cli_challenge_id\",\"code\":\"$cli_dev_code\",\"resident_id\":\"zhangsan\"}"
+)"
+CLI_SESSION_TOKEN="$(JSON_PAYLOAD="$cli_otp_verify" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ["JSON_PAYLOAD"])
+assert payload["resident_id"] == "zhangsan"
+print(payload["session_token"])
+PY
+)"
+export CLI_SESSION_TOKEN
+
 echo "== sending direct message =="
 send_output="$("$CLI_BIN" send \
   --from agent:openclaw \
@@ -197,7 +265,7 @@ printf '%s' "$send_output" | grep -F "已投递到 dm:openclaw:zhangsan" >/dev/n
 }
 
 echo "== checking inbox =="
-inbox_output="$("$CLI_BIN" inbox --for user:zhangsan --gateway "$GATEWAY_URL")"
+inbox_output="$("$CLI_BIN" inbox --for user:zhangsan --token "$CLI_SESSION_TOKEN" --gateway "$GATEWAY_URL")"
 printf '%s\n' "$inbox_output"
 printf '%s' "$inbox_output" | grep -F "收件箱 user:zhangsan" >/dev/null || {
   echo "inbox header missing" >&2
@@ -209,7 +277,7 @@ printf '%s' "$inbox_output" | grep -F "$MESSAGE_TEXT" >/dev/null || {
 }
 
 echo "== checking rooms =="
-rooms_output="$("$CLI_BIN" rooms --for user:zhangsan --gateway "$GATEWAY_URL")"
+rooms_output="$("$CLI_BIN" rooms --for user:zhangsan --token "$CLI_SESSION_TOKEN" --gateway "$GATEWAY_URL")"
 printf '%s\n' "$rooms_output"
 printf '%s' "$rooms_output" | grep -F "会话列表 user:zhangsan" >/dev/null || {
   echo "rooms header missing" >&2
@@ -222,7 +290,7 @@ printf '%s' "$rooms_output" | grep -F "正在与 openclaw 聊天" >/dev/null || 
 }
 
 echo "== checking tail =="
-tail_output="$("$CLI_BIN" tail --for user:zhangsan --gateway "$GATEWAY_URL")"
+tail_output="$("$CLI_BIN" tail --for user:zhangsan --token "$CLI_SESSION_TOKEN" --gateway "$GATEWAY_URL")"
 printf '%s\n' "$tail_output"
 printf '%s' "$tail_output" | grep -F "消息流 dm:openclaw:zhangsan" >/dev/null || {
   echo "tail header missing" >&2
@@ -232,6 +300,40 @@ printf '%s' "$tail_output" | grep -F "$MESSAGE_TEXT" >/dev/null || {
   echo "tail did not include sent message" >&2
   exit 1
 }
+
+echo "== checking presence/read =="
+presence_json="$("$CLI_BIN" presence --for user:zhangsan --token "$CLI_SESSION_TOKEN" --gateway "$GATEWAY_URL" --json)"
+printf '%s\n' "$presence_json"
+json_check "$presence_json" "presence" "user:zhangsan"
+
+read_json="$("$CLI_BIN" read --for user:zhangsan --conversation-id dm:openclaw:zhangsan --token "$CLI_SESSION_TOKEN" --gateway "$GATEWAY_URL" --json)"
+printf '%s\n' "$read_json"
+json_check "$read_json" "read" "user:zhangsan"
+
+echo "== checking scoped search =="
+search_output="$("$CLI_BIN" search "$MESSAGE_TEXT" --for user:zhangsan --token "$CLI_SESSION_TOKEN" --gateway "$GATEWAY_URL")"
+printf '%s\n' "$search_output"
+printf '%s' "$search_output" | grep -F "搜索「${MESSAGE_TEXT}」命中" >/dev/null || {
+  echo "scoped search header missing" >&2
+  exit 1
+}
+printf '%s' "$search_output" | grep -F "$MESSAGE_TEXT" >/dev/null || {
+  echo "scoped search did not include sent message" >&2
+  exit 1
+}
+
+echo "== checking admin reads =="
+admin_config_json="$("$CLI_BIN" config --get --token "$CLI_SESSION_TOKEN" --gateway "$GATEWAY_URL" --json)"
+printf '%s\n' "$admin_config_json"
+json_check "$admin_config_json" "config" ""
+
+admin_residents_json="$("$CLI_BIN" residents --for user:zhangsan --token "$CLI_SESSION_TOKEN" --gateway "$GATEWAY_URL" --json)"
+printf '%s\n' "$admin_residents_json"
+json_check "$admin_residents_json" "admin-residents" ""
+
+admin_rooms_json="$("$CLI_BIN" rooms-admin --for user:zhangsan --token "$CLI_SESSION_TOKEN" --gateway "$GATEWAY_URL" --json)"
+printf '%s\n' "$admin_rooms_json"
+json_check "$admin_rooms_json" "admin-rooms" ""
 
 echo "== checking json mode =="
 send_json="$("$CLI_BIN" send \
@@ -243,17 +345,21 @@ send_json="$("$CLI_BIN" send \
 printf '%s\n' "$send_json"
 json_check "$send_json" "send" "dm:lisi:openclaw"
 
-inbox_json="$("$CLI_BIN" inbox --for user:zhangsan --gateway "$GATEWAY_URL" --json)"
+inbox_json="$("$CLI_BIN" inbox --for user:zhangsan --token "$CLI_SESSION_TOKEN" --gateway "$GATEWAY_URL" --json)"
 printf '%s\n' "$inbox_json"
 json_check "$inbox_json" "inbox" "user:zhangsan"
 
-rooms_json="$("$CLI_BIN" rooms --for user:zhangsan --gateway "$GATEWAY_URL" --json)"
+rooms_json="$("$CLI_BIN" rooms --for user:zhangsan --token "$CLI_SESSION_TOKEN" --gateway "$GATEWAY_URL" --json)"
 printf '%s\n' "$rooms_json"
 json_check "$rooms_json" "rooms" "user:zhangsan"
 
-tail_json="$("$CLI_BIN" tail --for user:zhangsan --gateway "$GATEWAY_URL" --json)"
+tail_json="$("$CLI_BIN" tail --for user:zhangsan --token "$CLI_SESSION_TOKEN" --gateway "$GATEWAY_URL" --json)"
 printf '%s\n' "$tail_json"
 json_check "$tail_json" "tail" "user:zhangsan"
+
+search_json="$("$CLI_BIN" search "$MESSAGE_TEXT" --for user:zhangsan --token "$CLI_SESSION_TOKEN" --gateway "$GATEWAY_URL" --json)"
+printf '%s\n' "$search_json"
+json_check "$search_json" "search" "$MESSAGE_TEXT"
 
 echo "== checking edit/recall =="
 edit_seed_json="$("$CLI_BIN" send \
@@ -297,7 +403,7 @@ recall_json="$("$CLI_BIN" recall \
 printf '%s\n' "$recall_json"
 json_check "$recall_json" "recall" "$recall_message_id"
 
-edit_recall_tail_json="$("$CLI_BIN" tail --for user:zhangsan --gateway "$GATEWAY_URL" --json)"
+edit_recall_tail_json="$("$CLI_BIN" tail --for user:zhangsan --token "$CLI_SESSION_TOKEN" --gateway "$GATEWAY_URL" --json)"
 JSON_PAYLOAD="$edit_recall_tail_json" EDIT_MESSAGE_ID="$edit_message_id" RECALL_MESSAGE_ID="$recall_message_id" python3 - <<'PY'
 import json
 import os
@@ -319,6 +425,7 @@ FOLLOW_LOG="$STATE_ROOT/tail-follow.jsonl"
 "$CLI_BIN" tail \
   --for user:zhangsan \
   --conversation-id dm:openclaw:zhangsan \
+  --token "$CLI_SESSION_TOKEN" \
   --gateway "$GATEWAY_URL" \
   --json \
   --follow \
