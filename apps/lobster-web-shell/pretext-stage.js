@@ -1,4 +1,4 @@
-import { layoutWithLines, prepareWithSegments } from "./node_modules/@chenglou/pretext/dist/layout.js";
+import { layoutWithLines, prepareWithSegments } from "./vendor/pretext/layout.js";
 
 const REFERENCE_WIDTH = 800;
 const REFERENCE_TITLE_SIZE = 22;

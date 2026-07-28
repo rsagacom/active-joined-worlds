@@ -969,7 +969,8 @@ test("pretext stage module uses a browser-resolvable import path", async () => {
   const source = await readShellModule("pretext-stage.js");
 
   assert.doesNotMatch(source, /from "@chenglou\/pretext"/);
-  assert.match(source, /from "\.\/node_modules\/@chenglou\/pretext\/dist\/layout\.js"/);
+  assert.match(source, /from "\.\/vendor\/pretext\/layout\.js"/);
+  assert.doesNotMatch(source, /node_modules/, "production web dir has no node_modules; vendor path is required");
 });
 
 test("pixel scene backgrounds use web-optimized runtime assets", async () => {
