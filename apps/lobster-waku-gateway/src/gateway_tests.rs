@@ -2893,7 +2893,8 @@ fn email_otp_delivery_failure_rolls_back_challenge_and_rate_limit() {
     .unwrap_or_else(|_| panic!("runtime should be available"));
     assert_eq!(
         result.expect_err("delivery should fail"),
-        "mailer unavailable"
+        "email otp delivery failed",
+        "resident-facing error must be generic; delivery detail stays in server logs"
     );
 
     let retry = runtime

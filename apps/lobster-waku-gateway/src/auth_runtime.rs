@@ -393,11 +393,12 @@ impl GatewayRuntime {
         if let Some(delivery) = prepared.delivery.as_ref()
             && let Err(error) = deliver_email_otp_from_env(delivery)
         {
+            eprintln!("email otp delivery failed: {error}");
             self.rollback_email_otp_request(
                 &prepared.response.challenge_id,
                 &prepared.normalized_email,
             )?;
-            return Err(error);
+            return Err("email otp delivery failed".to_string());
         }
         Ok(prepared.response)
     }

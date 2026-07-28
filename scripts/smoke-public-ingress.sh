@@ -127,7 +127,7 @@ assert_status "401" "POST" "$BASE_URL/v1/auth/logout"
 if [[ -n "$EXPECT_CORS_ORIGIN" ]]; then
   echo "== CORS origin =="
   headers="$($CURL_BIN -fsS -D - -o /dev/null -H "Origin: ${EXPECT_CORS_ORIGIN}" "$BASE_URL/health")"
-  printf '%s\n' "$headers" | grep -F "Access-Control-Allow-Origin: ${EXPECT_CORS_ORIGIN}" >/dev/null || {
+  printf '%s\n' "$headers" | grep -Fi "Access-Control-Allow-Origin: ${EXPECT_CORS_ORIGIN}" >/dev/null || {
     echo "public CORS origin did not match: $EXPECT_CORS_ORIGIN" >&2
     exit 1
   }

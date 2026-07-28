@@ -68,6 +68,9 @@ pub(crate) fn request_email_otp_with_delivery(
     if let Some(delivery) = prepared.delivery.as_ref()
         && let Err(delivery_error) = deliver(delivery)
     {
+        // 投递失败细节(内部 mailer 地址、连接错误)只进服务端日志,
+        // 对居民端只暴露通用文案,避免泄露内部拓扑。
+        eprintln!("email otp delivery failed: {delivery_error}");
         let rollback = with_runtime(runtime, |runtime| {
             runtime.rollback_email_otp_request(
                 &prepared.response.challenge_id,
@@ -75,11 +78,10 @@ pub(crate) fn request_email_otp_with_delivery(
             )
         })?;
         if let Err(rollback_error) = rollback {
-            return Ok(Err(format!(
-                "{delivery_error}; otp rollback failed: {rollback_error}"
-            )));
+            eprintln!("email otp rollback failed: {rollback_error}");
+            return Ok(Err("email otp delivery failed".to_string()));
         }
-        return Ok(Err(delivery_error));
+        return Ok(Err("email otp delivery failed".to_string()));
     }
 
     Ok(Ok(prepared.response))

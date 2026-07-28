@@ -1,8 +1,22 @@
 # lobster-chat Active Work Queue
 
-Last updated: 2026-07-27
+Last updated: 2026-07-28
 
 > 说明：下方按日期排列的记录保留当时的交接背景；如与本页最新日期区块冲突，以最新区块和 `docs/DEPLOYMENT.md` 为准。
+
+## 2026-07-28 生产部署落地 chat.ajw.cn(AWS EC2 北京)
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| Git 收口 | 已完成 | 113 修改 + 54 未跟踪分 6 批提交;`refactor/appjs-techdebt-20260710` 推送 origin 并快进合并入 main(842f170→7b0218d);临时产物入 gitignore |
+| CI | 已转绿 | lobster-chat-ci 双 job 首次全绿:修新版 stable clippy×5、rustfmt、rust-smoke 补 Node/npm ci 与 Playwright chromium、根 package.json 显式声明 playwright@1.59.1;release.yml verify 补 chromium |
+| release 构建 | 已完成 | workflow_dispatch 构建 x86_64+aarch64 artifact,SHA256 校验一致 |
+| 生产部署 | 已完成 | EC2 北京(71.136.99.134):`install-server.sh` artifact 模式装 gateway(:8787)+web+nginx(:80);gateway.env(CORS=https://chat.ajw.cn,dev 开关全关,mailer loopback)+ systemd drop-in;`lobster-mailer` 文件与 unit 已装,待 RESEND_API_KEY 后 enable |
+| 公网入口 | 已完成 | cloudflared tunnel(2d0e230a)新增 chat.ajw.cn→localhost:80;CNAME 已建;`smoke-public-ingress.sh` 与 `production-readiness.sh CHECK_PUBLIC=1` 全过 |
+| 安全边界 | 已验证 | 无 Bearer 401、OTP 响应无 dev_code、CORS 单 origin、journal 无敏感日志;OTP 投递失败文案收口为通用 `email otp delivery failed`(细节只进服务端日志),mailer 未启用时认证失败关闭 |
+| 生产发现的脚本坑 | 已修复 | smoke-public-ingress CORS 断言改 `grep -Fi`(HTTP/2 小写头);env 中含空格/尖括号值必须加引号(DEPLOYMENT 示例已改) |
+| 待用户外部动作 | 阻塞中 | 注册 Resend、验证发信域名、提供 RESEND_API_KEY → 写入 /etc/lobster-chat/mailer.env 后 `systemctl enable --now lobster-mailer` |
+| 待生产验收 | 待做 | 真实邮箱注册链路(§7)、H5 双端 IM(§7)、admin-ds 运维演练、备份/恢复演练;Gateway 二进制需随本次提交重建 redeploy(当前线上为 7b0218d,OTP 文案收口在未发布提交中) |
 
 ## 2026-07-27 H5 会话摘要表面 DOM 职责下沉
 
