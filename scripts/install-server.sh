@@ -311,6 +311,13 @@ server {
     location / {
         try_files \$uri \$uri/ /index.html;
     }
+
+    # JS/CSS/HTML 禁用长缓存:源站发 no-cache,CDN(CF 默认遵循源站)
+    # 每次回源校验,避免热更新后边缘节点继续发旧模块导致功能不一致。
+    location ~* \.(?:js|mjs|css|html)\$ {
+        add_header Cache-Control "no-cache";
+        try_files \$uri \$uri/ /index.html;
+    }
 }
 EOF
 
