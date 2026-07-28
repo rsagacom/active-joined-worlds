@@ -50,6 +50,35 @@ test("resolveGatewayUrlCandidate keeps hub query-only and user pages opt-in", ()
     }),
     null,
   );
+  // https 公网部署与 Gateway 同源:hub 页无 query 时回退 origin;
+  // dev loopback bootstrap/remembered 地址在 https 下必须忽略
+  assert.equal(
+    resolveGatewayUrlCandidate({
+      shellPage: "hub",
+      protocol: "https:",
+      origin: "https://chat.ajw.cn",
+    }),
+    "https://chat.ajw.cn",
+  );
+  assert.equal(
+    resolveGatewayUrlCandidate({
+      shellPage: "creative",
+      bootstrapGatewayBaseUrl: "http://127.0.0.1:57399",
+      protocol: "https:",
+      origin: "https://chat.ajw.cn",
+    }),
+    "https://chat.ajw.cn",
+  );
+  assert.equal(
+    resolveGatewayUrlCandidate({
+      shellPage: "creative",
+      bootstrapGatewayBaseUrl: "http://127.0.0.1:57399",
+      rememberedGateway: "http://127.0.0.1:8787",
+      protocol: "https:",
+      origin: "https://chat.ajw.cn",
+    }),
+    "https://chat.ajw.cn",
+  );
   assert.equal(
     resolveGatewayUrlCandidate({
       shellPage: "creative",
