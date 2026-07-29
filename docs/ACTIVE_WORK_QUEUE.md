@@ -18,6 +18,18 @@ Last updated: 2026-07-28
 | 待用户外部动作 | 已完成 | Resend 已注册并取得 API Key;`lobster-mailer` 已 enable(active,health 200);发件人暂用 Resend 测试地址 onboarding@resend.dev,chat.ajw.cn 域名验证后切回 no-reply@chat.ajw.cn(需在 Resend Domains 添加并把 SPF/DKIM 记录配到 Cloudflare) |
 | 真实邮件 OTP | 已投递 | 2026-07-28 经公网向真实邮箱发起 OTP:dev_code=null、邮箱脱敏、delivery_mode=mailer-webhook;Resend 未验证域名只能发到账号注册邮箱(tym331@gmail.com);verify/logout 与双端 IM 验收待进行 |
 
+## 2026-07-28 生产 H5 三处真修复 + 双端 IM 验收 13/13
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 真实邮箱注册链路 | 验收通过 | 真实邮箱收件→verify(resident_id=tym331,Active)→session 可读 shell state→logout→旧 token 立即 401 |
+| pretext vendor 化 | 已修复上线 | pretext-stage.js 引用 ./node_modules/...,artifact 不含 node_modules,nginx 回退 index.html 致 app.js 模块图整体加载失败;改 vendor/pretext 随包分发,静态测试防回归 |
+| https 同源回退 | 已修复上线 | hub 页无 ?gateway= 时原返回 null;https 下回退 location.origin;打包带入的 dev loopback bootstrap 地址在 https 下忽略 |
+| 轮询鉴权 | 已修复上线 | loadGatewayState 未带 Bearer,/v1/shell/state 401 静默失败,界面永远停留静态 state.json;EventSource 401 自动回退轮询 |
+| CDN 缓存 | 已修复上线 | CF 边缘 max-age=14400 持旧模块致部署不一致;nginx 对 js/css/html 发 no-cache(源站+install-server.sh 模板),Purge Everything 后恢复 |
+| 双端 IM 验收 | **13/13 通过** | 双浏览器会话:登录态、双方向实时收发、失败气泡+重发无重复、搜索(带 token 200/无 token 401)、编辑/撤回 API 与界面反映、零 JS 错误;重启 Gateway 后消息可检索 |
+| 待办 | 待做 | admin-ds 运维演练、备份/恢复演练;Resend 域名验证后第二居民(rsaga@qq.com)注册补私聊双居民验收 |
+
 ## 2026-07-27 H5 会话摘要表面 DOM 职责下沉
 
 | 项目 | 状态 | 说明 |
