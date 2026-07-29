@@ -4230,7 +4230,11 @@ async function loadGatewayState() {
   if (!gatewayUrl) return false;
   try {
     const shellStateUrl = gatewayShellStateUrl();
-    const response = await fetch(shellStateUrl);
+    // /v1/shell/state 对居民视角要求 Bearer session(无 session 401);
+    // 与 postGatewayJson 一致携带 session token,否则轮询永远静默失败。
+    const response = await fetch(shellStateUrl, {
+      headers: gatewayJsonHeaders(getSessionToken()),
+    });
     if (!response.ok) return false;
     const payload = await response.json();
     return applyGatewayShellStatePayload(payload, { persist: true });
