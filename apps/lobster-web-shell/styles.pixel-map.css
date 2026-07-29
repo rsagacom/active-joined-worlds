@@ -3064,3 +3064,73 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-c
   border-color: #57c8c2 !important;
   color: #0b0908 !important;
 }
+
+/* ── P0 补齐:creative 页发送键/颜文字键深色化 + 移动端顶栏紧凑(creative 不加载 styles.scene.css) ── */
+body[data-shell-variant="creative-terminal"] .creative-composer #composer-send {
+  background: #22181c !important;
+  border: 1px solid #3a2f28 !important;
+  color: #9a8b7a !important;
+  border-radius: 8px !important;
+}
+
+body[data-shell-variant="creative-terminal"] .creative-composer #composer-send:not(:disabled) {
+  background: #57c8c2 !important;
+  border-color: #57c8c2 !important;
+  color: #0b0908 !important;
+}
+
+body[data-shell-variant="creative-terminal"] .composer-symbol-trigger,
+body[data-shell-variant="creative-terminal"] .creative-mention-trigger {
+  background: #22181c !important;
+  border: 1px solid #3a2f28 !important;
+  color: #9a8b7a !important;
+  border-radius: 8px !important;
+}
+
+@media (max-width: 720px) {
+  body[data-shell-page] .sfc-hud {
+    gap: 8px;
+    min-height: 44px;
+  }
+
+  body[data-shell-page] .sfc-hud .hud-left,
+  body[data-shell-page] .sfc-hud .hud-right {
+    gap: 6px;
+    min-width: 0;
+  }
+
+  body[data-shell-page] .sfc-hud .hud-kicker,
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .hub-hud-kicker {
+    display: none;
+  }
+
+  body[data-shell-page] .sfc-hud .hud-title,
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hud .hud-title {
+    font-size: 18px;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  body[data-shell-page] .sfc-hud .hud-pill,
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hud .hud-pill {
+    min-height: 28px;
+    padding: 3px 8px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  body[data-shell-page] .sfc-hud .hud-login-toggle {
+    min-height: 28px;
+    padding: 0 8px;
+    font-size: 12px;
+    letter-spacing: 0;
+    background: none;
+    border: 1px solid #3a2f28;
+    color: #9a8b7a;
+    white-space: nowrap;
+  }
+
+  body[data-shell-page] .sfc-hud .creative-hud-ownership-badge {
+    display: none;
+  }
+}
