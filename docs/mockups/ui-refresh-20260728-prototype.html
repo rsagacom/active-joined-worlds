@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>lobster-chat UI 优化原型 · 2026-07-28</title>
+<style>
+  :root {
+    --panel: #16100c;
+    --panel-88: rgba(22, 16, 12, 0.88);
+    --border: #2c2622;
+    --bubble-border: #3a2f28;
+    --text: #e8ded2;
+    --text-dim: #9a8b7a;
+    --accent: #57c8c2;
+    --danger: #c25b4e;
+    --gold-text: #d8b96a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0b0908;
+    color: var(--text);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    min-height: 100vh;
+  }
+
+  /* ===== 顶部形态切换 ===== */
+  .switcher {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; gap: 8px; justify-content: center; align-items: center;
+    padding: 10px; background: #0b0908; border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .switcher span { color: var(--text-dim); font-size: 12px; }
+  .switcher button {
+    background: var(--panel); color: var(--text-dim);
+    border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 14px; font-size: 13px; cursor: pointer;
+  }
+  .switcher button.active { color: var(--accent); border-color: var(--accent); }
+  .switcher .note { width: 100%; text-align: center; font-size: 11px; color: #6b5f52; }
+
+  /* ===== 设备框 ===== */
+  .stage { display: flex; justify-content: center; padding: 20px 8px 40px; }
+  .device {
+    position: relative;
+    width: 390px; height: 844px;
+    border: 2px solid var(--border); border-radius: 28px;
+    overflow: hidden; background: #000;
+    transition: width .3s, height .3s, border-radius .3s;
+  }
+  .device.wechat { width: 390px; height: 700px; border-radius: 28px; }
+  .device.desktop { width: min(1180px, 96vw); height: 760px; border-radius: 12px; }
+
+  /* 微信顶栏模拟 */
+  .wechat-bar {
+    display: none;
+    height: 44px; background: #ededed; color: #111;
+    align-items: center; justify-content: center; position: relative;
+    font-size: 14px; font-weight: 500;
+  }
+  .device.wechat .wechat-bar { display: flex; }
+  .wechat-bar .capsule {
+    position: absolute; right: 10px; top: 7px;
+    border: 1px solid #d4d4d4; border-radius: 14px;
+    padding: 3px 10px; font-size: 12px; color: #333; background: #fff;
+  }
+  .wechat-bar::before {
+    content: "‹"; position: absolute; left: 14px; font-size: 20px; color: #111;
+  }
+
+  /* ===== 应用骨架 ===== */
+  .app { display: flex; flex-direction: column; height: 100%; }
+  .device.wechat .app { height: calc(100% - 44px); }
+  .app-body { flex: 1; display: flex; min-height: 0; }
+
+  /* 桌面左栏 */
+  .rail {
+    display: none;
+    width: 200px; flex-shrink: 0;
+    background: var(--panel); border-right: 1px solid var(--border);
+    padding: 10px 8px; flex-direction: column; gap: 4px;
+  }
+  .device.desktop .rail { display: flex; }
+  .rail .rail-item {
+    padding: 10px 12px; border-radius: 6px; font-size: 14px;
+    color: var(--text-dim); cursor: pointer; border-left: 2px solid transparent;
+  }
+  .rail .rail-item.active {
+    color: var(--text); background: #22181c; border-left-color: var(--accent);
+  }
+  .rail .rail-resident {
+    margin-top: 12px; padding: 10px 12px; border: 1px solid var(--border);
+    border-radius: 8px; font-size: 12px; color: var(--text-dim); line-height: 1.7;
+  }
+  .rail .rail-resident b { color: var(--text); font-size: 13px; }
+
+  /* 聊天主区 */
+  .chat { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+  .scene-bg {
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(rgba(11, 9, 8, 0.25), rgba(11, 9, 8, 0.45)),
+      url("https://chat.ajw.cn/assets/pixel/composed/hub-main-city-scene-v1-256.png") center / cover,
+      #1a1418;
+    image-rendering: pixelated;
+  }
+
+  /* 顶栏(单行 40px) */
+  .topbar {
+    position: relative; z-index: 2;
+    height: 40px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 10px;
+    background: var(--panel-88); border-bottom: 1px solid var(--border);
+    backdrop-filter: blur(4px);
+  }
+  .topbar .room-btn {
+    display: flex; align-items: center; gap: 6px;
+    background: none; border: none; color: var(--text);
+    font-size: 15px; font-weight: 600; cursor: pointer; padding: 6px 4px;
+  }
+  .topbar .room-btn small { color: var(--text-dim); font-weight: 400; font-size: 11px; }
+  .topbar .spacer { flex: 1; }
+  .topbar .status { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-dim); }
+  .topbar .status i {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 6px var(--accent);
+  }
+  .device.desktop .topbar .avatar-menu {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #2a3f3e; color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; cursor: pointer; border: 1px solid var(--bubble-border);
+  }
+
+  /* 消息流 */
+  .timeline {
+    position: relative; z-index: 1;
+    flex: 1; overflow-y: auto; overscroll-behavior: contain;
+    padding: 14px 12px 8px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .device.desktop .timeline { max-width: 720px; width: 100%; margin: 0 auto; }
+  .msg { display: flex; gap: 8px; max-width: 82%; }
+  .msg.self { align-self: flex-end; flex-direction: row-reverse; }
+  .msg .avatar {
+    width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0;
+    background: #2a3f3e; color: var(--accent);
+    font-size: 10px; display: flex; align-items: center; justify-content: center;
+    border: 1px solid var(--bubble-border); margin-top: 2px;
+  }
+  .msg.other .avatar { background: #3a2f28; color: var(--text-dim); }
+  .bubble {
+    background: var(--panel-88); border: 1px solid var(--bubble-border);
+    border-radius: 10px; padding: 8px 10px 6px;
+    font-size: 14px; line-height: 1.55; color: var(--text);
+    cursor: pointer; user-select: none;
+    backdrop-filter: blur(3px);
+    transition: border-color .15s;
+  }
+  .msg.self .bubble { border-color: rgba(87, 200, 194, 0.45); }
+  .bubble:active { border-color: var(--accent); }
+  .bubble .meta { font-size: 10px; color: var(--text-dim); margin-bottom: 3px; }
+  .bubble .meta b { color: var(--gold-text); font-weight: 500; margin-right: 6px; }
+  .msg.self .bubble .meta { text-align: right; }
+  .bubble .edited-tag { font-size: 10px; color: var(--text-dim); margin-left: 6px; }
+  .bubble.recalled { font-style: italic; color: var(--text-dim); background: rgba(22,16,12,.6); }
+  .system-line {
+    align-self: center; font-size: 11px; color: var(--text-dim);
+    background: var(--panel-88); border: 1px solid var(--border);
+    padding: 3px 12px; border-radius: 10px;
+  }
+
+  /* 输入区 */
+  .composer {
+    position: relative; z-index: 2; flex-shrink: 0;
+    display: flex; align-items: flex-end; gap: 8px;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+    background: var(--panel); border-top: 1px solid var(--border);
+  }
+  .composer .plus-btn, .composer .emoji-btn {
+    width: 36px; height: 36px; flex-shrink: 0;
+    border: 1px solid var(--bubble-border); border-radius: 8px;
+    background: #22181c; color: var(--text-dim); font-size: 17px; cursor: pointer;
+  }
+  .composer .plus-btn:active, .composer .emoji-btn:active { color: var(--accent); border-color: var(--accent); }
+  .composer textarea {
+    flex: 1; resize: none; border: 1px solid var(--bubble-border);
+    background: #22181c; color: var(--text);
+    border-radius: 8px; padding: 8px 10px; font-size: 16px; line-height: 1.4;
+    max-height: 96px; outline: none; font-family: inherit;
+  }
+  .composer textarea:focus { border-color: var(--accent); }
+  .composer .send-btn {
+    height: 36px; padding: 0 16px; flex-shrink: 0;
+    border: 1px solid var(--bubble-border); border-radius: 8px;
+    background: #22181c; color: var(--text-dim); font-size: 14px; cursor: pointer;
+  }
+  .composer .send-btn.ready { color: #0b0908; background: var(--accent); border-color: var(--accent); font-weight: 600; }
+
+  /* 底部 Tab(移动端) */
+  .tabbar {
+    display: flex; flex-shrink: 0;
+    background: var(--panel); border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .device.desktop .tabbar { display: none; }
+  .tabbar .tab {
+    flex: 1; padding: 7px 0 6px; text-align: center;
+    font-size: 10px; color: var(--text-dim); cursor: pointer;
+    border: none; background: none;
+  }
+  .tabbar .tab .ico { font-size: 17px; display: block; margin-bottom: 2px; }
+  .tabbar .tab.active { color: var(--accent); }
+
+  /* 长按动作面板 */
+  .action-sheet-mask {
+    position: absolute; inset: 0; z-index: 20;
+    background: rgba(0, 0, 0, 0.5);
+    display: none; align-items: flex-end;
+  }
+  .action-sheet-mask.show { display: flex; }
+  .action-sheet {
+    width: 100%; background: var(--panel);
+    border-top: 1px solid var(--border);
+    border-radius: 14px 14px 0 0;
+    padding: 8px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .action-sheet .quote {
+    font-size: 11px; color: var(--text-dim); padding: 8px 4px;
+    border-bottom: 1px solid var(--border);
+    overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  }
+  .action-sheet button {
+    display: block; width: 100%; text-align: left;
+    background: none; border: none; color: var(--text);
+    font-size: 15px; padding: 13px 4px; cursor: pointer;
+    border-bottom: 1px solid var(--border);
+  }
+  .action-sheet button.danger { color: var(--danger); }
+  .action-sheet button.cancel { color: var(--text-dim); border-bottom: none; text-align: center; }
+
+  .desktop-only-hint { display: none; }
+  .device.desktop .desktop-only-hint { display: block; }
+</style>
+</head>
+<body>
+  <div class="switcher">
+    <span>形态:</span>
+    <button data-mode="mobile" class="active">📱 手机浏览器 390×844</button>
+    <button data-mode="wechat">💬 微信内打开 390×700</button>
+    <button data-mode="desktop">🖥 桌面 1180×760</button>
+    <span class="note" id="mode-note">手机浏览器:视口完整,底 Tab + 安全区垫高</span>
+  </div>
+
+  <div class="stage">
+    <div class="device" id="device">
+      <!-- 微信顶栏模拟 -->
+      <div class="wechat-bar">龙虾聊天 <span class="capsule">··· ⊙</span></div>
+
+      <div class="app">
+        <div class="app-body">
+          <!-- 桌面左栏 -->
+          <nav class="rail">
+            <div class="rail-item">住宅</div>
+            <div class="rail-item active">主城</div>
+            <div class="rail-item">世界</div>
+            <div class="rail-item">🎨 场景</div>
+            <div class="rail-resident">
+              <b>tym331</b><br />居民 · 已加入 core-harbor<br />身份:居民
+            </div>
+          </nav>
+
+          <!-- 聊天主区 -->
+          <div class="chat">
+            <div class="scene-bg"></div>
+
+            <header class="topbar">
+              <button class="room-btn" onclick="alert('原型:打开房间列表抽屉')">世界广场 ▾ <small>room:world:lobby</small></button>
+              <div class="spacer"></div>
+              <span class="status"><i></i>在线</span>
+              <div class="avatar-menu desktop-only-hint" title="账号菜单">TY</div>
+            </header>
+
+            <div class="timeline" id="timeline">
+              <div class="system-line">system:world lobby online</div>
+            </div>
+
+            <div class="composer">
+              <button class="plus-btn" onclick="alert('原型:快捷动作面板(颜文字/场景/快指令)')">＋</button>
+              <textarea id="composer-input" rows="1" placeholder="说点什么…"></textarea>
+              <button class="emoji-btn" onclick="alert('原型:颜文字面板')">颜</button>
+              <button class="send-btn" id="send-btn">发送</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 移动端底 Tab -->
+        <nav class="tabbar">
+          <button class="tab"><span class="ico">🏠</span>住宅</button>
+          <button class="tab active"><span class="ico">🏙</span>主城</button>
+          <button class="tab"><span class="ico">🌐</span>世界</button>
+          <button class="tab"><span class="ico">👥</span>居民</button>
+          <button class="tab"><span class="ico">⚙️</span>我的</button>
+        </nav>
+      </div>
+
+      <!-- 长按动作面板 -->
+      <div class="action-sheet-mask" id="action-sheet">
+        <div class="action-sheet">
+          <div class="quote" id="action-quote"></div>
+          <button onclick="sheetAction('编辑')">✏️ 编辑</button>
+          <button onclick="sheetAction('引用')">💬 引用</button>
+          <button onclick="sheetAction('复制')">📋 复制</button>
+          <button class="danger" onclick="sheetAction('撤回')">↩️ 撤回</button>
+          <button class="cancel" onclick="closeSheet()">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const device = document.getElementById('device');
+  const note = document.getElementById('mode-note');
+  const notes = {
+    mobile: '手机浏览器:视口完整,底 Tab + 安全区垫高',
+    wechat: '微信内:可用高度仅 ~700px,顶栏被微信占 44px,布局改为 100dvh + 单行紧凑顶栏,输入区贴底不回弹',
+    desktop: '桌面:左栏导航(dark-on-dark),消息区限宽 720px 居中,底 Tab 隐藏',
+  };
+  document.querySelectorAll('.switcher button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.switcher button').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      device.className = 'device ' + (btn.dataset.mode === 'mobile' ? '' : btn.dataset.mode);
+      note.textContent = notes[btn.dataset.mode];
+    });
+  });
+
+  // ===== 示例消息 =====
+  const timeline = document.getElementById('timeline');
+  const seed = [
+    { who: 'other', name: 'builder', time: '20:14', text: '夜景主城上线第一天,大家随便聊。' },
+    { who: 'self', name: 'tym331', time: '20:16', text: '气泡不再常驻按钮了,长按我试试 👆' },
+    { who: 'other', name: 'rsaga', time: '20:17', text: '微信里打开也不挤了,顶栏只有一行。' },
+    { who: 'self', name: 'tym331', time: '20:18', text: '这条是编辑过的', edited: true },
+    { who: 'self', name: 'tym331', time: '20:19', text: '消息已撤回', recalled: true },
+  ];
+  function bubbleHTML(m) {
+    if (m.recalled) {
+      return `<div class="msg ${m.who}"><div class="avatar">${m.name.slice(0, 2).toUpperCase()}</div>
+        <div class="bubble recalled">${m.text}</div></div>`;
+    }
+    return `<div class="msg ${m.who}">
+      <div class="avatar">${m.name.slice(0, 2).toUpperCase()}</div>
+      <div class="bubble" oncontextmenu="openSheet(event,this)" onlongpress="openSheet(event,this)">
+        <div class="meta"><b>${m.name}</b>${m.time}${m.edited ? '<span class="edited-tag">已编辑</span>' : ''}</div>
+        <span class="txt">${m.text}</span>
+      </div></div>`;
+  }
+  seed.forEach((m) => timeline.insertAdjacentHTML('beforeend', bubbleHTML(m)));
+
+  // ===== 长按/右键动作面板 =====
+  let pressTimer = null;
+  timeline.addEventListener('pointerdown', (e) => {
+    const b = e.target.closest('.bubble');
+    if (!b || b.classList.contains('recalled')) return;
+    pressTimer = setTimeout(() => openSheet(e, b), 500);
+  });
+  ['pointerup', 'pointermove', 'pointercancel'].forEach((ev) =>
+    timeline.addEventListener(ev, () => clearTimeout(pressTimer)));
+
+  const sheet = document.getElementById('action-sheet');
+  function openSheet(e, bubbleEl) {
+    e.preventDefault();
+    document.getElementById('action-quote').textContent =
+      '「' + bubbleEl.querySelector('.txt').textContent.slice(0, 40) + '…」';
+    sheet.classList.add('show');
+  }
+  function closeSheet() { sheet.classList.remove('show'); }
+  function sheetAction(name) {
+    closeSheet();
+    if (name === '复制') { navigator.clipboard?.writeText('').catch(() => {}); }
+    alert('原型:动作「' + name + '」');
+  }
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) closeSheet(); });
+
+  // ===== 输入与发送 =====
+  const input = document.getElementById('composer-input');
+  const sendBtn = document.getElementById('send-btn');
+  input.addEventListener('input', () => {
+    sendBtn.classList.toggle('ready', input.value.trim().length > 0);
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 96) + 'px';
+  });
+  function send() {
+    const text = input.value.trim();
+    if (!text) return;
+    const now = new Date();
+    const hhmm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    timeline.insertAdjacentHTML('beforeend', bubbleHTML({ who: 'self', name: 'tym331', time: hhmm, text }));
+    input.value = '';
+    input.style.height = 'auto';
+    sendBtn.classList.remove('ready');
+    timeline.scrollTop = timeline.scrollHeight;
+  }
+  sendBtn.addEventListener('click', send);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+  timeline.scrollTop = timeline.scrollHeight;
+</script>
+</body>
+</html>
