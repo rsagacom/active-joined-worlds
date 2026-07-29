@@ -3134,3 +3134,50 @@ body[data-shell-variant="creative-terminal"] .creative-mention-trigger {
     display: none;
   }
 }
+
+/* ── 2026-07-30 UI refresh P2:桌面端深色化(rail active/居民卡/退出键) + 消息区限宽 ── */
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-rail .rail-item.is-active,
+body[data-shell-variant="creative-terminal"] .creative-rail .rail-item.is-active {
+  color: #e8ded2 !important;
+  background: #22181c !important;
+  border-color: #3a2f28 !important;
+  box-shadow: inset 3px 0 0 #57c8c2 !important;
+}
+
+body[data-shell-page] .rail-list .city-card,
+body[data-shell-page] .creative-resident-list .city-card {
+  background: rgba(22, 16, 12, 0.88) !important;
+  border: 1px solid #3a2f28 !important;
+  color: #e8ded2 !important;
+}
+
+body[data-shell-page] .rail-list .city-card .city-name,
+body[data-shell-page] .rail-list .city-card .resident-name {
+  color: #e8ded2 !important;
+}
+
+body[data-shell-page] .rail-list .city-card .city-meta,
+body[data-shell-page] .rail-list .city-card .resident-meta {
+  color: #9a8b7a !important;
+}
+
+body[data-shell-page] .sfc-hud .hud-login-toggle {
+  background: none;
+  border: 1px solid #3a2f28;
+  color: #9a8b7a;
+}
+
+body[data-shell-page] .sfc-hud .hud-login-toggle:hover {
+  color: #e8ded2;
+  border-color: #57c8c2;
+}
+
+@media (min-width: 821px) {
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-log,
+  body[data-shell-variant="creative-terminal"] .creative-chat-log {
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+  }
+}

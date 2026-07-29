@@ -153,9 +153,10 @@ body[data-shell-page="world-entry"] {
 }
 
 .rail-item.is-active {
-  color: #23150b;
-  background: linear-gradient(180deg, #ffe9a9, #d69d4c);
-  border-color: #fff1aa;
+  color: #e8ded2;
+  background: #22181c;
+  border-color: #3a2f28;
+  box-shadow: inset 3px 0 0 #57c8c2;
 }
 
 .rail-item-label {
