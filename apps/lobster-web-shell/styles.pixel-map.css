@@ -1640,17 +1640,17 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public
   width: auto !important;
   max-width: 100% !important;
   padding: 9px 12px 10px !important;
-  color: #17110b !important;
-  background: rgba(255, 245, 221, 0.94) !important;
-  border: 2px solid rgba(96, 61, 28, 0.72) !important;
-  border-radius: 0 !important;
-  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.34) !important;
+  color: #e8ded2 !important;
+  background: rgba(22, 16, 12, 0.88) !important;
+  border: 1px solid #3a2f28 !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .message.self {
-  color: #14100b !important;
-  background: rgba(255, 221, 137, 0.96) !important;
-  border-color: rgba(88, 49, 17, 0.88) !important;
+  color: #e8ded2 !important;
+  background: rgba(22, 16, 12, 0.88) !important;
+  border-color: rgba(87, 200, 194, 0.45) !important;
 }
 
 /* Composer final contract: one long adaptive input field plus a send button. */
@@ -1833,33 +1833,34 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public
 body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .message-header,
 body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .message-meta,
 body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .message-time {
-  color: rgba(36, 22, 10, 0.72) !important;
+  color: #9a8b7a !important;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .message:not(.self),
 body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .message:not(.self) {
-  color: #17110b !important;
-  background: rgba(255, 245, 221, 0.96) !important;
+  color: #e8ded2 !important;
+  background: rgba(22, 16, 12, 0.88) !important;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .message:not(.self) .message-body,
 body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .message:not(.self) .message-body *,
 body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .message:not(.self) .message-body,
 body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .message:not(.self) .message-body * {
-  color: #17110b !important;
+  color: #e8ded2 !important;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .message.self,
 body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .message.self {
-  color: #14100b !important;
-  background: rgba(255, 221, 137, 0.96) !important;
+  color: #e8ded2 !important;
+  background: rgba(22, 16, 12, 0.88) !important;
+  border-color: rgba(87, 200, 194, 0.45) !important;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .message.self .message-body,
 body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .message.self .message-body *,
 body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .message.self .message-body,
 body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .message.self .message-body * {
-  color: #14100b !important;
+  color: #e8ded2 !important;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .message-row[data-message-kind="system"] .message,
@@ -3007,4 +3008,59 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot--
 body[data-shell-page="hub"][data-shell-variant="public-square"] .scene-hotspot--shop {
   left: 84% !important;
   top: 41% !important;
+}
+
+/* ── 2026-07-30 UI refresh P0:composer 深色化(去金边/米色输入栏,守 dark-on-dark) ── */
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer,
+body[data-shell-variant="creative-terminal"] .creative-composer {
+  background: rgba(22, 16, 12, 0.94) !important;
+  border: 1px solid #3a2f28 !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-field,
+body[data-shell-variant="creative-terminal"] .creative-composer-field {
+  background: #22181c !important;
+  border: 1px solid #3a2f28 !important;
+  border-radius: 8px !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-field textarea,
+body[data-shell-variant="creative-terminal"] .creative-composer-field textarea {
+  color: #e8ded2 !important;
+  caret-color: #57c8c2;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-field textarea::placeholder,
+body[data-shell-variant="creative-terminal"] .creative-composer-field textarea::placeholder {
+  color: #9a8b7a !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-field-label,
+body[data-shell-page="hub"][data-shell-variant="public-square"] .composer-symbol-trigger {
+  color: #9a8b7a !important;
+  border: 1px solid #3a2f28 !important;
+  background: #22181c !important;
+  border-radius: 8px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tool {
+  background: #22181c !important;
+  border: 1px solid #3a2f28 !important;
+  color: #9a8b7a !important;
+  border-radius: 8px;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer #composer-send {
+  background: #22181c !important;
+  border: 1px solid #3a2f28 !important;
+  color: #9a8b7a !important;
+  border-radius: 8px !important;
+}
+
+body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer #composer-send:not(:disabled) {
+  background: #57c8c2 !important;
+  border-color: #57c8c2 !important;
+  color: #0b0908 !important;
 }
