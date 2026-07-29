@@ -2500,21 +2500,26 @@ test("gateway send failure keeps composer cleared and stops pending typing", asy
   assert.match(renderSource, /pending\.some\(\(message\) => !message\?\.failed\)/);
 });
 
-test("message owner action specs are delegated out of createMessageOwnerActions", async () => {
+test("message owner actions are served via long-press action sheet", async () => {
   const source = await readShellModule("app.js");
   const renderSource = await readShellModule("shell-message-render.js");
-  const ownerActionRenderer = sliceBetween(
+  const sheetSource = await readShellModule("shell-message-action-sheet.js");
+  const sheetFlow = sliceBetween(
     source,
-    "function createMessageOwnerActions(room, message, { isSelf, messageKind } = {}) {",
-    "async function retryPendingEcho(roomId, echoId) {",
+    "function openMessageActionSheetForTarget(target) {",
+    "const messageActionSheet = createMessageActionSheet({ document });",
   );
 
   assert.match(renderSource, /export function messageOwnerActionSpecs\(\{/);
-  assert.match(ownerActionRenderer, /messageOwnerActionSpecs\(\{/);
-  assert.match(ownerActionRenderer, /createMessageOwnerActionButton\(spec, room, message\)/);
-  assert.doesNotMatch(ownerActionRenderer, /message\?\.moderation_status === ['"]blocked['"]/);
-  assert.doesNotMatch(ownerActionRenderer, /editButton\.textContent = "编辑"/);
-  assert.doesNotMatch(ownerActionRenderer, /recallButton\.textContent = "撤回"/);
+  assert.match(sheetFlow, /messageOwnerActionSpecs\(\{/);
+  assert.match(sheetFlow, /messageStableId\(item\) === article\.dataset\.messageStableId/);
+  assert.doesNotMatch(sheetFlow, /message\?\.moderation_status === ['"]blocked['"]/);
+  assert.match(source, /createMessageActionSheet \} from "\.\/shell-message-action-sheet\.js"/);
+  assert.match(source, /timelineEl\.addEventListener\("contextmenu"/);
+  assert.match(source, /messageLongPressTimer = setTimeout/);
+  assert.match(sheetSource, /export function createMessageActionSheet/);
+  assert.doesNotMatch(sheetSource, /textContent = "编辑"/);
+  assert.doesNotMatch(sheetSource, /textContent = "撤回"/);
 });
 
 test("composer submit ignores duplicate send while a message is in flight", async () => {
@@ -2979,7 +2984,8 @@ test("timeline committed message article body is delegated out of createTimeline
   assert.match(articleRenderer, /createTimelineMessageHeaderNode\(message, room, rowSpec, quickContext\)/);
   assert.match(articleRenderer, /createTimelineReplyPreviewNode\(message, messages\)/);
   assert.match(articleRenderer, /createMessageBodyNode\(message, \{\s*quickState: quickContext\.quickState,/);
-  assert.match(articleRenderer, /createMessageOwnerActions\(room, message, \{ isSelf, messageKind \}\)/);
+  assert.match(articleRenderer, /article\.dataset\.messageStableId = messageStableId\(message\)/);
+  assert.doesNotMatch(articleRenderer, /createMessageOwnerActions|message-actions/);
   assert.match(stackRenderer, /stack\.className = "message-stack"/);
   assert.match(stackRenderer, /stack\.appendChild\(article\)/);
   assert.match(rowRenderer, /createTimelineMessageQuickContext\(room, message\)/);

@@ -1686,3 +1686,52 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .square-tool:dis
     font-size: 18px;
   }
 }
+
+/* ── 2026-07-28 UI refresh P0:移动端顶栏单行紧凑化(标题与按钮不再碰撞) ── */
+@media (max-width: 720px) {
+  body[data-shell-page] .sfc-hud {
+    gap: 8px;
+    min-height: 44px;
+  }
+
+  body[data-shell-page] .sfc-hud .hud-left,
+  body[data-shell-page] .sfc-hud .hud-right {
+    gap: 6px;
+    min-width: 0;
+  }
+
+  body[data-shell-page] .sfc-hud .hud-kicker,
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .hub-hud-kicker {
+    display: none;
+  }
+
+  body[data-shell-page] .sfc-hud .hud-title,
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hud .hud-title {
+    font-size: 18px;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+
+  body[data-shell-page] .sfc-hud .hud-pill,
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-hud .hud-pill {
+    min-height: 28px;
+    padding: 3px 8px;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  body[data-shell-page] .sfc-hud .hud-login-toggle {
+    min-height: 28px;
+    padding: 0 8px;
+    font-size: 12px;
+    letter-spacing: 0;
+    background: none;
+    border: 1px solid #3a2f28;
+    color: #9a8b7a;
+    white-space: nowrap;
+  }
+
+  body[data-shell-page] .sfc-hud .creative-hud-ownership-badge {
+    display: none;
+  }
+}

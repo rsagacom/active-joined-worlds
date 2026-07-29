@@ -2911,3 +2911,105 @@ body[data-shell-page="user"] .chat-pane-toggle {
     display: block !important;
   }
 }
+
+/* ── 2026-07-28 UI refresh P0:深色气泡(去 cream,守 dark-on-dark 收口) ── */
+
+body[data-shell-page] .message {
+  background: rgba(22, 16, 12, 0.88);
+  color: #e8ded2;
+  border: 1px solid #3a2f28;
+  box-shadow: none;
+  backdrop-filter: blur(3px);
+}
+
+body[data-shell-page] .message.self {
+  border-color: rgba(87, 200, 194, 0.45);
+}
+
+body[data-shell-page] .message .message-header,
+body[data-shell-page] .message .message-timestamp {
+  color: #9a8b7a;
+}
+
+body[data-shell-page] .message .message-edited,
+body[data-shell-page] .message .message-reply-preview {
+  color: #9a8b7a;
+}
+
+/* ── 消息动作面板(长按/右键) ── */
+
+.message-action-sheet-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.message-action-sheet-mask[hidden] {
+  display: none;
+}
+
+.message-action-sheet {
+  width: 100%;
+  background: #16100c;
+  border-top: 1px solid #2c2622;
+  border-radius: 14px 14px 0 0;
+  padding: 8px 12px calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
+.message-action-sheet-quote {
+  font-size: 11px;
+  color: #9a8b7a;
+  padding: 8px 4px;
+  border-bottom: 1px solid #2c2622;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.message-action-sheet-quote[hidden] {
+  display: none;
+}
+
+.message-action-sheet-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid #2c2622;
+  color: #e8ded2;
+  font-size: 15px;
+  padding: 13px 4px;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.message-action-sheet-item.danger {
+  color: #c25b4e;
+}
+
+.message-action-sheet-cancel {
+  display: block;
+  width: 100%;
+  text-align: center;
+  background: none;
+  border: none;
+  color: #9a8b7a;
+  font-size: 15px;
+  padding: 13px 4px;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+@media (min-width: 821px) {
+  .message-action-sheet {
+    max-width: 420px;
+    margin: 0 auto 24px;
+    border: 1px solid #2c2622;
+    border-radius: 14px;
+    padding-bottom: 12px;
+  }
+}

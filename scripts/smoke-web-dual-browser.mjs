@@ -221,19 +221,25 @@ async function expectEditedMessage(page, editedText, side) {
 
 async function clickMessageAction(page, text, side, action) {
   await page.waitForFunction(
-    ({ expectedText, expectedSide, expectedAction }) => {
+    ({ expectedText, expectedSide }) => {
       const rows = Array.from(document.querySelectorAll(".message-row"));
       const row = rows.find((candidate) => {
         if (candidate.getAttribute("data-message-side") !== expectedSide) return false;
         if (!(candidate.textContent || "").includes(expectedText)) return false;
-        return Boolean(candidate.querySelector(`[data-message-action="${expectedAction}"]`));
+        return Boolean(candidate.querySelector(".message[data-message-stable-id]"));
       });
-      row?.querySelector(`[data-message-action="${expectedAction}"]`)?.click();
-      return Boolean(row);
+      if (!row) return false;
+      const article = row.querySelector(".message[data-message-stable-id]");
+      article.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true }));
+      return true;
     },
-    { expectedText: text, expectedSide: side, expectedAction: action },
+    { expectedText: text, expectedSide: side },
     { timeout: 10000 },
   );
+  // 长按/右键动作面板出现后点击对应动作
+  await page
+    .locator(`.message-action-sheet-mask [data-sheet-action="${action}"]`)
+    .click({ timeout: 10000 });
 }
 
 async function expectRecalledMessage(page, { previousText, side }) {

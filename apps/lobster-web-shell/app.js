@@ -116,6 +116,7 @@ import {
   createMessageSearchController,
   mountMessageSearchChrome,
 } from "./shell-message-search.js";
+import { createMessageActionSheet } from "./shell-message-action-sheet.js";
 import {
   messageBodyDomSpec,
   messageQuickActionChipSpec,
@@ -1728,33 +1729,63 @@ async function recallCommittedMessage(room, message, button = null) {
   }
 }
 
-function createMessageOwnerActions(room, message, { isSelf, messageKind } = {}) {
-  const actionSpecs = messageOwnerActionSpecs({ gatewayUrl, isSelf, message, messageKind });
-  if (!actionSpecs.length) return null;
-  const actions = document.createElement("div");
-  actions.className = "message-actions";
-  for (const spec of actionSpecs) {
-    actions.appendChild(createMessageOwnerActionButton(spec, room, message));
-  }
-  return actions;
+// ── 长按/右键消息动作面板(替代常驻 message-actions) ──
+// 时间线当前渲染上下文,供动作面板按 stable id 找回消息。
+let lastTimelineContext = { room: null, messages: [] };
+
+function openMessageActionSheetForTarget(target) {
+  const article = target.closest?.(".message[data-message-stable-id]");
+  if (!article || !article.dataset.messageStableId) return false;
+  const { room, messages } = lastTimelineContext;
+  if (!room) return false;
+  const message = (messages || []).find(
+    (item) => messageStableId(item) === article.dataset.messageStableId,
+  );
+  if (!message) return false;
+  const isSelf = String(message.sender || "") === currentIdentity();
+  const messageKind = article.dataset.messageKind || "";
+  const specs = messageOwnerActionSpecs({ gatewayUrl, isSelf, message, messageKind });
+  if (!specs.length) return false;
+  return messageActionSheet.open({
+    specs: specs.map((spec) => ({
+      action: spec.action,
+      label: spec.label,
+      danger: /danger/.test(spec.className),
+    })),
+    quoteText: String(message.text || "").slice(0, 40),
+    onAction: (action) => {
+      if (action === "edit") {
+        beginMessageEdit(room, message);
+        return;
+      }
+      if (action === "recall") {
+        void recallCommittedMessage(room, message);
+      }
+    },
+  });
 }
 
-function createMessageOwnerActionButton(spec, room, message) {
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = spec.className;
-  button.dataset.messageAction = spec.action;
-  button.textContent = spec.label;
-  button.addEventListener("click", () => {
-    if (spec.action === "edit") {
-      beginMessageEdit(room, message);
-      return;
-    }
-    if (spec.action === "recall") {
-      void recallCommittedMessage(room, message, button);
-    }
+const messageActionSheet = createMessageActionSheet({ document });
+
+if (timelineEl) {
+  document.body.appendChild(messageActionSheet.element);
+  let messageLongPressTimer = null;
+  const cancelMessageLongPress = () => clearTimeout(messageLongPressTimer);
+  timelineEl.addEventListener("contextmenu", (event) => {
+    const article = event.target.closest?.(".message[data-message-stable-id]");
+    if (!article) return;
+    event.preventDefault();
+    openMessageActionSheetForTarget(event.target);
   });
-  return button;
+  timelineEl.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "mouse") return;
+    cancelMessageLongPress();
+    const target = event.target;
+    messageLongPressTimer = setTimeout(() => openMessageActionSheetForTarget(target), 500);
+  });
+  ["pointerup", "pointermove", "pointercancel", "pointerleave"].forEach((type) => {
+    timelineEl.addEventListener(type, cancelMessageLongPress);
+  });
 }
 
 async function retryPendingEcho(roomId, echoId) {
@@ -5482,6 +5513,7 @@ function createTimelineMessageArticleNode(message, room, messages, rowSpec, quic
   const article = document.createElement("article");
   article.className = `message${isSelf ? " self" : ""}`;
   article.dataset.messageKind = messageKind;
+  article.dataset.messageStableId = messageStableId(message) || "";
   article.appendChild(createTimelineMessageHeaderNode(message, room, rowSpec, quickContext));
   const replyEl = createTimelineReplyPreviewNode(message, messages);
   if (replyEl) {
@@ -5491,10 +5523,6 @@ function createTimelineMessageArticleNode(message, room, messages, rowSpec, quic
     quickState: quickContext.quickState,
   });
   article.appendChild(body);
-  const ownerActions = createMessageOwnerActions(room, message, { isSelf, messageKind });
-  if (ownerActions) {
-    article.appendChild(ownerActions);
-  }
   return article;
 }
 
@@ -5686,6 +5714,7 @@ function renderTimeline() {
   const localPreviewMessages = localPreviewMessagesForEmptyRoom(room);
   renderTimelineSkeletonIfNeeded(room, localPreviewMessages, shellPage);
   const flowSpec = timelineFlowSpecForRoom(room, localPreviewMessages, shellPage, unread);
+  lastTimelineContext = { room, messages: flowSpec.messages || [] };
   appendTimelineMessageFlowRows(room, flowSpec);
   finishTimelineRender(room, flowSpec, wasNearBottom);
 }

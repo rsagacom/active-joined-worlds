@@ -331,10 +331,19 @@ test("hub shell self messages expose edit and recall actions backed by gateway s
       (row.textContent || "").includes(text),
     );
     assert.ok(sentRow, "sent self row should render");
-    const editButton = sentRow.querySelector('[data-message-action="edit"]');
-    const recallButton = sentRow.querySelector('[data-message-action="recall"]');
-    assert.ok(editButton, "self committed row should expose edit action");
-    assert.ok(recallButton, "self committed row should expose recall action");
+    const sentArticle = sentRow.querySelector(".message[data-message-stable-id]");
+    assert.ok(sentArticle, "self committed row should carry stable id for action sheet");
+    // fake-dom 不模拟冒泡:预置 target 并在 timeline 上派发,等价于事件冒泡到委托监听器
+    const timeline = document.querySelector("#timeline");
+    const contextEvent = new Event("contextmenu", { bubbles: true, cancelable: true });
+    contextEvent.target = sentArticle;
+    timeline.dispatchEvent(contextEvent);
+    const sheetMask = document.querySelector(".message-action-sheet-mask");
+    assert.ok(sheetMask && !sheetMask.hidden, "action sheet should open on contextmenu");
+    const editButton = sheetMask.querySelector('[data-sheet-action="edit"]');
+    const recallButton = sheetMask.querySelector('[data-sheet-action="recall"]');
+    assert.ok(editButton, "action sheet should expose edit action");
+    assert.ok(recallButton, "action sheet should expose recall action");
 
     editButton.click();
     assert.equal(composerInput.value, text);
@@ -353,8 +362,15 @@ test("hub shell self messages expose edit and recall actions backed by gateway s
     assert.ok(editedRow.querySelector(".message-edited"), "edited self row should show edited chip");
     assert.equal(composerForm.dataset.editingMessageId || "", "");
 
-    const editedRecallButton = editedRow.querySelector('[data-message-action="recall"]');
-    assert.ok(editedRecallButton, "edited self row should still expose recall action");
+    const editedArticle = editedRow.querySelector(".message[data-message-stable-id]");
+    assert.ok(editedArticle, "edited self row should carry stable id");
+    const recallEvent = new Event("contextmenu", { bubbles: true, cancelable: true });
+    recallEvent.target = editedArticle;
+    timeline.dispatchEvent(recallEvent);
+    const editedRecallButton = document
+      .querySelector(".message-action-sheet-mask")
+      ?.querySelector('[data-sheet-action="recall"]');
+    assert.ok(editedRecallButton, "action sheet should still expose recall action");
     editedRecallButton.click();
     for (let i = 0; i < 8; i += 1) {
       await flushAsyncWork();

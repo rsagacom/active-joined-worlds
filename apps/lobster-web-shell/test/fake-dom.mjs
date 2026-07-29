@@ -60,6 +60,7 @@ export const APP_LOCAL_IMPORT_PATHS = Object.freeze([
   "./shell-user-detail-card.js",
   "./shell-conversation-callout.js",
   "./shell-message-action-payload.js",
+  "./shell-message-action-sheet.js",
   "./shell-mode-view.js",
   "./shell-chrome-text.js",
   "./shell-scene-chrome.js",
