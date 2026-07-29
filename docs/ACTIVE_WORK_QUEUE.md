@@ -1,8 +1,18 @@
 # lobster-chat Active Work Queue
 
-Last updated: 2026-07-28
+Last updated: 2026-07-30
 
 > 说明：下方按日期排列的记录保留当时的交接背景；如与本页最新日期区块冲突，以最新区块和 `docs/DEPLOYMENT.md` 为准。
+
+## 2026-07-30 H5 UI refresh 三期全量上线(P0/P1/P2)
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 策划与原型 | 用户已确认 | `docs/UI_REFRESH_PROPOSAL_20260728.md` + `docs/mockups/ui-refresh-20260728-prototype.html`;三层结构(住宅场景优先/主城对话优先/世界发现优先)确认后实施;回滚锚点 tag `ui-refresh-base-20260728` |
+| P0 顶栏+气泡+动作收敛 | 已上线 | ≤720px 顶栏单行;气泡/composer 深色化——根因是 pixel-map.css 内"final contract" !important 规则钉死 cream,外部覆盖无效,已直接改写;编辑/撤回收敛进长按/右键动作面板(新模块 shell-message-action-sheet,3 单测);顶栏紧凑规则须放 pixel-map.css(creative 不加载 styles.scene.css) |
+| P1 底 Tab+微信适配 | 已上线 | 三页底部 Tab Bar(≤820px,住宅/主城/世界/我的,composer 自动抬升);微信专项:overscroll-behavior:none 防下拉误刷新、100dvh、输入字号 ≥16px、safe-area |
+| P2 桌面深色化 | 已上线 | rail active 金底改深底+冷青左条、居民/城市卡 cream 改深色、退出键中性描边、消息区限宽 720px 居中 |
+| 验证 | 全绿 | Web 1404/1404(+3 新单测)、layout、realness、完整 release gate;生产三形态截图复核;meta 可读性(昵称金色小字/时间浅灰)单独修复 |
 
 ## 2026-07-28 生产部署落地 chat.ajw.cn(AWS EC2 北京)
 
