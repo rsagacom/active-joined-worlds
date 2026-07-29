@@ -2001,19 +2001,19 @@ body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .messag
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .message-sender,
 body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .message-sender {
-  color: #9b5b16 !important;
+  color: #d8b96a !important;
   font-weight: 800 !important;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .message-role,
 body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .message-role {
-  color: rgba(36, 22, 10, 0.48) !important;
+  color: #9a8b7a !important;
   font-weight: 700 !important;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] #timeline.public-square-log .message-time,
 body[data-shell-variant="creative-terminal"] #timeline.creative-chat-log .message-time {
-  color: rgba(36, 22, 10, 0.58) !important;
+  color: #9a8b7a !important;
   font-weight: 700 !important;
 }
 
