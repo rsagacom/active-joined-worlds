@@ -43,3 +43,96 @@
   --spacing-lg: 16px;
   --spacing-xl: 24px;
 }
+
+/* ── 2026-07-30 UI refresh P1:移动端底部 Tab Bar(≤820px) ──
+   三页(index/creative/world-square)共用;桌面端隐藏。 */
+.shell-tabbar {
+  display: none;
+}
+
+@media (max-width: 820px) {
+  .shell-tabbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    display: flex;
+    background: #16100c;
+    border-top: 1px solid #2c2622;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .shell-tabbar .tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 7px 0 6px;
+    min-height: 50px;
+    background: none;
+    border: none;
+    color: #9a8b7a;
+    font-size: 10px;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .shell-tabbar .tab .tab-ico {
+    font-size: 17px;
+    line-height: 1.2;
+  }
+
+  .shell-tabbar .tab.is-active {
+    color: #57c8c2;
+  }
+
+  /* composer 抬到 Tab Bar 之上 */
+  body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-composer,
+  body[data-shell-variant="creative-terminal"] .creative-composer {
+    bottom: calc(12px + 50px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  /* 世界广场等静态页内容不被 Tab Bar 遮挡 */
+  body[data-shell-page="world-square"] .world-square-shell,
+  body[data-shell-page="world-square"] main {
+    padding-bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ── P1 微信/移动浏览器受限场景适配 ──
+   1) dvh 动态视口:WeChat 顶栏/底栏与键盘弹起时高度自动正确
+   2) 禁止页面级回弹,消息区独立滚动,防下拉误触刷新/前进后退
+   3) 输入字号 ≥16px,防 iOS 聚焦自动放大 */
+
+html {
+  overscroll-behavior: none;
+}
+
+body {
+  overscroll-behavior: none;
+}
+
+body[data-shell-page] .sfc-shell,
+body[data-shell-page] .app {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+#timeline,
+.message-timeline,
+.chat-log,
+.creative-chat-log,
+.public-square-log {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (max-width: 820px) {
+  body[data-shell-page] .public-square-composer textarea,
+  body[data-shell-page] .creative-composer textarea,
+  body[data-shell-page] #composer-input {
+    font-size: 16px !important;
+  }
+}
