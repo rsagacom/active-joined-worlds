@@ -13,6 +13,8 @@ Last updated: 2026-07-30
 | P1 底 Tab+微信适配 | 已上线 | 三页底部 Tab Bar(≤820px,住宅/主城/世界/我的,composer 自动抬升);微信专项:overscroll-behavior:none 防下拉误刷新、100dvh、输入字号 ≥16px、safe-area |
 | P2 桌面深色化 | 已上线 | rail active 金底改深底+冷青左条、居民/城市卡 cream 改深色、退出键中性描边、消息区限宽 720px 居中 |
 | 验证 | 全绿 | Web 1404/1404(+3 新单测)、layout、realness、完整 release gate;生产三形态截图复核;meta 可读性(昵称金色小字/时间浅灰)单独修复 |
+| Atlas / 生产事实 | 已核验 | Atlas 将 `deployment.lobster-chat-production` 标记为 active/verified；chat.ajw.cn 健康检查、13/13 双端 IM 验收与 UI refresh 视觉复核均有记录；本次同步不包含主机地址、邮箱或凭据值 |
+| Git 同步 | 本次已完成 | 当前工作分支已与 origin 同名分支同 commit；本次仅提交脱敏进度记录，运行态 generated JSON 不纳入提交 |
 
 ## 2026-07-28 生产部署落地 chat.ajw.cn(AWS EC2 北京)
 
@@ -21,24 +23,24 @@ Last updated: 2026-07-30
 | Git 收口 | 已完成 | 113 修改 + 54 未跟踪分 6 批提交;`refactor/appjs-techdebt-20260710` 推送 origin 并快进合并入 main(842f170→7b0218d);临时产物入 gitignore |
 | CI | 已转绿 | lobster-chat-ci 双 job 首次全绿:修新版 stable clippy×5、rustfmt、rust-smoke 补 Node/npm ci 与 Playwright chromium、根 package.json 显式声明 playwright@1.59.1;release.yml verify 补 chromium |
 | release 构建 | 已完成 | workflow_dispatch 构建 x86_64+aarch64 artifact,SHA256 校验一致 |
-| 生产部署 | 已完成 | EC2 北京(71.136.99.134):`install-server.sh` artifact 模式装 gateway(:8787)+web+nginx(:80);gateway.env(CORS=https://chat.ajw.cn,dev 开关全关,mailer loopback)+ systemd drop-in;`lobster-mailer` 文件与 unit 已装,待 RESEND_API_KEY 后 enable |
+| 生产部署 | 已完成 | AWS 北京生产节点以 `install-server.sh` artifact 模式装 gateway、web、nginx；gateway.env 关闭开发开关并使用同机 mailer，`lobster-mailer` 已启用并健康 |
 | 公网入口 | 已完成 | cloudflared tunnel(2d0e230a)新增 chat.ajw.cn→localhost:80;CNAME 已建;`smoke-public-ingress.sh` 与 `production-readiness.sh CHECK_PUBLIC=1` 全过 |
 | 安全边界 | 已验证 | 无 Bearer 401、OTP 响应无 dev_code、CORS 单 origin、journal 无敏感日志;OTP 投递失败文案收口为通用 `email otp delivery failed`(细节只进服务端日志),mailer 未启用时认证失败关闭 |
 | 生产发现的脚本坑 | 已修复 | smoke-public-ingress CORS 断言改 `grep -Fi`(HTTP/2 小写头);env 中含空格/尖括号值必须加引号(DEPLOYMENT 示例已改) |
-| 待用户外部动作 | 已完成 | Resend 已注册并取得 API Key;`lobster-mailer` 已 enable(active,health 200);发件人暂用 Resend 测试地址 onboarding@resend.dev,chat.ajw.cn 域名验证后切回 no-reply@chat.ajw.cn(需在 Resend Domains 添加并把 SPF/DKIM 记录配到 Cloudflare) |
-| 真实邮件 OTP | 已投递 | 2026-07-28 经公网向真实邮箱发起 OTP:dev_code=null、邮箱脱敏、delivery_mode=mailer-webhook;Resend 未验证域名只能发到账号注册邮箱(tym331@gmail.com);verify/logout 与双端 IM 验收待进行 |
+| 待用户外部动作 | 已完成 | Resend 已注册并取得 API Key；`lobster-mailer` 已 enable(active,health 200)；当前仍使用测试发件地址，正式域名验证后再切换正式发件人并补齐 SPF/DKIM |
+| 真实邮件 OTP | 已验收 | 2026-07-28 经公网向已绑定测试邮箱发起 OTP：`dev_code=null`、邮箱已脱敏、`delivery_mode=mailer-webhook`；verify/logout 与双端 IM 验收已由后续生产记录确认 |
 
 ## 2026-07-28 生产 H5 三处真修复 + 双端 IM 验收 13/13
 
 | 项目 | 状态 | 说明 |
 | --- | --- | --- |
-| 真实邮箱注册链路 | 验收通过 | 真实邮箱收件→verify(resident_id=tym331,Active)→session 可读 shell state→logout→旧 token 立即 401 |
+| 真实邮箱注册链路 | 验收通过 | 测试邮箱收件→verify(测试居民,Active)→session 可读 shell state→logout→旧 token 立即 401 |
 | pretext vendor 化 | 已修复上线 | pretext-stage.js 引用 ./node_modules/...,artifact 不含 node_modules,nginx 回退 index.html 致 app.js 模块图整体加载失败;改 vendor/pretext 随包分发,静态测试防回归 |
 | https 同源回退 | 已修复上线 | hub 页无 ?gateway= 时原返回 null;https 下回退 location.origin;打包带入的 dev loopback bootstrap 地址在 https 下忽略 |
 | 轮询鉴权 | 已修复上线 | loadGatewayState 未带 Bearer,/v1/shell/state 401 静默失败,界面永远停留静态 state.json;EventSource 401 自动回退轮询 |
 | CDN 缓存 | 已修复上线 | CF 边缘 max-age=14400 持旧模块致部署不一致;nginx 对 js/css/html 发 no-cache(源站+install-server.sh 模板),Purge Everything 后恢复 |
 | 双端 IM 验收 | **13/13 通过** | 双浏览器会话:登录态、双方向实时收发、失败气泡+重发无重复、搜索(带 token 200/无 token 401)、编辑/撤回 API 与界面反映、零 JS 错误;重启 Gateway 后消息可检索 |
-| 待办 | 待做 | admin-ds 运维演练、备份/恢复演练;Resend 域名验证后第二居民(rsaga@qq.com)注册补私聊双居民验收 |
+| 待办 | 待做 | admin-ds 运维演练、备份/恢复演练；Resend 域名验证后第二测试居民注册并补私聊双居民验收 |
 
 ## 2026-07-27 H5 会话摘要表面 DOM 职责下沉
 
