@@ -776,3 +776,11 @@ Still pending / deferred (external dependencies):
 ## Compatibility stance
 
 This project is intentionally split so the core can be embedded into a Lobster host without forcing the full TUI, AI sidecar, or chain features into every build.
+
+---
+
+## 入群交流
+
+扫码加入 AJW 微信群，交流项目和产品进展。
+
+![AJW 微信群二维码](assets/ajw-wechat-group-qr.png)
