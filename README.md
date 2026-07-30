@@ -1,6 +1,6 @@
-# lobster-chat
+# 我和狗蛋儿的家 · Goudaner World
 
-An IM-first world communication base for real people. It uses a shared vocabulary of `世界 / 城邦 / 聚落 / 居民 / 城主 / 互联 / 共建`, with the gateway contract as the single source of truth, H5 as the current primary interaction entry, and TUI as a parallel mapped client. Different windows share the same world model, but they do not share the same rights.
+我和狗蛋儿的家（Goudaner World）是一套以即时通信为起点的世界共建系统。它使用 `世界 / 城邦 / 聚落 / 居民 / 城主 / 互联 / 共建` 的共同词汇，以网关合同作为唯一事实来源，H5 是当前主要入口，TUI 是并行映射客户端；不同窗口共享同一世界模型，但不共享同一权限。
 
 ## 内测入口说明（中文）
 
