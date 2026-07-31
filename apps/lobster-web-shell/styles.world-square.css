@@ -777,3 +777,130 @@ body.scene-clear-mode[data-shell-page="world-square"] .scene-hotspot.is-active {
   border-color: transparent;
   background: transparent;
 }
+
+/* ── 2026-07-31 世界广场 chrome 并入 sfc 体系(与主城/住宅一致) ──
+   HUD:居中 kicker+标题、右侧深色状态丸;rail:深色卡片项 */
+
+.world-square-hud {
+  min-height: 50px;
+  padding: 8px 14px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(90deg, rgba(20, 16, 14, 0.94), rgba(34, 28, 24, 0.88));
+  border: 1px solid #3a2f28;
+  box-shadow: none;
+}
+
+.world-square-title-stack {
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.world-square-title-stack .world-square-kicker {
+  font-size: 13px;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: rgba(224, 194, 123, 0.72);
+  margin: 0;
+}
+
+.world-square-title-stack h1 {
+  margin: 0;
+  font-size: 32px;
+  line-height: 0.95;
+  letter-spacing: 1.4px;
+  color: #e8ded2;
+}
+
+.world-square-title-stack .world-square-hud-note {
+  display: none;
+}
+
+.world-square-actions {
+  grid-column: 3;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.world-square-actions .hud-login-toggle,
+.world-square-actions .hud-pill,
+.world-square-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 3px 10px;
+  background: none;
+  border: 1px solid #3a2f28;
+  border-radius: 0;
+  color: #9a8b7a;
+  font-size: 11px;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.world-square-actions .hud-login-toggle:hover,
+.world-square-actions a:hover {
+  color: #e8ded2;
+  border-color: #57c8c2;
+}
+
+/* rail 深色卡片化,与主城/住宅一致 */
+.world-square-rail .rail-item {
+  display: block;
+  min-height: 44px;
+  padding: 10px 12px;
+  background: #22181c;
+  border: 1px solid #3a2f28;
+  border-radius: 6px;
+  color: #9a8b7a;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.world-square-rail .rail-item:hover,
+.world-square-rail .rail-item:focus-visible {
+  color: #e8ded2;
+  border-color: #57c8c2;
+}
+
+.world-square-rail .rail-title {
+  padding: 4px 2px 6px;
+  font-size: 11px;
+  color: #6b5f52;
+  letter-spacing: 1px;
+}
+
+@media (max-width: 720px) {
+  .world-square-title-stack .world-square-kicker {
+    display: none;
+  }
+
+  .world-square-title-stack h1 {
+    font-size: 18px;
+    line-height: 1.1;
+  }
+}
+
+/* ── 移动端:隐藏左栏(导航由底部 Tab Bar 承担,与主城/住宅一致) ── */
+@media (max-width: 820px) {
+  .world-square-shell .sfc-rail,
+  .world-square-rail {
+    display: none !important;
+  }
+
+  .world-square-shell main,
+  .world-square-shell .world-square-layout {
+    grid-template-columns: 1fr !important;
+    display: block;
+  }
+}
