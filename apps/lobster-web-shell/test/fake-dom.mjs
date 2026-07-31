@@ -742,7 +742,7 @@ function buildHubPage(document) {
         createPageNode(document, "div", {
           id: "masthead-eyebrow",
           className: "eyebrow",
-          textContent: "龙虾聊天",
+          textContent: "我和狗蛋儿的家",
         }),
         createPageNode(document, "h1", {
           id: "masthead-title",
@@ -886,7 +886,7 @@ function buildUserPage(document, options = {}) {
   const topbar = createPageNode(document, "header", { className: "topbar" });
   const topbarMain = createPageNode(document, "div", { className: "topbar-main" });
   const masthead = createPageNode(document, "div", { className: "masthead" }, [
-    createPageNode(document, "div", { id: "masthead-eyebrow", className: "eyebrow", textContent: "龙虾聊天 · 房间聊天" }),
+    createPageNode(document, "div", { id: "masthead-eyebrow", className: "eyebrow", textContent: "我和狗蛋儿的家 · 房间聊天" }),
     createPageNode(document, "h1", { id: "masthead-title", textContent: "像在房间里聊天一样继续说" }),
     createPageNode(document, "p", { id: "hero-note", className: "hero-note", textContent: "左边选会话，右边看消息，底部直接输入。用户页只保留聊天主路径。" }),
   ]);
@@ -1136,7 +1136,7 @@ function buildNonUserPage(document, shellPage) {
   body.dataset.defaultShellMode = shellPage;
   body.dataset.workspace = "chat";
   if (shellPage === "unified") {
-    document.title = "龙虾聊天 · 世界入口";
+    document.title = "我和狗蛋儿的家 · 世界入口";
   }
 
   const title = shellPage === "admin" ? "管理后台" : "城市外世界页";
@@ -1154,7 +1154,7 @@ function buildNonUserPage(document, shellPage) {
     createPageNode(document, "div", {
       id: "masthead-eyebrow",
       className: "eyebrow",
-      textContent: `龙虾聊天 · ${title}`,
+      textContent: `我和狗蛋儿的家 · ${title}`,
     }),
     createPageNode(document, "h1", { id: "masthead-title", textContent: mastheadTitle }),
     createPageNode(document, "p", { id: "hero-note", className: "hero-note", textContent: heroNote }),
@@ -1880,7 +1880,7 @@ async function loadShellApp(shellPage, options = {}) {
         const response = exportResponse || {
           status: 200,
           body: {
-            content: "# 龙虾聊天导出\n\n测试导出内容",
+            content: "# 我和狗蛋儿的家导出\n\n测试导出内容",
           },
         };
         return responseFromJson(response.body, { status: response.status || 200 });

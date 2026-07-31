@@ -1,6 +1,6 @@
-# lobster-mailer
+# Goudaner World mailer
 
-Lobster Chat 邮件 OTP webhook 适配器。Gateway(`email_otp_mailer.rs`)在
+我和狗蛋儿的家（Goudaner World）邮件 OTP webhook 适配器。Gateway(`email_otp_mailer.rs`)在
 production 模式下把 OTP 以 JSON POST 到 `LOBSTER_EMAIL_OTP_MAILER_URL`,
 本服务接收该请求并通过 [Resend](https://resend.com) API 发出真实邮件。
 
@@ -18,7 +18,7 @@ production 模式下把 OTP 以 JSON POST 到 `LOBSTER_EMAIL_OTP_MAILER_URL`,
 | --- | --- |
 | `LOBSTER_MAILER_BEARER_TOKEN` | 与 Gateway `LOBSTER_EMAIL_OTP_MAILER_BEARER_TOKEN` 一致 |
 | `RESEND_API_KEY` | Resend API Key(`re_...`) |
-| `LOBSTER_MAILER_FROM` | 发件人,如 `Lobster <otp@chat.example.com>`,域名需在 Resend 完成验证 |
+| `LOBSTER_MAILER_FROM` | 发件人,如 `我和狗蛋儿的家 <otp@chat.example.com>`,域名需在 Resend 完成验证 |
 | `LOBSTER_MAILER_HOST` | 监听地址,默认 `127.0.0.1` |
 | `LOBSTER_MAILER_PORT` | 监听端口,默认 `8791` |
 
@@ -37,7 +37,7 @@ Gateway 的 `gateway.env`:
 ```bash
 LOBSTER_EMAIL_OTP_MAILER_URL=http://127.0.0.1:8791/lobster/email-otp
 LOBSTER_EMAIL_OTP_MAILER_BEARER_TOKEN=<同上>
-LOBSTER_EMAIL_OTP_FROM=Lobster <otp@chat.example.com>
+LOBSTER_EMAIL_OTP_FROM="我和狗蛋儿的家 <otp@chat.example.com>"
 ```
 
 本服务与 Gateway 同机部署时走 loopback http;跨机部署必须在前面套 https

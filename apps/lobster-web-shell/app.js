@@ -6862,7 +6862,7 @@ async function exportHistory({ conversationId = null, includePublic = true } = {
     throw new Error(gatewayErrorMessage(payload, "", response.status) || "导出失败");
   }
   const scopeName = conversationId ? conversationId.replace(/[:/]+/g, "_") : "全部历史";
-  const filename = `龙虾聊天_${scopeName}.${exportFileExtension(format)}`;
+  const filename = `我和狗蛋儿的家_${scopeName}.${exportFileExtension(format)}`;
   downloadContent(filename, payload.content || "", exportMimeType(format));
   setGovernanceStatus(`导出文件已准备好：${filename}`);
 }

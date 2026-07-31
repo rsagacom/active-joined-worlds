@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Lobster Chat 邮件 OTP webhook 适配器:接收 Gateway OTP 投递请求,经 Resend 发出真实邮件",
+  "description": "我和狗蛋儿的家（Goudaner World）邮件 OTP webhook 适配器:接收 Gateway OTP 投递请求,经 Resend 发出真实邮件",
   "scripts": {
     "start": "node src/mailer.mjs",
     "test": "node --test"

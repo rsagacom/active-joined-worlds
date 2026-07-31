@@ -36,7 +36,7 @@ test("creative resident shell boots into the chat workspace with room scene and 
     assert.equal(document.body.dataset.chatDetailMode, "inline");
     assert.equal(document.body.dataset.roomVariant, "home");
     assert.equal(document.body.dataset.roomMotif, "courtyard");
-    assert.equal(document.title, "龙虾聊天 · 房间聊天");
+    assert.equal(document.title, "我和狗蛋儿的家 · 房间聊天");
     assert.equal(document.querySelector(".workspace-switcher"), null);
     assert.ok(activeRoom);
     assert.equal(roomStageCanvas?.dataset?.variant, "home");

@@ -68,7 +68,7 @@ export function shellModeConfig(mode) {
   switch (mode) {
     case "user":
       return {
-        eyebrow: "龙虾聊天 · 房间聊天",
+        eyebrow: "我和狗蛋儿的家 · 房间聊天",
         title: "房间内聊天主界面",
         hero:
           "左边放会话，右边直接进房间聊；把房间外的工具收进边缘，不抢主聊的注意力。",
@@ -81,7 +81,7 @@ export function shellModeConfig(mode) {
       };
     case "admin":
       return {
-        eyebrow: "龙虾聊天 · 管理后台",
+        eyebrow: "我和狗蛋儿的家 · 管理后台",
         title: "左侧选工具，中间处理当前事务",
         hero:
           "后台按会话、居民、房间、安全、公告、世界和系统分组；日常先处理会话，高风险动作默认收起。",
@@ -94,7 +94,7 @@ export function shellModeConfig(mode) {
       };
     default:
       return {
-        eyebrow: "龙虾聊天 · 城市外世界页",
+        eyebrow: "我和狗蛋儿的家 · 城市外世界页",
         title: "城市外世界页",
         hero:
           "把主聊放在中间，把城市外壳按来源、城市、公告、安全、身份顺序排开。",

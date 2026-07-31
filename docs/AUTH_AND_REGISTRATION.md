@@ -81,9 +81,9 @@ Production mailer webhook payload:
 {
   "kind": "lobster-email-otp",
   "to": "reader@example.com",
-  "from": "Lobster Chat <no-reply@example.com>",
-  "subject": "Lobster Chat 登录验证码",
-  "text": "你的 Lobster Chat 验证码是 483921。验证码 10 分钟内有效，请勿转发。",
+  "from": "我和狗蛋儿的家 <no-reply@example.com>",
+  "subject": "我和狗蛋儿的家登录验证码",
+  "text": "你在我和狗蛋儿的家的验证码是 483921。验证码 10 分钟内有效，请勿转发。",
   "code": "483921",
   "challenge_id": "otp:...",
   "expires_at_ms": 1800000000000

@@ -11,7 +11,7 @@ test("hub shell keeps the entry masthead and does not inject workspace chrome", 
   try {
     const { document } = app;
 
-    assert.equal(document.querySelector("#masthead-eyebrow")?.textContent, "龙虾聊天");
+    assert.equal(document.querySelector("#masthead-eyebrow")?.textContent, "我和狗蛋儿的家");
     assert.equal(document.querySelector("#masthead-title")?.textContent, "选一个房间开始");
     assert.equal(document.querySelector(".workspace-switcher"), null);
     assert.match(document.querySelector("#shell-mode-badge")?.textContent || "", /入口：聊天入口/);

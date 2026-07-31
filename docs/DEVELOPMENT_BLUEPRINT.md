@@ -119,7 +119,17 @@
 - 保留：暗角 vignette（中性黑色）
 
 ### 输入框
-- Hub 主城 textarea: `color: #241409`（白底深色字，可读）
+- Hub 主城 textarea: `color: #e8ded2`（深色底浅色字,2026-07-30 深色化后）
+- 移动端输入字号 ≥16px(防 iOS 聚焦自动放大)
+
+### 三页 chrome 统一(2026-07-31 收口)
+- **框架宽度**:住宅/主城/世界广场一律 `100vw` 满宽;历史限宽规则(主城 1440、世界 1640)已清除
+- **HUD**:三页统一 sfc 居中 kicker+标题、右侧深色状态丸;世界广场原有左对齐大标题体系已废弃
+- **边框**:全部 `#3a2f28` 深色 1px,无金环;金色仅小字符高亮(2026-06-18"三页 HUD 暖金"决定已被本收口取代)
+- **导航**:桌面左 rail 深色卡片项、active 冷青左条;移动端(≤820px)三页一律隐藏左栏,由底部 Tab Bar(住宅/主城/世界/我的)承担导航
+- **消息气泡**:dark-on-dark `rgba(22,16,12,.88)` + `#3a2f28` 边框,自己=冷青描边;编辑/撤回等动作不常驻气泡,长按/右键呼出底部动作面板(`shell-message-action-sheet.js`)
+- **微信受限场景**:`100dvh`、`overscroll-behavior: none`(防下拉误刷新)、safe-area 垫高、composer 抬升至 Tab Bar 之上
+- **缓存纪律**:改 CSS/JS 必须同步升版 HTML 引用 `?v=`(CF 边缘强制 max-age=14400 覆盖源站 no-cache,不升版客户端拿不到新样式)
 
 ## 六、存储
 
@@ -199,6 +209,28 @@
 - TUI: **233 tests / 0 fail**；启动已接入 Gateway `conversation_shell`/`scene_render` hydration，edit/recall 请求符合 `room_id`/`actor` 合同
 - 端到端 smoke: `SKIP_BUILD=1 node scripts/smoke-web-dual-browser.mjs` 通过（真实 gateway + 双浏览器消息发送/编辑/撤回/失败重发闭环，503 注入重发测试）
 - app.js: **9342 → 8422 行**；继续按职责和实例边界拆分，不以机械行数为目标
+
+## 十二、生产上线与 UI refresh(2026-07-28 ~ 07-31)
+
+### 生产上线(2026-07-28)
+
+- 公网入口 **https://chat.ajw.cn**(Cloudflare Tunnel → AWS EC2 北京 nginx:80 → gateway 127.0.0.1:8787);`lobster-mailer`(Resend 适配,:8791)同机 systemd
+- 真实邮箱注册链路、双端 IM 验收 13/13(收发/失败重发/搜索/编辑/撤回/重启恢复)
+- 生产实测修复:pretext vendor 化(artifact 不含 node_modules 致模块图全灭)、hub 页 https 回退同源 gateway、loadGatewayState 携带 Bearer(轮询静默 401)、nginx 对 js/css/html 发 no-cache
+
+### UI refresh P0/P1/P2 + 三页统一(2026-07-30 ~ 07-31)
+
+- P0:移动端顶栏单行、气泡/composer 深色化、消息动作收敛长按面板(新模块 `shell-message-action-sheet.js`)
+- P1:三页底部 Tab Bar、微信受限场景适配(dvh/overscroll/safe-area/≥16px)
+- P2:桌面深色左栏、限宽消息区、退出键中性化
+- 三页统一(07-31):框架一律 100vw、HUD 统一 sfc 居中标题、边框统一 `#3a2f28`、移动端三页均无左栏
+- 关键坑:pixel-map.css 内 "final contract" `!important` 规则钉死 cream,外部覆盖无效必须直接改写;creative.html 不加载 styles.scene.css,共用规则须放 pixel-map.css;世界页 stage 显式 `grid-column:2` 在单列移动布局塌缩 2px
+- 事故(07-31 已修复):macOS bsdtar 手动打包带 xattr 致 65 张场景图解出 0 字节;手动打包必须 `COPYFILE_DISABLE=1`
+
+### 当前验证基线(2026-07-31)
+
+- Web Shell: **1404 tests / 0 fail**(unit + layout + realness);Gateway 312;完整 release gate 通过
+- 缓存纪律:HTML 引用统一 `?v=20260731-ui-refresh-r4`,改样式必须升版
 
 ### 真实进度（2026-07-16）
 

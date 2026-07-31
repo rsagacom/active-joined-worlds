@@ -102,7 +102,7 @@ LOBSTER_DEV_AUTH_BYPASS=0
 LOBSTER_DEV_EMAIL_OTP_INLINE=0
 LOBSTER_EMAIL_OTP_MAILER_URL=http://127.0.0.1:8791/lobster/email-otp
 LOBSTER_EMAIL_OTP_MAILER_BEARER_TOKEN=replace-with-secret
-LOBSTER_EMAIL_OTP_FROM="Lobster Chat <no-reply@chat.ajw.cn>"
+LOBSTER_EMAIL_OTP_FROM="我和狗蛋儿的家 <no-reply@chat.ajw.cn>"
 
 > 含空格/尖括号的值必须加双引号:gateway.env 会被 systemd 读取,也会被
 > scripts/production-readiness.sh 用 bash source,不加引号会导致 bash 语法错误。
@@ -132,7 +132,7 @@ sudoedit /etc/lobster-chat/mailer.env
 ```dotenv
 LOBSTER_MAILER_BEARER_TOKEN=<与 gateway.env 中 LOBSTER_EMAIL_OTP_MAILER_BEARER_TOKEN 相同>
 RESEND_API_KEY=re_xxxxxxxx
-LOBSTER_MAILER_FROM="Lobster Chat <no-reply@chat.ajw.cn>"
+LOBSTER_MAILER_FROM="我和狗蛋儿的家 <no-reply@chat.ajw.cn>"
 ```
 
 ```bash

@@ -93,7 +93,7 @@ test("world-entry preserves metro entry title and does not revert to generic", s
 
   try {
     const { document } = app;
-    assert.equal(document.title, "龙虾聊天 · 世界入口");
+    assert.equal(document.title, "我和狗蛋儿的家 · 世界入口");
     assert.doesNotMatch(document.title, /城市外世界页/);
   } finally {
     app.cleanup();
