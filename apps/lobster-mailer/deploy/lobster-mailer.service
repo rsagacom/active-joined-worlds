@@ -1,5 +1,5 @@
 [Unit]
-Description=Lobster Chat email OTP mailer (Resend adapter)
+Description=Goudaner World email OTP mailer (Resend adapter)
 After=network-online.target
 Wants=network-online.target
 

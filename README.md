@@ -1,6 +1,8 @@
 # 我和狗蛋儿的家 · Goudaner World
 
-我和狗蛋儿的家（Goudaner World）是一套以即时通信为起点的世界共建系统。它使用 `世界 / 城邦 / 聚落 / 居民 / 城主 / 互联 / 共建` 的共同词汇，以网关合同作为唯一事实来源，H5 是当前主要入口，TUI 是并行映射客户端；不同窗口共享同一世界模型，但不共享同一权限。
+「我和狗蛋儿的家」（Goudaner World）是一套以即时通讯（IM）为核心的城邦式交流系统。它先解决一个城邦里最真实的事：居民能够登录、找到人、进入房间、私聊、群聊并参与共建；再把世界入口、城邦治理和跨城互联作为清晰的外层能力逐步展开。
+
+当前 H5 是主交互入口：主城承载公共群聊，住宅承载私聊，世界广场提供只读公共发现，城主在同一套会话语境里处理公告、提醒和维护。Rust Gateway 提供统一状态与权限合同，TUI/CLI 消费同一套合同，保证浏览器、终端与本地智能体共享同一条 IM 主线，同时遵守各自的权限边界。
 
 ## 内测入口说明（中文）
 
@@ -735,7 +737,7 @@ Gateway 通过环境变量控制安全敏感行为，无需改代码或配置文
 | `LOBSTER_DEV_EMAIL_OTP_INLINE` | (空) | 设为 `1` 后 OTP 验证码直接返回在 API 响应里（`dev_code` 字段），跳过邮件发送。**仅限本地开发**。 |
 | `LOBSTER_EMAIL_OTP_MAILER_URL` | (空) | 生产邮件 Webhook 地址，必须为 HTTPS；仅 localhost/127.0.0.1 测试端点允许 HTTP。未配置时生产 OTP 请求失败关闭，不会生成无法送达的挑战。 |
 | `LOBSTER_EMAIL_OTP_MAILER_BEARER_TOKEN` | (空) | 调用邮件 Webhook 的 Bearer 凭证，必填。凭证只进入 Authorization header，不写入请求体或 auth-state。 |
-| `LOBSTER_EMAIL_OTP_FROM` | (空) | 可选发件人，例如 `Lobster Chat <no-reply@example.com>`；实际发件域名与 DKIM/SPF 由邮件 Webhook 服务负责。 |
+| `LOBSTER_EMAIL_OTP_FROM` | (空) | 可选发件人，例如 `我和狗蛋儿的家 <no-reply@example.com>`；实际发件域名与 DKIM/SPF 由邮件 Webhook 服务负责。 |
 | `LOBSTER_WAKU_PROVIDER_URL` | (空) | 上游 gateway / Waku provider URL。设置后 gateway 启动时自动连接上游。 |
 | `LOBSTER_WAKU_UPSTREAM_URL` | (空) | `LOBSTER_WAKU_PROVIDER_URL` 的旧名，仍受支持。 |
 

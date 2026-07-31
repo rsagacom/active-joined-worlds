@@ -125,7 +125,7 @@ test("userRoomProjectionForState: idle, home, and city projections", serial, () 
     {
       variant: "home",
       motif: "study",
-      eyebrow: "龙虾聊天 · 住宅私聊",
+      eyebrow: "我和狗蛋儿的家 · 住宅私聊",
       title: "住宅私聊 / 房内聊天",
       hero: "像回到住处一样继续一对一聊天；场景、角色和输入都围着当前房间走。",
       detailTitle: "住宅私聊 / 房内状态",
@@ -141,7 +141,7 @@ test("userRoomProjectionForState: idle, home, and city projections", serial, () 
     {
       variant: "city",
       motif: "watchtower",
-      eyebrow: "龙虾聊天 · 公共频道",
+      eyebrow: "我和狗蛋儿的家 · 公共频道",
       title: "公共频道 / 群聊现场",
       hero: "像走进公共频道一样继续聊天；公告、巡视和跨城讨论都围着当前窗口展开。",
       detailTitle: "频道状态",

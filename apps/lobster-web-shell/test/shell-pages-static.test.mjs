@@ -31,7 +31,7 @@ function assertInOrder(source, markers, context) {
 test("hub page is now main-city group chat page with canvas and timeline", async () => {
   const html = await readShellPage("index.html");
 
-  assert.match(html, /<title>龙虾聊天 · 主城群聊<\/title>/);
+  assert.match(html, /<title>我和狗蛋儿的家 · 主城群聊<\/title>/);
   assert.match(html, /data-sfc-theme="city"/);
   assert.match(html, /class="[^"]*sfc-city-shell[^"]*"/);
   assert.match(html, /id="room-stage-canvas"/);
@@ -64,7 +64,7 @@ test("hub page is now main-city group chat page with canvas and timeline", async
 test("creative page is the residential pixel room entry", async () => {
   const html = await readShellPage("creative.html");
 
-  assert.match(html, /<title>龙虾聊天 · 住宅<\/title>/);
+  assert.match(html, /<title>我和狗蛋儿的家 · 住宅<\/title>/);
   assert.match(html, /data-shell-page="user"/);
   assert.match(html, /data-shell-variant="creative-terminal"/);
   assert.match(html, /data-default-shell-mode="user"/);
@@ -97,7 +97,7 @@ test("creative page is the residential pixel room entry", async () => {
 test("admin page has collapsible management navigation and tool groups", async () => {
   const html = await readShellPage("admin.html");
 
-  assert.match(html, /<title>龙虾聊天 · 管理后台<\/title>/);
+  assert.match(html, /<title>我和狗蛋儿的家 · 管理后台<\/title>/);
   assert.match(html, /href="\.\/styles\.base\.css\?v=20260612-css-split"/);
   assert.match(html, /href="\.\/styles\.scene\.css\?v=20260612-css-split"/);
   assert.match(html, /href="\.\/styles\.chat\.css\?v=20260612-css-split"/);
@@ -748,7 +748,7 @@ test("admin tools panel css has high-contrast action status labels", async () =>
 test("unified page is world-entry metro station with pixel scene and hotspots", async () => {
   const html = await readShellPage("unified.html");
 
-  assert.match(html, /<title>龙虾聊天 · 世界入口<\/title>/);
+  assert.match(html, /<title>我和狗蛋儿的家 · 世界入口<\/title>/);
   assert.match(html, /data-shell-page="world-entry"/);
   assert.match(html, /data-shell-variant="metro-station"/);
   assert.match(html, /data-default-shell-mode="unified"/);
@@ -774,7 +774,7 @@ test("world-square page is a readonly public square entry", async () => {
   const html = await readShellPage("world-square.html");
   const css = await fs.readFile(new URL("../styles.world-square.css", import.meta.url), "utf8");
 
-  assert.match(html, /<title>龙虾聊天 · 世界广场<\/title>/);
+  assert.match(html, /<title>我和狗蛋儿的家 · 世界广场<\/title>/);
   assert.match(html, /data-shell-page="world-square"/);
   assert.match(html, /data-shell-variant="world-square-readonly"/);
   assert.match(html, /assets\/pixel\/concepts\/world-square-concept-20260427-256\.png/);
@@ -1054,7 +1054,7 @@ test("world-entry runtime preserves the metro entry title", async () => {
   assert.match(source, /viewState\.shellPage !== "hub" && viewState\.shellPage !== "world-entry"/);
   assert.match(
     source,
-    /if \(viewState\.shellPage !== "hub" && viewState\.shellPage !== "world-entry"\) \{\s*doc\.title = `龙虾聊天 · \$\{translateShellMode\(viewState\.shellMode\)\}`;\s*\}/
+    /if \(viewState\.shellPage !== "hub" && viewState\.shellPage !== "world-entry"\) \{\s*doc\.title = `我和狗蛋儿的家 · \$\{translateShellMode\(viewState\.shellMode\)\}`;\s*\}/
   );
 });
 

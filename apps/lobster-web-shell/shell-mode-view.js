@@ -50,7 +50,7 @@ export function updateShellModeBadge(viewState, badgeEl) {
  */
 export function updateShellModeDocumentTitle(viewState, doc = globalThis.document) {
   if (viewState.shellPage !== "hub" && viewState.shellPage !== "world-entry") {
-    doc.title = `龙虾聊天 · ${translateShellMode(viewState.shellMode)}`;
+    doc.title = `我和狗蛋儿的家 · ${translateShellMode(viewState.shellMode)}`;
   }
 }
 
@@ -64,7 +64,7 @@ export function updateShellModeMasthead(viewState, {
 } = {}) {
   if (eyebrowEl) {
     eyebrowEl.textContent = viewState.shellPage === "hub"
-      ? "龙虾聊天"
+      ? "我和狗蛋儿的家"
       : viewState.config.eyebrow;
   }
   if (titleEl) {

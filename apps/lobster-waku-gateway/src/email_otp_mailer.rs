@@ -99,9 +99,9 @@ pub(crate) fn deliver_email_otp(
         kind: "lobster-email-otp",
         to: &delivery.to,
         from: config.from.as_deref(),
-        subject: "Lobster Chat 登录验证码",
+        subject: "我和狗蛋儿的家登录验证码",
         text: format!(
-            "你的 Lobster Chat 验证码是 {}。验证码 10 分钟内有效，请勿转发。",
+            "你在我和狗蛋儿的家的验证码是 {}。验证码 10 分钟内有效，请勿转发。",
             delivery.code
         ),
         code: &delivery.code,

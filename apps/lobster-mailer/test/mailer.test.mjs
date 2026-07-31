@@ -5,8 +5,8 @@ import { createMailerServer, validateDelivery } from '../src/mailer.mjs';
 const VALID_BODY = {
   kind: 'lobster-email-otp',
   to: 'resident@example.com',
-  subject: 'Lobster Chat 登录验证码',
-  text: '你的 Lobster Chat 验证码是 123456。验证码 10 分钟内有效，请勿转发。',
+  subject: '我和狗蛋儿的家登录验证码',
+  text: '你在我和狗蛋儿的家的验证码是 123456。验证码 10 分钟内有效，请勿转发。',
   code: '123456',
   challenge_id: 'ch-1',
   expires_at_ms: 1780000000000,
@@ -15,7 +15,7 @@ const VALID_BODY = {
 async function withServer(options, run) {
   const server = createMailerServer({
     bearerToken: 'test-secret',
-    mailFrom: 'Lobster <otp@example.com>',
+    mailFrom: '我和狗蛋儿的家 <otp@example.com>',
     sendEmail: async () => {},
     ...options,
   });
@@ -71,7 +71,7 @@ test('合法投递调用 sendEmail 并返回 200,不泄露上游细节', async (
   );
   assert.equal(sent.length, 1);
   assert.equal(sent[0].to, 'resident@example.com');
-  assert.equal(sent[0].from, 'Lobster <otp@example.com>');
+  assert.equal(sent[0].from, '我和狗蛋儿的家 <otp@example.com>');
   assert.match(sent[0].text, /123456/);
 });
 

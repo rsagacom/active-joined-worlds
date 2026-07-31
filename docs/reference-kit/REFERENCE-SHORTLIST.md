@@ -1,4 +1,4 @@
-# Lobster Chat Reference Shortlist
+# Goudaner World Reference Shortlist
 
 这份清单只保留后续会真正拿来参考和执行的项目。
 

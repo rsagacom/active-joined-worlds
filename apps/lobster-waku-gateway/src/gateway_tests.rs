@@ -2781,7 +2781,7 @@ fn email_otp_mailer_posts_authenticated_delivery_without_leaking_token_into_body
     let config = EmailOtpMailerConfig::new(
         format!("http://{address}/deliver"),
         "mailer-secret".into(),
-        Some("Lobster Chat <no-reply@example.com>".into()),
+        Some("我和狗蛋儿的家 <no-reply@example.com>".into()),
     )
     .expect("localhost mailer config");
     deliver_email_otp(

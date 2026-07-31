@@ -24,7 +24,7 @@ test("shellModeViewState resolves user mode from body dataset", () => {
   assert.equal(vs.shellMode, "user");
   assert.equal(vs.shellPage, "hub");
   assert.equal(vs.compactShell, false);
-  assert.equal(vs.config.eyebrow, "龙虾聊天 · 房间聊天");
+  assert.equal(vs.config.eyebrow, "我和狗蛋儿的家 · 房间聊天");
 });
 
 test("shellModeViewState resolves admin mode from body dataset", () => {
@@ -34,7 +34,7 @@ test("shellModeViewState resolves admin mode from body dataset", () => {
   assert.equal(vs.shellMode, "admin");
   assert.equal(vs.shellPage, "hub");
   assert.equal(vs.compactShell, false);
-  assert.equal(vs.config.eyebrow, "龙虾聊天 · 管理后台");
+  assert.equal(vs.config.eyebrow, "我和狗蛋儿的家 · 管理后台");
 });
 
 test("shellModeViewState resolves user mode from URL query param", () => {
@@ -154,20 +154,20 @@ test("updateShellModeBadge is a no-op when badgeEl is null", () => {
 test("updateShellModeDocumentTitle sets page title for user mode", () => {
   const doc = { title: "" };
   updateShellModeDocumentTitle({ shellMode: "user", shellPage: "user" }, doc);
-  assert.match(doc.title, /龙虾聊天 · 房间聊天/);
+  assert.match(doc.title, /我和狗蛋儿的家 · 房间聊天/);
 });
 
 test("updateShellModeDocumentTitle sets page title for admin mode", () => {
   const doc = { title: "" };
   updateShellModeDocumentTitle({ shellMode: "admin", shellPage: "admin" }, doc);
-  assert.match(doc.title, /龙虾聊天 · 管理后台/);
+  assert.match(doc.title, /我和狗蛋儿的家 · 管理后台/);
 });
 
 test("updateShellModeDocumentTitle sets page title for unified mode on non-hub page", () => {
   const doc = { title: "" };
   // shellPage must NOT be "hub" or "world-entry" for title to be set
   updateShellModeDocumentTitle({ shellMode: "unified", shellPage: "unified" }, doc);
-  assert.match(doc.title, /龙虾聊天 · 城市外世界页/);
+  assert.match(doc.title, /我和狗蛋儿的家 · 城市外世界页/);
 });
 
 test("updateShellModeDocumentTitle skips title update on hub page", () => {
@@ -192,7 +192,7 @@ test("updateShellModeMasthead sets hub masthead text", () => {
     { shellMode: "unified", shellPage: "hub", config: { eyebrow: "test eyebrow", title: "test title", hero: "test hero" } },
     { eyebrowEl, titleEl, heroEl },
   );
-  assert.equal(eyebrowEl.textContent, "龙虾聊天");
+  assert.equal(eyebrowEl.textContent, "我和狗蛋儿的家");
   assert.equal(titleEl.textContent, "选一个房间开始");
   assert.equal(heroEl.textContent, "test hero");
 });
@@ -449,6 +449,6 @@ test("applyShellModeView orchestrates all sub-applicators", () => {
 
   assert.equal(body.dataset.shellMode, "user");
   assert.equal(body.dataset.chromeDensity, "compact");
-  assert.match(doc.title, /龙虾聊天/);
+  assert.match(doc.title, /我和狗蛋儿的家/);
   assert.equal(panelTitleEls.roomsEl.textContent, "房间列表");
 });

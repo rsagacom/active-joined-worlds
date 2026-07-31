@@ -40,7 +40,7 @@ function sampleModel() {
     rulesTitle: "房间规则",
     rules: ["友善交流", "禁止广告"],
     messages: [
-      { title: "欢迎", time: "12:00", detail: "欢迎来到龙虾聊天" },
+      { title: "欢迎", time: "12:00", detail: "欢迎来到我和狗蛋儿的家" },
     ],
   };
 }
@@ -87,7 +87,7 @@ test("createCaretakerPanelSummaryNode uses profile summary", () => {
 
 test("createCaretakerMessageNode creates title with time", () => {
   const msg = createCaretakerMessageNode(
-    { title: "欢迎", time: "12:00", detail: "欢迎来到龙虾聊天" },
+    { title: "欢迎", time: "12:00", detail: "欢迎来到我和狗蛋儿的家" },
     fakeDoc(),
   );
   assert.equal(msg.className, "caretaker-message");
@@ -100,7 +100,7 @@ test("createCaretakerMessageNode creates title with time", () => {
   assert.equal(timeSpan.textContent, "12:00");
   const detail = msg._children[1];
   assert.equal(detail.tagName, "P");
-  assert.equal(detail.textContent, "欢迎来到龙虾聊天");
+  assert.equal(detail.textContent, "欢迎来到我和狗蛋儿的家");
 });
 
 // --- createCaretakerMessagesNode ---
