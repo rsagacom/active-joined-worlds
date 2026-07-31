@@ -125,9 +125,10 @@ body[data-shell-page="world-square"] {
 }
 
 .world-square-rail .rail-item.is-active {
-  color: #1f1409;
-  background: linear-gradient(90deg, rgba(220, 185, 106, 0.62) 0%, rgba(220, 185, 106, 0.22) 75%);
-  border-color: rgba(220, 185, 106, 0.7);
+  color: #e8ded2;
+  background: #22181c;
+  border-color: #3a2f28;
+  box-shadow: inset 3px 0 0 #57c8c2;
 }
 
 .world-square-rail .rail-label {
