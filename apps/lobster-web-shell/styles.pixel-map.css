@@ -75,8 +75,8 @@ body[data-shell-variant="creative-terminal"] .creative-hud {
      对齐 world-square.css:152（world-square-hud）。本 baseline 特异性 (0,3,1) 高于
      creative-hud:1067 的 (0,2,1) 且 pixel-map 在 scene.css 之后加载，故实际控制
      public-square + creative 顶栏边框/外发光。底色与 ::before 纹理各页保留。 */
-  border: 2px solid #f1c978;
-  box-shadow: 0 0 0 3px rgba(28, 16, 8, 0.92), 0 8px 0 rgba(0, 0, 0, 0.32);
+  border: 1px solid #3a2f28;
+  box-shadow: none;
 }
 
 body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-layout,
@@ -125,7 +125,7 @@ body[data-shell-variant="creative-terminal"] .rail-list button {
   color: #fff2c9;
   font-size: 15px;
   background: rgba(255, 242, 201, 0.08);
-  border: 2px solid rgba(241, 201, 120, 0.62);
+  border: 1px solid #3a2f28;
   box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.22);
 }
 
@@ -145,8 +145,8 @@ body[data-shell-variant="creative-terminal"] .creative-stage {
   height: 100%;
   min-height: calc(100vh - 86px);
   overflow: hidden;
-  border: 3px solid #27190f;
-  box-shadow: 0 0 0 3px #f1c978, 0 12px 0 rgba(0, 0, 0, 0.34);
+  border: 1px solid #3a2f28;
+  box-shadow: none;
   image-rendering: auto;
 }
 
@@ -1070,7 +1070,7 @@ body[data-shell-variant="creative-terminal"] .creative-hud {
   min-height: 54px;
   background:
     linear-gradient(180deg, rgba(22, 16, 12, 0.96), rgba(12, 8, 6, 0.98)) !important;
-  border-color: #f1c978;
+  border-color: #3a2f28;
 }
 
 body[data-shell-variant="creative-terminal"] .creative-hud::before {
@@ -2107,7 +2107,7 @@ body[data-shell-page="hub"][data-shell-variant="public-square"] .public-square-r
 body[data-shell-variant="creative-terminal"] .creative-rail .rail-item {
   color: #fff2c9 !important;
   background: rgba(255, 242, 201, 0.08) !important;
-  border: 2px solid rgba(241, 201, 120, 0.62) !important;
+  border: 1px solid #3a2f28 !important;
   box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.22) !important;
 }
 
