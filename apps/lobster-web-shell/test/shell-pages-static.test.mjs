@@ -37,13 +37,13 @@ test("hub page is now main-city group chat page with canvas and timeline", async
   assert.match(html, /id="room-stage-canvas"/);
   assert.match(html, /id="timeline"/);
   assert.match(html, /id="composer"/);
-  assert.match(html, /styles\.base\.css\?v=20260731-ui-refresh-r3/);
-  assert.match(html, /styles\.scene\.css\?v=20260731-ui-refresh-r3/);
-  assert.match(html, /styles\.chat\.css\?v=20260731-ui-refresh-r3/);
-  assert.match(html, /styles\.css\?v=20260731-ui-refresh-r3/);
-  assert.match(html, /styles\.user-shell\.css\?v=20260731-ui-refresh-r3/);
-  assert.match(html, /styles\.pixel-map\.css\?v=20260731-ui-refresh-r3/);
-  assert.match(html, /app\.js\?v=20260731-ui-refresh-r3/);
+  assert.match(html, /styles\.base\.css\?v=20260731-ui-refresh-r4/);
+  assert.match(html, /styles\.scene\.css\?v=20260731-ui-refresh-r4/);
+  assert.match(html, /styles\.chat\.css\?v=20260731-ui-refresh-r4/);
+  assert.match(html, /styles\.css\?v=20260731-ui-refresh-r4/);
+  assert.match(html, /styles\.user-shell\.css\?v=20260731-ui-refresh-r4/);
+  assert.match(html, /styles\.pixel-map\.css\?v=20260731-ui-refresh-r4/);
+  assert.match(html, /app\.js\?v=20260731-ui-refresh-r4/);
   assert.match(html, /data-symbol-trigger/);
   assert.match(html, /composer-symbol-category/);
   assert.match(html, /高兴/);
@@ -82,10 +82,10 @@ test("creative page is the residential pixel room entry", async () => {
   assert.match(html, /data-rail-visibility="owner-only"/);
   assert.match(html, /data-personal-room-policy="friends_only"/);
   assert.match(html, /data-personal-room-policy="registered_all"/);
-  assert.match(html, /styles\.creative\.css\?v=20260731-ui-refresh-r3/);
-  assert.match(html, /styles\.user-shell\.css\?v=20260731-ui-refresh-r3/);
-  assert.match(html, /styles\.pixel-map\.css\?v=20260731-ui-refresh-r3/);
-  assert.match(html, /app\.js\?v=20260731-ui-refresh-r3/);
+  assert.match(html, /styles\.creative\.css\?v=20260731-ui-refresh-r4/);
+  assert.match(html, /styles\.user-shell\.css\?v=20260731-ui-refresh-r4/);
+  assert.match(html, /styles\.pixel-map\.css\?v=20260731-ui-refresh-r4/);
+  assert.match(html, /app\.js\?v=20260731-ui-refresh-r4/);
   assert.match(html, /data-symbol-trigger/);
   assert.match(html, /composer-symbol-category/);
   assert.match(html, /卖萌/);
@@ -98,11 +98,11 @@ test("admin page has collapsible management navigation and tool groups", async (
   const html = await readShellPage("admin.html");
 
   assert.match(html, /<title>我和狗蛋儿的家 · 管理后台<\/title>/);
-  assert.match(html, /href="\.\/styles\.base\.css\?v=20260731-ui-refresh-r3"/);
-  assert.match(html, /href="\.\/styles\.scene\.css\?v=20260731-ui-refresh-r3"/);
-  assert.match(html, /href="\.\/styles\.chat\.css\?v=20260731-ui-refresh-r3"/);
-  assert.match(html, /href="\.\/styles\.css\?v=20260731-ui-refresh-r3"/);
-  assert.match(html, /href="\.\/styles\.user-shell\.css\?v=20260731-ui-refresh-r3"/);
+  assert.match(html, /href="\.\/styles\.base\.css\?v=20260731-ui-refresh-r4"/);
+  assert.match(html, /href="\.\/styles\.scene\.css\?v=20260731-ui-refresh-r4"/);
+  assert.match(html, /href="\.\/styles\.chat\.css\?v=20260731-ui-refresh-r4"/);
+  assert.match(html, /href="\.\/styles\.css\?v=20260731-ui-refresh-r4"/);
+  assert.match(html, /href="\.\/styles\.user-shell\.css\?v=20260731-ui-refresh-r4"/);
   assert.match(html, /管理后台/);
 
   // 左侧是可收起管理目录，仍保留会话队列作为首个日常入口。
@@ -753,8 +753,8 @@ test("unified page is world-entry metro station with pixel scene and hotspots", 
   assert.match(html, /data-shell-variant="metro-station"/);
   assert.match(html, /data-default-shell-mode="unified"/);
   assert.match(html, /data-sfc-theme="city"/);
-  assert.match(html, /href="\.\/styles\.world-entry\.css\?v=20260731-ui-refresh-r3/);
-  assert.match(html, /app\.js\?v=20260731-ui-refresh-r3/);
+  assert.match(html, /href="\.\/styles\.world-entry\.css\?v=20260731-ui-refresh-r4/);
+  assert.match(html, /app\.js\?v=20260731-ui-refresh-r4/);
   assert.match(html, /href="\.\/creative\.html"/);
   assert.match(html, /href="\.\/index\.html"/);
   assert.match(html, /href="\.\/world-square\.html"/);
@@ -781,7 +781,7 @@ test("world-square page is a readonly public square entry", async () => {
   assert.match(html, /href="\.\/index\.html"/);
   assert.match(css, /world-square-concept-20260427-256\.png/);
   assert.match(css, /世界广场/);
-  assert.match(html, /styles\.world-square\.css\?v=20260731-ui-refresh-r3/);
+  assert.match(html, /styles\.world-square\.css\?v=20260731-ui-refresh-r4/);
   assert.match(html, /dataset\.timeOfDay/);
   assert.match(html, /\/v1\/world-square/);
   assert.match(html, /textContent/);

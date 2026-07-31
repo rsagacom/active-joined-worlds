@@ -903,6 +903,11 @@ body.scene-clear-mode[data-shell-page="world-square"] .scene-hotspot.is-active {
     grid-template-columns: 1fr !important;
   }
 
+  /* stage 被显式钉在 grid-column:2,单列模式下必须归位,否则塌成 2px */
+  .world-square-stage {
+    grid-column: 1 !important;
+  }
+
   .world-square-actions {
     flex-wrap: wrap;
   }
