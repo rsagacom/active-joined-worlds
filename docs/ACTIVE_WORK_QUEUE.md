@@ -4,6 +4,14 @@ Last updated: 2026-07-30
 
 > 说明：下方按日期排列的记录保留当时的交接背景；如与本页最新日期区块冲突，以最新区块和 `docs/DEPLOYMENT.md` 为准。
 
+## 2026-07-31 场景背景图全灭事故修复(macOS tar AppleDouble)
+
+| 项目 | 状态 | 说明 |
+| --- | --- | --- |
+| 根因 | 已确认 | UI refresh 期间用 macOS bsdtar 手动打包 web 部署,带 xattr 的 PNG 在 GNU tar 解出 0 字节实体 + `._*` AppleDouble 残片,65 张图全空;期间 EC2 /tmp(tmpfs 457M)被打包文件塞满一次 |
+| 修复 | 已上线 | `COPYFILE_DISABLE=1` 重新打包、清 `._*` 后重部署(assets 9.1M→55M);0 字节响应被 CF 边缘缓存(age/14400),Purge 后恢复 |
+| 教训 | 已记录 | 手动打包必须 `COPYFILE_DISABLE=1`;优先用 CI GNU tar artifact;EC2 /tmp 是 tmpfs,大包走 home 目录;图片响应也会被边缘缓存,部署后抽查关键资产 size_download |
+
 ## 2026-07-30 H5 UI refresh 三期全量上线(P0/P1/P2)
 
 | 项目 | 状态 | 说明 |
